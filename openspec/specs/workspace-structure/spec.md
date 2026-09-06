@@ -34,11 +34,15 @@ The `app-core` package SHALL declare a normal local workspace dependency on `aut
 - **THEN** the dependency direction is `app_core` to `automerge_repo` to `automerge`, with no edge from `automerge_repo` to `app_core`
 
 ### Requirement: Minimal application scaffold
-The `app_core` crate SHALL contain only the code and test needed to establish its future application-backend location and dependency boundary, and MUST NOT implement speculative application modules or functionality during this change.
+The `app_core` crate SHALL own the finance application backend, including explicit application bootstrap, domain commands and validation, Automerge root mapping, SQLite control and read-model adapters, projection orchestration, query services, and typed internal events. It SHALL depend on `automerge_repo` through its public API and MUST NOT move application-specific concerns into the generic Repo crate.
 
-#### Scenario: Application scope remains deferred
+#### Scenario: Application scope is implemented
 - **WHEN** the `app_core` source is inspected
-- **THEN** it contains no finance transactions, categories, CQRS orchestration, SQLite projection, identity, trust, pairing, discovery, Quinn, mDNS, platform lifecycle, or authentication implementation
+- **THEN** it contains the finance domain, CQRS-lite command/query paths, SQLite projection/rebuild, application bootstrap storage, and typed event implementation while identity, trust, pairing, discovery, Quinn, mDNS, and platform UI remain deferred
+
+#### Scenario: Generic Repo remains independent
+- **WHEN** the workspace dependency graph and `automerge_repo` sources are inspected
+- **THEN** dependency direction remains `app_core` to `automerge_repo` to `automerge` with no finance or SQLite read-model concern in `automerge_repo`
 
 ### Requirement: Preserved Repo behavior and tests
 All existing Repo tests SHALL remain present as tests of `automerge_repo` and SHALL pass unchanged in behavioral intent, including coverage for persistence, synchronization, concurrent offline edits, multiple-document synchronization, root bootstrap, change notifications, reconnect behavior, lifecycle, ports, and crash-safe Stage 2 semantics.
