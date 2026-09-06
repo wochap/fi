@@ -15,31 +15,96 @@ A repository with neither a bootstrap record nor documents SHALL enter `NeedsDec
 - **WHEN** a caller attempts to create or mutate an authoritative document while bootstrap status is not `Ready`
 - **THEN** the operation fails with a structured bootstrap lifecycle error and commits no Automerge change
 
+### Requirement: Strict bootstrap consistency on opening
+`Repo::open()` SHALL validate all listed snapshots and the bootstrap record, complete recoverable Creating or Joining transitions, reject inconsistent state without mutation, and start networking only after validation and recovery succeed.
+
+#### Scenario: Orphaned documents
+- **WHEN** document files exist without a bootstrap record
+- **THEN** opening fails with `OrphanedDocuments` and does not infer a root, delete data, or replace control state
+
+#### Scenario: Ready root missing
+- **WHEN** a Ready record names a root snapshot that is absent
+- **THEN** opening fails with a fatal structured bootstrap consistency error
+
+#### Scenario: Any listed snapshot is corrupt
+- **WHEN** one listed snapshot cannot be strictly loaded
+- **THEN** opening fails with its document and storage-path context before consuming network events
+
+### Requirement: Creating recovery is idempotent
+Opening `Creating { root }` SHALL preserve the recorded root, durably create its required existence history only when absent, and durably transition the same record to `Ready` without duplicating history.
+
+#### Scenario: Creating root absent
+- **WHEN** opening finds Creating and no root snapshot
+- **THEN** it creates exactly one existence commit for the recorded root, durably stores the snapshot, and durably writes Ready for that root
+
+#### Scenario: Creating root already durable
+- **WHEN** opening finds Creating and a valid nonempty root snapshot
+- **THEN** it reuses the snapshot without adding another empty commit and durably writes Ready
+
+#### Scenario: Creating conflict
+- **WHEN** Creating storage contains an empty root snapshot or documents conflicting with an interrupted fresh initialization
+- **THEN** opening fails visibly without rewriting those snapshots
+
+#### Scenario: Repeated Creating crashes
+- **WHEN** recovery is interrupted repeatedly after any ordered step
+- **THEN** every later open reuses the same root and converges on one existence change and a durable Ready record
+
+### Requirement: Joining recovery preserves remote authority
+Opening `Joining { root }` SHALL preserve the selected root and SHALL never introduce a local root change. It SHALL complete Ready only for valid nonempty history or otherwise resume root-only synchronization with an empty placeholder.
+
+#### Scenario: Joining root absent
+- **WHEN** opening finds Joining without a root snapshot
+- **THEN** it creates an empty in-memory placeholder with a fresh actor ID and no local commit and resumes root-only synchronization
+
+#### Scenario: Joining root empty
+- **WHEN** opening finds Joining with a valid snapshot having empty history
+- **THEN** it retains or recreates an empty placeholder without committing a local change
+
+#### Scenario: Joining root has history
+- **WHEN** opening finds Joining with a valid root snapshot having nonempty history
+- **THEN** it treats that gated history as remotely obtained, durably writes Ready, and only then enables full synchronization
+
+#### Scenario: Joining restart and reconnect
+- **WHEN** a join is interrupted by disconnect or process restart before readiness
+- **THEN** the repository retains the exact root ID, uses fresh connection sync state, and resumes root-only synchronization
+
 ### Requirement: First-device initialization
-`initialize_new()` SHALL choose one root ID and order the in-memory control and snapshot stores as `Creating`, root snapshot, then `Ready` before returning the root handle.
+`initialize_new()` SHALL choose one root ID and order durable transitions as `Creating`, complete root snapshot with one explicit existence commit, then `Ready` before exposing or announcing the root.
 
 #### Scenario: Successful initialization
 - **WHEN** a fresh repository successfully initializes a new root
-- **THEN** it becomes `Ready` with that root, returns its ready handle, and admits normal document writes
+- **THEN** Creating store and control barrier, root store and storage barrier, and Ready store and control barrier occur in that order before the repository becomes Ready or returns the root handle
+
+#### Scenario: Initialization persistence failure
+- **WHEN** any ordered store or barrier fails
+- **THEN** initialization returns structured operation context, exposes no ready handle, announces no root, and leaves durable state recoverable under the last completed step
 
 #### Scenario: Concurrent decisions
 - **WHEN** multiple initialize or join requests race for a repository awaiting a decision
 - **THEN** exactly one transition is accepted and the others receive deterministic lifecycle errors
 
 ### Requirement: Explicit joining
-`join_existing(root)` SHALL durably record the Stage 1 in-memory `Joining` state, create an empty root placeholder without a local commit, and synchronize only that root until readiness.
+`join_existing(root)` SHALL durably record `Joining`, create an empty root placeholder without a local commit, communicate Joining to compatible peers, and synchronize only that root until root snapshot and Ready control durability complete.
 
 #### Scenario: Join starts
 - **WHEN** the application accepts an offered root while the repository needs a decision
-- **THEN** bootstrap status becomes `Joining` for that exact root and root-only synchronization begins
+- **THEN** Joining store and control barrier succeed before bootstrap status changes, an empty placeholder is created for that exact root, and root-only synchronization begins
+
+#### Scenario: Joining store fails
+- **WHEN** storing or synchronizing Joining fails
+- **THEN** no placeholder is exposed for authoritative use and no Joining bootstrap-state update is sent
 
 #### Scenario: Non-root document during joining
 - **WHEN** a joining repository receives inventory, announcement, or sync traffic for a document other than its selected root
-- **THEN** it does not create, mutate, or synchronize that document
+- **THEN** it does not create, mutate, persist, or synchronize that document
 
-#### Scenario: Join becomes ready
-- **WHEN** remote synchronization gives the selected root nonempty history and the Stage 1 snapshot and Ready control stores succeed
-- **THEN** bootstrap status becomes `Ready` and full inventory synchronization begins
+#### Scenario: Join receives root history
+- **WHEN** remote synchronization gives the selected root nonempty history
+- **THEN** it immediately stores and synchronizes the complete root snapshot, stores and synchronizes Ready, then marks the root and repository Ready
+
+#### Scenario: Join durability fails
+- **WHEN** root snapshot or Ready control durability fails
+- **THEN** the repository remains Joining and write-gated, reports the failure, and remains eligible to retry without creating a local root change
 
 ### Requirement: Bootstrap offers are observable state
 An uninitialized repository SHALL retain root offers learned from authenticated ready peers in a typed, queryable form.
@@ -53,15 +118,19 @@ An uninitialized repository SHALL retain root offers learned from authenticated 
 - **THEN** the repository does not join it until the application explicitly calls `join_existing(root)`
 
 ### Requirement: Live bootstrap transitions
-The protocol SHALL support idempotent post-Hello bootstrap-state updates so a connection can observe `Joining` and `Ready` transitions without reconnecting.
+The protocol SHALL support idempotent post-Hello bootstrap-state updates so a connection can observe only durably completed `Joining` and `Ready` transitions without reconnecting.
 
 #### Scenario: Join on existing connection
-- **WHEN** an uninitialized peer stores `Joining` after the initial Hello exchange
+- **WHEN** an uninitialized peer durably stores Joining after the initial Hello exchange
 - **THEN** it sends a bootstrap-state update and the matching ready peer begins root synchronization on that connection
 
 #### Scenario: Joining peer reaches ready
-- **WHEN** a joining peer completes the root snapshot and Ready control stores
+- **WHEN** a joining peer durably completes the root snapshot and Ready control record
 - **THEN** it sends a Ready bootstrap-state update and compatible peers enable full inventory exchange
+
+#### Scenario: Repeated bootstrap state
+- **WHEN** an equivalent bootstrap-state update is received repeatedly
+- **THEN** eligibility, actor attachment, inventory, and announcements remain idempotent
 
 ### Requirement: Root compatibility
 Peers with different nonempty root IDs SHALL be treated as incompatible and SHALL exchange no inventories, announcements, or document sync messages.

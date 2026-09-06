@@ -54,11 +54,15 @@ The system SHALL generate sync messages only in response to connection, inventor
 - **THEN** the repository schedules no polling timer or busy loop
 
 ### Requirement: Announcements propagate new documents
-A document that becomes locally shareable after a connection is established SHALL be announced idempotently to every compatible ready peer.
+A document that becomes locally shareable after a connection is established SHALL be announced idempotently to every compatible ready peer only after its required durable snapshot and bootstrap transitions succeed.
 
 #### Scenario: Create after connection
-- **WHEN** a ready repository durably completes Stage 1 creation of a document while compatible ready peers are connected
+- **WHEN** a ready repository durably completes creation of a document while compatible ready peers are connected
 - **THEN** it announces the ID and initiates synchronization with those peers
+
+#### Scenario: Creation not yet durable
+- **WHEN** a new document's store or durability barrier remains pending or fails
+- **THEN** no inventory, announcement, or sync frame exposes that document ID
 
 #### Scenario: Unknown announcement
 - **WHEN** a compatible ready peer announces an unknown document
@@ -84,12 +88,24 @@ Repositories SHALL converge Automerge heads and hydrated values after concurrent
 - **THEN** fresh state exchanges eventually converge without sync-state deadlock
 
 ### Requirement: Ordered bounded delivery
-The repository and transport SHALL preserve frame order per authenticated connection and SHALL apply bounded backpressure.
+The repository and transport SHALL preserve frame order per authenticated connection and SHALL apply bounded backpressure through one internal writer queue and task per active peer session.
 
 #### Scenario: Concurrent documents send to one peer
 - **WHEN** multiple document actors produce frames for the same peer concurrently
-- **THEN** the outbound peer path serializes complete frames in a deterministic connection order
+- **THEN** the peer writer serializes complete frames in deterministic connection order
+
+#### Scenario: Blocked transport send
+- **WHEN** one peer's transport send remains pending
+- **THEN** the coordinator and unrelated peer writers can continue until that peer's bounded outbound policy is reached
+
+#### Scenario: Outbound queue unavailable
+- **WHEN** a peer writer queue is closed or reaches its configured failure policy
+- **THEN** the repository reports a peer-scoped error and detaches that session rather than creating an unbounded queue
 
 #### Scenario: Outbound send fails
 - **WHEN** transport send returns an error
 - **THEN** the repository reports the error, treats the peer as disconnected, and clears its document sync states
+
+#### Scenario: Reconnection writer state
+- **WHEN** the same peer reconnects
+- **THEN** the repository creates a fresh writer task and fresh per-document Automerge sync states for the new session
