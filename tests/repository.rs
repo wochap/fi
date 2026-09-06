@@ -199,7 +199,7 @@ async fn concurrent_offline_changes_converge_after_fresh_reconnection() {
 async fn shutdown_closes_handles_and_repository() {
     let (repo, _, _, _, _, _, _, _) = open_pair().await;
     let root = repo.initialize_new().await.unwrap();
-    repo.shutdown().await.unwrap();
+    repo.clone().shutdown().await.unwrap();
     assert_eq!(root.status(), DocumentStatus::Closed);
     assert!(repo.document_ids().await.is_err());
     assert!(root.read(|_| ()).await.is_err());

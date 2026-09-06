@@ -21,9 +21,14 @@ struct StoreState {
     documents: BTreeMap<DocumentId, Vec<u8>>,
     record: Option<BootstrapRecord>,
     failures: HashSet<&'static str>,
+    failure_counts: BTreeMap<&'static str, usize>,
+    document_failure_counts: BTreeMap<(&'static str, DocumentId), usize>,
     blocked: HashSet<&'static str>,
+    blocked_documents: HashSet<(&'static str, DocumentId)>,
     operations: Vec<String>,
-    closed: bool,
+    entered: Vec<String>,
+    documents_closed: bool,
+    control_closed: bool,
 }
 
 #[derive(Clone, Default)]
@@ -45,14 +50,77 @@ impl MemoryStore {
     pub fn operations(&self) -> Vec<String> {
         self.state.lock().unwrap().operations.clone()
     }
+    pub fn clear_operations(&self) {
+        let mut state = self.state.lock().unwrap();
+        state.operations.clear();
+        state.entered.clear();
+    }
+    #[must_use]
+    pub fn entered_operations(&self) -> Vec<String> {
+        self.state.lock().unwrap().entered.clone()
+    }
+    #[must_use]
+    pub fn documents_closed(&self) -> bool {
+        self.state.lock().unwrap().documents_closed
+    }
+    #[must_use]
+    pub fn control_closed(&self) -> bool {
+        self.state.lock().unwrap().control_closed
+    }
     pub fn fail(&self, operation: &'static str) {
         self.state.lock().unwrap().failures.insert(operation);
+    }
+    /// Fails the next `count` occurrences of an operation.
+    pub fn fail_times(&self, operation: &'static str, count: usize) {
+        self.state
+            .lock()
+            .unwrap()
+            .failure_counts
+            .insert(operation, count);
+    }
+    pub fn fail_document_times(&self, operation: &'static str, document: DocumentId, count: usize) {
+        self.state
+            .lock()
+            .unwrap()
+            .document_failure_counts
+            .insert((operation, document), count);
     }
     pub fn clear_failure(&self, operation: &'static str) {
         self.state.lock().unwrap().failures.remove(operation);
     }
     pub fn block(&self, operation: &'static str) {
         self.state.lock().unwrap().blocked.insert(operation);
+    }
+    pub fn block_document(&self, operation: &'static str, document: DocumentId) {
+        self.state
+            .lock()
+            .unwrap()
+            .blocked_documents
+            .insert((operation, document));
+    }
+    pub fn unblock_document(&self, operation: &'static str, document: DocumentId) {
+        self.state
+            .lock()
+            .unwrap()
+            .blocked_documents
+            .remove(&(operation, document));
+        self.changed.notify_waiters();
+    }
+    pub async fn wait_for_operation(&self, expected: &str) {
+        loop {
+            let notified = self.changed.notified();
+            if self
+                .state
+                .lock()
+                .unwrap()
+                .entered
+                .iter()
+                .any(|operation| operation == expected)
+            {
+                return;
+            }
+            notified.await;
+        }
     }
     pub fn unblock(&self, operation: &'static str) {
         self.state.lock().unwrap().blocked.remove(operation);
@@ -63,19 +131,52 @@ impl MemoryStore {
         operation: &'static str,
         document: Option<DocumentId>,
     ) -> Result<(), StorageError> {
+        let label = document.map_or_else(|| operation.into(), |id| format!("{operation}:{id}"));
+        self.state.lock().unwrap().entered.push(label.clone());
+        self.changed.notify_waiters();
         loop {
             let notified = self.changed.notified();
             {
                 let mut state = self.state.lock().unwrap();
-                if !state.blocked.contains(operation) {
-                    state.operations.push(match document {
-                        Some(id) => format!("{operation}:{id}"),
-                        None => operation.into(),
-                    });
-                    if state.closed && !operation.ends_with("_close") {
+                if !state.blocked.contains(operation)
+                    && document.is_none_or(|id| !state.blocked_documents.contains(&(operation, id)))
+                {
+                    state.operations.push(label.clone());
+                    let closed = if operation.starts_with("control_") {
+                        state.control_closed
+                    } else {
+                        state.documents_closed
+                    };
+                    if closed && !operation.ends_with("_close") {
                         return Err(StorageError::new(operation, document, "adapter is closed"));
                     }
-                    if state.failures.contains(operation) {
+                    self.changed.notify_waiters();
+                    let counted_failure =
+                        state
+                            .failure_counts
+                            .get_mut(operation)
+                            .is_some_and(|remaining| {
+                                if *remaining == 0 {
+                                    false
+                                } else {
+                                    *remaining -= 1;
+                                    true
+                                }
+                            });
+                    let document_failure = document.is_some_and(|id| {
+                        state
+                            .document_failure_counts
+                            .get_mut(&(operation, id))
+                            .is_some_and(|remaining| {
+                                if *remaining == 0 {
+                                    false
+                                } else {
+                                    *remaining -= 1;
+                                    true
+                                }
+                            })
+                    });
+                    if state.failures.contains(operation) || counted_failure || document_failure {
                         return Err(StorageError::new(operation, document, "injected failure"));
                     }
                     return Ok(());
@@ -118,7 +219,7 @@ impl StorageAdapter for MemoryStore {
     }
     async fn close(&self) -> Result<(), StorageError> {
         self.before("document_close", None).await?;
-        self.state.lock().unwrap().closed = true;
+        self.state.lock().unwrap().documents_closed = true;
         Ok(())
     }
 }
@@ -139,7 +240,7 @@ impl ControlStore for MemoryStore {
     }
     async fn close(&self) -> Result<(), StorageError> {
         self.before("control_close", None).await?;
-        self.state.lock().unwrap().closed = true;
+        self.state.lock().unwrap().control_closed = true;
         Ok(())
     }
 }
@@ -152,6 +253,7 @@ struct LinkState {
     connected: bool,
     generation: u64,
     fail_sends: bool,
+    block_sends: bool,
     pending: VecDeque<Pending>,
 }
 
@@ -164,6 +266,7 @@ pub struct MemoryTransport {
     remote_event_tx: mpsc::Sender<NetworkEvent>,
     outbound: Arc<Mutex<LinkState>>,
     inbound: Arc<Mutex<LinkState>>,
+    changed: Arc<Notify>,
 }
 
 impl MemoryTransport {
@@ -180,14 +283,17 @@ impl MemoryTransport {
             connected: false,
             generation: 0,
             fail_sends: false,
+            block_sends: false,
             pending: VecDeque::new(),
         }));
         let ba = Arc::new(Mutex::new(LinkState {
             connected: false,
             generation: 0,
             fail_sends: false,
+            block_sends: false,
             pending: VecDeque::new(),
         }));
+        let changed = Arc::new(Notify::new());
         (
             Arc::new(Self {
                 local: a.clone(),
@@ -197,6 +303,7 @@ impl MemoryTransport {
                 remote_event_tx: b_tx.clone(),
                 outbound: ab.clone(),
                 inbound: ba.clone(),
+                changed: changed.clone(),
             }),
             Arc::new(Self {
                 local: b,
@@ -206,6 +313,7 @@ impl MemoryTransport {
                 remote_event_tx: a_tx,
                 outbound: ba,
                 inbound: ab,
+                changed,
             }),
         )
     }
@@ -215,6 +323,12 @@ impl MemoryTransport {
     }
     pub fn fail_sends(&self, fail: bool) {
         self.outbound.lock().unwrap().fail_sends = fail;
+    }
+    pub fn block_sends(&self, block: bool) {
+        self.outbound.lock().unwrap().block_sends = block;
+        if !block {
+            self.changed.notify_waiters();
+        }
     }
     pub fn discard_pending(&self) {
         self.outbound.lock().unwrap().pending.clear();
@@ -283,19 +397,27 @@ impl NetworkTransport for MemoryTransport {
             .ok_or(NetworkError::EventsAlreadyTaken)
     }
     async fn send(&self, peer: &PeerId, frame: Bytes) -> Result<(), NetworkError> {
-        let mut link = self.outbound.lock().unwrap();
-        if peer != &self.remote || !link.connected || link.fail_sends {
-            return Err(NetworkError::Transport {
-                peer: peer.clone(),
-                message: "connection is unavailable".into(),
-            });
+        loop {
+            let notified = self.changed.notified();
+            {
+                let mut link = self.outbound.lock().unwrap();
+                if peer != &self.remote || !link.connected || link.fail_sends {
+                    return Err(NetworkError::Transport {
+                        peer: peer.clone(),
+                        message: "connection is unavailable".into(),
+                    });
+                }
+                if !link.block_sends {
+                    let generation = link.generation;
+                    link.pending.push_back(Pending {
+                        generation,
+                        bytes: frame,
+                    });
+                    return Ok(());
+                }
+            }
+            notified.await;
         }
-        let generation = link.generation;
-        link.pending.push_back(Pending {
-            generation,
-            bytes: frame,
-        });
-        Ok(())
     }
     async fn close_peer(&self, peer: &PeerId) -> Result<(), NetworkError> {
         if peer == &self.remote {
@@ -352,6 +474,7 @@ impl MemoryNetwork {
                     connected: false,
                     generation: 0,
                     fail_sends: false,
+                    block_sends: false,
                     pending: VecDeque::new(),
                 });
                 link.generation += 1;
