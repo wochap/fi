@@ -75,3 +75,14 @@ Shutdown SHALL best-effort flush and close every document, close the transport, 
 #### Scenario: Removal failure
 - **WHEN** snapshot removal or its barrier fails
 - **THEN** the error is returned directly with document and subsystem context and the closed actor is evicted so explicit reopen or retry can inspect remaining storage
+
+### Requirement: Repository state survives a complete restart
+The repository SHALL preserve every durably accepted document's identity, Automerge history, and hydrated value across a successful flush, shutdown, and reopen using fresh adapter and repository instances over the same storage.
+
+#### Scenario: Persist and reopen a mutated document
+- **WHEN** a ready repository creates and mutates a document, successfully flushes and shuts down, and a new repository instance opens the same storage
+- **THEN** the reopened repository enumerates and opens the same document ID with identical Automerge heads and hydrated values
+
+#### Scenario: Reopened root metadata
+- **WHEN** a repository is reopened after a successful ready-root shutdown
+- **THEN** its bootstrap status identifies the same root and the root document is immediately available as ready

@@ -109,3 +109,14 @@ Every locally created document SHALL have explicit nonempty Automerge history an
 #### Scenario: Creation announcement ordering
 - **WHEN** compatible peers are connected during document creation
 - **THEN** no inventory, announcement, or sync frame for the new ID is queued before initial durability succeeds
+
+### Requirement: End-to-end document change observation
+Document subscribers SHALL observe typed change events when local or protocol-delivered remote mutations change document heads in the two-repository acceptance path.
+
+#### Scenario: Local acceptance event
+- **WHEN** a subscriber is registered before a successful local transaction that changes document heads
+- **THEN** it receives one event for that document with `Local` origin, resulting heads, and nonempty materialized patches
+
+#### Scenario: Remote acceptance event
+- **WHEN** a subscriber on Repo B is registered before Repo B receives and applies Repo A's synchronization change
+- **THEN** it receives one event for that document whose `Remote` origin identifies Repo A and whose resulting heads and materialized patches describe the accepted change

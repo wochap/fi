@@ -109,3 +109,34 @@ The repository and transport SHALL preserve frame order per authenticated connec
 #### Scenario: Reconnection writer state
 - **WHEN** the same peer reconnects
 - **THEN** the repository creates a fresh writer task and fresh per-document Automerge sync states for the new session
+
+### Requirement: End-to-end two-repository acceptance
+Two independent repository instances connected only through the repository protocol and an ordered reliable in-memory transport SHALL synchronize their eligible Automerge documents in both directions and after session replacement.
+
+#### Scenario: Forward online synchronization
+- **WHEN** Repo A creates a document containing a value while connected to compatible Repo B
+- **THEN** Repo B learns the document ID and reaches identical heads and hydrated values
+
+#### Scenario: Reverse online synchronization
+- **WHEN** Repo B changes a synchronized document while connected to Repo A
+- **THEN** Repo A reaches identical heads and observes Repo B's value
+
+#### Scenario: Three-document initial inventory
+- **WHEN** ready Repo A owns three non-root documents before connecting to compatible ready Repo B
+- **THEN** Repo B learns and converges all three documents through inventory exchange without application-level document registration
+
+#### Scenario: Fourth document announced live
+- **WHEN** Repo A durably creates a fourth non-root document while Repo B remains connected
+- **THEN** Repo B learns and converges that document without reconnecting
+
+#### Scenario: Peer repository restart
+- **WHEN** Repo B shuts down after synchronizing, a new Repo B instance opens its retained snapshots, and the peers reconnect using fresh transport-session and Automerge sync state
+- **THEN** both repositories converge any changes made before or during the restart without persisted per-peer sync state
+
+#### Scenario: Duplicate delivery and repeated connection
+- **WHEN** repository inventory or announcement processing is repeated and the same peer identity reconnects in a new session
+- **THEN** each repository retains one document actor per ID and synchronization converges without corruption or deadlock
+
+#### Scenario: Concurrent offline acceptance
+- **WHEN** synchronized repositories disconnect, each adds a distinct value to the same document, and then reconnect
+- **THEN** both repositories reach identical heads and hydrated values containing both additions
