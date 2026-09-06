@@ -13,3 +13,13 @@ license = "MIT"
 
 [workspace.dependencies]
 automerge-repo = { path = "crates/automerge_repo" }
+async-trait = "=0.1.92"
+automerge = "=0.11.0"
+bytes = "=1.12.1"
+rusqlite = { version = "=0.37.0", features = ["bundled"] }
+serde = { version = "=1.0.229", features = ["derive"] }
+thiserror = "=2.0.20"
+tokio = { version = "=1.53.1", features = ["macros", "rt-multi-thread", "sync", "time"] }
+tracing = "=0.1.44"
+uuid = { version = "=1.26.0", features = ["serde", "v7"] }
+tempfile = "=3.27.0"

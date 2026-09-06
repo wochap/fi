@@ -44,7 +44,10 @@
             flutter
 
             # Rust
-            rustup
+            cargo
+            clippy
+            rustc
+            rustfmt
 
             # flutter_rust_bridge build tooling
             cargo-ndk
