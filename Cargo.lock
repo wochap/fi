@@ -3,6 +3,13 @@
 version = 4
 
 [[package]]
+name = "app-core"
+version = "0.1.0"
+dependencies = [
+ "automerge-repo",
+]
+
+[[package]]
 name = "async-trait"
 version = "0.1.92"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -35,6 +42,19 @@ dependencies = [
  "tinyvec",
  "tracing",
  "unicode-segmentation",
+]
+
+[[package]]
+name = "automerge-repo"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "automerge",
+ "bytes",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "uuid",
 ]
 
 [[package]]
@@ -153,19 +173,6 @@ name = "fastrand"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "da7c62ceae207dd37ea5b845da6a0696c799f85e97da1ab5b7910be3c1c80223"
-
-[[package]]
-name = "fi-repo"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "automerge",
- "bytes",
- "tempfile",
- "thiserror",
- "tokio",
- "uuid",
-]
 
 [[package]]
 name = "flate2"

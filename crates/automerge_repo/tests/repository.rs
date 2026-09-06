@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use automerge::{ROOT, ReadDoc, transaction::Transactable};
-use fi_repo::{
+use automerge_repo::{
     BootstrapStatus, Error, PeerId, Repo, RepoConfig,
     document::{ChangeOrigin, DocumentStatus},
     error::{BootstrapError, ProtocolError},
@@ -14,7 +14,7 @@ fn put(
     tx: &mut automerge::transaction::Transaction<'_>,
     key: &str,
     value: i64,
-) -> fi_repo::Result<()> {
+) -> automerge_repo::Result<()> {
     tx.put(ROOT, key, value)
         .map_err(|error| Error::Change(error.to_string()))
 }
@@ -70,7 +70,7 @@ async fn drive(a: &MemoryTransport, b: &MemoryTransport) {
     panic!("deterministic network failed to become idle");
 }
 
-async fn state(handle: &fi_repo::DocHandle) -> (Vec<automerge::ChangeHash>, String) {
+async fn state(handle: &automerge_repo::DocHandle) -> (Vec<automerge::ChangeHash>, String) {
     handle
         .read(|doc| {
             let mut keys: Vec<_> = doc.keys(ROOT).collect();
@@ -210,7 +210,7 @@ async fn racing_bootstrap_decisions_accept_exactly_one() {
     let (repo, _, _, _, _, _, _, _) = open_pair().await;
     let left = repo.clone();
     let right = repo.clone();
-    let offered = fi_repo::DocumentId::new();
+    let offered = automerge_repo::DocumentId::new();
     let initialize = tokio::spawn(async move { left.initialize_new().await });
     let join = tokio::spawn(async move { right.join_existing(offered).await });
     let results = [initialize.await.unwrap(), join.await.unwrap()];
@@ -260,7 +260,7 @@ async fn non_hello_first_is_a_peer_scoped_protocol_error() {
     raw_peer
         .send(
             &PeerId::from("repo"),
-            Codec::encode(Message::Announce(fi_repo::DocumentId::new())).unwrap(),
+            Codec::encode(Message::Announce(automerge_repo::DocumentId::new())).unwrap(),
         )
         .await
         .unwrap();
@@ -291,16 +291,16 @@ async fn duplicate_inventory_is_idempotent() {
     raw_peer
         .send(
             &PeerId::from("repo"),
-            Codec::encode(Message::Hello(fi_repo::protocol::BootstrapMode::Ready(
-                root.id(),
-            )))
+            Codec::encode(Message::Hello(
+                automerge_repo::protocol::BootstrapMode::Ready(root.id()),
+            ))
             .unwrap(),
         )
         .await
         .unwrap();
     raw_peer.deliver_all().await;
     tokio::task::yield_now().await;
-    let unknown = fi_repo::DocumentId::new();
+    let unknown = automerge_repo::DocumentId::new();
     for _ in 0..2 {
         raw_peer
             .send(
@@ -333,7 +333,7 @@ async fn send_failure_is_reported_and_reconnection_uses_fresh_state() {
     tokio::task::yield_now().await;
     assert!(matches!(
         errors.recv().await.unwrap(),
-        Error::Network(fi_repo::error::NetworkError::Transport { .. })
+        Error::Network(automerge_repo::error::NetworkError::Transport { .. })
     ));
     net_a.fail_sends(false);
     net_a.connect().await;

@@ -4,7 +4,7 @@ use automerge::{
     Automerge, ROOT, ReadDoc,
     transaction::{CommitOptions, Transactable},
 };
-use fi_repo::{
+use automerge_repo::{
     BootstrapRecord, BootstrapStatus, DocumentId, Error, FilesystemStorage, Repo, RepoConfig,
     error::BootstrapError,
     storage::{ControlStore, StorageAdapter},
@@ -31,7 +31,7 @@ fn put(
     tx: &mut automerge::transaction::Transaction<'_>,
     key: &str,
     value: i64,
-) -> fi_repo::Result<()> {
+) -> automerge_repo::Result<()> {
     tx.put(ROOT, key, value)
         .map_err(|error| Error::Change(error.to_string()))
 }
@@ -301,7 +301,7 @@ async fn shutdown_aggregates_failures_closes_handles_and_rejects_other_clones() 
     documents.fail("document_flush");
     control.fail("control_flush");
     assert!(matches!(repo.shutdown().await, Err(Error::Shutdown(failures)) if failures.len() >= 2));
-    assert_eq!(root.status(), fi_repo::DocumentStatus::Closed);
+    assert_eq!(root.status(), automerge_repo::DocumentStatus::Closed);
     assert!(retained.document_ids().await.is_err());
     assert!(documents.documents_closed());
     assert!(control.control_closed());
@@ -346,9 +346,9 @@ async fn failed_removal_evicts_and_can_be_reopened_then_retried() {
     let document = repo.create().await.unwrap();
     documents.fail_times("remove", 1);
     assert!(repo.remove_local(document.id()).await.is_err());
-    assert_eq!(document.status(), fi_repo::DocumentStatus::Closed);
+    assert_eq!(document.status(), automerge_repo::DocumentStatus::Closed);
     let reopened = repo.open_document(document.id()).await.unwrap();
-    assert_eq!(reopened.status(), fi_repo::DocumentStatus::Ready);
+    assert_eq!(reopened.status(), automerge_repo::DocumentStatus::Ready);
     repo.remove_local(document.id()).await.unwrap();
     assert!(!documents.documents().contains_key(&document.id()));
 }

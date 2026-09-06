@@ -1,0 +1,10 @@
+[package]
+name = "app-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Application backend core"
+
+[dependencies]
+automerge-repo.workspace = true

@@ -1,13 +1,13 @@
 [package]
-name = "fi-repo"
-version = "0.1.0"
-edition = "2024"
-rust-version = "1.90"
-license = "MIT"
+name = "automerge-repo"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
 description = "Actor-owned Automerge repository and peer replication core"
 
 [lib]
-name = "fi_repo"
+name = "automerge_repo"
 path = "src/lib.rs"
 
 [dependencies]

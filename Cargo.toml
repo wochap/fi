@@ -1,0 +1,15 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/automerge_repo",
+    "crates/app_core",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.90"
+license = "MIT"
+
+[workspace.dependencies]
+automerge-repo = { path = "crates/automerge_repo" }

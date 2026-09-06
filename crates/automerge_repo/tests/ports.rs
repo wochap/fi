@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
-use bytes::Bytes;
-use fi_repo::{
+use automerge_repo::{
     BootstrapRecord, DocumentId, PeerId,
     error::NetworkError,
     network::{NetworkEvent, NetworkTransport},
     storage::{ControlStore, StorageAdapter},
     testing::{MemoryStore, MemoryTransport},
 };
+use bytes::Bytes;
 
 #[tokio::test]
 async fn memory_storage_round_trips_and_injects_failures() {

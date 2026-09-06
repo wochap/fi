@@ -1,6 +1,6 @@
-# fi-repo
+# automerge-repo
 
-`fi-repo` is a native Rust repository around Automerge 0.11. Each loaded
+`automerge-repo` is a native Rust repository around Automerge 0.11. Each loaded
 document is exclusively owned by a bounded Tokio actor. A coordinator manages
 explicit bootstrap and whole-collection replication over application-supplied
 authenticated transport and storage ports.
@@ -13,9 +13,9 @@ device, then create and mutate documents through actor handles:
 ```no_run
 use std::sync::Arc;
 use automerge::{ROOT, transaction::Transactable};
-use fi_repo::{Error, Repo, RepoConfig, testing::{MemoryStore, MemoryTransport}};
+use automerge_repo::{Error, Repo, RepoConfig, testing::{MemoryStore, MemoryTransport}};
 
-# async fn example() -> fi_repo::Result<()> {
+# async fn example() -> automerge_repo::Result<()> {
 let documents = Arc::new(MemoryStore::default());
 let control = Arc::new(MemoryStore::default());
 let (transport, _remote) = MemoryTransport::pair("local", "remote", 128);
@@ -46,8 +46,8 @@ only after the application accepts the root:
 
 ```no_run
 # use std::sync::Arc;
-# use fi_repo::{Repo, RepoConfig, testing::{MemoryStore, MemoryTransport}};
-# async fn example() -> fi_repo::Result<()> {
+# use automerge_repo::{Repo, RepoConfig, testing::{MemoryStore, MemoryTransport}};
+# async fn example() -> automerge_repo::Result<()> {
 # let documents = Arc::new(MemoryStore::default());
 # let control = Arc::new(MemoryStore::default());
 # let (transport, _remote) = MemoryTransport::pair("joining", "ready", 128);

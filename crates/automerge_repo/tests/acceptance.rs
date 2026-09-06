@@ -1,7 +1,7 @@
 use std::{path::Path, sync::Arc, time::Duration};
 
 use automerge::{ChangeHash, ROOT, ReadDoc, hydrate, transaction::Transactable};
-use fi_repo::{
+use automerge_repo::{
     BootstrapStatus, ChangeOrigin, DocHandle, DocumentEvent, DocumentId, DocumentStatus, Error,
     FilesystemStorage, PeerId, Repo, RepoConfig,
     testing::{MemoryNetwork, MemoryStore, MemoryTransport},
@@ -16,7 +16,7 @@ fn put(
     tx: &mut automerge::transaction::Transaction<'_>,
     key: &str,
     value: i64,
-) -> fi_repo::Result<()> {
+) -> automerge_repo::Result<()> {
     tx.put(ROOT, key, value)
         .map_err(|error| Error::Change(error.to_string()))
 }
@@ -189,7 +189,7 @@ async fn ready_pair() -> ReadyPair {
 
 async fn open_filesystem_repo(
     path: &Path,
-    transport: Arc<dyn fi_repo::network::NetworkTransport>,
+    transport: Arc<dyn automerge_repo::network::NetworkTransport>,
 ) -> Repo {
     let storage = FilesystemStorage::open(path).await.unwrap();
     Repo::open(
