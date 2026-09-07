@@ -1,0 +1,23 @@
+[package]
+name = "app_bridge"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Narrow flutter_rust_bridge adapter for app-core"
+
+[lib]
+name = "app_bridge"
+crate-type = ["rlib", "cdylib", "staticlib"]
+
+[dependencies]
+app-core = { path = "../app_core" }
+flutter_rust_bridge.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }

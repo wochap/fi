@@ -1,8 +1,23 @@
-# Flutter application (reserved)
+# fi
 
-This directory is reserved for the future Flutter presentation layer and its
-FRB-facing UI state. Flutter scaffolding and `flutter_rust_bridge` configuration
-are intentionally deferred because the Flutter toolchain is unavailable.
+Native Android/Linux presentation for the local-first finance core. The Dart UI
+uses the generated API in `lib/src/rust`; authoritative data and validation stay
+in Rust.
 
-No generated Flutter project, platform runner, networking implementation,
-business logic, or Rust bridge configuration is present yet.
+From the repository root, enter `nix develop`, then use `flutter run` from this
+directory. Run `scripts/check-frb-generated.sh` at the repository root to verify
+that committed FRB bindings reproduce cleanly.
+
+## Getting Started
+
+This project is a starting point for a Flutter application.
+
+A few resources to get you started if this is your first Flutter project:
+
+- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
+- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
+- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+
+For help getting started with Flutter development, view the
+[online documentation](https://docs.flutter.dev/), which offers tutorials,
+samples, guidance on mobile development, and a full API reference.

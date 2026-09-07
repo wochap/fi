@@ -19,7 +19,10 @@
         };
 
         androidComposition = pkgs.androidenv.composeAndroidPackages {
-          platformVersions = [ "35" ];
+          platformVersions = [
+            "35"
+            "36"
+          ];
           buildToolsVersions = [ "35.0.0" ];
 
           abiVersions = [
@@ -28,10 +31,10 @@
           ];
 
           includeNDK = true;
-          includeEmulator = true;
-          includeSystemImages = true;
-
-          systemImageTypes = [ "google_apis" ];
+          includeCmake = true;
+          cmakeVersions = [ "3.22.1" ];
+          includeEmulator = false;
+          includeSystemImages = false;
         };
 
         androidSdk = androidComposition.androidsdk;
@@ -48,19 +51,23 @@
             clippy
             rustc
             rustfmt
+            rustup
 
             # flutter_rust_bridge build tooling
             cargo-ndk
+            flutter_rust_bridge_codegen
 
             # Linux desktop Flutter
             clang
             cmake
             ninja
             pkg-config
+            llvmPackages.libclang
 
             gtk3
             pcre2
             libepoxy
+            weston
 
             # Android
             androidSdk
@@ -73,6 +80,7 @@
           ANDROID_NDK_HOME = "${androidSdk}/libexec/android-sdk/ndk-bundle";
 
           JAVA_HOME = "${pkgs.jdk17}";
+          LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
 
           shellHook = ''
             export PATH="$HOME/.cargo/bin:$PATH"

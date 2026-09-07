@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/automerge_repo",
     "crates/app_core",
+    "crates/app_bridge",
 ]
 
 [workspace.package]
@@ -23,3 +24,4 @@ tokio = { version = "=1.53.1", features = ["macros", "rt-multi-thread", "sync", 
 tracing = "=0.1.44"
 uuid = { version = "=1.26.0", features = ["serde", "v7"] }
 tempfile = "=3.27.0"
+flutter_rust_bridge = "=2.12.0"
