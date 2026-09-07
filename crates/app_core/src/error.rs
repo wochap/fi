@@ -51,6 +51,10 @@ pub enum AppError {
     Domain(#[from] DomainError),
     #[error(transparent)]
     Projection(#[from] ProjectionError),
+    #[error(transparent)]
+    Identity(#[from] crate::identity::IdentityError),
+    #[error(transparent)]
+    Network(#[from] crate::quinn_transport::QuinnTransportError),
     #[error("repository operation failed: {0}")]
     Repository(String),
     #[error("storage operation failed: {0}")]

@@ -246,6 +246,10 @@ impl From<AppError> for BridgeError {
                 BridgeErrorKind::Persistence,
                 "Local data could not be saved or loaded.",
             ),
+            AppError::Identity(_) | AppError::Network(_) => Self::safe(
+                BridgeErrorKind::Initialization,
+                "Secure device networking could not be initialized.",
+            ),
             AppError::OwnerStopped => Self::safe(
                 BridgeErrorKind::Lifecycle,
                 "The local finance service is not running.",

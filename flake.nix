@@ -48,6 +48,8 @@
 
             # Rust
             cargo
+            cargo-audit
+            cargo-deny
             clippy
             rustc
             rustfmt

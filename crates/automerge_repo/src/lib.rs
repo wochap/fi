@@ -10,7 +10,7 @@ pub mod network;
 pub mod protocol;
 pub mod repo;
 pub mod storage;
-mod sync;
+pub mod sync;
 #[doc(hidden)]
 pub mod testing;
 
@@ -20,3 +20,4 @@ pub use error::{Error, Failure, FailurePhase, Result};
 pub use ids::{DocumentId, PeerId};
 pub use repo::{Repo, RepoConfig};
 pub use storage::FilesystemStorage;
+pub use sync::{PeerSyncProgress, PeerSyncState, RelationshipSyncState};

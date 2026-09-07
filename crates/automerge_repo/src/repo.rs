@@ -22,6 +22,7 @@ use crate::{
     network::{NetworkEvent, NetworkTransport},
     protocol::{BootstrapMode, Codec, Message},
     storage::{ControlStore, StorageAdapter},
+    sync::{PeerSyncProgress, PeerSyncState, RelationshipSyncState},
 };
 
 #[derive(Clone, Debug)]
@@ -113,6 +114,7 @@ pub struct Repo {
     tx: mpsc::Sender<Command>,
     bootstrap: watch::Receiver<BootstrapStatus>,
     offers: watch::Receiver<Vec<BootstrapOffer>>,
+    peer_sync: watch::Receiver<HashMap<PeerId, PeerSyncProgress>>,
     errors: broadcast::Sender<Error>,
     lifecycle: Lifecycle,
 }
@@ -221,6 +223,7 @@ impl Repo {
         let capture_gate: CaptureGate = Arc::new(RwLock::new(()));
         let (bootstrap_tx, bootstrap) = watch::channel(initial.clone());
         let (offers_tx, offers) = watch::channel(Vec::new());
+        let (peer_sync_tx, peer_sync) = watch::channel(HashMap::new());
         let (errors, _) = broadcast::channel(config.error_capacity.max(1));
         let (actor_tx, actor_rx) = mpsc::channel(config.coordinator_capacity.max(1));
         let mut actors = HashMap::new();
@@ -257,6 +260,8 @@ impl Repo {
             peers: HashMap::new(),
             status_tx: bootstrap_tx,
             offers_tx,
+            peer_sync_tx,
+            relationships: HashMap::new(),
             errors: errors.clone(),
             actor_tx,
             lifecycle: lifecycle.clone(),
@@ -268,6 +273,7 @@ impl Repo {
             tx,
             bootstrap,
             offers,
+            peer_sync,
             errors,
             lifecycle,
         })
@@ -287,6 +293,16 @@ impl Repo {
     /// Watches the retained set of roots offered by authenticated peers.
     pub fn subscribe_offers(&self) -> watch::Receiver<Vec<BootstrapOffer>> {
         self.offers.clone()
+    }
+    #[must_use]
+    /// Watches retained whole-repository synchronization progress per authenticated peer.
+    pub fn subscribe_peer_sync(&self) -> watch::Receiver<HashMap<PeerId, PeerSyncProgress>> {
+        self.peer_sync.clone()
+    }
+    #[must_use]
+    /// Returns the latest retained synchronization snapshot.
+    pub fn peer_sync_progress(&self) -> HashMap<PeerId, PeerSyncProgress> {
+        self.peer_sync.borrow().clone()
     }
     #[must_use]
     /// Subscribes to typed asynchronous persistence, network, and protocol errors.
@@ -398,6 +414,8 @@ struct Coordinator {
     peers: HashMap<PeerId, PeerState>,
     status_tx: watch::Sender<BootstrapStatus>,
     offers_tx: watch::Sender<Vec<BootstrapOffer>>,
+    peer_sync_tx: watch::Sender<HashMap<PeerId, PeerSyncProgress>>,
+    relationships: HashMap<(PeerId, DocumentId), RelationshipSyncState>,
     errors: broadcast::Sender<Error>,
     actor_tx: mpsc::Sender<ActorOutput>,
     lifecycle: Lifecycle,
@@ -778,6 +796,7 @@ impl Coordinator {
     async fn handle_network(&mut self, event: NetworkEvent) {
         match event {
             NetworkEvent::PeerConnected(peer) => {
+                self.clear_peer_progress(&peer);
                 self.detach_peer(&peer).await;
                 if let Some(previous) = self.peers.remove(&peer) {
                     previous.writer_task.abort();
@@ -806,6 +825,17 @@ impl Coordinator {
                         writer_task,
                     },
                 );
+                self.peer_sync_tx.send_modify(|progress| {
+                    progress.insert(
+                        peer.clone(),
+                        PeerSyncProgress {
+                            peer: peer.clone(),
+                            state: PeerSyncState::Connected,
+                            documents: 0,
+                            syncing_documents: Vec::new(),
+                        },
+                    );
+                });
                 self.send(&peer, Message::Hello(mode(&self.status()))).await;
             }
             NetworkEvent::PeerDisconnected(peer) => {
@@ -814,6 +844,7 @@ impl Coordinator {
                     state.writer_task.abort();
                 }
                 self.refresh_offers();
+                self.clear_peer_progress(&peer);
             }
             NetworkEvent::Message { peer, bytes } => match Codec::decode_exact(&bytes) {
                 Ok(message) => self.handle_message(peer, message).await,
@@ -936,6 +967,7 @@ impl Coordinator {
             }
             let _ = self.transport.close_peer(&peer).await;
             self.refresh_offers();
+            self.clear_peer_progress(&peer);
             return;
         }
         let eligibility = match (local.clone(), remote) {
@@ -1010,6 +1042,22 @@ impl Coordinator {
                     state.writer_task.abort();
                 }
                 self.refresh_offers();
+                self.clear_peer_progress(&peer);
+            }
+            ActorOutput::SyncProgress {
+                peer,
+                document,
+                state,
+            } => {
+                match state {
+                    Some(state) => {
+                        self.relationships.insert((peer.clone(), document), state);
+                    }
+                    None => {
+                        self.relationships.remove(&(peer.clone(), document));
+                    }
+                }
+                self.refresh_peer_progress(&peer);
             }
         }
     }
@@ -1057,6 +1105,47 @@ impl Coordinator {
         for actor in self.actors.values() {
             actor.detach(peer.clone()).await;
         }
+    }
+    fn clear_peer_progress(&mut self, peer: &PeerId) {
+        self.relationships
+            .retain(|(candidate, _), _| candidate != peer);
+        self.peer_sync_tx.send_modify(|progress| {
+            progress.remove(peer);
+        });
+    }
+
+    fn refresh_peer_progress(&self, peer: &PeerId) {
+        if !self.peers.contains_key(peer) {
+            return;
+        }
+        let mut relationships: Vec<_> = self
+            .relationships
+            .iter()
+            .filter(|((candidate, _), _)| candidate == peer)
+            .map(|((_, document), state)| (*document, *state))
+            .collect();
+        relationships.sort_by_key(|(document, _)| *document);
+        let syncing_documents = relationships
+            .iter()
+            .filter(|(_, state)| *state == RelationshipSyncState::Syncing)
+            .map(|(document, _)| *document)
+            .collect::<Vec<_>>();
+        let state = if relationships.is_empty() {
+            PeerSyncState::Connected
+        } else if syncing_documents.is_empty() {
+            PeerSyncState::Synced
+        } else {
+            PeerSyncState::Syncing
+        };
+        let value = PeerSyncProgress {
+            peer: peer.clone(),
+            state,
+            documents: relationships.len(),
+            syncing_documents,
+        };
+        self.peer_sync_tx.send_modify(|progress| {
+            progress.insert(peer.clone(), value);
+        });
     }
     async fn announce(&mut self, id: DocumentId) {
         let peers: Vec<_> = self
@@ -1118,6 +1207,7 @@ impl Coordinator {
         }
         let _ = self.transport.close_peer(&peer).await;
         self.refresh_offers();
+        self.clear_peer_progress(&peer);
     }
 }
 

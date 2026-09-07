@@ -5,6 +5,7 @@ use crate::{
     error::{BootstrapError, LifecycleError, NetworkError, StorageError},
     lifecycle::{CaptureGate, Lifecycle},
     storage::StorageAdapter,
+    sync::RelationshipSyncState,
 };
 use automerge::{
     Automerge, ChangeHash, Patch, PatchLog,
@@ -71,6 +72,11 @@ pub(crate) enum ActorOutput {
     },
     DurableHistory(DocumentId),
     PeerWriterFailed(PeerId, NetworkError),
+    SyncProgress {
+        peer: PeerId,
+        document: DocumentId,
+        state: Option<RelationshipSyncState>,
+    },
 }
 enum Command {
     Read {
@@ -485,8 +491,15 @@ async fn run_actor(
                         Err(error) => { let _ = reply.send(Err(error)); }
                     }
                 }
-                Some(Command::Attach(peer)) => { peers.entry(peer.clone()).or_default(); pump_one(&doc, id, peer, &mut peers, &output).await; }
-                Some(Command::Detach(peer)) => { peers.remove(&peer); }
+                Some(Command::Attach(peer)) => {
+                    peers.entry(peer.clone()).or_default();
+                    report_progress(&doc, id, &peer, &peers, &output).await;
+                    pump_one(&doc, id, peer, &mut peers, &output).await;
+                }
+                Some(Command::Detach(peer)) => {
+                    peers.remove(&peer);
+                    let _ = output.send(ActorOutput::SyncProgress { peer, document: id, state: None }).await;
+                }
                 Some(Command::Receive { peer, message, reply }) => {
                     let _capture = capture_gate.read().await;
                     let before = doc.get_heads();
@@ -520,6 +533,7 @@ async fn run_actor(
                                 submit(&doc, revision, true, &work_tx, &mut in_flight).await;
                             }
                         }
+                        report_progress(&doc, id, &peer, &peers, &output).await;
                     }
                     let _ = reply.send(result);
                 }
@@ -621,9 +635,44 @@ async fn pump_one(
     {
         let _ = output
             .send(ActorOutput::Send {
-                peer,
+                peer: peer.clone(),
                 document: id,
                 message,
+            })
+            .await;
+    }
+    report_progress(doc, id, &peer, peers, output).await;
+}
+
+fn relationship_state(doc: &Automerge, state: &SyncState) -> RelationshipSyncState {
+    let heads = doc.get_heads();
+    if state.have_responded
+        && !state.in_flight
+        && state
+            .their_heads
+            .as_ref()
+            .is_some_and(|remote| *remote == heads)
+        && state.last_sent_heads == heads
+    {
+        RelationshipSyncState::Synced
+    } else {
+        RelationshipSyncState::Syncing
+    }
+}
+
+async fn report_progress(
+    doc: &Automerge,
+    document: DocumentId,
+    peer: &PeerId,
+    peers: &HashMap<PeerId, SyncState>,
+    output: &mpsc::Sender<ActorOutput>,
+) {
+    if let Some(state) = peers.get(peer) {
+        let _ = output
+            .send(ActorOutput::SyncProgress {
+                peer: peer.clone(),
+                document,
+                state: Some(relationship_state(doc, state)),
             })
             .await;
     }

@@ -11,12 +11,23 @@ automerge-repo.workspace = true
 async-trait.workspace = true
 automerge.workspace = true
 bytes.workspace = true
+ed25519-dalek.workspace = true
+hex.workspace = true
+quinn.workspace = true
+rand_core.workspace = true
+rcgen.workspace = true
 rusqlite.workspace = true
+rustls.workspace = true
+secret-service.workspace = true
 serde.workspace = true
+sha2.workspace = true
+subtle.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 uuid.workspace = true
+zeroize.workspace = true
+x509-parser.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

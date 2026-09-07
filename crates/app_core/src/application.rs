@@ -1,17 +1,20 @@
 use std::{
     future::pending,
+    net::SocketAddr,
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{Arc, Mutex},
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 use automerge_repo::{
-    BootstrapStatus, DocHandle, DocumentId, DocumentStatus, Repo, RepoConfig,
-    network::NetworkTransport,
+    BootstrapStatus, DocHandle, DocumentId, DocumentStatus, PeerId, PeerSyncProgress,
+    PeerSyncState, Repo, RepoConfig, network::NetworkTransport,
 };
 use tokio::sync::{broadcast, mpsc, oneshot, watch};
 use tracing::{error, info, instrument};
 
 use crate::{
+    LocalIdentityRecord,
     adapters::{FileDocumentStore, LocalTransport, SqliteControlStore},
     domain::{
         CategoryId, CategoryView, CreateCategory, CreateTransaction, FinanceCommand,
@@ -20,7 +23,10 @@ use crate::{
     },
     error::{AppError, BootstrapError, DomainError, Result},
     events::{ApplicationState, DataChanged, DomainKind, ErrorEvent, ProjectionState},
+    identity::{DeviceId, DeviceIdentity, SecureKeyStore},
     projection::{AggregateView, ReadModel, project, reconcile},
+    quinn_transport::{QuinnTransport, QuinnTransportConfig},
+    routing::{ConnectionManager, EndpointRegistry, NetworkEndpoint, PeerConnectionState},
 };
 
 #[derive(Clone, Debug)]
@@ -52,6 +58,13 @@ enum OwnerCommand {
     Shutdown(oneshot::Sender<Result<()>>),
 }
 
+struct NetworkComponents {
+    identity: Option<Arc<DeviceIdentity>>,
+    network: Option<Arc<QuinnTransport>>,
+    endpoints: Arc<Mutex<EndpointRegistry>>,
+    connections: Option<Arc<ConnectionManager>>,
+}
+
 /// Cloneable application handle. Mutable orchestration is confined to one bounded owner task.
 #[derive(Clone)]
 pub struct AppCore {
@@ -62,6 +75,11 @@ pub struct AppCore {
     error_events: broadcast::Sender<ErrorEvent>,
     read_model: ReadModel,
     data_dir: Arc<PathBuf>,
+    identity: Option<Arc<DeviceIdentity>>,
+    network: Option<Arc<QuinnTransport>>,
+    endpoints: Arc<Mutex<EndpointRegistry>>,
+    connections: Option<Arc<ConnectionManager>>,
+    peer_sync: watch::Receiver<std::collections::HashMap<PeerId, PeerSyncProgress>>,
 }
 
 impl std::fmt::Debug for AppCore {
@@ -69,6 +87,10 @@ impl std::fmt::Debug for AppCore {
         f.debug_struct("AppCore")
             .field("data_dir", &self.data_dir)
             .field("lifecycle", &self.lifecycle_state())
+            .field(
+                "device_id",
+                &self.identity.as_ref().map(|identity| identity.id()),
+            )
             .finish_non_exhaustive()
     }
 }
@@ -102,6 +124,58 @@ impl AppCore {
             .await
     }
 
+    /// Opens a network-capable core without starting discovery. Trust and endpoints
+    /// must be populated explicitly before dialing.
+    pub async fn open_networked(
+        data_dir: impl Into<PathBuf>,
+        key_store: Arc<dyn SecureKeyStore>,
+        bind: SocketAddr,
+        config: AppCoreConfig,
+        network_config: QuinnTransportConfig,
+    ) -> Result<Self> {
+        let data_dir = data_dir.into();
+        tokio::fs::create_dir_all(&data_dir)
+            .await
+            .map_err(|error| AppError::Storage(error.to_string()))?;
+        let control_store = Arc::new(SqliteControlStore::open(data_dir.join("control.sqlite"))?);
+        let identity = Arc::new(DeviceIdentity::load_or_create(key_store.as_ref()).await?);
+        let created_at_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis()
+            .try_into()
+            .unwrap_or(u64::MAX);
+        control_store.store_local_identity(&LocalIdentityRecord {
+            device_id: identity.id(),
+            public_key: identity.public_key(),
+            created_at_ms,
+        })?;
+        let network = QuinnTransport::bind(
+            bind,
+            identity.clone(),
+            control_store.clone(),
+            network_config,
+        )?;
+        let endpoints = Arc::new(Mutex::new(EndpointRegistry::default()));
+        let connections = Arc::new(
+            ConnectionManager::new(identity.id(), network.clone(), endpoints.clone(), 4)
+                .map_err(|message| AppError::Storage(message.into()))?,
+        );
+        Self::open_with_components(
+            data_dir,
+            config,
+            network.clone(),
+            control_store,
+            NetworkComponents {
+                identity: Some(identity),
+                network: Some(network),
+                endpoints,
+                connections: Some(connections),
+            },
+        )
+        .await
+    }
+
     async fn open_with_config_and_transport(
         data_dir: PathBuf,
         config: AppCoreConfig,
@@ -115,9 +189,36 @@ impl AppCore {
         tokio::fs::create_dir_all(&data_dir)
             .await
             .map_err(|e| AppError::Storage(e.to_string()))?;
+        let control_store = Arc::new(SqliteControlStore::open(data_dir.join("control.sqlite"))?);
+        Self::open_with_components(
+            data_dir,
+            config,
+            transport,
+            control_store,
+            NetworkComponents {
+                identity: None,
+                network: None,
+                endpoints: Arc::new(Mutex::new(EndpointRegistry::default())),
+                connections: None,
+            },
+        )
+        .await
+    }
+
+    async fn open_with_components(
+        data_dir: PathBuf,
+        config: AppCoreConfig,
+        transport: Arc<dyn NetworkTransport>,
+        control_store: Arc<SqliteControlStore>,
+        network_components: NetworkComponents,
+    ) -> Result<Self> {
+        if config.command_capacity == 0 || config.transient_event_capacity == 0 {
+            return Err(AppError::Storage(
+                "application queue capacities must be greater than zero".into(),
+            ));
+        }
         let document_store =
             Arc::new(FileDocumentStore::open(data_dir.join("automerge/documents")).await?);
-        let control_store = Arc::new(SqliteControlStore::open(data_dir.join("control.sqlite"))?);
         let read_model = ReadModel::open_disposable(data_dir.join("read-model.sqlite"))?;
         let repo = Repo::open(
             document_store,
@@ -126,6 +227,10 @@ impl AppCore {
             config.repo.clone(),
         )
         .await?;
+        let peer_sync = repo.subscribe_peer_sync();
+        if let Some(manager) = network_components.connections.clone() {
+            spawn_sync_bridge(peer_sync.clone(), manager);
+        }
 
         let initial = match repo.bootstrap_status() {
             BootstrapStatus::NeedsDecision => ApplicationState::NeedsDecision,
@@ -178,6 +283,11 @@ impl AppCore {
             error_events,
             read_model,
             data_dir: Arc::new(data_dir),
+            identity: network_components.identity,
+            network: network_components.network,
+            endpoints: network_components.endpoints,
+            connections: network_components.connections,
+            peer_sync,
         })
     }
 
@@ -208,6 +318,64 @@ impl AppCore {
     #[must_use]
     pub fn data_dir(&self) -> &Path {
         &self.data_dir
+    }
+    #[must_use]
+    pub fn device_id(&self) -> Option<DeviceId> {
+        self.identity.as_ref().map(|identity| identity.id())
+    }
+    #[must_use]
+    pub fn network_addr(&self) -> Option<SocketAddr> {
+        self.network
+            .as_ref()
+            .and_then(|network| network.local_addr().ok())
+    }
+    #[must_use]
+    pub fn subscribe_peer_sync(
+        &self,
+    ) -> watch::Receiver<std::collections::HashMap<PeerId, PeerSyncProgress>> {
+        self.peer_sync.clone()
+    }
+    #[must_use]
+    pub fn subscribe_connections(
+        &self,
+    ) -> Option<watch::Receiver<std::collections::HashMap<DeviceId, PeerConnectionState>>> {
+        self.connections.as_ref().map(|manager| manager.subscribe())
+    }
+    #[must_use]
+    pub fn sync_status(&self) -> crate::routing::SyncStatus {
+        self.connections
+            .as_ref()
+            .map_or(crate::routing::SyncStatus::Offline, |manager| {
+                manager.sync_status()
+            })
+    }
+    pub fn replace_endpoints(
+        &self,
+        peer: DeviceId,
+        source: crate::routing::EndpointSource,
+        endpoints: impl IntoIterator<Item = NetworkEndpoint>,
+    ) {
+        if let Ok(mut registry) = self.endpoints.lock() {
+            registry.replace_source(peer, source, endpoints);
+        }
+    }
+    pub async fn connect_peer(&self, peer: DeviceId, now_ms: u64) -> Result<u64> {
+        self.connections
+            .as_ref()
+            .ok_or_else(|| AppError::Storage("networking is not enabled".into()))?
+            .connect_manual(peer, now_ms)
+            .await
+            .map_err(|error| AppError::Storage(error.to_string()))
+    }
+    pub async fn disconnect_peer(&self, peer: DeviceId) -> Result<()> {
+        let network = self
+            .network
+            .as_ref()
+            .ok_or_else(|| AppError::Storage("networking is not enabled".into()))?;
+        NetworkTransport::close_peer(network.as_ref(), &PeerId::from(peer.to_string()))
+            .await
+            .map_err(|error| AppError::Repository(error.to_string()))?;
+        Ok(())
     }
 
     pub async fn create_new_dataset(&self) -> Result<DocumentId> {
@@ -298,6 +466,42 @@ impl AppCore {
     pub async fn shutdown(&self) -> Result<()> {
         request(&self.commands, OwnerCommand::Shutdown).await
     }
+}
+
+fn spawn_sync_bridge(
+    mut sync: watch::Receiver<std::collections::HashMap<PeerId, PeerSyncProgress>>,
+    manager: Arc<ConnectionManager>,
+) {
+    tokio::spawn(async move {
+        let mut previous = std::collections::HashSet::new();
+        loop {
+            let snapshot = sync.borrow_and_update().clone();
+            let current = snapshot
+                .keys()
+                .filter_map(|peer| peer.as_str().parse::<DeviceId>().ok())
+                .collect::<std::collections::HashSet<_>>();
+            for disconnected in previous.difference(&current) {
+                manager.set_state(*disconnected, PeerConnectionState::Disconnected);
+            }
+            for (peer, progress) in snapshot {
+                let Ok(device) = peer.as_str().parse::<DeviceId>() else {
+                    continue;
+                };
+                manager.set_state(
+                    device,
+                    match progress.state {
+                        PeerSyncState::Connected => PeerConnectionState::Connected,
+                        PeerSyncState::Syncing => PeerConnectionState::Syncing,
+                        PeerSyncState::Synced => PeerConnectionState::Synced,
+                    },
+                );
+            }
+            previous = current;
+            if sync.changed().await.is_err() {
+                break;
+            }
+        }
+    });
 }
 
 fn ensure_query_ready(state: ApplicationState) -> Result<()> {

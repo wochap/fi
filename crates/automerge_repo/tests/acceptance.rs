@@ -3,7 +3,7 @@ use std::{path::Path, sync::Arc, time::Duration};
 use automerge::{ChangeHash, ROOT, ReadDoc, hydrate, transaction::Transactable};
 use automerge_repo::{
     BootstrapStatus, ChangeOrigin, DocHandle, DocumentEvent, DocumentId, DocumentStatus, Error,
-    FilesystemStorage, PeerId, Repo, RepoConfig,
+    FilesystemStorage, PeerId, PeerSyncState, Repo, RepoConfig,
     testing::{MemoryNetwork, MemoryStore, MemoryTransport},
 };
 use tokio::sync::broadcast;
@@ -19,6 +19,23 @@ fn put(
 ) -> automerge_repo::Result<()> {
     tx.put(ROOT, key, value)
         .map_err(|error| Error::Change(error.to_string()))
+}
+
+async fn wait_for_peer_state(repo: &Repo, peer: &PeerId, expected: PeerSyncState) {
+    for _ in 0..MAX_DELIVERY_ROUNDS {
+        if repo
+            .peer_sync_progress()
+            .get(peer)
+            .is_some_and(|value| value.state == expected)
+        {
+            return;
+        }
+        tokio::task::yield_now().await;
+    }
+    panic!(
+        "peer {peer} did not reach {expected:?}: {:?}",
+        repo.peer_sync_progress()
+    );
 }
 
 #[derive(Debug, PartialEq)]
@@ -413,4 +430,48 @@ async fn repository_restart_uses_retained_snapshots_and_fresh_session_state() {
         assert_value(&document_a, key, value).await;
         assert_value(&replacement_document_b, key, value).await;
     }
+}
+
+#[tokio::test]
+async fn peer_sync_progress_is_retained_aggregated_and_fresh_per_connection() {
+    let pair = ready_pair().await;
+    let peer_b = PeerId::from("acceptance-b");
+    wait_for_peer_state(&pair.a, &peer_b, PeerSyncState::Synced).await;
+    let late = pair.a.subscribe_peer_sync();
+    assert_eq!(
+        late.borrow().get(&peer_b).unwrap().state,
+        PeerSyncState::Synced
+    );
+
+    pair.root_a
+        .change(|tx| put(tx, "regresses", 1))
+        .await
+        .unwrap();
+    wait_for_peer_state(&pair.a, &peer_b, PeerSyncState::Syncing).await;
+    drive_pair(&pair.net_a, &pair.net_b).await;
+    wait_for_peer_state(&pair.a, &peer_b, PeerSyncState::Synced).await;
+
+    let second = pair.a.create_with(|tx| put(tx, "second", 2)).await.unwrap();
+    drive_pair(&pair.net_a, &pair.net_b).await;
+    pair.b
+        .open_document(second.id())
+        .await
+        .unwrap()
+        .ready()
+        .await
+        .unwrap();
+    wait_for_peer_state(&pair.a, &peer_b, PeerSyncState::Synced).await;
+    assert_eq!(pair.a.peer_sync_progress()[&peer_b].documents, 2);
+
+    pair.net_a.disconnect().await;
+    for _ in 0..MAX_DELIVERY_ROUNDS {
+        if !pair.a.peer_sync_progress().contains_key(&peer_b) {
+            break;
+        }
+        tokio::task::yield_now().await;
+    }
+    assert!(!pair.a.peer_sync_progress().contains_key(&peer_b));
+    pair.net_a.connect().await;
+    drive_pair(&pair.net_a, &pair.net_b).await;
+    wait_for_peer_state(&pair.a, &peer_b, PeerSyncState::Synced).await;
 }

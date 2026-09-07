@@ -1,0 +1,422 @@
+//! Device-oriented endpoint selection and bounded connection orchestration.
+
+use std::{
+    cmp::Reverse,
+    collections::{BTreeMap, HashMap},
+    net::SocketAddr,
+    sync::{Arc, Mutex},
+};
+
+use async_trait::async_trait;
+use tokio::sync::{Semaphore, watch};
+
+use crate::identity::DeviceId;
+
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum EndpointSource {
+    Lan,
+    Tailscale,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NetworkEndpoint {
+    pub address: SocketAddr,
+    pub source: EndpointSource,
+    pub observed_at_ms: u64,
+    pub expires_at_ms: u64,
+    pub interface_scope: Option<u32>,
+    pub last_success_ms: Option<u64>,
+    pub failures: u8,
+    pub retry_after_ms: Option<u64>,
+}
+
+impl NetworkEndpoint {
+    #[must_use]
+    pub fn is_eligible(&self, now_ms: u64) -> bool {
+        self.expires_at_ms > now_ms && self.retry_after_ms.is_none_or(|retry| retry <= now_ms)
+    }
+
+    pub fn record_failure(&mut self, now_ms: u64, minimum_ms: u64, maximum_ms: u64) {
+        self.failures = self.failures.saturating_add(1).min(31);
+        let shift = u32::from(self.failures.saturating_sub(1)).min(20);
+        let delay = minimum_ms.saturating_mul(1_u64 << shift).min(maximum_ms);
+        self.retry_after_ms = Some(now_ms.saturating_add(delay));
+    }
+
+    pub fn record_success(&mut self, now_ms: u64) {
+        self.last_success_ms = Some(now_ms);
+        self.failures = 0;
+        self.retry_after_ms = None;
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct EndpointRegistry {
+    endpoints: BTreeMap<DeviceId, Vec<NetworkEndpoint>>,
+}
+
+impl EndpointRegistry {
+    pub fn replace_source(
+        &mut self,
+        device: DeviceId,
+        source: EndpointSource,
+        replacements: impl IntoIterator<Item = NetworkEndpoint>,
+    ) {
+        let current = self.endpoints.entry(device).or_default();
+        current.retain(|endpoint| endpoint.source != source);
+        current.extend(
+            replacements
+                .into_iter()
+                .filter(|endpoint| endpoint.source == source),
+        );
+    }
+
+    #[must_use]
+    pub fn ranked(&self, device: DeviceId, now_ms: u64) -> Vec<NetworkEndpoint> {
+        rank_endpoints(
+            self.endpoints
+                .get(&device)
+                .map(Vec::as_slice)
+                .unwrap_or_default(),
+            now_ms,
+        )
+    }
+
+    pub fn endpoint_mut(
+        &mut self,
+        device: DeviceId,
+        address: SocketAddr,
+    ) -> Option<&mut NetworkEndpoint> {
+        self.endpoints
+            .get_mut(&device)?
+            .iter_mut()
+            .find(|endpoint| endpoint.address == address)
+    }
+}
+
+#[must_use]
+pub fn rank_endpoints(endpoints: &[NetworkEndpoint], now_ms: u64) -> Vec<NetworkEndpoint> {
+    let mut ranked: Vec<_> = endpoints
+        .iter()
+        .filter(|endpoint| endpoint.is_eligible(now_ms))
+        .cloned()
+        .collect();
+    ranked.sort_by_key(|endpoint| {
+        (
+            endpoint.source,
+            Reverse(endpoint.last_success_ms.unwrap_or(0)),
+            endpoint.failures,
+            Reverse(endpoint.observed_at_ms),
+            endpoint.address,
+            endpoint.interface_scope,
+        )
+    });
+    ranked
+}
+
+#[derive(Clone, Debug, thiserror::Error, Eq, PartialEq)]
+pub enum ConnectionFailure {
+    #[error("no eligible endpoint")]
+    NoRoute,
+    #[error("route failed: {0}")]
+    Route(String),
+    #[error("TLS failed: {0}")]
+    Tls(String),
+    #[error("trust failed: {0}")]
+    Trust(String),
+    #[error("stream failed: {0}")]
+    Stream(String),
+    #[error("transport failed: {0}")]
+    Transport(String),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum PeerConnectionState {
+    Disconnected,
+    Connecting { endpoint: SocketAddr },
+    Authenticating { endpoint: SocketAddr },
+    Connected,
+    Syncing,
+    Synced,
+    Failed(ConnectionFailure),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SyncStatus {
+    Offline,
+    Connecting,
+    Syncing,
+    Synced,
+    Failed,
+}
+
+#[must_use]
+pub fn aggregate_sync_status(states: &HashMap<DeviceId, PeerConnectionState>) -> SyncStatus {
+    if states.is_empty()
+        || states
+            .values()
+            .all(|state| matches!(state, PeerConnectionState::Disconnected))
+    {
+        SyncStatus::Offline
+    } else if states
+        .values()
+        .any(|state| matches!(state, PeerConnectionState::Failed(_)))
+    {
+        SyncStatus::Failed
+    } else if states.values().any(|state| {
+        matches!(
+            state,
+            PeerConnectionState::Connecting { .. } | PeerConnectionState::Authenticating { .. }
+        )
+    }) {
+        SyncStatus::Connecting
+    } else if states.values().any(|state| {
+        matches!(
+            state,
+            PeerConnectionState::Connected | PeerConnectionState::Syncing
+        )
+    }) {
+        SyncStatus::Syncing
+    } else {
+        SyncStatus::Synced
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ConnectionDirection {
+    Inbound,
+    Outbound,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct SessionCandidate {
+    pub direction: ConnectionDirection,
+    pub generation: u64,
+}
+
+#[must_use]
+pub fn is_preferred_initiator(local: DeviceId, remote: DeviceId) -> bool {
+    local < remote
+}
+
+#[must_use]
+pub fn choose_session(
+    local: DeviceId,
+    remote: DeviceId,
+    left: SessionCandidate,
+    right: SessionCandidate,
+) -> SessionCandidate {
+    let preferred = if is_preferred_initiator(local, remote) {
+        ConnectionDirection::Outbound
+    } else {
+        ConnectionDirection::Inbound
+    };
+    [left, right]
+        .into_iter()
+        .max_by_key(|candidate| (candidate.direction == preferred, candidate.generation))
+        .expect("two candidates")
+}
+
+#[async_trait]
+pub trait PeerConnector: Send + Sync + 'static {
+    async fn connect(
+        &self,
+        peer: DeviceId,
+        endpoint: NetworkEndpoint,
+    ) -> Result<u64, ConnectionFailure>;
+}
+
+pub struct ConnectionManager {
+    local: DeviceId,
+    connector: Arc<dyn PeerConnector>,
+    registry: Arc<Mutex<EndpointRegistry>>,
+    attempts: Arc<Semaphore>,
+    states: watch::Sender<HashMap<DeviceId, PeerConnectionState>>,
+    retry_min_ms: u64,
+    retry_max_ms: u64,
+}
+
+impl ConnectionManager {
+    pub fn new(
+        local: DeviceId,
+        connector: Arc<dyn PeerConnector>,
+        registry: Arc<Mutex<EndpointRegistry>>,
+        max_concurrent_attempts: usize,
+    ) -> Result<Self, &'static str> {
+        if max_concurrent_attempts == 0 {
+            return Err("connection capacity must be greater than zero");
+        }
+        let (states, _) = watch::channel(HashMap::new());
+        Ok(Self {
+            local,
+            connector,
+            registry,
+            attempts: Arc::new(Semaphore::new(max_concurrent_attempts)),
+            states,
+            retry_min_ms: 250,
+            retry_max_ms: 30_000,
+        })
+    }
+
+    #[must_use]
+    pub fn subscribe(&self) -> watch::Receiver<HashMap<DeviceId, PeerConnectionState>> {
+        self.states.subscribe()
+    }
+
+    #[must_use]
+    pub fn sync_status(&self) -> SyncStatus {
+        aggregate_sync_status(&self.states.borrow())
+    }
+
+    pub fn set_state(&self, peer: DeviceId, state: PeerConnectionState) {
+        self.states.send_modify(|states| {
+            states.insert(peer, state);
+        });
+    }
+
+    pub async fn connect_preferred(
+        &self,
+        peer: DeviceId,
+        now_ms: u64,
+    ) -> Result<u64, ConnectionFailure> {
+        if !is_preferred_initiator(self.local, peer) {
+            return Err(ConnectionFailure::NoRoute);
+        }
+        self.connect_manual(peer, now_ms).await
+    }
+
+    pub async fn connect_manual(
+        &self,
+        peer: DeviceId,
+        now_ms: u64,
+    ) -> Result<u64, ConnectionFailure> {
+        let _permit = self
+            .attempts
+            .acquire()
+            .await
+            .map_err(|_| ConnectionFailure::Transport("connection manager closed".into()))?;
+        let endpoints = self
+            .registry
+            .lock()
+            .map_err(|_| ConnectionFailure::Transport("endpoint registry lock poisoned".into()))?
+            .ranked(peer, now_ms);
+        if endpoints.is_empty() {
+            self.set_state(
+                peer,
+                PeerConnectionState::Failed(ConnectionFailure::NoRoute),
+            );
+            return Err(ConnectionFailure::NoRoute);
+        }
+        let mut last = ConnectionFailure::NoRoute;
+        for endpoint in endpoints {
+            self.set_state(
+                peer,
+                PeerConnectionState::Connecting {
+                    endpoint: endpoint.address,
+                },
+            );
+            self.set_state(
+                peer,
+                PeerConnectionState::Authenticating {
+                    endpoint: endpoint.address,
+                },
+            );
+            match self.connector.connect(peer, endpoint.clone()).await {
+                Ok(generation) => {
+                    if let Ok(mut registry) = self.registry.lock()
+                        && let Some(route) = registry.endpoint_mut(peer, endpoint.address)
+                    {
+                        route.record_success(now_ms);
+                    }
+                    self.set_state(peer, PeerConnectionState::Connected);
+                    return Ok(generation);
+                }
+                Err(error) => {
+                    if let Ok(mut registry) = self.registry.lock()
+                        && let Some(route) = registry.endpoint_mut(peer, endpoint.address)
+                    {
+                        route.record_failure(now_ms, self.retry_min_ms, self.retry_max_ms);
+                    }
+                    last = error;
+                }
+            }
+        }
+        self.set_state(peer, PeerConnectionState::Failed(last.clone()));
+        Err(last)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn endpoint(source: EndpointSource, port: u16) -> NetworkEndpoint {
+        NetworkEndpoint {
+            address: ([127, 0, 0, 1], port).into(),
+            source,
+            observed_at_ms: 5,
+            expires_at_ms: 100,
+            interface_scope: None,
+            last_success_ms: None,
+            failures: 0,
+            retry_after_ms: None,
+        }
+    }
+
+    #[test]
+    fn ranking_is_lan_first_expiring_and_success_aware() {
+        let mut old_lan = endpoint(EndpointSource::Lan, 1);
+        old_lan.last_success_ms = Some(10);
+        let fresh_lan = endpoint(EndpointSource::Lan, 2);
+        let tailscale = endpoint(EndpointSource::Tailscale, 3);
+        let mut expired = endpoint(EndpointSource::Lan, 4);
+        expired.expires_at_ms = 9;
+        let ranked = rank_endpoints(&[tailscale, fresh_lan, expired, old_lan], 10);
+        assert_eq!(
+            ranked
+                .iter()
+                .map(|item| item.address.port())
+                .collect::<Vec<_>>(),
+            vec![1, 2, 3]
+        );
+    }
+
+    #[test]
+    fn failure_backoff_is_bounded_and_excludes_route() {
+        let mut route = endpoint(EndpointSource::Lan, 1);
+        route.expires_at_ms = 1_000;
+        for now in 0..20 {
+            route.record_failure(now, 10, 100);
+        }
+        assert!(route.retry_after_ms.unwrap() <= 119);
+        assert!(!route.is_eligible(50));
+        route.record_success(120);
+        assert!(route.is_eligible(120));
+    }
+
+    #[test]
+    fn preferred_dialing_and_generation_winner_are_deterministic() {
+        let low = DeviceId::from_public_key(&[1; 32]);
+        let high = DeviceId::from_public_key(&[2; 32]);
+        let (local, remote) = if low < high { (low, high) } else { (high, low) };
+        assert!(is_preferred_initiator(local, remote));
+        assert!(!is_preferred_initiator(remote, local));
+        let older = SessionCandidate {
+            direction: ConnectionDirection::Outbound,
+            generation: 4,
+        };
+        let newer = SessionCandidate {
+            direction: ConnectionDirection::Inbound,
+            generation: 5,
+        };
+        assert_eq!(choose_session(local, remote, older, newer), older);
+        let newest_preferred = SessionCandidate {
+            direction: ConnectionDirection::Outbound,
+            generation: 6,
+        };
+        assert_eq!(
+            choose_session(local, remote, older, newest_preferred),
+            newest_preferred
+        );
+    }
+}

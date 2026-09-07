@@ -21,6 +21,12 @@ use bytes::Bytes;
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 use tokio::sync::mpsc;
 
+use crate::{
+    control::{LocalIdentityRecord, PeerConnectionMetadata, PeerTrustRecord, TrustState},
+    identity::{DeviceId, PublicDeviceKey},
+    routing::{ConnectionFailure, PeerConnectionState},
+};
+
 fn storage_error(
     operation: &'static str,
     document: Option<DocumentId>,
@@ -241,7 +247,25 @@ impl SqliteControlStore {
         connection
             .pragma_update(None, "synchronous", "FULL")
             .map_err(|e| storage_error("control_open", None, &path, e))?;
-        connection.execute_batch("CREATE TABLE IF NOT EXISTS app_control (key TEXT PRIMARY KEY, version INTEGER NOT NULL, state TEXT NOT NULL, root TEXT NOT NULL) STRICT;")
+        connection.execute_batch(
+            "CREATE TABLE IF NOT EXISTS app_control (
+                key TEXT PRIMARY KEY, version INTEGER NOT NULL, state TEXT NOT NULL, root TEXT NOT NULL
+             ) STRICT;
+             CREATE TABLE IF NOT EXISTS local_identity (
+                singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
+                device_id TEXT NOT NULL UNIQUE, public_key BLOB NOT NULL CHECK(length(public_key) = 32),
+                created_at_ms INTEGER NOT NULL CHECK(created_at_ms >= 0)
+             ) STRICT;
+             CREATE TABLE IF NOT EXISTS trusted_peers (
+                device_id TEXT PRIMARY KEY, public_key BLOB NOT NULL CHECK(length(public_key) = 32),
+                trust_state TEXT NOT NULL CHECK(trust_state IN ('trusted', 'revoked')),
+                updated_at_ms INTEGER NOT NULL CHECK(updated_at_ms >= 0), last_seen_ms INTEGER
+             ) STRICT;
+             CREATE TABLE IF NOT EXISTS peer_connections (
+                device_id TEXT PRIMARY KEY, state TEXT NOT NULL, error_category TEXT,
+                endpoint TEXT, updated_at_ms INTEGER NOT NULL CHECK(updated_at_ms >= 0)
+             ) STRICT;",
+        )
             .map_err(|e| storage_error("control_open", None, &path, e))?;
         Ok(Self {
             path,
@@ -261,6 +285,262 @@ impl SqliteControlStore {
             Ok(())
         }
     }
+
+    pub fn store_local_identity(&self, record: &LocalIdentityRecord) -> Result<(), StorageError> {
+        self.ensure_open("identity_store")?;
+        if DeviceId::from_public_key(record.public_key.as_bytes()) != record.device_id {
+            return Err(storage_error(
+                "identity_store",
+                None,
+                &self.path,
+                "public key does not match device id",
+            ));
+        }
+        let created_at_ms = i64::try_from(record.created_at_ms).map_err(|_| {
+            storage_error(
+                "identity_store",
+                None,
+                &self.path,
+                "timestamp is out of range",
+            )
+        })?;
+        self.connection.lock().map_err(|_| storage_error("identity_store", None, &self.path, "connection lock poisoned"))?
+            .execute(
+                "INSERT INTO local_identity(singleton, device_id, public_key, created_at_ms) VALUES(1, ?1, ?2, ?3)
+                 ON CONFLICT(singleton) DO UPDATE SET device_id=excluded.device_id, public_key=excluded.public_key, created_at_ms=excluded.created_at_ms",
+                params![record.device_id.to_string(), record.public_key.as_bytes().as_slice(), created_at_ms],
+            )
+            .map(|_| ())
+            .map_err(|error| storage_error("identity_store", None, &self.path, error))
+    }
+
+    pub fn load_local_identity(&self) -> Result<Option<LocalIdentityRecord>, StorageError> {
+        self.ensure_open("identity_load")?;
+        let row: Option<(String, Vec<u8>, i64)> = self
+            .connection
+            .lock()
+            .map_err(|_| {
+                storage_error(
+                    "identity_load",
+                    None,
+                    &self.path,
+                    "connection lock poisoned",
+                )
+            })?
+            .query_row(
+                "SELECT device_id, public_key, created_at_ms FROM local_identity WHERE singleton=1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .optional()
+            .map_err(|error| storage_error("identity_load", None, &self.path, error))?;
+        row.map(|(id, key, created)| {
+            let device_id = id.parse().map_err(|_| {
+                storage_error("identity_load", None, &self.path, "malformed device id")
+            })?;
+            let bytes: [u8; 32] = key.try_into().map_err(|_| {
+                storage_error(
+                    "identity_load",
+                    None,
+                    &self.path,
+                    "malformed public key length",
+                )
+            })?;
+            let public_key = PublicDeviceKey::from_bytes(bytes).map_err(|_| {
+                storage_error("identity_load", None, &self.path, "malformed public key")
+            })?;
+            if DeviceId::from_public_key(public_key.as_bytes()) != device_id {
+                return Err(storage_error(
+                    "identity_load",
+                    None,
+                    &self.path,
+                    "public key does not match device id",
+                ));
+            }
+            Ok(LocalIdentityRecord {
+                device_id,
+                public_key,
+                created_at_ms: u64::try_from(created).map_err(|_| {
+                    storage_error("identity_load", None, &self.path, "negative timestamp")
+                })?,
+            })
+        })
+        .transpose()
+    }
+
+    pub fn upsert_peer_trust(&self, record: &PeerTrustRecord) -> Result<(), StorageError> {
+        self.ensure_open("trust_store")?;
+        if DeviceId::from_public_key(record.public_key.as_bytes()) != record.device_id {
+            return Err(storage_error(
+                "trust_store",
+                None,
+                &self.path,
+                "public key does not match device id",
+            ));
+        }
+        let updated = i64::try_from(record.updated_at_ms).map_err(|_| {
+            storage_error("trust_store", None, &self.path, "timestamp is out of range")
+        })?;
+        let last_seen = record
+            .last_seen_ms
+            .map(i64::try_from)
+            .transpose()
+            .map_err(|_| {
+                storage_error("trust_store", None, &self.path, "timestamp is out of range")
+            })?;
+        self.connection.lock().map_err(|_| storage_error("trust_store", None, &self.path, "connection lock poisoned"))?
+            .execute(
+                "INSERT INTO trusted_peers(device_id, public_key, trust_state, updated_at_ms, last_seen_ms) VALUES(?1, ?2, ?3, ?4, ?5)
+                 ON CONFLICT(device_id) DO UPDATE SET public_key=excluded.public_key, trust_state=excluded.trust_state, updated_at_ms=excluded.updated_at_ms, last_seen_ms=excluded.last_seen_ms",
+                params![record.device_id.to_string(), record.public_key.as_bytes().as_slice(), record.state.as_str(), updated, last_seen],
+            ).map(|_| ()).map_err(|error| storage_error("trust_store", None, &self.path, error))
+    }
+
+    pub fn peer_trust(&self, device: DeviceId) -> Result<Option<PeerTrustRecord>, StorageError> {
+        self.ensure_open("trust_load")?;
+        let row: Option<(Vec<u8>, String, i64, Option<i64>)> = self.connection.lock()
+            .map_err(|_| storage_error("trust_load", None, &self.path, "connection lock poisoned"))?
+            .query_row("SELECT public_key, trust_state, updated_at_ms, last_seen_ms FROM trusted_peers WHERE device_id=?1", [device.to_string()], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)))
+            .optional().map_err(|error| storage_error("trust_load", None, &self.path, error))?;
+        row.map(|(key, state, updated, seen)| {
+            let bytes: [u8; 32] = key.try_into().map_err(|_| {
+                storage_error(
+                    "trust_load",
+                    None,
+                    &self.path,
+                    "malformed public key length",
+                )
+            })?;
+            let public_key = PublicDeviceKey::from_bytes(bytes).map_err(|_| {
+                storage_error("trust_load", None, &self.path, "malformed public key")
+            })?;
+            Ok(PeerTrustRecord {
+                device_id: device,
+                public_key,
+                state: TrustState::parse(&state).ok_or_else(|| {
+                    storage_error("trust_load", None, &self.path, "malformed trust state")
+                })?,
+                updated_at_ms: u64::try_from(updated).map_err(|_| {
+                    storage_error("trust_load", None, &self.path, "negative timestamp")
+                })?,
+                last_seen_ms: seen.map(u64::try_from).transpose().map_err(|_| {
+                    storage_error("trust_load", None, &self.path, "negative timestamp")
+                })?,
+            })
+        })
+        .transpose()
+    }
+
+    pub fn store_peer_connection(
+        &self,
+        metadata: &PeerConnectionMetadata,
+    ) -> Result<(), StorageError> {
+        self.ensure_open("connection_store")?;
+        let (state, error_category) = encode_connection_state(&metadata.state);
+        let updated = i64::try_from(metadata.updated_at_ms).map_err(|_| {
+            storage_error(
+                "connection_store",
+                None,
+                &self.path,
+                "timestamp is out of range",
+            )
+        })?;
+        self.connection.lock().map_err(|_| storage_error("connection_store", None, &self.path, "connection lock poisoned"))?
+            .execute(
+                "INSERT INTO peer_connections(device_id, state, error_category, endpoint, updated_at_ms) VALUES(?1, ?2, ?3, ?4, ?5)
+                 ON CONFLICT(device_id) DO UPDATE SET state=excluded.state, error_category=excluded.error_category, endpoint=excluded.endpoint, updated_at_ms=excluded.updated_at_ms",
+                params![metadata.device_id.to_string(), state, error_category, metadata.endpoint.map(|item| item.to_string()), updated],
+            ).map(|_| ()).map_err(|error| storage_error("connection_store", None, &self.path, error))
+    }
+
+    pub fn peer_connection(
+        &self,
+        device: DeviceId,
+    ) -> Result<Option<PeerConnectionMetadata>, StorageError> {
+        self.ensure_open("connection_load")?;
+        let row: Option<(String, Option<String>, Option<String>, i64)> = self.connection.lock()
+            .map_err(|_| storage_error("connection_load", None, &self.path, "connection lock poisoned"))?
+            .query_row("SELECT state, error_category, endpoint, updated_at_ms FROM peer_connections WHERE device_id=?1", [device.to_string()], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)))
+            .optional().map_err(|error| storage_error("connection_load", None, &self.path, error))?;
+        row.map(|(state, category, endpoint, updated)| {
+            let endpoint = endpoint
+                .map(|value| value.parse())
+                .transpose()
+                .map_err(|_| {
+                    storage_error("connection_load", None, &self.path, "malformed endpoint")
+                })?;
+            let state = decode_connection_state(&state, category.as_deref(), endpoint).ok_or_else(
+                || {
+                    storage_error(
+                        "connection_load",
+                        None,
+                        &self.path,
+                        "malformed connection state",
+                    )
+                },
+            )?;
+            Ok(PeerConnectionMetadata {
+                device_id: device,
+                state,
+                endpoint,
+                updated_at_ms: u64::try_from(updated).map_err(|_| {
+                    storage_error("connection_load", None, &self.path, "negative timestamp")
+                })?,
+            })
+        })
+        .transpose()
+    }
+}
+
+fn encode_connection_state(state: &PeerConnectionState) -> (&'static str, Option<&'static str>) {
+    match state {
+        PeerConnectionState::Disconnected => ("disconnected", None),
+        PeerConnectionState::Connecting { .. } => ("connecting", None),
+        PeerConnectionState::Authenticating { .. } => ("authenticating", None),
+        PeerConnectionState::Connected => ("connected", None),
+        PeerConnectionState::Syncing => ("syncing", None),
+        PeerConnectionState::Synced => ("synced", None),
+        PeerConnectionState::Failed(error) => (
+            "failed",
+            Some(match error {
+                ConnectionFailure::NoRoute => "no_route",
+                ConnectionFailure::Route(_) => "route",
+                ConnectionFailure::Tls(_) => "tls",
+                ConnectionFailure::Trust(_) => "trust",
+                ConnectionFailure::Stream(_) => "stream",
+                ConnectionFailure::Transport(_) => "transport",
+            }),
+        ),
+    }
+}
+
+fn decode_connection_state(
+    state: &str,
+    category: Option<&str>,
+    endpoint: Option<std::net::SocketAddr>,
+) -> Option<PeerConnectionState> {
+    Some(match state {
+        "disconnected" => PeerConnectionState::Disconnected,
+        "connecting" => PeerConnectionState::Connecting {
+            endpoint: endpoint?,
+        },
+        "authenticating" => PeerConnectionState::Authenticating {
+            endpoint: endpoint?,
+        },
+        "connected" => PeerConnectionState::Connected,
+        "syncing" => PeerConnectionState::Syncing,
+        "synced" => PeerConnectionState::Synced,
+        "failed" => PeerConnectionState::Failed(match category? {
+            "no_route" => ConnectionFailure::NoRoute,
+            "route" => ConnectionFailure::Route("previous attempt failed".into()),
+            "tls" => ConnectionFailure::Tls("previous attempt failed".into()),
+            "trust" => ConnectionFailure::Trust("previous attempt failed".into()),
+            "stream" => ConnectionFailure::Stream("previous attempt failed".into()),
+            "transport" => ConnectionFailure::Transport("previous attempt failed".into()),
+            _ => return None,
+        }),
+        _ => return None,
+    })
 }
 
 #[async_trait]
@@ -386,6 +666,44 @@ impl NetworkTransport for LocalTransport {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::identity::PrivateDeviceKey;
+
+    #[test]
+    fn sqlite_control_stores_only_public_identity_and_typed_trust() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("control.sqlite");
+        let store = SqliteControlStore::open(path.clone()).unwrap();
+        let public_key = PrivateDeviceKey::from_seed(&[7; 32]).unwrap().public_key();
+        let device_id = DeviceId::from_public_key(public_key.as_bytes());
+        let local = LocalIdentityRecord {
+            device_id,
+            public_key,
+            created_at_ms: 10,
+        };
+        store.store_local_identity(&local).unwrap();
+        assert_eq!(store.load_local_identity().unwrap(), Some(local));
+        let trust = PeerTrustRecord {
+            device_id,
+            public_key,
+            state: TrustState::Trusted,
+            updated_at_ms: 11,
+            last_seen_ms: None,
+        };
+        store.upsert_peer_trust(&trust).unwrap();
+        assert_eq!(store.peer_trust(device_id).unwrap(), Some(trust));
+        let connection = PeerConnectionMetadata {
+            device_id,
+            state: PeerConnectionState::Connecting {
+                endpoint: "127.0.0.1:42".parse().unwrap(),
+            },
+            endpoint: Some("127.0.0.1:42".parse().unwrap()),
+            updated_at_ms: 12,
+        };
+        store.store_peer_connection(&connection).unwrap();
+        assert_eq!(store.peer_connection(device_id).unwrap(), Some(connection));
+        let bytes = std::fs::read(path).unwrap();
+        assert!(!bytes.windows(32).any(|window| window == [7; 32]));
+    }
 
     #[tokio::test]
     async fn sqlite_control_round_trips_every_transition() {
