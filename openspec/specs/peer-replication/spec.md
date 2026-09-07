@@ -140,3 +140,22 @@ Two independent repository instances connected only through the repository proto
 #### Scenario: Concurrent offline acceptance
 - **WHEN** synchronized repositories disconnect, each adds a distinct value to the same document, and then reconnect
 - **THEN** both repositories reach identical heads and hydrated values containing both additions
+
+### Requirement: Observable per-peer synchronization progress
+The repository SHALL expose retained typed synchronization progress for each authenticated eligible peer, aggregated across its active per-document Automerge sync relationships without persisting connection sync state.
+
+#### Scenario: Eligible peer begins synchronization
+- **WHEN** a compatible authenticated peer is attached to one or more documents
+- **THEN** observers see that peer as syncing until every active relationship has exchanged current heads and has no unacknowledged outbound work
+
+#### Scenario: All document relationships converge
+- **WHEN** every eligible document relationship with a connected peer reaches matching known heads and no in-flight work
+- **THEN** observers see that peer as synced
+
+#### Scenario: Heads change after convergence
+- **WHEN** a local or remote commit changes an attached document after the peer was synced
+- **THEN** that peer returns to syncing until the new heads converge
+
+#### Scenario: Peer disconnects
+- **WHEN** the active peer session disconnects or is replaced
+- **THEN** its old per-session synchronization progress is removed and a reconnect starts with fresh sync state
