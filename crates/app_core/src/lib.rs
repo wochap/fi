@@ -4,6 +4,7 @@ pub mod adapters;
 pub mod application;
 pub mod control;
 pub mod discovery;
+pub mod discovery_control;
 pub mod domain;
 pub mod error;
 pub mod events;
@@ -20,14 +21,20 @@ pub mod test_support;
 
 pub use application::{AppCore, AppCoreConfig};
 pub use control::{
-    DiscoveryGroupMetadata, LocalIdentityRecord, PairingJournalRecord, PairingJournalStage,
-    PeerConnectionMetadata, PeerTrustRecord, TrustState, TrustedDeviceRecord,
+    DiscoveryGroupMetadata, DiscoveryRotationJournal, DiscoveryRotationStage, LocalIdentityRecord,
+    PairingJournalRecord, PairingJournalStage, PeerConnectionMetadata, PeerTrustRecord, TrustState,
+    TrustedDeviceRecord,
 };
 pub use discovery::{
     Clock, DiscoveredEndpoint, DiscoveryAdvertisement, DiscoveryError, DiscoveryEvent,
     DiscoveryGroupSecret, DiscoveryProvider, DiscoveryScope, FakeDiscoveryProvider, ManualClock,
     MdnsDiscovery, PairingInstanceId, group_routing_token, group_service_selector,
     match_group_endpoint,
+};
+pub use discovery_control::{
+    DISCOVERY_ACK_SIZE, DISCOVERY_CONTROL_VERSION, DISCOVERY_UPDATE_SIZE, DiscoveryControlError,
+    DiscoverySecretAck, DiscoverySecretUpdate, authorize_peer, decode_ack, decode_update,
+    encode_ack, encode_update,
 };
 pub use domain::{
     Category, CategoryId, CategoryView, CreateCategory, CreateTransaction, FinanceCommand,
@@ -46,9 +53,9 @@ pub use pairing::{
     PAIRING_ALPN, PairingCandidate, PairingDecision, PairingDecisionKind, PairingError,
     PairingEvent, PairingHello, PairingInput, PairingKeys, PairingMessage, PairingRole,
     PairingSessionId, PairingState, ProvisioningData, ProvisioningEnvelope, RootCompatibility,
-    RootState, canonical_transcript, derive_pairing_keys, open_provisioning, pairing_session_id,
-    protect_provisioning, reduce_pairing, root_compatibility, sign_commit_ack, sign_decision,
-    verify_commit_ack, verify_decision,
+    RootState, SasCode, canonical_transcript, derive_pairing_keys, open_provisioning,
+    pairing_session_id, protect_provisioning, reduce_pairing, root_compatibility, sign_commit_ack,
+    sign_decision, verify_commit_ack, verify_decision,
 };
 pub use pairing_manager::{NormalDiscoveryEvent, PairingCommitPlan, PairingManager};
 pub use pairing_transport::{PairingConnection, PairingStream, PairingTransport};

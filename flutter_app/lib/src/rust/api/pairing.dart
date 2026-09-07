@@ -41,6 +41,18 @@ Future<void> rejectPairing({String? sessionId}) =>
 Future<List<TrustedDeviceDto>> trustedDevices() =>
     RustLib.instance.api.crateApiPairingTrustedDevices();
 
+Future<SyncStatusDto> syncStatus() =>
+    RustLib.instance.api.crateApiPairingSyncStatus();
+
+Future<Uint8List?> discoverySecretForPlatform() =>
+    RustLib.instance.api.crateApiPairingDiscoverySecretForPlatform();
+
+Stream<List<TrustedDeviceDto>> connectionStateStream() =>
+    RustLib.instance.api.crateApiPairingConnectionStateStream();
+
+Stream<SyncStatusDto> syncStatusStream() =>
+    RustLib.instance.api.crateApiPairingSyncStatusStream();
+
 Future<bool> renameTrustedDevice({
   required String deviceId,
   required String name,

@@ -6,8 +6,8 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `from_core`, `from_core`, `hex_id`, `initialization`, `lifecycle`, `new`, `new`, `safe`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
+// These functions are ignored because they are not marked as `pub`: `from_core`, `from_core`, `from_core`, `hex_id`, `initialization`, `lifecycle`, `new`, `new`, `safe`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
 
 class AggregateDto {
   final int balanceMinor;
@@ -244,6 +244,15 @@ class PairingStateDto {
           message == other.message;
 }
 
+enum PeerConnectionKindDto {
+  offline,
+  searching,
+  connected,
+  syncing,
+  synced,
+  error,
+}
+
 class ProjectionDto {
   final ProjectionKindDto kind;
   final String? checkpoint;
@@ -272,6 +281,8 @@ enum ProjectionKindDto {
   failed,
   closed,
 }
+
+enum SyncStatusDto { offline, searching, connected, syncing, synced, error }
 
 class TransactionDto {
   final String id;
@@ -357,6 +368,7 @@ class TrustedDeviceDto {
   final int? lastSeenMs;
   final int? lastSyncMs;
   final bool revoked;
+  final PeerConnectionKindDto connection;
 
   const TrustedDeviceDto({
     required this.deviceId,
@@ -365,6 +377,7 @@ class TrustedDeviceDto {
     this.lastSeenMs,
     this.lastSyncMs,
     required this.revoked,
+    required this.connection,
   });
 
   @override
@@ -374,7 +387,8 @@ class TrustedDeviceDto {
       pairedAtMs.hashCode ^
       lastSeenMs.hashCode ^
       lastSyncMs.hashCode ^
-      revoked.hashCode;
+      revoked.hashCode ^
+      connection.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -386,5 +400,6 @@ class TrustedDeviceDto {
           pairedAtMs == other.pairedAtMs &&
           lastSeenMs == other.lastSeenMs &&
           lastSyncMs == other.lastSyncMs &&
-          revoked == other.revoked;
+          revoked == other.revoked &&
+          connection == other.connection;
 }

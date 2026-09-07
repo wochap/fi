@@ -15,6 +15,26 @@ final class FakeFinanceBridge implements FinanceBridge {
   final List<TransactionDto> transactions = [];
   final List<TransactionFilterDto> requestedFilters = [];
   final List<String> deletedTransactions = [];
+  final List<TrustedDeviceDto> devices = [];
+  PairingStateDto pairing = const PairingStateDto(
+    kind: PairingKindDto.idle,
+    localConfirmed: false,
+    remoteConfirmed: false,
+  );
+  List<PairingCandidateDto> candidates = const [];
+  SyncStatusDto syncStatusValue = SyncStatusDto.offline;
+  final pairingController = StreamController<PairingStateDto>.broadcast(
+    sync: true,
+  );
+  final candidateController =
+      StreamController<List<PairingCandidateDto>>.broadcast(sync: true);
+  final deviceController = StreamController<List<TrustedDeviceDto>>.broadcast(
+    sync: true,
+  );
+  final syncController = StreamController<SyncStatusDto>.broadcast(sync: true);
+  final List<String> confirmedSessions = [];
+  final List<String?> rejectedSessions = [];
+  final List<String> revokedDevices = [];
   final bootstrapController = StreamController<BootstrapDto>.broadcast(
     sync: true,
   );
@@ -61,6 +81,90 @@ final class FakeFinanceBridge implements FinanceBridge {
   Stream<BridgeErrorEventDto> errorEvents() => errorController.stream;
   @override
   Future<void> shutdown() async {}
+  @override
+  Future<void> setForeground(bool foreground) async {}
+  @override
+  Future<void> startPairing(int durationMs) async {
+    pairing = PairingStateDto(
+      kind: PairingKindDto.discoverable,
+      deadlineMs: DateTime.now().millisecondsSinceEpoch + durationMs,
+      localConfirmed: false,
+      remoteConfirmed: false,
+    );
+    pairingController.add(pairing);
+  }
+
+  @override
+  Future<void> stopPairing() async {
+    pairing = const PairingStateDto(
+      kind: PairingKindDto.idle,
+      localConfirmed: false,
+      remoteConfirmed: false,
+    );
+    candidates = const [];
+    pairingController.add(pairing);
+    candidateController.add(candidates);
+  }
+
+  @override
+  Future<void> connectPairingCandidate(PairingCandidateDto candidate) async {}
+  @override
+  Future<void> confirmPairing(String sessionId) async {
+    confirmedSessions.add(sessionId);
+  }
+
+  @override
+  Future<void> rejectPairing(String? sessionId) async {
+    rejectedSessions.add(sessionId);
+  }
+
+  @override
+  Future<List<TrustedDeviceDto>> trustedDevices() async => List.of(devices);
+  @override
+  Future<void> renameTrustedDevice(String deviceId, String name) async {
+    final index = devices.indexWhere((item) => item.deviceId == deviceId);
+    final current = devices[index];
+    devices[index] = TrustedDeviceDto(
+      deviceId: current.deviceId,
+      friendlyName: name,
+      pairedAtMs: current.pairedAtMs,
+      lastSeenMs: current.lastSeenMs,
+      lastSyncMs: current.lastSyncMs,
+      revoked: current.revoked,
+      connection: current.connection,
+    );
+    deviceController.add(List.of(devices));
+  }
+
+  @override
+  Future<void> revokeTrustedDevice(String deviceId, int nowMs) async {
+    revokedDevices.add(deviceId);
+    final index = devices.indexWhere((item) => item.deviceId == deviceId);
+    final current = devices[index];
+    devices[index] = TrustedDeviceDto(
+      deviceId: current.deviceId,
+      friendlyName: current.friendlyName,
+      pairedAtMs: current.pairedAtMs,
+      lastSeenMs: current.lastSeenMs,
+      lastSyncMs: current.lastSyncMs,
+      revoked: true,
+      connection: PeerConnectionKindDto.offline,
+    );
+    deviceController.add(List.of(devices));
+  }
+
+  @override
+  Future<SyncStatusDto> syncStatus() async => syncStatusValue;
+  @override
+  Stream<PairingStateDto> pairingStateEvents() => pairingController.stream;
+  @override
+  Stream<List<PairingCandidateDto>> pairingCandidateEvents() =>
+      candidateController.stream;
+  @override
+  Stream<List<TrustedDeviceDto>> connectionStateEvents() =>
+      deviceController.stream;
+  @override
+  Stream<SyncStatusDto> syncStatusEvents() => syncController.stream;
   @override
   Future<List<CategoryDto>> listCategories() async => List.of(categories);
   @override

@@ -15,9 +15,16 @@ The dependency direction is strictly:
 Flutter -> app_bridge -> app_core -> automerge_repo -> automerge
 ```
 
-Application features—including finance domain logic, projections, identity,
-pairing, discovery, platform integration, and authentication—are intentionally
-deferred. The generic Repo crate must not acquire those concerns.
+Application finance logic, SQLite projections, permanent device identity,
+private discovery, SAS pairing, pinned Quinn sessions, device revocation, and
+foreground platform lifecycle are owned above the generic Repo crate. The Repo
+crate intentionally does not acquire those application concerns.
+
+The delivered alpha is foreground-only on Android: LAN discovery and sync start
+on resume and stop on backgrounding. It does not install WorkManager, a
+foreground service, or another always-running daemon. See
+[`docs/operations.md`](docs/operations.md) for storage, pairing, permissions,
+recovery, and platform verification.
 
 Run workspace checks from this directory:
 

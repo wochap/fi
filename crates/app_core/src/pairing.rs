@@ -24,6 +24,41 @@ const MAX_FRIENDLY_NAME: usize = 64;
 
 type HmacSha256 = Hmac<Sha256>;
 
+/// A user-comparable code whose formatting is deliberately non-revealing.
+#[derive(Clone, Eq, PartialEq, Zeroize, ZeroizeOnDrop)]
+pub struct SasCode(String);
+
+impl SasCode {
+    pub fn new(value: String) -> Result<Self, PairingError> {
+        if valid_sas(&value) {
+            Ok(Self(value))
+        } else {
+            Err(PairingError::Malformed("SAS must contain six digits"))
+        }
+    }
+
+    #[must_use]
+    pub fn expose(&self) -> &str {
+        &self.0
+    }
+
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
+impl fmt::Debug for SasCode {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("SasCode([REDACTED])")
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct PairingSessionId(pub [u8; 16]);
 
@@ -61,7 +96,7 @@ pub enum RootState {
     Ready(DocumentId),
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct PairingHello {
     pub version: u16,
     pub role: PairingRole,
@@ -72,17 +107,43 @@ pub struct PairingHello {
     pub root_state: RootState,
 }
 
+impl fmt::Debug for PairingHello {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("PairingHello")
+            .field("version", &self.version)
+            .field("role", &self.role)
+            .field("instance_id", &self.instance_id)
+            .field("public_key", &self.public_key)
+            .field("nonce", &"[REDACTED]")
+            .field("friendly_name", &self.friendly_name)
+            .field("root_state", &self.root_state)
+            .finish()
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PairingDecisionKind {
     Confirm,
     Reject,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct PairingDecision {
     pub session_id: PairingSessionId,
     pub kind: PairingDecisionKind,
     pub mac: [u8; 32],
+}
+
+impl fmt::Debug for PairingDecision {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("PairingDecision")
+            .field("session_id", &self.session_id)
+            .field("kind", &self.kind)
+            .field("mac", &"[REDACTED]")
+            .finish()
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -96,11 +157,22 @@ pub struct ProvisioningData {
     pub sync_port: u16,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct ProvisioningEnvelope {
     pub session_id: PairingSessionId,
     pub payload: Vec<u8>,
     pub mac: [u8; 32],
+}
+
+impl fmt::Debug for ProvisioningEnvelope {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ProvisioningEnvelope")
+            .field("session_id", &self.session_id)
+            .field("payload", &"[REDACTED]")
+            .field("mac", &"[REDACTED]")
+            .finish()
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -135,7 +207,7 @@ pub enum PairingState {
     },
     AwaitingConfirmation {
         session_id: PairingSessionId,
-        sas: String,
+        sas: SasCode,
         local_confirmed: bool,
         remote_confirmed: bool,
         deadline_ms: u64,
@@ -167,7 +239,7 @@ pub enum PairingInput {
     },
     SasReady {
         session_id: PairingSessionId,
-        sas: String,
+        sas: SasCode,
         deadline_ms: u64,
     },
     LocalConfirm {
@@ -198,7 +270,7 @@ pub enum PairingInput {
 pub enum PairingEvent {
     Started { deadline_ms: u64 },
     CandidateSelected(PairingSessionId),
-    SasReady(String),
+    SasReady(SasCode),
     ConfirmationChanged { local: bool, remote: bool },
     CommitReady(PairingSessionId),
     Trusted(DeviceId),
@@ -279,7 +351,7 @@ pub fn reduce_pairing(
                 sas,
                 deadline_ms,
             },
-        ) if *active == session_id && valid_sas(&sas) => Ok((
+        ) if *active == session_id => Ok((
             S::AwaitingConfirmation {
                 session_id,
                 sas: sas.clone(),
@@ -422,8 +494,8 @@ impl fmt::Debug for PairingKeys {
 
 impl PairingKeys {
     #[must_use]
-    pub fn sas(&self) -> String {
-        format!("{:06}", unbiased_sas(&self.sas_material))
+    pub fn sas(&self) -> SasCode {
+        SasCode(format!("{:06}", unbiased_sas(&self.sas_material)))
     }
     fn confirmation_key(&self, role: PairingRole) -> &[u8; 32] {
         match role {

@@ -114,3 +114,35 @@ pub struct DiscoveryGroupMetadata {
     pub epoch: u64,
     pub updated_at_ms: u64,
 }
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DiscoveryRotationStage {
+    Prepared,
+    Active,
+}
+
+impl DiscoveryRotationStage {
+    pub(crate) const fn as_str(self) -> &'static str {
+        match self {
+            Self::Prepared => "prepared",
+            Self::Active => "active",
+        }
+    }
+
+    pub(crate) fn parse(value: &str) -> Option<Self> {
+        match value {
+            "prepared" => Some(Self::Prepared),
+            "active" => Some(Self::Active),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct DiscoveryRotationJournal {
+    pub previous_epoch: u64,
+    pub target_epoch: u64,
+    pub retain_until_ms: u64,
+    pub stage: DiscoveryRotationStage,
+    pub updated_at_ms: u64,
+}

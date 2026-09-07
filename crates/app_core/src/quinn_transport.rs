@@ -30,7 +30,7 @@ use rustls::{
 };
 use tokio::{
     io::{AsyncRead, AsyncReadExt},
-    sync::mpsc,
+    sync::{mpsc, oneshot},
     task::JoinHandle,
 };
 use x509_parser::prelude::{FromDer, X509Certificate};
@@ -47,6 +47,8 @@ use crate::{
 
 pub const SYNC_ALPN: &[u8] = b"myapp-sync/1";
 const STREAM_PREFACE: &[u8] = b"FISYNC\x01";
+const CONTROL_PREFACE: &[u8] = b"FICTRL\x01";
+const MAX_CONTROL_FRAME: usize = 1024;
 const FRAME_PREFIX_LEN: usize = 4;
 const FRAME_BODY_HEADER_LEN: usize = 8;
 const FRAME_MAGIC: &[u8; 4] = b"FIRP";
@@ -405,6 +407,12 @@ struct Session {
     writer: mpsc::Sender<Bytes>,
 }
 
+pub(crate) struct ControlRequest {
+    pub peer: DeviceId,
+    pub frame: Vec<u8>,
+    pub response: oneshot::Sender<Result<Vec<u8>, QuinnTransportError>>,
+}
+
 pub struct QuinnTransport {
     self_weak: Weak<QuinnTransport>,
     endpoint: Endpoint,
@@ -414,6 +422,8 @@ pub struct QuinnTransport {
     config: QuinnTransportConfig,
     events_tx: mpsc::Sender<NetworkEvent>,
     events_rx: Mutex<Option<mpsc::Receiver<NetworkEvent>>>,
+    control_tx: mpsc::Sender<ControlRequest>,
+    control_rx: Mutex<Option<mpsc::Receiver<ControlRequest>>>,
     sessions: Mutex<HashMap<PeerId, Session>>,
     generation: AtomicU64,
     closed: AtomicBool,
@@ -467,13 +477,14 @@ impl QuinnTransport {
         let transport =
             Arc::get_mut(&mut server.transport).expect("new transport config is unique");
         transport
-            .max_concurrent_bidi_streams(1_u8.into())
+            .max_concurrent_bidi_streams(8_u8.into())
             .max_concurrent_uni_streams(0_u8.into())
             .datagram_receive_buffer_size(None)
             .datagram_send_buffer_size(0);
         let endpoint = Endpoint::server(server, bind)
             .map_err(|error| QuinnTransportError::Configuration(error.to_string()))?;
         let (events_tx, events_rx) = mpsc::channel(config.event_capacity);
+        let (control_tx, control_rx) = mpsc::channel(config.event_capacity);
         let transport = Arc::new_cyclic(|self_weak| Self {
             self_weak: self_weak.clone(),
             endpoint,
@@ -483,6 +494,8 @@ impl QuinnTransport {
             config,
             events_tx,
             events_rx: Mutex::new(Some(events_rx)),
+            control_tx,
+            control_rx: Mutex::new(Some(control_rx)),
             sessions: Mutex::new(HashMap::new()),
             generation: AtomicU64::new(0),
             closed: AtomicBool::new(false),
@@ -498,6 +511,45 @@ impl QuinnTransport {
         self.endpoint
             .local_addr()
             .map_err(|error| QuinnTransportError::Configuration(error.to_string()))
+    }
+
+    pub(crate) fn take_control_requests(&self) -> Option<mpsc::Receiver<ControlRequest>> {
+        self.control_rx.lock().ok()?.take()
+    }
+
+    pub async fn exchange_control(
+        &self,
+        peer: DeviceId,
+        frame: &[u8],
+    ) -> Result<Vec<u8>, QuinnTransportError> {
+        if frame.len() > MAX_CONTROL_FRAME {
+            return Err(QuinnTransportError::Protocol("control frame is too large"));
+        }
+        let connection = self
+            .sessions
+            .lock()
+            .map_err(|_| QuinnTransportError::Closed)?
+            .get(&PeerId::from(peer.to_string()))
+            .map(|session| session.connection.clone())
+            .ok_or(QuinnTransportError::Connection(
+                "peer is not connected".into(),
+            ))?;
+        let (mut send, mut receive) = connection
+            .open_bi()
+            .await
+            .map_err(|error| QuinnTransportError::Stream(error.to_string()))?;
+        send.write_all(CONTROL_PREFACE)
+            .await
+            .map_err(|error| QuinnTransportError::Stream(error.to_string()))?;
+        send.write_all(&(frame.len() as u16).to_be_bytes())
+            .await
+            .map_err(|error| QuinnTransportError::Stream(error.to_string()))?;
+        send.write_all(frame)
+            .await
+            .map_err(|error| QuinnTransportError::Stream(error.to_string()))?;
+        send.finish()
+            .map_err(|error| QuinnTransportError::Stream(error.to_string()))?;
+        read_control_frame(&mut receive).await
     }
 
     fn client_config(
@@ -677,12 +729,19 @@ impl QuinnTransport {
             send,
             frames,
         ));
+        let control_peer = authenticated.device;
+        let control_connection = authenticated.connection.clone();
         self.spawn_session_task(reader_loop(
             owner,
             peer,
             generation,
             authenticated.connection,
             receive,
+        ));
+        self.spawn_session_task(control_accept_loop(
+            self.self_weak.clone(),
+            control_peer,
+            control_connection,
         ));
         Ok(generation)
     }
@@ -723,6 +782,69 @@ impl QuinnTransport {
                 .await;
         }
     }
+}
+
+async fn control_accept_loop(owner: Weak<QuinnTransport>, peer: DeviceId, connection: Connection) {
+    while let Ok((mut send, mut receive)) = connection.accept_bi().await {
+        let Some(owner) = owner.upgrade() else { break };
+        let mut preface = [0; CONTROL_PREFACE.len()];
+        if receive.read_exact(&mut preface).await.is_err() || preface != CONTROL_PREFACE {
+            connection.close(2_u32.into(), b"invalid control preface");
+            break;
+        }
+        let frame = match read_control_frame(&mut receive).await {
+            Ok(frame) => frame,
+            Err(_) => {
+                connection.close(2_u32.into(), b"invalid control frame");
+                break;
+            }
+        };
+        let (response, reply) = oneshot::channel();
+        if owner
+            .control_tx
+            .send(ControlRequest {
+                peer,
+                frame,
+                response,
+            })
+            .await
+            .is_err()
+        {
+            break;
+        }
+        let Ok(Ok(frame)) = reply.await else {
+            connection.close(2_u32.into(), b"control request rejected");
+            break;
+        };
+        if frame.len() > MAX_CONTROL_FRAME
+            || send
+                .write_all(&(frame.len() as u16).to_be_bytes())
+                .await
+                .is_err()
+            || send.write_all(&frame).await.is_err()
+            || send.finish().is_err()
+        {
+            break;
+        }
+    }
+}
+
+async fn read_control_frame(receive: &mut RecvStream) -> Result<Vec<u8>, QuinnTransportError> {
+    let mut prefix = [0; 2];
+    receive
+        .read_exact(&mut prefix)
+        .await
+        .map_err(|error| QuinnTransportError::Stream(error.to_string()))?;
+    let length = usize::from(u16::from_be_bytes(prefix));
+    if length == 0 || length > MAX_CONTROL_FRAME {
+        return Err(QuinnTransportError::Protocol("invalid control frame size"));
+    }
+    let mut frame = vec![0; length];
+    receive
+        .read_exact(&mut frame)
+        .await
+        .map_err(|error| QuinnTransportError::Stream(error.to_string()))?;
+    Ok(frame)
 }
 
 use std::future::Future;

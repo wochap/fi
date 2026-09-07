@@ -211,6 +211,139 @@ final class FinanceController extends ChangeNotifier {
   }
 }
 
+final class DevicesController extends ChangeNotifier {
+  DevicesController(this.bridge);
+
+  final FinanceBridge bridge;
+  PairingStateDto pairing = const PairingStateDto(
+    kind: PairingKindDto.idle,
+    localConfirmed: false,
+    remoteConfirmed: false,
+  );
+  List<PairingCandidateDto> candidates = const [];
+  List<TrustedDeviceDto> devices = const [];
+  SyncStatusDto syncStatus = SyncStatusDto.offline;
+  String? errorMessage;
+  bool busy = false;
+  bool _disposed = false;
+  Timer? _clock;
+  final List<StreamSubscription<Object?>> _subscriptions = [];
+
+  Future<void> start() async {
+    _subscriptions
+      ..add(bridge.pairingStateEvents().listen(_setPairing, onError: _setError))
+      ..add(
+        bridge.pairingCandidateEvents().listen((value) {
+          candidates = value;
+          notifyListeners();
+        }, onError: _setError),
+      )
+      ..add(
+        bridge.connectionStateEvents().listen((value) {
+          devices = value;
+          notifyListeners();
+        }, onError: _setError),
+      )
+      ..add(
+        bridge.syncStatusEvents().listen((value) {
+          syncStatus = value;
+          notifyListeners();
+        }, onError: _setError),
+      );
+    await refreshDevices();
+    syncStatus = await bridge.syncStatus();
+    notifyListeners();
+  }
+
+  int get remainingSeconds {
+    final deadline = pairing.deadlineMs;
+    if (deadline == null) return 0;
+    final remaining = deadline - DateTime.now().millisecondsSinceEpoch;
+    return remaining <= 0 ? 0 : (remaining / 1000).ceil();
+  }
+
+  Future<void> beginPairing({int durationMs = 120000}) =>
+      _run(() => bridge.startPairing(durationMs));
+  Future<void> stopPairing() => _run(bridge.stopPairing);
+  Future<void> selectCandidate(PairingCandidateDto candidate) =>
+      _run(() => bridge.connectPairingCandidate(candidate));
+  Future<void> confirm() => _run(() async {
+    final session = pairing.sessionId;
+    if (session == null) return;
+    await bridge.confirmPairing(session);
+  });
+  Future<void> reject() => _run(() => bridge.rejectPairing(pairing.sessionId));
+
+  Future<void> rename(TrustedDeviceDto device, String name) async {
+    await _run(() => bridge.renameTrustedDevice(device.deviceId, name));
+    await refreshDevices();
+  }
+
+  Future<void> revoke(TrustedDeviceDto device) async {
+    await _run(
+      () => bridge.revokeTrustedDevice(
+        device.deviceId,
+        DateTime.now().millisecondsSinceEpoch,
+      ),
+    );
+    await refreshDevices();
+  }
+
+  Future<void> refreshDevices() async {
+    try {
+      devices = await bridge.trustedDevices();
+      errorMessage = null;
+    } catch (error) {
+      _setError(error);
+    }
+    notifyListeners();
+  }
+
+  Future<void> _run(Future<void> Function() operation) async {
+    busy = true;
+    errorMessage = null;
+    notifyListeners();
+    try {
+      await operation();
+    } catch (error) {
+      _setError(error);
+    } finally {
+      busy = false;
+      notifyListeners();
+    }
+  }
+
+  void _setPairing(PairingStateDto value) {
+    pairing = value;
+    _clock?.cancel();
+    if (value.deadlineMs != null) {
+      _clock = Timer.periodic(const Duration(seconds: 1), (timer) {
+        if (remainingSeconds == 0) timer.cancel();
+        if (!_disposed) notifyListeners();
+      });
+    }
+    if (value.kind == PairingKindDto.trusted) {
+      unawaited(refreshDevices());
+    }
+    notifyListeners();
+  }
+
+  void _setError(Object error) {
+    errorMessage = bridgeMessage(error);
+    if (!_disposed) notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _clock?.cancel();
+    for (final subscription in _subscriptions) {
+      unawaited(subscription.cancel());
+    }
+    super.dispose();
+  }
+}
+
 String bridgeMessage(Object error) => switch (error) {
   BridgeError(:final message) => message,
   _ => 'The local finance service encountered an unexpected error.',

@@ -186,6 +186,23 @@ pub trait SecureKeyStore: Send + Sync + 'static {
         &self,
         secret: &DiscoveryGroupSecret,
     ) -> Result<(), SecureStoreError>;
+    async fn load_previous_discovery_group_secret(
+        &self,
+    ) -> Result<Option<(u64, DiscoveryGroupSecret)>, SecureStoreError> {
+        Ok(None)
+    }
+    async fn store_previous_discovery_group_secret(
+        &self,
+        _epoch: u64,
+        _secret: &DiscoveryGroupSecret,
+    ) -> Result<(), SecureStoreError> {
+        Err(SecureStoreError::Unavailable(
+            "previous discovery-secret retention is unavailable".into(),
+        ))
+    }
+    async fn remove_previous_discovery_group_secret(&self) -> Result<(), SecureStoreError> {
+        Ok(())
+    }
 }
 
 /// Linux adapter backed only by the desktop session's Secret Service.
@@ -362,6 +379,7 @@ impl SecureKeyStore for LinuxSecretServiceKeyStore {
 pub struct InMemorySecureKeyStore {
     seed: Mutex<Option<[u8; 32]>>,
     discovery_secret: Mutex<Option<[u8; 32]>>,
+    previous_discovery_secret: Mutex<Option<(u64, [u8; 32])>>,
 }
 
 impl InMemorySecureKeyStore {
@@ -370,6 +388,7 @@ impl InMemorySecureKeyStore {
         Self {
             seed: Mutex::new(None),
             discovery_secret: Mutex::new(None),
+            previous_discovery_secret: Mutex::new(None),
         }
     }
 
@@ -378,6 +397,7 @@ impl InMemorySecureKeyStore {
         Self {
             seed: Mutex::new(Some(seed)),
             discovery_secret: Mutex::new(None),
+            previous_discovery_secret: Mutex::new(None),
         }
     }
 }
@@ -416,6 +436,33 @@ impl SecureKeyStore for InMemorySecureKeyStore {
         *self.discovery_secret.lock().map_err(|_| {
             SecureStoreError::Operation("in-memory discovery lock poisoned".into())
         })? = Some(*secret.expose());
+        Ok(())
+    }
+
+    async fn load_previous_discovery_group_secret(
+        &self,
+    ) -> Result<Option<(u64, DiscoveryGroupSecret)>, SecureStoreError> {
+        let stored = *self.previous_discovery_secret.lock().map_err(|_| {
+            SecureStoreError::Operation("in-memory previous discovery lock poisoned".into())
+        })?;
+        Ok(stored.map(|(epoch, bytes)| (epoch, DiscoveryGroupSecret::from_bytes(bytes))))
+    }
+
+    async fn store_previous_discovery_group_secret(
+        &self,
+        epoch: u64,
+        secret: &DiscoveryGroupSecret,
+    ) -> Result<(), SecureStoreError> {
+        *self.previous_discovery_secret.lock().map_err(|_| {
+            SecureStoreError::Operation("in-memory previous discovery lock poisoned".into())
+        })? = Some((epoch, *secret.expose()));
+        Ok(())
+    }
+
+    async fn remove_previous_discovery_group_secret(&self) -> Result<(), SecureStoreError> {
+        *self.previous_discovery_secret.lock().map_err(|_| {
+            SecureStoreError::Operation("in-memory previous discovery lock poisoned".into())
+        })? = None;
         Ok(())
     }
 }

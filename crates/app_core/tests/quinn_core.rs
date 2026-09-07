@@ -1,9 +1,16 @@
-use std::{net::SocketAddr, path::Path, sync::Arc, time::Duration};
+use std::{
+    net::SocketAddr,
+    path::Path,
+    sync::Arc,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 
 use app_core::{
-    AppCore, AppCoreConfig, ApplicationState, CreateTransaction, DeviceIdentity, EndpointSource,
-    InMemorySecureKeyStore, NetworkEndpoint, PeerTrustRecord, QuinnTransportConfig, SecureKeyStore,
-    TransactionFilter, TrustState, adapters::SqliteControlStore,
+    AppCore, AppCoreConfig, ApplicationState, CreateTransaction, DeviceIdentity,
+    DiscoveryGroupMetadata, DiscoveryGroupSecret, EndpointSource, FakeDiscoveryProvider,
+    InMemorySecureKeyStore, ManualClock, NetworkEndpoint, PeerTrustRecord, QuinnTransportConfig,
+    SecureKeyStore, TransactionFilter, TrustState, TrustedDeviceRecord,
+    adapters::SqliteControlStore,
 };
 
 async fn identity(seed: u8) -> DeviceIdentity {
@@ -32,6 +39,19 @@ async fn open(directory: &Path, seed: u8) -> AppCore {
         SocketAddr::from(([127, 0, 0, 1], 0)),
         AppCoreConfig::default(),
         QuinnTransportConfig::default(),
+    )
+    .await
+    .unwrap()
+}
+
+async fn open_store(directory: &Path, store: Arc<InMemorySecureKeyStore>) -> AppCore {
+    AppCore::open_networked_with_discovery(
+        directory,
+        store,
+        SocketAddr::from(([127, 0, 0, 1], 0)),
+        AppCoreConfig::default(),
+        QuinnTransportConfig::default(),
+        Arc::new(FakeDiscoveryProvider::new(Arc::new(ManualClock::new(0)))),
     )
     .await
     .unwrap()
@@ -215,4 +235,117 @@ async fn unknown_and_revoked_peers_are_rejected_before_repo_sync() {
         a.shutdown().await.unwrap();
         b.shutdown().await.unwrap();
     }
+}
+
+#[tokio::test]
+async fn complete_restart_preserves_data_identity_trust_revocation_and_epoch() {
+    let directory_a = tempfile::tempdir().unwrap();
+    let directory_b = tempfile::tempdir().unwrap();
+    let store_a = Arc::new(InMemorySecureKeyStore::seeded([70; 32]));
+    let store_b = Arc::new(InMemorySecureKeyStore::seeded([71; 32]));
+    let identity_a = DeviceIdentity::load_or_create(store_a.as_ref())
+        .await
+        .unwrap();
+    let identity_b = DeviceIdentity::load_or_create(store_b.as_ref())
+        .await
+        .unwrap();
+    let revoked = identity(72).await;
+    let secret = DiscoveryGroupSecret::from_bytes([73; 32]);
+    store_a.store_discovery_group_secret(&secret).await.unwrap();
+    store_b.store_discovery_group_secret(&secret).await.unwrap();
+
+    for (directory, trusted, extra) in [
+        (directory_a.path(), &identity_b, Some(&revoked)),
+        (directory_b.path(), &identity_a, None),
+    ] {
+        let control = SqliteControlStore::open(directory.join("control.sqlite")).unwrap();
+        for device in std::iter::once(trusted).chain(extra) {
+            control
+                .upsert_peer_trust(&PeerTrustRecord {
+                    device_id: device.id(),
+                    public_key: device.public_key(),
+                    state: TrustState::Trusted,
+                    updated_at_ms: 1,
+                    last_seen_ms: Some(1),
+                })
+                .unwrap();
+            control
+                .upsert_trusted_device(&TrustedDeviceRecord {
+                    device_id: device.id(),
+                    public_key: device.public_key(),
+                    friendly_name: format!("Device {}", &device.id().to_string()[..8]),
+                    paired_at_ms: 1,
+                    last_seen_ms: Some(1),
+                    last_sync_ms: None,
+                    state: TrustState::Trusted,
+                })
+                .unwrap();
+        }
+        control
+            .store_discovery_metadata(DiscoveryGroupMetadata {
+                epoch: 1,
+                updated_at_ms: 1,
+            })
+            .unwrap();
+    }
+
+    let a = open_store(directory_a.path(), store_a.clone()).await;
+    let b = open_store(directory_b.path(), store_b.clone()).await;
+    let root = a.create_new_dataset().await.unwrap();
+    connect(&a, &b).await;
+    b.join_existing(root).await.unwrap();
+    wait_ready(&b).await;
+    let category = a.categories().unwrap()[0].id;
+    a.create_transaction(CreateTransaction {
+        occurred_at_ms: 8,
+        category_id: category,
+        amount_minor: 123,
+        description: "restart acceptance".into(),
+    })
+    .await
+    .unwrap();
+    wait_transactions(&b, 1).await;
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_millis()
+        .try_into()
+        .unwrap();
+    a.revoke_trusted_device(revoked.id(), now).await.unwrap();
+    a.shutdown().await.unwrap();
+    b.shutdown().await.unwrap();
+
+    let reopened_a = open_store(directory_a.path(), store_a).await;
+    let reopened_b = open_store(directory_b.path(), store_b).await;
+    assert_eq!(reopened_a.device_id(), Some(identity_a.id()));
+    assert_eq!(reopened_b.device_id(), Some(identity_b.id()));
+    assert_eq!(
+        reopened_a.lifecycle_state(),
+        ApplicationState::Ready { root }
+    );
+    assert_eq!(
+        reopened_a
+            .transactions(&TransactionFilter::default())
+            .unwrap()
+            .len(),
+        1
+    );
+    assert!(
+        reopened_a.trusted_devices().unwrap().iter().any(|device| {
+            device.device_id == revoked.id() && device.state == TrustState::Revoked
+        })
+    );
+    for directory in [directory_a.path(), directory_b.path()] {
+        assert_eq!(
+            SqliteControlStore::open(directory.join("control.sqlite"))
+                .unwrap()
+                .discovery_metadata()
+                .unwrap()
+                .unwrap()
+                .epoch,
+            2
+        );
+    }
+    reopened_a.shutdown().await.unwrap();
+    reopened_b.shutdown().await.unwrap();
 }

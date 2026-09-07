@@ -4,41 +4,81 @@ import 'package:fi/bridge/finance_bridge.dart';
 import 'package:fi/controllers.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/transactions_page.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class FinanceApp extends StatefulWidget {
   const FinanceApp({
     required this.bridge,
     required this.initializeRust,
     required this.dataDirProvider,
+    this.setPlatformForeground,
     super.key,
   });
 
   final FinanceBridge bridge;
   final Future<void> Function() initializeRust;
   final Future<String> Function() dataDirProvider;
+  final Future<void> Function(bool foreground)? setPlatformForeground;
 
   @override
   State<FinanceApp> createState() => _FinanceAppState();
 }
 
-class _FinanceAppState extends State<FinanceApp> {
+class _FinanceAppState extends State<FinanceApp> with WidgetsBindingObserver {
   late final BootstrapController controller;
+  static const _platform = MethodChannel('fi/platform');
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     controller = BootstrapController(
       bridge: widget.bridge,
       initializeRust: widget.initializeRust,
       dataDirProvider: widget.dataDirProvider,
     );
-    unawaited(controller.start());
+    unawaited(_start());
+  }
+
+  Future<void> _start() async {
+    await _setPlatformForeground(true);
+    await controller.start();
+    await _setForeground(true);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    unawaited(_setForeground(state == AppLifecycleState.resumed));
+  }
+
+  Future<void> _setForeground(bool foreground) async {
+    try {
+      await widget.bridge.setForeground(foreground);
+    } catch (_) {
+      // Rust exposes lifecycle failures through its typed error stream.
+    }
+    await _setPlatformForeground(foreground);
+  }
+
+  Future<void> _setPlatformForeground(bool foreground) async {
+    if (widget.setPlatformForeground case final callback?) {
+      await callback(foreground);
+    } else if (defaultTargetPlatform == TargetPlatform.android) {
+      try {
+        await _platform.invokeMethod<void>('setForeground', foreground);
+      } on PlatformException {
+        // Initialization below maps the unavailable capability to app state.
+      }
+    }
   }
 
   @override
   void dispose() {
     controller.dispose();
+    WidgetsBinding.instance.removeObserver(this);
+    unawaited(_setForeground(false));
     unawaited(widget.bridge.shutdown());
     super.dispose();
   }
@@ -171,31 +211,35 @@ class FinanceShell extends StatefulWidget {
 
 class _FinanceShellState extends State<FinanceShell> {
   late final FinanceController controller;
+  late final DevicesController devices;
   int selected = 0;
 
   @override
   void initState() {
     super.initState();
     controller = FinanceController(widget.bridge);
+    devices = DevicesController(widget.bridge);
     unawaited(controller.start());
+    unawaited(devices.start());
   }
 
   @override
   void dispose() {
     controller.dispose();
+    devices.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: controller,
+    listenable: Listenable.merge([controller, devices]),
     builder: (context, _) => Scaffold(
       appBar: AppBar(
         title: const Text('Fi'),
         actions: [
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Center(child: Text(_statusText(controller.projection))),
+            child: Center(child: Text(_statusText(devices.syncStatus))),
           ),
         ],
       ),
@@ -206,6 +250,7 @@ class _FinanceShellState extends State<FinanceShell> {
             children: [
               TransactionsPage(controller: controller),
               CategoriesPage(controller: controller),
+              DevicesPage(controller: devices),
             ],
           );
           if (constraints.maxWidth >= 720) {
@@ -225,6 +270,10 @@ class _FinanceShellState extends State<FinanceShell> {
                     NavigationRailDestination(
                       icon: Icon(Icons.category),
                       label: Text('Categories'),
+                    ),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.devices),
+                      label: Text('Devices'),
                     ),
                   ],
                 ),
@@ -251,6 +300,10 @@ class _FinanceShellState extends State<FinanceShell> {
                   icon: Icon(Icons.category),
                   label: 'Categories',
                 ),
+                NavigationDestination(
+                  icon: Icon(Icons.devices),
+                  label: 'Devices',
+                ),
               ],
             )
           : null,
@@ -258,13 +311,274 @@ class _FinanceShellState extends State<FinanceShell> {
   );
 }
 
-String _statusText(ProjectionDto projection) => switch (projection.kind) {
-  ProjectionKindDto.ready => 'Local data ready · Offline',
-  ProjectionKindDto.projecting ||
-  ProjectionKindDto.rebuilding => 'Updating local data · Offline',
-  ProjectionKindDto.failed => 'Local data needs attention · Offline',
-  _ => 'Local only · Offline',
+String _statusText(SyncStatusDto status) => switch (status) {
+  SyncStatusDto.offline => 'Offline',
+  SyncStatusDto.searching => 'Searching',
+  SyncStatusDto.connected => 'Connected',
+  SyncStatusDto.syncing => 'Syncing',
+  SyncStatusDto.synced => 'Synced',
+  SyncStatusDto.error => 'Error',
 };
+
+class DevicesPage extends StatelessWidget {
+  const DevicesPage({required this.controller, super.key});
+  final DevicesController controller;
+
+  @override
+  Widget build(BuildContext context) => ListView(
+    key: const Key('devices-page'),
+    padding: const EdgeInsets.all(16),
+    children: [
+      Row(
+        children: [
+          Expanded(
+            child: Text(
+              'Devices',
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
+          ),
+          _SyncChip(status: controller.syncStatus),
+        ],
+      ),
+      const SizedBox(height: 16),
+      if (controller.errorMessage case final error?) _ErrorBanner(error),
+      _PairingCard(controller: controller),
+      const SizedBox(height: 24),
+      Text('Trusted devices', style: Theme.of(context).textTheme.titleLarge),
+      const SizedBox(height: 8),
+      if (controller.devices.isEmpty)
+        const Text('No devices have been paired yet.')
+      else
+        ...controller.devices.map(
+          (device) => Card(
+            key: Key('device-${device.deviceId}'),
+            child: ListTile(
+              leading: Icon(device.revoked ? Icons.block : Icons.devices_other),
+              title: Text(device.friendlyName),
+              subtitle: Text(
+                '${_shortDeviceId(device.deviceId)} · '
+                '${device.revoked ? 'Revoked' : _connectionText(device.connection)}\n'
+                'Last seen ${_timestamp(device.lastSeenMs)} · '
+                'Last sync ${_timestamp(device.lastSyncMs)}',
+              ),
+              isThreeLine: true,
+              trailing: PopupMenuButton<String>(
+                onSelected: (action) {
+                  if (action == 'rename') _renameDevice(context, device);
+                  if (action == 'revoke') _revokeDevice(context, device);
+                },
+                itemBuilder: (_) => [
+                  const PopupMenuItem(value: 'rename', child: Text('Rename')),
+                  if (!device.revoked)
+                    const PopupMenuItem(
+                      value: 'revoke',
+                      child: Text('Revoke / unpair'),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+    ],
+  );
+
+  Future<void> _renameDevice(
+    BuildContext context,
+    TrustedDeviceDto device,
+  ) async {
+    var name = device.friendlyName;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Rename device'),
+        content: TextFormField(
+          key: const Key('device-name'),
+          initialValue: name,
+          onChanged: (value) => name = value,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'Friendly name'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              await controller.rename(device, name);
+              if (dialogContext.mounted) Navigator.pop(dialogContext);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _revokeDevice(
+    BuildContext context,
+    TrustedDeviceDto device,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Revoke ${device.friendlyName}?'),
+        content: const Text(
+          'This device will be disconnected and will no longer be trusted. '
+          'Its record is retained as revoked.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Revoke'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) await controller.revoke(device);
+  }
+}
+
+class _PairingCard extends StatelessWidget {
+  const _PairingCard({required this.controller});
+  final DevicesController controller;
+
+  @override
+  Widget build(BuildContext context) => Card(
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('Pair a device', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 12),
+          ..._content(context),
+        ],
+      ),
+    ),
+  );
+
+  List<Widget> _content(
+    BuildContext context,
+  ) => switch (controller.pairing.kind) {
+    PairingKindDto.idle => [
+      const Text('Pairing is off. Start it only when both devices are nearby.'),
+      const SizedBox(height: 12),
+      FilledButton.icon(
+        key: const Key('start-pairing'),
+        onPressed: controller.busy ? null : controller.beginPairing,
+        icon: const Icon(Icons.link),
+        label: const Text('Start pairing'),
+      ),
+    ],
+    PairingKindDto.discoverable => [
+      Text(
+        'Searching for nearby devices · ${controller.remainingSeconds}s remaining',
+      ),
+      const LinearProgressIndicator(),
+      const SizedBox(height: 8),
+      if (controller.candidates.isEmpty)
+        const Text('No nearby pairing candidates yet.')
+      else
+        ...controller.candidates.map(
+          (candidate) => ListTile(
+            key: Key('candidate-${candidate.instanceId}'),
+            leading: const Icon(Icons.phone_android),
+            title: Text(candidate.endpoint),
+            subtitle: const Text('Nearby device'),
+            onTap: controller.busy
+                ? null
+                : () => controller.selectCandidate(candidate),
+          ),
+        ),
+      OutlinedButton(
+        onPressed: controller.busy ? null : controller.stopPairing,
+        child: const Text('Stop pairing'),
+      ),
+    ],
+    PairingKindDto.connecting => const [
+      LinearProgressIndicator(),
+      SizedBox(height: 8),
+      Text('Connecting securely…'),
+    ],
+    PairingKindDto.awaitingConfirmation => [
+      const Text('Confirm that this code matches on both devices:'),
+      const SizedBox(height: 8),
+      SelectableText(
+        controller.pairing.sas?.padLeft(6, '0') ?? '------',
+        key: const Key('pairing-sas'),
+        textAlign: TextAlign.center,
+        style: Theme.of(context).textTheme.displaySmall,
+      ),
+      const SizedBox(height: 12),
+      FilledButton(
+        onPressed: controller.busy ? null : controller.confirm,
+        child: const Text('Codes match'),
+      ),
+      TextButton(
+        onPressed: controller.busy ? null : controller.reject,
+        child: const Text('Codes do not match'),
+      ),
+    ],
+    PairingKindDto.committing => const [
+      LinearProgressIndicator(),
+      SizedBox(height: 8),
+      Text('Saving trust and synchronizing the dataset…'),
+    ],
+    PairingKindDto.trusted => [
+      const Icon(Icons.verified, color: Colors.green, size: 40),
+      const Text('Device paired successfully.', textAlign: TextAlign.center),
+      TextButton(
+        onPressed: controller.beginPairing,
+        child: const Text('Pair another device'),
+      ),
+    ],
+    PairingKindDto.failed => [
+      const Icon(Icons.error_outline, color: Colors.red, size: 40),
+      Text(
+        controller.pairing.message ?? 'Pairing did not complete.',
+        textAlign: TextAlign.center,
+      ),
+      TextButton(
+        onPressed: controller.beginPairing,
+        child: const Text('Try again'),
+      ),
+    ],
+  };
+}
+
+class _SyncChip extends StatelessWidget {
+  const _SyncChip({required this.status});
+  final SyncStatusDto status;
+  @override
+  Widget build(BuildContext context) => Chip(
+    key: const Key('sync-status'),
+    avatar: Icon(
+      status == SyncStatusDto.error ? Icons.error_outline : Icons.sync,
+      size: 18,
+    ),
+    label: Text(_statusText(status)),
+  );
+}
+
+String _shortDeviceId(String id) => id.length <= 16
+    ? id
+    : '${id.substring(0, 8)}…${id.substring(id.length - 8)}';
+String _connectionText(PeerConnectionKindDto state) => switch (state) {
+  PeerConnectionKindDto.offline => 'Offline',
+  PeerConnectionKindDto.searching => 'Searching',
+  PeerConnectionKindDto.connected => 'Connected',
+  PeerConnectionKindDto.syncing => 'Syncing',
+  PeerConnectionKindDto.synced => 'Synced',
+  PeerConnectionKindDto.error => 'Error',
+};
+String _timestamp(int? milliseconds) => milliseconds == null
+    ? 'never'
+    : DateTime.fromMillisecondsSinceEpoch(milliseconds).toLocal().toString();
 
 class CategoriesPage extends StatelessWidget {
   const CategoriesPage({required this.controller, super.key});

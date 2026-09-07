@@ -145,6 +145,27 @@ pub struct TrustedDeviceDto {
     pub last_seen_ms: Option<u64>,
     pub last_sync_ms: Option<u64>,
     pub revoked: bool,
+    pub connection: PeerConnectionKindDto,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PeerConnectionKindDto {
+    Offline,
+    Searching,
+    Connected,
+    Syncing,
+    Synced,
+    Error,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SyncStatusDto {
+    Offline,
+    Searching,
+    Connected,
+    Syncing,
+    Synced,
+    Error,
 }
 
 impl From<app_core::PairingState> for PairingStateDto {
@@ -184,7 +205,7 @@ impl From<app_core::PairingState> for PairingStateDto {
             } => {
                 dto.kind = PairingKindDto::AwaitingConfirmation;
                 dto.session_id = Some(hex_id(session_id.0));
-                dto.sas = Some(sas);
+                dto.sas = Some(sas.expose().to_owned());
                 dto.local_confirmed = local_confirmed;
                 dto.remote_confirmed = remote_confirmed;
                 dto.deadline_ms = Some(deadline_ms);
@@ -222,8 +243,11 @@ impl From<app_core::PairingCandidate> for PairingCandidateDto {
     }
 }
 
-impl From<app_core::TrustedDeviceRecord> for TrustedDeviceDto {
-    fn from(value: app_core::TrustedDeviceRecord) -> Self {
+impl TrustedDeviceDto {
+    pub(crate) fn from_core(
+        value: app_core::TrustedDeviceRecord,
+        connection: Option<&app_core::PeerConnectionState>,
+    ) -> Self {
         Self {
             device_id: value.device_id.to_string(),
             friendly_name: value.friendly_name,
@@ -231,6 +255,36 @@ impl From<app_core::TrustedDeviceRecord> for TrustedDeviceDto {
             last_seen_ms: value.last_seen_ms,
             last_sync_ms: value.last_sync_ms,
             revoked: value.state == app_core::TrustState::Revoked,
+            connection: connection.into(),
+        }
+    }
+}
+
+impl From<Option<&app_core::PeerConnectionState>> for PeerConnectionKindDto {
+    fn from(value: Option<&app_core::PeerConnectionState>) -> Self {
+        use app_core::PeerConnectionState;
+        match value {
+            None | Some(PeerConnectionState::Disconnected) => Self::Offline,
+            Some(
+                PeerConnectionState::Connecting { .. } | PeerConnectionState::Authenticating { .. },
+            ) => Self::Searching,
+            Some(PeerConnectionState::Connected) => Self::Connected,
+            Some(PeerConnectionState::Syncing) => Self::Syncing,
+            Some(PeerConnectionState::Synced) => Self::Synced,
+            Some(PeerConnectionState::Failed(_)) => Self::Error,
+        }
+    }
+}
+
+impl From<app_core::SyncStatus> for SyncStatusDto {
+    fn from(value: app_core::SyncStatus) -> Self {
+        match value {
+            app_core::SyncStatus::Offline => Self::Offline,
+            app_core::SyncStatus::Searching => Self::Searching,
+            app_core::SyncStatus::Connected => Self::Connected,
+            app_core::SyncStatus::Syncing => Self::Syncing,
+            app_core::SyncStatus::Synced => Self::Synced,
+            app_core::SyncStatus::Error => Self::Error,
         }
     }
 }

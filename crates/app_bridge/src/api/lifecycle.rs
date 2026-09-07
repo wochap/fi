@@ -1,6 +1,11 @@
 use std::sync::OnceLock;
 
-use app_core::{AppCore, DomainKind};
+use std::{net::SocketAddr, sync::Arc};
+
+use app_core::{
+    AppCore, AppCoreConfig, DiscoveryGroupSecret, DomainKind, InMemorySecureKeyStore,
+    LinuxSecretServiceKeyStore, QuinnTransportConfig, SecureKeyStore,
+};
 use flutter_rust_bridge::frb;
 use tokio::sync::RwLock;
 
@@ -28,6 +33,11 @@ pub(crate) async fn core() -> Result<AppCore, BridgeError> {
 
 #[frb(init)]
 pub fn init_app() {
+    let _ = tracing_subscriber::fmt()
+        .json()
+        .with_target(false)
+        .with_current_span(false)
+        .try_init();
     flutter_rust_bridge::setup_default_user_utils();
 }
 
@@ -47,6 +57,62 @@ pub async fn initialize(data_dir: String) -> Result<BootstrapDto, BridgeError> {
     Ok(state)
 }
 
+pub async fn initialize_desktop_networked(data_dir: String) -> Result<BootstrapDto, BridgeError> {
+    initialize_networked(
+        data_dir,
+        Arc::new(LinuxSecretServiceKeyStore::new("com.gean.fi")),
+    )
+    .await
+}
+
+pub async fn initialize_android_networked(
+    data_dir: String,
+    device_seed: Vec<u8>,
+    discovery_secret: Option<Vec<u8>>,
+) -> Result<BootstrapDto, BridgeError> {
+    let seed: [u8; 32] = device_seed
+        .try_into()
+        .map_err(|_| BridgeError::initialization("Android returned an invalid device key."))?;
+    let store = Arc::new(InMemorySecureKeyStore::seeded(seed));
+    if let Some(secret) = discovery_secret {
+        let secret: [u8; 32] = secret.try_into().map_err(|_| {
+            BridgeError::initialization("Android returned an invalid discovery secret.")
+        })?;
+        store
+            .store_discovery_group_secret(&DiscoveryGroupSecret::from_bytes(secret))
+            .await
+            .map_err(|_| BridgeError::initialization("Android secure storage is unavailable."))?;
+    }
+    initialize_networked(data_dir, store).await
+}
+
+async fn initialize_networked(
+    data_dir: String,
+    key_store: Arc<dyn SecureKeyStore>,
+) -> Result<BootstrapDto, BridgeError> {
+    if data_dir.trim().is_empty() {
+        return Err(BridgeError::initialization(
+            "An application data directory is required.",
+        ));
+    }
+    let mut slot = process_core().write().await;
+    if let Some(core) = slot.as_ref() {
+        return Ok(BootstrapDto::from_core(core.lifecycle_state()));
+    }
+    let core = AppCore::open_networked(
+        data_dir,
+        key_store,
+        SocketAddr::from(([0, 0, 0, 0], 0)),
+        AppCoreConfig::default(),
+        QuinnTransportConfig::default(),
+    )
+    .await
+    .map_err(BridgeError::from)?;
+    let state = BootstrapDto::from_core(core.lifecycle_state());
+    *slot = Some(core);
+    Ok(state)
+}
+
 pub async fn bootstrap_state() -> Result<BootstrapDto, BridgeError> {
     Ok(BootstrapDto::from_core(core().await?.lifecycle_state()))
 }
@@ -61,6 +127,14 @@ pub async fn shutdown() -> Result<(), BridgeError> {
         app.shutdown().await.map_err(BridgeError::from)?;
     }
     Ok(())
+}
+
+pub async fn set_foreground(foreground: bool) -> Result<(), BridgeError> {
+    core()
+        .await?
+        .set_foreground(foreground)
+        .await
+        .map_err(BridgeError::from)
 }
 
 pub async fn bootstrap_stream(sink: StreamSink<BootstrapDto>) -> Result<(), BridgeError> {

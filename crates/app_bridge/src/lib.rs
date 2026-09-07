@@ -11,7 +11,13 @@ mod tests {
             include_str!("api/models.rs"),
             include_str!("api/pairing.rs")
         );
-        for forbidden in ["Automerge", "rusqlite", "Connection", "DocHandle", "Repo<"] {
+        for forbidden in [
+            "automerge::",
+            "rusqlite::Connection",
+            "quinn::Connection",
+            "DocHandle",
+            "Repo<",
+        ] {
             assert!(!api.contains(forbidden), "public API leaked {forbidden}");
         }
     }

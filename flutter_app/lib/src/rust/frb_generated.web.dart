@@ -51,12 +51,21 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   dco_decode_StreamSink_list_pairing_candidate_dto_Sse(dynamic raw);
 
   @protected
+  RustStreamSink<List<TrustedDeviceDto>>
+  dco_decode_StreamSink_list_trusted_device_dto_Sse(dynamic raw);
+
+  @protected
   RustStreamSink<PairingStateDto> dco_decode_StreamSink_pairing_state_dto_Sse(
     dynamic raw,
   );
 
   @protected
   RustStreamSink<ProjectionDto> dco_decode_StreamSink_projection_dto_Sse(
+    dynamic raw,
+  );
+
+  @protected
+  RustStreamSink<SyncStatusDto> dco_decode_StreamSink_sync_status_dto_Sse(
     dynamic raw,
   );
 
@@ -114,6 +123,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<PairingCandidateDto> dco_decode_list_pairing_candidate_dto(dynamic raw);
 
   @protected
+  List<int> dco_decode_list_prim_u_8_loose(dynamic raw);
+
+  @protected
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
 
   @protected
@@ -132,6 +144,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   String? dco_decode_opt_String(dynamic raw);
 
   @protected
+  Uint8List? dco_decode_opt_list_prim_u_8_strict(dynamic raw);
+
+  @protected
   PairingCandidateDto dco_decode_pairing_candidate_dto(dynamic raw);
 
   @protected
@@ -141,10 +156,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   PairingStateDto dco_decode_pairing_state_dto(dynamic raw);
 
   @protected
+  PeerConnectionKindDto dco_decode_peer_connection_kind_dto(dynamic raw);
+
+  @protected
   ProjectionDto dco_decode_projection_dto(dynamic raw);
 
   @protected
   ProjectionKindDto dco_decode_projection_kind_dto(dynamic raw);
+
+  @protected
+  SyncStatusDto dco_decode_sync_status_dto(dynamic raw);
 
   @protected
   TransactionDto dco_decode_transaction_dto(dynamic raw);
@@ -196,12 +217,23 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  RustStreamSink<List<TrustedDeviceDto>>
+  sse_decode_StreamSink_list_trusted_device_dto_Sse(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   RustStreamSink<PairingStateDto> sse_decode_StreamSink_pairing_state_dto_Sse(
     SseDeserializer deserializer,
   );
 
   @protected
   RustStreamSink<ProjectionDto> sse_decode_StreamSink_projection_dto_Sse(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  RustStreamSink<SyncStatusDto> sse_decode_StreamSink_sync_status_dto_Sse(
     SseDeserializer deserializer,
   );
 
@@ -265,6 +297,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  List<int> sse_decode_list_prim_u_8_loose(SseDeserializer deserializer);
+
+  @protected
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
 
   @protected
@@ -287,6 +322,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   String? sse_decode_opt_String(SseDeserializer deserializer);
 
   @protected
+  Uint8List? sse_decode_opt_list_prim_u_8_strict(SseDeserializer deserializer);
+
+  @protected
   PairingCandidateDto sse_decode_pairing_candidate_dto(
     SseDeserializer deserializer,
   );
@@ -298,12 +336,20 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   PairingStateDto sse_decode_pairing_state_dto(SseDeserializer deserializer);
 
   @protected
+  PeerConnectionKindDto sse_decode_peer_connection_kind_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   ProjectionDto sse_decode_projection_dto(SseDeserializer deserializer);
 
   @protected
   ProjectionKindDto sse_decode_projection_kind_dto(
     SseDeserializer deserializer,
   );
+
+  @protected
+  SyncStatusDto sse_decode_sync_status_dto(SseDeserializer deserializer);
 
   @protected
   TransactionDto sse_decode_transaction_dto(SseDeserializer deserializer);
@@ -362,6 +408,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_StreamSink_list_trusted_device_dto_Sse(
+    RustStreamSink<List<TrustedDeviceDto>> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_StreamSink_pairing_state_dto_Sse(
     RustStreamSink<PairingStateDto> self,
     SseSerializer serializer,
@@ -370,6 +422,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_StreamSink_projection_dto_Sse(
     RustStreamSink<ProjectionDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_StreamSink_sync_status_dto_Sse(
+    RustStreamSink<SyncStatusDto> self,
     SseSerializer serializer,
   );
 
@@ -449,6 +507,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_list_prim_u_8_loose(List<int> self, SseSerializer serializer);
+
+  @protected
   void sse_encode_list_prim_u_8_strict(
     Uint8List self,
     SseSerializer serializer,
@@ -476,6 +537,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_opt_String(String? self, SseSerializer serializer);
 
   @protected
+  void sse_encode_opt_list_prim_u_8_strict(
+    Uint8List? self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_pairing_candidate_dto(
     PairingCandidateDto self,
     SseSerializer serializer,
@@ -494,6 +561,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_peer_connection_kind_dto(
+    PeerConnectionKindDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_projection_dto(ProjectionDto self, SseSerializer serializer);
 
   @protected
@@ -501,6 +574,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
     ProjectionKindDto self,
     SseSerializer serializer,
   );
+
+  @protected
+  void sse_encode_sync_status_dto(SyncStatusDto self, SseSerializer serializer);
 
   @protected
   void sse_encode_transaction_dto(

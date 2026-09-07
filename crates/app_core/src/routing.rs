@@ -56,6 +56,9 @@ pub struct EndpointRegistry {
 }
 
 impl EndpointRegistry {
+    pub fn remove(&mut self, device: DeviceId) {
+        self.endpoints.remove(&device);
+    }
     pub fn replace_source(
         &mut self,
         device: DeviceId,
@@ -144,10 +147,11 @@ pub enum PeerConnectionState {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SyncStatus {
     Offline,
-    Connecting,
+    Searching,
+    Connected,
     Syncing,
     Synced,
-    Failed,
+    Error,
 }
 
 #[must_use]
@@ -162,21 +166,24 @@ pub fn aggregate_sync_status(states: &HashMap<DeviceId, PeerConnectionState>) ->
         .values()
         .any(|state| matches!(state, PeerConnectionState::Failed(_)))
     {
-        SyncStatus::Failed
+        SyncStatus::Error
     } else if states.values().any(|state| {
         matches!(
             state,
             PeerConnectionState::Connecting { .. } | PeerConnectionState::Authenticating { .. }
         )
     }) {
-        SyncStatus::Connecting
-    } else if states.values().any(|state| {
-        matches!(
-            state,
-            PeerConnectionState::Connected | PeerConnectionState::Syncing
-        )
-    }) {
+        SyncStatus::Searching
+    } else if states
+        .values()
+        .any(|state| matches!(state, PeerConnectionState::Syncing))
+    {
         SyncStatus::Syncing
+    } else if states
+        .values()
+        .any(|state| matches!(state, PeerConnectionState::Connected))
+    {
+        SyncStatus::Connected
     } else {
         SyncStatus::Synced
     }
@@ -269,9 +276,20 @@ impl ConnectionManager {
     }
 
     pub fn set_state(&self, peer: DeviceId, state: PeerConnectionState) {
+        tracing::info!(
+            event = "peer_connection_state",
+            device_id = %peer,
+            state = connection_state_name(&state),
+            "peer connection state transition"
+        );
         self.states.send_modify(|states| {
             states.insert(peer, state);
         });
+    }
+
+    #[must_use]
+    pub fn states(&self) -> HashMap<DeviceId, PeerConnectionState> {
+        self.states.borrow().clone()
     }
 
     pub async fn connect_preferred(
@@ -343,6 +361,19 @@ impl ConnectionManager {
         }
         self.set_state(peer, PeerConnectionState::Failed(last.clone()));
         Err(last)
+    }
+}
+
+fn connection_state_name(state: &PeerConnectionState) -> &'static str {
+    match state {
+        PeerConnectionState::Disconnected => "offline",
+        PeerConnectionState::Connecting { .. } | PeerConnectionState::Authenticating { .. } => {
+            "searching"
+        }
+        PeerConnectionState::Connected => "connected",
+        PeerConnectionState::Syncing => "syncing",
+        PeerConnectionState::Synced => "synced",
+        PeerConnectionState::Failed(_) => "error",
     }
 }
 

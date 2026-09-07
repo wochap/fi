@@ -23,8 +23,9 @@ use tokio::sync::mpsc;
 
 use crate::{
     control::{
-        DiscoveryGroupMetadata, LocalIdentityRecord, PairingJournalRecord, PairingJournalStage,
-        PeerConnectionMetadata, PeerTrustRecord, TrustState, TrustedDeviceRecord,
+        DiscoveryGroupMetadata, DiscoveryRotationJournal, DiscoveryRotationStage,
+        LocalIdentityRecord, PairingJournalRecord, PairingJournalStage, PeerConnectionMetadata,
+        PeerTrustRecord, TrustState, TrustedDeviceRecord,
     },
     identity::{DeviceId, PublicDeviceKey},
     routing::{ConnectionFailure, PeerConnectionState},
@@ -284,6 +285,15 @@ impl SqliteControlStore {
              CREATE TABLE IF NOT EXISTS discovery_group (
                 singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
                 version INTEGER NOT NULL CHECK(version = 1), epoch INTEGER NOT NULL CHECK(epoch > 0),
+                updated_at_ms INTEGER NOT NULL CHECK(updated_at_ms >= 0)
+             ) STRICT;
+             CREATE TABLE IF NOT EXISTS discovery_rotation (
+                singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
+                version INTEGER NOT NULL CHECK(version = 1),
+                previous_epoch INTEGER NOT NULL CHECK(previous_epoch > 0),
+                target_epoch INTEGER NOT NULL CHECK(target_epoch > previous_epoch),
+                retain_until_ms INTEGER NOT NULL CHECK(retain_until_ms >= 0),
+                stage TEXT NOT NULL CHECK(stage IN ('prepared', 'active')),
                 updated_at_ms INTEGER NOT NULL CHECK(updated_at_ms >= 0)
              ) STRICT;",
         )
@@ -827,6 +837,99 @@ impl SqliteControlStore {
             })
         })
         .transpose()
+    }
+
+    pub fn store_discovery_rotation(
+        &self,
+        value: DiscoveryRotationJournal,
+    ) -> Result<(), StorageError> {
+        self.ensure_open("discovery_rotation_store")?;
+        let previous = i64::try_from(value.previous_epoch).map_err(|_| {
+            storage_error(
+                "discovery_rotation_store",
+                None,
+                &self.path,
+                "epoch out of range",
+            )
+        })?;
+        let target = i64::try_from(value.target_epoch).map_err(|_| {
+            storage_error(
+                "discovery_rotation_store",
+                None,
+                &self.path,
+                "epoch out of range",
+            )
+        })?;
+        let retain = checked_timestamp(
+            value.retain_until_ms,
+            "discovery_rotation_store",
+            &self.path,
+        )?;
+        let updated =
+            checked_timestamp(value.updated_at_ms, "discovery_rotation_store", &self.path)?;
+        self.connection.lock().map_err(|_| storage_error("discovery_rotation_store", None, &self.path, "connection lock poisoned"))?
+            .execute(
+                "INSERT INTO discovery_rotation(singleton,version,previous_epoch,target_epoch,retain_until_ms,stage,updated_at_ms) VALUES(1,1,?1,?2,?3,?4,?5) ON CONFLICT(singleton) DO UPDATE SET previous_epoch=excluded.previous_epoch,target_epoch=excluded.target_epoch,retain_until_ms=excluded.retain_until_ms,stage=excluded.stage,updated_at_ms=excluded.updated_at_ms",
+                params![previous, target, retain, value.stage.as_str(), updated],
+            )
+            .map(|_| ())
+            .map_err(|error| storage_error("discovery_rotation_store", None, &self.path, error))
+    }
+
+    pub fn discovery_rotation(&self) -> Result<Option<DiscoveryRotationJournal>, StorageError> {
+        self.ensure_open("discovery_rotation_load")?;
+        let row: Option<(i64, i64, i64, String, i64)> = self.connection.lock()
+            .map_err(|_| storage_error("discovery_rotation_load", None, &self.path, "connection lock poisoned"))?
+            .query_row(
+                "SELECT previous_epoch,target_epoch,retain_until_ms,stage,updated_at_ms FROM discovery_rotation WHERE singleton=1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
+            )
+            .optional()
+            .map_err(|error| storage_error("discovery_rotation_load", None, &self.path, error))?;
+        row.map(|(previous, target, retain, stage, updated)| {
+            Ok(DiscoveryRotationJournal {
+                previous_epoch: u64::try_from(previous).map_err(|_| {
+                    storage_error(
+                        "discovery_rotation_load",
+                        None,
+                        &self.path,
+                        "invalid previous epoch",
+                    )
+                })?,
+                target_epoch: u64::try_from(target).map_err(|_| {
+                    storage_error(
+                        "discovery_rotation_load",
+                        None,
+                        &self.path,
+                        "invalid target epoch",
+                    )
+                })?,
+                retain_until_ms: decode_timestamp(retain, "discovery_rotation_load", &self.path)?,
+                stage: DiscoveryRotationStage::parse(&stage).ok_or_else(|| {
+                    storage_error("discovery_rotation_load", None, &self.path, "invalid stage")
+                })?,
+                updated_at_ms: decode_timestamp(updated, "discovery_rotation_load", &self.path)?,
+            })
+        })
+        .transpose()
+    }
+
+    pub fn clear_discovery_rotation(&self) -> Result<(), StorageError> {
+        self.ensure_open("discovery_rotation_clear")?;
+        self.connection
+            .lock()
+            .map_err(|_| {
+                storage_error(
+                    "discovery_rotation_clear",
+                    None,
+                    &self.path,
+                    "connection lock poisoned",
+                )
+            })?
+            .execute("DELETE FROM discovery_rotation", [])
+            .map(|_| ())
+            .map_err(|error| storage_error("discovery_rotation_clear", None, &self.path, error))
     }
 }
 

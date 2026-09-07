@@ -3,7 +3,9 @@
 use crate::{
     api::{
         lifecycle::core,
-        models::{BridgeError, PairingCandidateDto, PairingStateDto, TrustedDeviceDto},
+        models::{
+            BridgeError, PairingCandidateDto, PairingStateDto, SyncStatusDto, TrustedDeviceDto,
+        },
     },
     frb_generated::StreamSink,
 };
@@ -86,13 +88,75 @@ pub async fn reject_pairing(session_id: Option<String>) -> Result<(), BridgeErro
 }
 
 pub async fn trusted_devices() -> Result<Vec<TrustedDeviceDto>, BridgeError> {
-    Ok(core()
-        .await?
+    let core = core().await?;
+    let connections = core.connection_states();
+    Ok(core
         .trusted_devices()
         .map_err(BridgeError::from)?
         .into_iter()
-        .map(Into::into)
+        .map(|record| {
+            let connection = connections.get(&record.device_id);
+            TrustedDeviceDto::from_core(record, connection)
+        })
         .collect())
+}
+
+pub async fn sync_status() -> Result<SyncStatusDto, BridgeError> {
+    Ok(core().await?.sync_status().into())
+}
+
+pub async fn discovery_secret_for_platform() -> Result<Option<Vec<u8>>, BridgeError> {
+    Ok(core()
+        .await?
+        .discovery_secret_for_platform()
+        .await
+        .map_err(BridgeError::from)?
+        .map(|secret| secret.expose().to_vec()))
+}
+
+pub async fn connection_state_stream(
+    sink: StreamSink<Vec<TrustedDeviceDto>>,
+) -> Result<(), BridgeError> {
+    let core = core().await?;
+    let mut receiver = core
+        .subscribe_connections()
+        .ok_or_else(|| BridgeError::lifecycle("Device networking is unavailable."))?;
+    tokio::spawn(async move {
+        loop {
+            let connections = receiver.borrow_and_update().clone();
+            let devices = match core.trusted_devices() {
+                Ok(devices) => devices,
+                Err(_) => break,
+            };
+            let values = devices
+                .into_iter()
+                .map(|record| {
+                    let connection = connections.get(&record.device_id);
+                    TrustedDeviceDto::from_core(record, connection)
+                })
+                .collect();
+            if sink.add(values).is_err() || receiver.changed().await.is_err() {
+                break;
+            }
+        }
+    });
+    Ok(())
+}
+
+pub async fn sync_status_stream(sink: StreamSink<SyncStatusDto>) -> Result<(), BridgeError> {
+    let core = core().await?;
+    let mut receiver = core
+        .subscribe_connections()
+        .ok_or_else(|| BridgeError::lifecycle("Device networking is unavailable."))?;
+    tokio::spawn(async move {
+        loop {
+            let status = app_core::aggregate_sync_status(&receiver.borrow_and_update()).into();
+            if sink.add(status).is_err() || receiver.changed().await.is_err() {
+                break;
+            }
+        }
+    });
+    Ok(())
 }
 
 pub async fn rename_trusted_device(device_id: String, name: String) -> Result<bool, BridgeError> {

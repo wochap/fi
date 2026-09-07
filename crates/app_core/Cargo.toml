@@ -29,6 +29,7 @@ subtle.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
+tracing-subscriber.workspace = true
 uuid.workspace = true
 zeroize.workspace = true
 x509-parser.workspace = true

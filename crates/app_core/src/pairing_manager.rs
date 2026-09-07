@@ -17,13 +17,18 @@ use tokio::{
 use crate::{
     adapters::SqliteControlStore,
     control::{
-        DiscoveryGroupMetadata, PairingJournalRecord, PairingJournalStage, PeerTrustRecord,
-        TrustState, TrustedDeviceRecord,
+        DiscoveryGroupMetadata, DiscoveryRotationJournal, DiscoveryRotationStage,
+        PairingJournalRecord, PairingJournalStage, PeerTrustRecord, TrustState,
+        TrustedDeviceRecord,
     },
     discovery::{
         DEFAULT_RECORD_TTL_MS, DiscoveryAdvertisement, DiscoveryEvent, DiscoveryGroupSecret,
         DiscoveryProvider, DiscoveryScope, PairingInstanceId, group_routing_token,
         group_service_selector, match_group_endpoint,
+    },
+    discovery_control::{
+        DISCOVERY_UPDATE_SIZE, DiscoverySecretAck, DiscoverySecretUpdate, authorize_peer,
+        decode_ack, decode_update, encode_ack, encode_update,
     },
     identity::{DeviceId, DeviceIdentity, PublicDeviceKey, SecureKeyStore},
     pairing::{
@@ -67,6 +72,14 @@ pub enum NormalDiscoveryEvent {
     },
 }
 
+#[derive(Clone)]
+struct DiscoveryGroupState {
+    active: DiscoveryGroupSecret,
+    previous: Option<(DiscoveryGroupSecret, u64)>,
+}
+
+const DISCOVERY_ROTATION_RETENTION_MS: u64 = 7 * 24 * 60 * 60 * 1_000;
+
 pub struct PairingManager {
     identity: Arc<DeviceIdentity>,
     keys: Arc<dyn SecureKeyStore>,
@@ -77,8 +90,10 @@ pub struct PairingManager {
     candidates_tx: watch::Sender<Vec<PairingCandidate>>,
     events: broadcast::Sender<PairingEvent>,
     normal_events: broadcast::Sender<NormalDiscoveryEvent>,
-    group_tx: watch::Sender<Option<(DiscoveryGroupSecret, u64)>>,
+    group_tx: watch::Sender<Option<DiscoveryGroupState>>,
     normal_scope: Mutex<Option<DiscoveryScope>>,
+    normal_port: Mutex<Option<u16>>,
+    migration_scope: Mutex<Option<DiscoveryScope>>,
     deadline: Mutex<Option<JoinHandle<()>>>,
     accept_task: Mutex<Option<JoinHandle<()>>>,
     sessions: Mutex<HashMap<PairingSessionId, Arc<ActivePairingSession>>>,
@@ -107,7 +122,7 @@ impl PairingManager {
         let (candidates_tx, _) = watch::channel(Vec::new());
         let (events, _) = broadcast::channel(128);
         let (normal_events, _) = broadcast::channel(128);
-        let (group_tx, group_rx) = watch::channel(None);
+        let (group_tx, group_rx) = watch::channel::<Option<DiscoveryGroupState>>(None);
         let mut discovered = discovery.subscribe();
         let own_state = state_tx.subscribe();
         let candidates = candidates_tx.clone();
@@ -154,7 +169,7 @@ impl PairingManager {
                         }
                     }
                     DiscoveryEvent::Upsert(endpoint) => {
-                        let Some((secret, _)) = group_rx.borrow().clone() else {
+                        let Some(group) = group_rx.borrow().clone() else {
                             continue;
                         };
                         let trusted = control_for_discovery
@@ -163,9 +178,19 @@ impl PairingManager {
                             .into_iter()
                             .filter(|record| record.state == TrustState::Trusted)
                             .map(|record| record.device_id);
-                        if let Some((peer, address, expires_at_ms)) =
-                            match_group_endpoint(&endpoint, &secret, trusted)
-                        {
+                        let trusted: Vec<_> = trusted.collect();
+                        let matched =
+                            match_group_endpoint(&endpoint, &group.active, trusted.iter().copied())
+                                .or_else(|| {
+                                    group.previous.as_ref().and_then(|(secret, _)| {
+                                        match_group_endpoint(
+                                            &endpoint,
+                                            secret,
+                                            trusted.iter().copied(),
+                                        )
+                                    })
+                                });
+                        if let Some((peer, address, expires_at_ms)) = matched {
                             let _ =
                                 normal_events_for_discovery.send(NormalDiscoveryEvent::Upsert {
                                     peer,
@@ -193,6 +218,8 @@ impl PairingManager {
             normal_events,
             group_tx,
             normal_scope: Mutex::new(None),
+            normal_port: Mutex::new(None),
+            migration_scope: Mutex::new(None),
             deadline: Mutex::new(None),
             accept_task: Mutex::new(None),
             sessions: Mutex::new(HashMap::new()),
@@ -219,6 +246,12 @@ impl PairingManager {
     #[must_use]
     pub fn subscribe_events(&self) -> broadcast::Receiver<PairingEvent> {
         self.events.subscribe()
+    }
+    pub async fn discovery_secret(&self) -> Result<Option<DiscoveryGroupSecret>, PairingError> {
+        self.keys
+            .load_discovery_group_secret()
+            .await
+            .map_err(|error| PairingError::Transport(error.to_string()))
     }
     #[must_use]
     pub fn subscribe_normal_discovery(&self) -> broadcast::Receiver<NormalDiscoveryEvent> {
@@ -352,7 +385,7 @@ impl PairingManager {
     pub fn sas_ready(
         &self,
         session_id: PairingSessionId,
-        sas: String,
+        sas: crate::pairing::SasCode,
         deadline_ms: u64,
     ) -> Result<(), PairingError> {
         self.apply(PairingInput::SasReady {
@@ -525,6 +558,12 @@ impl PairingManager {
 
     fn apply(&self, input: PairingInput) -> Result<PairingEvent, PairingError> {
         let (state, event) = reduce_pairing(&self.state(), input)?;
+        tracing::info!(
+            event = "pairing_state",
+            device_id = %self.identity.id(),
+            state = pairing_state_name(&state),
+            "pairing state transition"
+        );
         self.state_tx.send_replace(state);
         let _ = self.events.send(event.clone());
         Ok(event)
@@ -561,8 +600,10 @@ impl PairingManager {
                 .discovery_metadata()
                 .map_err(|error| PairingError::Transport(error.to_string()))?
                 .ok_or(PairingError::Malformed("secret metadata missing"))?;
-            self.group_tx
-                .send_replace(Some((secret.clone(), metadata.epoch)));
+            self.group_tx.send_replace(Some(DiscoveryGroupState {
+                active: secret.clone(),
+                previous: None,
+            }));
             return Ok((secret, metadata));
         }
         let mut bytes = [0; 32];
@@ -579,8 +620,10 @@ impl PairingManager {
         self.control
             .store_discovery_metadata(metadata)
             .map_err(|error| PairingError::Transport(error.to_string()))?;
-        self.group_tx
-            .send_replace(Some((secret.clone(), metadata.epoch)));
+        self.group_tx.send_replace(Some(DiscoveryGroupState {
+            active: secret.clone(),
+            previous: None,
+        }));
         Ok((secret, metadata))
     }
 
@@ -589,6 +632,46 @@ impl PairingManager {
         secret: &DiscoveryGroupSecret,
         metadata: DiscoveryGroupMetadata,
     ) -> Result<(), PairingError> {
+        let current = self
+            .control
+            .discovery_metadata()
+            .map_err(|error| PairingError::Transport(error.to_string()))?;
+        if let Some(current) = current {
+            if metadata.epoch < current.epoch {
+                return Ok(());
+            }
+            if metadata.epoch == current.epoch {
+                return Ok(());
+            }
+        }
+        let previous = if let Some(current) = current {
+            let previous = self
+                .keys
+                .load_discovery_group_secret()
+                .await
+                .map_err(|error| PairingError::Transport(error.to_string()))?
+                .ok_or(PairingError::Malformed("discovery secret missing"))?;
+            self.keys
+                .store_previous_discovery_group_secret(current.epoch, &previous)
+                .await
+                .map_err(|error| PairingError::Transport(error.to_string()))?;
+            self.control
+                .store_discovery_rotation(DiscoveryRotationJournal {
+                    previous_epoch: current.epoch,
+                    target_epoch: metadata.epoch,
+                    retain_until_ms: now_ms().saturating_add(DISCOVERY_ROTATION_RETENTION_MS),
+                    stage: DiscoveryRotationStage::Active,
+                    updated_at_ms: metadata.updated_at_ms,
+                })
+                .map_err(|error| PairingError::Transport(error.to_string()))?;
+            Some((previous, current.epoch))
+        } else {
+            None
+        };
+        let active_port = *self
+            .normal_port
+            .lock()
+            .map_err(|_| PairingError::Transport("normal discovery lock poisoned".into()))?;
         self.keys
             .store_discovery_group_secret(secret)
             .await
@@ -596,8 +679,14 @@ impl PairingManager {
         self.control
             .store_discovery_metadata(metadata)
             .map_err(|error| PairingError::Transport(error.to_string()))?;
-        self.group_tx
-            .send_replace(Some((secret.clone(), metadata.epoch)));
+        self.group_tx.send_replace(Some(DiscoveryGroupState {
+            active: secret.clone(),
+            previous,
+        }));
+        if let Some(port) = active_port {
+            self.stop_normal_discovery().await?;
+            self.start_normal_discovery(port).await?;
+        }
         Ok(())
     }
 
@@ -618,11 +707,33 @@ impl PairingManager {
         else {
             return Ok(false);
         };
-        let metadata = self
+        let mut metadata = self
             .control
             .discovery_metadata()
             .map_err(|error| PairingError::Transport(error.to_string()))?
             .ok_or(PairingError::Malformed("secret metadata missing"))?;
+        let journal = self
+            .control
+            .discovery_rotation()
+            .map_err(|error| PairingError::Transport(error.to_string()))?;
+        if let Some(journal) = journal
+            && journal.stage == DiscoveryRotationStage::Prepared
+            && journal.target_epoch > metadata.epoch
+        {
+            metadata = DiscoveryGroupMetadata {
+                epoch: journal.target_epoch,
+                updated_at_ms: journal.updated_at_ms,
+            };
+            self.control
+                .store_discovery_metadata(metadata)
+                .map_err(|error| PairingError::Transport(error.to_string()))?;
+            self.control
+                .store_discovery_rotation(DiscoveryRotationJournal {
+                    stage: DiscoveryRotationStage::Active,
+                    ..journal
+                })
+                .map_err(|error| PairingError::Transport(error.to_string()))?;
+        }
         let selector = group_service_selector(&secret, metadata.epoch);
         let route = group_routing_token(&secret, metadata.epoch, self.identity.id());
         let mut name = [0; 12];
@@ -647,8 +758,244 @@ impl PairingManager {
             .lock()
             .map_err(|_| PairingError::Transport("normal discovery lock poisoned".into()))? =
             Some(scope);
-        self.group_tx.send_replace(Some((secret, metadata.epoch)));
+        *self
+            .normal_port
+            .lock()
+            .map_err(|_| PairingError::Transport("normal discovery lock poisoned".into()))? =
+            Some(port);
+        let previous = if let Some(journal) = self
+            .control
+            .discovery_rotation()
+            .map_err(|error| PairingError::Transport(error.to_string()))?
+            && journal.stage == DiscoveryRotationStage::Active
+            && journal.retain_until_ms > now_ms()
+        {
+            self.keys
+                .load_previous_discovery_group_secret()
+                .await
+                .map_err(|error| PairingError::Transport(error.to_string()))?
+                .filter(|(epoch, _)| *epoch == journal.previous_epoch)
+                .map(|(epoch, secret)| (secret, epoch))
+        } else {
+            self.keys
+                .remove_previous_discovery_group_secret()
+                .await
+                .map_err(|error| PairingError::Transport(error.to_string()))?;
+            self.control
+                .clear_discovery_rotation()
+                .map_err(|error| PairingError::Transport(error.to_string()))?;
+            None
+        };
+        if let Some((previous_secret, previous_epoch)) = previous.as_ref() {
+            let migration = DiscoveryScope::Group {
+                epoch: *previous_epoch,
+                selector: group_service_selector(previous_secret, *previous_epoch),
+            };
+            self.discovery
+                .start_browse(migration.clone())
+                .await
+                .map_err(|error| PairingError::Transport(error.to_string()))?;
+            *self.migration_scope.lock().map_err(|_| {
+                PairingError::Transport("migration discovery lock poisoned".into())
+            })? = Some(migration);
+        }
+        self.group_tx.send_replace(Some(DiscoveryGroupState {
+            active: secret,
+            previous,
+        }));
         Ok(true)
+    }
+
+    pub async fn stop_normal_discovery(&self) -> Result<(), PairingError> {
+        *self
+            .normal_port
+            .lock()
+            .map_err(|_| PairingError::Transport("normal discovery lock poisoned".into()))? = None;
+        let normal = self
+            .normal_scope
+            .lock()
+            .map_err(|_| PairingError::Transport("normal discovery lock poisoned".into()))?
+            .take();
+        let migration = self
+            .migration_scope
+            .lock()
+            .map_err(|_| PairingError::Transport("migration discovery lock poisoned".into()))?
+            .take();
+        if let Some(scope) = normal {
+            let _ = self.discovery.stop(&scope).await;
+        }
+        if let Some(scope) = migration {
+            let _ = self.discovery.stop(&scope).await;
+        }
+        Ok(())
+    }
+
+    pub async fn rotate_discovery_secret(
+        &self,
+        port: u16,
+        now: u64,
+        retention_ms: u64,
+    ) -> Result<u64, PairingError> {
+        let previous = self
+            .keys
+            .load_discovery_group_secret()
+            .await
+            .map_err(|error| PairingError::Transport(error.to_string()))?
+            .ok_or(PairingError::Malformed("discovery secret missing"))?;
+        let current = self
+            .control
+            .discovery_metadata()
+            .map_err(|error| PairingError::Transport(error.to_string()))?
+            .ok_or(PairingError::Malformed("secret metadata missing"))?;
+        let target_epoch = current
+            .epoch
+            .checked_add(1)
+            .ok_or(PairingError::Malformed("discovery epoch exhausted"))?;
+        self.keys
+            .store_previous_discovery_group_secret(current.epoch, &previous)
+            .await
+            .map_err(|error| PairingError::Transport(error.to_string()))?;
+        let journal = DiscoveryRotationJournal {
+            previous_epoch: current.epoch,
+            target_epoch,
+            retain_until_ms: now.saturating_add(retention_ms),
+            stage: DiscoveryRotationStage::Prepared,
+            updated_at_ms: now,
+        };
+        self.control
+            .store_discovery_rotation(journal)
+            .map_err(|error| PairingError::Transport(error.to_string()))?;
+        let mut bytes = [0; 32];
+        OsRng.fill_bytes(&mut bytes);
+        let next = DiscoveryGroupSecret::from_bytes(bytes);
+        self.keys
+            .store_discovery_group_secret(&next)
+            .await
+            .map_err(|error| PairingError::Transport(error.to_string()))?;
+        self.control
+            .store_discovery_metadata(DiscoveryGroupMetadata {
+                epoch: target_epoch,
+                updated_at_ms: now,
+            })
+            .map_err(|error| PairingError::Transport(error.to_string()))?;
+        self.control
+            .store_discovery_rotation(DiscoveryRotationJournal {
+                stage: DiscoveryRotationStage::Active,
+                ..journal
+            })
+            .map_err(|error| PairingError::Transport(error.to_string()))?;
+        self.stop_normal_discovery().await?;
+        self.start_normal_discovery(port).await?;
+        Ok(target_epoch)
+    }
+
+    pub fn rotation_update_frames(
+        &self,
+    ) -> Result<Vec<(DeviceId, [u8; DISCOVERY_UPDATE_SIZE])>, PairingError> {
+        let group = self
+            .group_tx
+            .borrow()
+            .clone()
+            .ok_or(PairingError::Malformed("discovery group is inactive"))?;
+        let (previous, _) = group
+            .previous
+            .as_ref()
+            .ok_or(PairingError::Malformed("rotation migration is inactive"))?;
+        let update = DiscoverySecretUpdate::new(
+            self.control
+                .discovery_metadata()
+                .map_err(|error| PairingError::Transport(error.to_string()))?
+                .ok_or(PairingError::Malformed("secret metadata missing"))?
+                .epoch,
+            &group.active,
+        );
+        let frame = encode_update(&update, previous);
+        Ok(self
+            .control
+            .trusted_devices()
+            .map_err(|error| PairingError::Transport(error.to_string()))?
+            .into_iter()
+            .filter(|record| record.state == TrustState::Trusted)
+            .map(|record| (record.device_id, frame))
+            .collect())
+    }
+
+    pub async fn accept_rotation_update(
+        &self,
+        peer: DeviceId,
+        frame: &[u8],
+    ) -> Result<Vec<u8>, PairingError> {
+        authorize_peer(&self.control, peer).map_err(|_| PairingError::Authentication)?;
+        let current_secret = self
+            .keys
+            .load_discovery_group_secret()
+            .await
+            .map_err(|error| PairingError::Transport(error.to_string()))?
+            .ok_or(PairingError::Malformed("discovery secret missing"))?;
+        let update = match decode_update(frame, &current_secret) {
+            Ok(update) => update,
+            Err(_) => {
+                let (_, previous) = self
+                    .keys
+                    .load_previous_discovery_group_secret()
+                    .await
+                    .map_err(|error| PairingError::Transport(error.to_string()))?
+                    .ok_or(PairingError::Authentication)?;
+                decode_update(frame, &previous).map_err(|_| PairingError::Authentication)?
+            }
+        };
+        let current_epoch = self
+            .control
+            .discovery_metadata()
+            .map_err(|error| PairingError::Transport(error.to_string()))?
+            .ok_or(PairingError::Malformed("secret metadata missing"))?
+            .epoch;
+        if update.epoch > current_epoch {
+            let next = update.secret();
+            self.install_discovery_secret(
+                &next,
+                DiscoveryGroupMetadata {
+                    epoch: update.epoch,
+                    updated_at_ms: now_ms(),
+                },
+            )
+            .await?;
+            Ok(encode_ack(
+                DiscoverySecretAck {
+                    epoch: update.epoch,
+                },
+                &next,
+            )
+            .to_vec())
+        } else {
+            Ok(encode_ack(
+                DiscoverySecretAck {
+                    epoch: current_epoch,
+                },
+                &current_secret,
+            )
+            .to_vec())
+        }
+    }
+
+    pub async fn validate_rotation_ack(&self, frame: &[u8]) -> Result<u64, PairingError> {
+        let secret = self
+            .keys
+            .load_discovery_group_secret()
+            .await
+            .map_err(|error| PairingError::Transport(error.to_string()))?
+            .ok_or(PairingError::Malformed("discovery secret missing"))?;
+        let ack = decode_ack(frame, &secret).map_err(|_| PairingError::Authentication)?;
+        let epoch = self
+            .control
+            .discovery_metadata()
+            .map_err(|error| PairingError::Transport(error.to_string()))?
+            .ok_or(PairingError::Malformed("secret metadata missing"))?
+            .epoch;
+        if ack.epoch != epoch {
+            return Err(PairingError::Authentication);
+        }
+        Ok(epoch)
     }
 
     pub fn journal(
@@ -945,6 +1292,18 @@ impl PairingManager {
     }
 }
 
+fn pairing_state_name(state: &PairingState) -> &'static str {
+    match state {
+        PairingState::Idle => "idle",
+        PairingState::Discoverable { .. } => "discoverable",
+        PairingState::Connecting { .. } => "connecting",
+        PairingState::AwaitingConfirmation { .. } => "awaiting_confirmation",
+        PairingState::Committing { .. } => "committing",
+        PairingState::Trusted { .. } => "trusted",
+        PairingState::Failed { .. } => "failed",
+    }
+}
+
 impl Drop for PairingManager {
     fn drop(&mut self) {
         self.discovery_task.abort();
@@ -1114,6 +1473,237 @@ mod tests {
         );
         assert!(discovery.advertisements().is_empty());
         assert!(a.candidates().is_empty());
+    }
+
+    #[tokio::test]
+    async fn rotation_is_monotonic_browses_previous_and_cleans_expired_secret() {
+        let (manager, discovery, _directory) = manager(17).await;
+        manager.ensure_discovery_secret(true).await.unwrap();
+        manager.start_normal_discovery(41017).await.unwrap();
+        let now = now_ms();
+        let epoch = manager
+            .rotate_discovery_secret(41017, now, 60_000)
+            .await
+            .unwrap();
+        assert_eq!(epoch, 2);
+        assert_eq!(
+            manager.control.discovery_metadata().unwrap().unwrap().epoch,
+            2
+        );
+        assert_eq!(
+            manager
+                .keys
+                .load_previous_discovery_group_secret()
+                .await
+                .unwrap()
+                .unwrap()
+                .0,
+            1
+        );
+        assert!(discovery.advertisements().iter().any(|advertisement| {
+            matches!(advertisement.scope, DiscoveryScope::Group { epoch: 2, .. })
+        }));
+        assert!(
+            discovery
+                .browsing_scopes()
+                .iter()
+                .any(|scope| { matches!(scope, DiscoveryScope::Group { epoch: 1, .. }) })
+        );
+
+        let active = manager.discovery_secret().await.unwrap().unwrap();
+        manager
+            .install_discovery_secret(
+                &DiscoveryGroupSecret::from_bytes([99; 32]),
+                DiscoveryGroupMetadata {
+                    epoch: 1,
+                    updated_at_ms: now,
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(manager.discovery_secret().await.unwrap(), Some(active));
+
+        let journal = manager.control.discovery_rotation().unwrap().unwrap();
+        manager
+            .control
+            .store_discovery_rotation(DiscoveryRotationJournal {
+                retain_until_ms: 0,
+                ..journal
+            })
+            .unwrap();
+        manager.stop_normal_discovery().await.unwrap();
+        manager.start_normal_discovery(41017).await.unwrap();
+        assert!(manager.control.discovery_rotation().unwrap().is_none());
+        assert!(
+            manager
+                .keys
+                .load_previous_discovery_group_secret()
+                .await
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[tokio::test]
+    async fn rotation_targets_online_and_offline_trusted_peers_but_not_revoked_peers() {
+        let (sender, _, _sender_directory) = manager(19).await;
+        let (online, _, _online_directory) = manager(20).await;
+        let (offline, _, _offline_directory) = manager(21).await;
+        let (revoked, _, _revoked_directory) = manager(22).await;
+        let shared = DiscoveryGroupSecret::from_bytes([91; 32]);
+        let metadata = DiscoveryGroupMetadata {
+            epoch: 1,
+            updated_at_ms: 1,
+        };
+        for (port, manager) in [(41019, &sender), (41020, &online), (41021, &offline)] {
+            manager
+                .keys
+                .store_discovery_group_secret(&shared)
+                .await
+                .unwrap();
+            manager.control.store_discovery_metadata(metadata).unwrap();
+            manager.start_normal_discovery(port).await.unwrap();
+        }
+        for (peer, state) in [
+            (&online, TrustState::Trusted),
+            (&offline, TrustState::Trusted),
+            (&revoked, TrustState::Revoked),
+        ] {
+            sender
+                .control
+                .upsert_peer_trust(&PeerTrustRecord {
+                    device_id: peer.identity.id(),
+                    public_key: peer.identity.public_key(),
+                    state,
+                    updated_at_ms: 1,
+                    last_seen_ms: None,
+                })
+                .unwrap();
+            sender
+                .control
+                .upsert_trusted_device(&TrustedDeviceRecord {
+                    device_id: peer.identity.id(),
+                    public_key: peer.identity.public_key(),
+                    friendly_name: "peer".into(),
+                    paired_at_ms: 1,
+                    last_seen_ms: None,
+                    last_sync_ms: None,
+                    state,
+                })
+                .unwrap();
+        }
+        for recipient in [&online, &offline] {
+            recipient
+                .control
+                .upsert_peer_trust(&PeerTrustRecord {
+                    device_id: sender.identity.id(),
+                    public_key: sender.identity.public_key(),
+                    state: TrustState::Trusted,
+                    updated_at_ms: 1,
+                    last_seen_ms: None,
+                })
+                .unwrap();
+        }
+
+        sender
+            .rotate_discovery_secret(41019, now_ms(), 60_000)
+            .await
+            .unwrap();
+        let frames = sender.rotation_update_frames().unwrap();
+        assert_eq!(frames.len(), 2);
+        assert!(frames.iter().any(|(peer, _)| *peer == online.identity.id()));
+        assert!(
+            frames
+                .iter()
+                .any(|(peer, _)| *peer == offline.identity.id())
+        );
+        assert!(
+            !frames
+                .iter()
+                .any(|(peer, _)| *peer == revoked.identity.id())
+        );
+
+        let online_frame = frames
+            .iter()
+            .find(|(peer, _)| *peer == online.identity.id())
+            .unwrap()
+            .1;
+        let ack = online
+            .accept_rotation_update(sender.identity.id(), &online_frame)
+            .await
+            .unwrap();
+        assert_eq!(sender.validate_rotation_ack(&ack).await.unwrap(), 2);
+        let duplicate_ack = online
+            .accept_rotation_update(sender.identity.id(), &online_frame)
+            .await
+            .unwrap();
+        assert_eq!(
+            sender.validate_rotation_ack(&duplicate_ack).await.unwrap(),
+            2
+        );
+
+        let active = online.discovery_secret().await.unwrap().unwrap();
+        let replay = encode_update(&DiscoverySecretUpdate::new(1, &shared), &active);
+        online
+            .accept_rotation_update(sender.identity.id(), &replay)
+            .await
+            .unwrap();
+        assert_eq!(online.discovery_secret().await.unwrap(), Some(active));
+
+        let offline_frame = frames
+            .iter()
+            .find(|(peer, _)| *peer == offline.identity.id())
+            .unwrap()
+            .1;
+        offline
+            .accept_rotation_update(sender.identity.id(), &offline_frame)
+            .await
+            .unwrap();
+        assert_eq!(
+            offline.control.discovery_metadata().unwrap().unwrap().epoch,
+            2
+        );
+        assert_eq!(
+            sender
+                .accept_rotation_update(revoked.identity.id(), &online_frame)
+                .await,
+            Err(PairingError::Authentication)
+        );
+    }
+
+    #[tokio::test]
+    async fn prepared_rotation_recovers_epoch_after_secret_store_crash_boundary() {
+        let (manager, _, _directory) = manager(18).await;
+        let (previous, metadata) = manager.ensure_discovery_secret(true).await.unwrap();
+        manager
+            .keys
+            .store_previous_discovery_group_secret(metadata.epoch, &previous)
+            .await
+            .unwrap();
+        manager
+            .keys
+            .store_discovery_group_secret(&DiscoveryGroupSecret::from_bytes([42; 32]))
+            .await
+            .unwrap();
+        manager
+            .control
+            .store_discovery_rotation(DiscoveryRotationJournal {
+                previous_epoch: 1,
+                target_epoch: 2,
+                retain_until_ms: now_ms() + 60_000,
+                stage: DiscoveryRotationStage::Prepared,
+                updated_at_ms: now_ms(),
+            })
+            .unwrap();
+        manager.start_normal_discovery(41018).await.unwrap();
+        assert_eq!(
+            manager.control.discovery_metadata().unwrap().unwrap().epoch,
+            2
+        );
+        assert_eq!(
+            manager.control.discovery_rotation().unwrap().unwrap().stage,
+            DiscoveryRotationStage::Active
+        );
     }
 
     #[tokio::test]

@@ -161,6 +161,7 @@ pub enum DiscoveryError {
 #[async_trait]
 pub trait DiscoveryProvider: Send + Sync + 'static {
     async fn start(&self, advertisement: DiscoveryAdvertisement) -> Result<(), DiscoveryError>;
+    async fn start_browse(&self, scope: DiscoveryScope) -> Result<(), DiscoveryError>;
     async fn stop(&self, scope: &DiscoveryScope) -> Result<(), DiscoveryError>;
     fn subscribe(&self) -> broadcast::Receiver<DiscoveryEvent>;
 }
@@ -192,13 +193,14 @@ impl Clock for ManualClock {
 /// Deterministic provider used by protocol tests and platform adapters.
 pub struct FakeDiscoveryProvider {
     active: Mutex<HashMap<DiscoveryScope, DiscoveryAdvertisement>>,
+    browsing: Mutex<std::collections::HashSet<DiscoveryScope>>,
     events: broadcast::Sender<DiscoveryEvent>,
     clock: Arc<dyn Clock>,
 }
 
 struct MdnsActive {
     service_type: String,
-    fullname: String,
+    fullname: Option<String>,
     task: JoinHandle<()>,
 }
 
@@ -324,7 +326,77 @@ impl DiscoveryProvider for MdnsDiscovery {
                 advertisement.scope,
                 MdnsActive {
                     service_type,
-                    fullname,
+                    fullname: Some(fullname),
+                    task,
+                },
+            );
+        Ok(())
+    }
+
+    async fn start_browse(&self, scope: DiscoveryScope) -> Result<(), DiscoveryError> {
+        if self
+            .active
+            .lock()
+            .map_err(|_| DiscoveryError::Provider("lock poisoned".into()))?
+            .contains_key(&scope)
+        {
+            return Err(DiscoveryError::AlreadyActive);
+        }
+        let service_type = Self::service_type(&scope).to_owned();
+        let receiver = self
+            .daemon
+            .browse(&service_type)
+            .map_err(|error| DiscoveryError::Provider(error.to_string()))?;
+        let events = self.events.clone();
+        let event_scope = scope.clone();
+        let service_suffix = format!(".{service_type}");
+        let task = tokio::spawn(async move {
+            while let Ok(event) = receiver.recv_async().await {
+                match event {
+                    mdns_sd::ServiceEvent::ServiceResolved(info) => {
+                        let properties: BTreeMap<String, String> = info
+                            .get_properties()
+                            .iter()
+                            .map(|property| {
+                                (property.key().to_owned(), property.val_str().to_owned())
+                            })
+                            .collect();
+                        for address in info.get_addresses() {
+                            let _ = events.send(DiscoveryEvent::Upsert(DiscoveredEndpoint {
+                                scope: event_scope.clone(),
+                                instance_name: info
+                                    .get_fullname()
+                                    .strip_suffix(&service_suffix)
+                                    .unwrap_or(info.get_fullname())
+                                    .to_owned(),
+                                address: SocketAddr::new(address.to_ip_addr(), info.get_port()),
+                                properties: properties.clone(),
+                                expires_at_ms: system_now_ms()
+                                    .saturating_add(DEFAULT_RECORD_TTL_MS),
+                            }));
+                        }
+                    }
+                    mdns_sd::ServiceEvent::ServiceRemoved(_, fullname) => {
+                        let _ = events.send(DiscoveryEvent::Expired {
+                            scope: event_scope.clone(),
+                            instance_name: fullname
+                                .strip_suffix(&service_suffix)
+                                .unwrap_or(&fullname)
+                                .to_owned(),
+                        });
+                    }
+                    _ => {}
+                }
+            }
+        });
+        self.active
+            .lock()
+            .map_err(|_| DiscoveryError::Provider("lock poisoned".into()))?
+            .insert(
+                scope,
+                MdnsActive {
+                    service_type,
+                    fullname: None,
                     task,
                 },
             );
@@ -342,9 +414,11 @@ impl DiscoveryProvider for MdnsDiscovery {
         self.daemon
             .stop_browse(&active.service_type)
             .map_err(|error| DiscoveryError::Provider(error.to_string()))?;
-        self.daemon
-            .unregister(&active.fullname)
-            .map_err(|error| DiscoveryError::Provider(error.to_string()))?;
+        if let Some(fullname) = active.fullname {
+            self.daemon
+                .unregister(&fullname)
+                .map_err(|error| DiscoveryError::Provider(error.to_string()))?;
+        }
         Ok(())
     }
 
@@ -363,7 +437,9 @@ impl Drop for MdnsDiscovery {
         {
             active.task.abort();
             let _ = self.daemon.stop_browse(&active.service_type);
-            let _ = self.daemon.unregister(&active.fullname);
+            if let Some(fullname) = active.fullname {
+                let _ = self.daemon.unregister(&fullname);
+            }
         }
         let _ = self.daemon.shutdown();
     }
@@ -392,6 +468,7 @@ impl FakeDiscoveryProvider {
         let (events, _) = broadcast::channel(128);
         Self {
             active: Mutex::new(HashMap::new()),
+            browsing: Mutex::new(std::collections::HashSet::new()),
             events,
             clock,
         }
@@ -402,6 +479,15 @@ impl FakeDiscoveryProvider {
             .lock()
             .expect("discovery lock poisoned")
             .values()
+            .cloned()
+            .collect()
+    }
+    #[must_use]
+    pub fn browsing_scopes(&self) -> Vec<DiscoveryScope> {
+        self.browsing
+            .lock()
+            .expect("discovery lock poisoned")
+            .iter()
             .cloned()
             .collect()
     }
@@ -445,13 +531,39 @@ impl DiscoveryProvider for FakeDiscoveryProvider {
         }
         Ok(())
     }
+    async fn start_browse(&self, scope: DiscoveryScope) -> Result<(), DiscoveryError> {
+        if !matches!(scope, DiscoveryScope::Group { .. }) {
+            return Err(DiscoveryError::InvalidRecord(
+                "pairing browse requires advertisement",
+            ));
+        }
+        if !self
+            .browsing
+            .lock()
+            .map_err(|_| DiscoveryError::Provider("lock poisoned".into()))?
+            .insert(scope)
+        {
+            return Err(DiscoveryError::AlreadyActive);
+        }
+        Ok(())
+    }
     async fn stop(&self, scope: &DiscoveryScope) -> Result<(), DiscoveryError> {
-        self.active
+        let advertised = self
+            .active
             .lock()
             .map_err(|_| DiscoveryError::Provider("lock poisoned".into()))?
             .remove(scope)
-            .ok_or(DiscoveryError::Inactive)?;
-        Ok(())
+            .is_some();
+        let browsed = self
+            .browsing
+            .lock()
+            .map_err(|_| DiscoveryError::Provider("lock poisoned".into()))?
+            .remove(scope);
+        if advertised || browsed {
+            Ok(())
+        } else {
+            Err(DiscoveryError::Inactive)
+        }
     }
     fn subscribe(&self) -> broadcast::Receiver<DiscoveryEvent> {
         self.events.subscribe()

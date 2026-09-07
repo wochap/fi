@@ -7,10 +7,25 @@ import '../frb_generated.dart';
 import 'models.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `core`, `process_core`
+// These functions are ignored because they are not marked as `pub`: `core`, `initialize_networked`, `process_core`
 
 Future<BootstrapDto> initialize({required String dataDir}) =>
     RustLib.instance.api.crateApiLifecycleInitialize(dataDir: dataDir);
+
+Future<BootstrapDto> initializeDesktopNetworked({required String dataDir}) =>
+    RustLib.instance.api.crateApiLifecycleInitializeDesktopNetworked(
+      dataDir: dataDir,
+    );
+
+Future<BootstrapDto> initializeAndroidNetworked({
+  required String dataDir,
+  required List<int> deviceSeed,
+  Uint8List? discoverySecret,
+}) => RustLib.instance.api.crateApiLifecycleInitializeAndroidNetworked(
+  dataDir: dataDir,
+  deviceSeed: deviceSeed,
+  discoverySecret: discoverySecret,
+);
 
 Future<BootstrapDto> bootstrapState() =>
     RustLib.instance.api.crateApiLifecycleBootstrapState();
@@ -19,6 +34,9 @@ Future<ProjectionDto> projectionState() =>
     RustLib.instance.api.crateApiLifecycleProjectionState();
 
 Future<void> shutdown() => RustLib.instance.api.crateApiLifecycleShutdown();
+
+Future<void> setForeground({required bool foreground}) =>
+    RustLib.instance.api.crateApiLifecycleSetForeground(foreground: foreground);
 
 Stream<BootstrapDto> bootstrapStream() =>
     RustLib.instance.api.crateApiLifecycleBootstrapStream();

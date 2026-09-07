@@ -2,7 +2,10 @@ use std::{
     future::pending,
     net::SocketAddr,
     path::{Path, PathBuf},
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -16,6 +19,7 @@ use tracing::{error, info, instrument};
 use crate::{
     LocalIdentityRecord,
     adapters::{FileDocumentStore, LocalTransport, SqliteControlStore},
+    discovery::DiscoveryGroupSecret,
     domain::{
         CategoryId, CategoryView, CreateCategory, CreateTransaction, FinanceCommand,
         TransactionFilter, TransactionId, TransactionView, UpdateCategory, UpdateTransaction,
@@ -87,6 +91,7 @@ pub struct AppCore {
     connections: Option<Arc<ConnectionManager>>,
     pairing: Option<Arc<PairingManager>>,
     peer_sync: watch::Receiver<std::collections::HashMap<PeerId, PeerSyncProgress>>,
+    network_foreground: Arc<AtomicBool>,
 }
 
 impl std::fmt::Debug for AppCore {
@@ -197,6 +202,9 @@ impl AppCore {
             discovery,
             bind.ip(),
         )?;
+        if let Some(requests) = network.take_control_requests() {
+            spawn_rotation_control(requests, pairing.clone());
+        }
         pairing
             .start_normal_discovery(network.local_addr()?.port())
             .await?;
@@ -272,8 +280,17 @@ impl AppCore {
         if let Some(manager) = network_components.connections.clone() {
             spawn_sync_bridge(peer_sync.clone(), manager);
         }
-        if let Some(pairing) = network_components.pairing.clone() {
-            spawn_discovery_bridge(pairing, network_components.endpoints.clone());
+        if let (Some(pairing), Some(connections), Some(network)) = (
+            network_components.pairing.clone(),
+            network_components.connections.clone(),
+            network_components.network.clone(),
+        ) {
+            spawn_discovery_bridge(
+                pairing,
+                network_components.endpoints.clone(),
+                connections,
+                network,
+            );
         }
 
         let initial = match repo.bootstrap_status() {
@@ -333,6 +350,7 @@ impl AppCore {
             connections: network_components.connections,
             pairing: network_components.pairing,
             peer_sync,
+            network_foreground: Arc::new(AtomicBool::new(false)),
         })
     }
 
@@ -388,11 +406,48 @@ impl AppCore {
     }
     #[must_use]
     pub fn sync_status(&self) -> crate::routing::SyncStatus {
-        self.connections
+        let status = self
+            .connections
             .as_ref()
             .map_or(crate::routing::SyncStatus::Offline, |manager| {
                 manager.sync_status()
-            })
+            });
+        if status == crate::routing::SyncStatus::Offline
+            && self.pairing.is_some()
+            && self.network_foreground.load(Ordering::Acquire)
+        {
+            crate::routing::SyncStatus::Searching
+        } else {
+            status
+        }
+    }
+
+    pub async fn set_foreground(&self, foreground: bool) -> Result<()> {
+        self.network_foreground.store(foreground, Ordering::Release);
+        let Some(pairing) = self.pairing.as_ref() else {
+            return Ok(());
+        };
+        if foreground {
+            if let Some(port) = self.network_addr().map(|address| address.port()) {
+                pairing.start_normal_discovery(port).await?;
+            }
+        } else {
+            pairing.stop_normal_discovery().await?;
+            let peers = self.connection_states().into_keys().collect::<Vec<_>>();
+            for peer in peers {
+                let _ = self.disconnect_peer(peer).await;
+                if let Some(connections) = self.connections.as_ref() {
+                    connections.set_state(peer, PeerConnectionState::Disconnected);
+                }
+            }
+        }
+        Ok(())
+    }
+    #[must_use]
+    pub fn connection_states(&self) -> std::collections::HashMap<DeviceId, PeerConnectionState> {
+        self.connections
+            .as_ref()
+            .map_or_else(std::collections::HashMap::new, |manager| manager.states())
     }
     pub fn replace_endpoints(
         &self,
@@ -443,6 +498,14 @@ impl AppCore {
             .as_ref()
             .ok_or_else(|| AppError::Storage("pairing requires networked mode".into()))?
             .stop()
+            .await
+            .map_err(Into::into)
+    }
+    pub async fn discovery_secret_for_platform(&self) -> Result<Option<DiscoveryGroupSecret>> {
+        self.pairing
+            .as_ref()
+            .ok_or_else(|| AppError::Storage("pairing requires networked mode".into()))?
+            .discovery_secret()
             .await
             .map_err(Into::into)
     }
@@ -654,13 +717,56 @@ impl AppCore {
             .map_err(Into::into)
     }
     pub async fn revoke_trusted_device(&self, peer: DeviceId, now_ms: u64) -> Result<bool> {
-        let changed = self
+        let pairing = self
             .pairing
             .as_ref()
-            .ok_or_else(|| AppError::Storage("pairing requires networked mode".into()))?
-            .revoke(peer, now_ms)?;
+            .ok_or_else(|| AppError::Storage("pairing requires networked mode".into()))?;
+        let changed = pairing.revoke(peer, now_ms)?;
         if changed {
             let _ = self.disconnect_peer(peer).await;
+            self.endpoints
+                .lock()
+                .map_err(|_| AppError::Storage("endpoint registry lock poisoned".into()))?
+                .remove(peer);
+            if let Some(connections) = self.connections.as_ref() {
+                connections.set_state(peer, PeerConnectionState::Disconnected);
+            }
+            let port = self
+                .network_addr()
+                .ok_or_else(|| AppError::Storage("networking is unavailable".into()))?
+                .port();
+            pairing
+                .rotate_discovery_secret(port, now_ms, 7 * 24 * 60 * 60 * 1_000)
+                .await?;
+            if let Some(network) = self.network.as_ref() {
+                for (recipient, frame) in pairing.rotation_update_frames()? {
+                    if recipient == peer {
+                        continue;
+                    }
+                    match network.exchange_control(recipient, &frame).await {
+                        Ok(response) => {
+                            let _ = pairing.validate_rotation_ack(&response).await;
+                        }
+                        Err(_)
+                            if self.connections.as_ref().is_some_and(|connections| {
+                                !matches!(
+                                    connections.states().get(&recipient),
+                                    Some(PeerConnectionState::Failed(_))
+                                )
+                            }) =>
+                        {
+                            if let Some(connections) = self.connections.as_ref()
+                                && connections.connect_manual(recipient, now_ms).await.is_ok()
+                                && let Ok(response) =
+                                    network.exchange_control(recipient, &frame).await
+                            {
+                                let _ = pairing.validate_rotation_ack(&response).await;
+                            }
+                        }
+                        Err(_) => {}
+                    }
+                }
+            }
         }
         Ok(changed)
     }
@@ -832,7 +938,12 @@ fn spawn_sync_bridge(
     });
 }
 
-fn spawn_discovery_bridge(pairing: Arc<PairingManager>, endpoints: Arc<Mutex<EndpointRegistry>>) {
+fn spawn_discovery_bridge(
+    pairing: Arc<PairingManager>,
+    endpoints: Arc<Mutex<EndpointRegistry>>,
+    connections: Arc<ConnectionManager>,
+    network: Arc<QuinnTransport>,
+) {
     let mut events = pairing.subscribe_normal_discovery();
     tokio::spawn(async move {
         while let Ok(event) = events.recv().await {
@@ -858,6 +969,32 @@ fn spawn_discovery_bridge(pairing: Arc<PairingManager>, endpoints: Arc<Mutex<End
                     }],
                 );
             }
+            if let Ok(frames) = pairing.rotation_update_frames()
+                && let Some((_, frame)) = frames.into_iter().find(|(device, _)| *device == peer)
+                && connections.connect_manual(peer, now).await.is_ok()
+                && let Ok(response) = network.exchange_control(peer, &frame).await
+            {
+                let _ = pairing.validate_rotation_ack(&response).await;
+            }
+        }
+    });
+}
+
+fn spawn_rotation_control(
+    mut requests: tokio::sync::mpsc::Receiver<crate::quinn_transport::ControlRequest>,
+    pairing: Arc<PairingManager>,
+) {
+    tokio::spawn(async move {
+        while let Some(request) = requests.recv().await {
+            let response = pairing
+                .accept_rotation_update(request.peer, &request.frame)
+                .await
+                .map_err(|_| {
+                    crate::quinn_transport::QuinnTransportError::Protocol(
+                        "discovery control request rejected",
+                    )
+                });
+            let _ = request.response.send(response);
         }
     });
 }
