@@ -107,6 +107,138 @@ pub struct BridgeErrorEventDto {
     pub message: String,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PairingKindDto {
+    Idle,
+    Discoverable,
+    Connecting,
+    AwaitingConfirmation,
+    Committing,
+    Trusted,
+    Failed,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PairingStateDto {
+    pub kind: PairingKindDto,
+    pub session_id: Option<String>,
+    pub sas: Option<String>,
+    pub peer_device_id: Option<String>,
+    pub deadline_ms: Option<u64>,
+    pub local_confirmed: bool,
+    pub remote_confirmed: bool,
+    pub message: Option<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PairingCandidateDto {
+    pub instance_id: String,
+    pub endpoint: String,
+    pub expires_at_ms: u64,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TrustedDeviceDto {
+    pub device_id: String,
+    pub friendly_name: String,
+    pub paired_at_ms: u64,
+    pub last_seen_ms: Option<u64>,
+    pub last_sync_ms: Option<u64>,
+    pub revoked: bool,
+}
+
+impl From<app_core::PairingState> for PairingStateDto {
+    fn from(value: app_core::PairingState) -> Self {
+        use app_core::PairingState;
+        let mut dto = Self {
+            kind: PairingKindDto::Idle,
+            session_id: None,
+            sas: None,
+            peer_device_id: None,
+            deadline_ms: None,
+            local_confirmed: false,
+            remote_confirmed: false,
+            message: None,
+        };
+        match value {
+            PairingState::Idle => {}
+            PairingState::Discoverable { deadline_ms, .. } => {
+                dto.kind = PairingKindDto::Discoverable;
+                dto.deadline_ms = Some(deadline_ms);
+            }
+            PairingState::Connecting {
+                session_id,
+                deadline_ms,
+                ..
+            } => {
+                dto.kind = PairingKindDto::Connecting;
+                dto.session_id = Some(hex_id(session_id.0));
+                dto.deadline_ms = Some(deadline_ms);
+            }
+            PairingState::AwaitingConfirmation {
+                session_id,
+                sas,
+                local_confirmed,
+                remote_confirmed,
+                deadline_ms,
+            } => {
+                dto.kind = PairingKindDto::AwaitingConfirmation;
+                dto.session_id = Some(hex_id(session_id.0));
+                dto.sas = Some(sas);
+                dto.local_confirmed = local_confirmed;
+                dto.remote_confirmed = remote_confirmed;
+                dto.deadline_ms = Some(deadline_ms);
+            }
+            PairingState::Committing {
+                session_id,
+                peer,
+                deadline_ms,
+            } => {
+                dto.kind = PairingKindDto::Committing;
+                dto.session_id = Some(hex_id(session_id.0));
+                dto.peer_device_id = Some(peer.to_string());
+                dto.deadline_ms = Some(deadline_ms);
+            }
+            PairingState::Trusted { peer } => {
+                dto.kind = PairingKindDto::Trusted;
+                dto.peer_device_id = Some(peer.to_string());
+            }
+            PairingState::Failed { error } => {
+                dto.kind = PairingKindDto::Failed;
+                dto.message = Some(error.to_string());
+            }
+        }
+        dto
+    }
+}
+
+impl From<app_core::PairingCandidate> for PairingCandidateDto {
+    fn from(value: app_core::PairingCandidate) -> Self {
+        Self {
+            instance_id: value.instance_id.to_string(),
+            endpoint: value.endpoint.to_string(),
+            expires_at_ms: value.expires_at_ms,
+        }
+    }
+}
+
+impl From<app_core::TrustedDeviceRecord> for TrustedDeviceDto {
+    fn from(value: app_core::TrustedDeviceRecord) -> Self {
+        Self {
+            device_id: value.device_id.to_string(),
+            friendly_name: value.friendly_name,
+            paired_at_ms: value.paired_at_ms,
+            last_seen_ms: value.last_seen_ms,
+            last_sync_ms: value.last_sync_ms,
+            revoked: value.state == app_core::TrustState::Revoked,
+        }
+    }
+}
+
+fn hex_id(value: [u8; 16]) -> String {
+    value.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
 impl BootstrapDto {
     pub(crate) fn from_core(value: ApplicationState) -> Self {
         match value {
@@ -246,7 +378,7 @@ impl From<AppError> for BridgeError {
                 BridgeErrorKind::Persistence,
                 "Local data could not be saved or loaded.",
             ),
-            AppError::Identity(_) | AppError::Network(_) => Self::safe(
+            AppError::Identity(_) | AppError::Network(_) | AppError::Pairing(_) => Self::safe(
                 BridgeErrorKind::Initialization,
                 "Secure device networking could not be initialized.",
             ),

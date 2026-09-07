@@ -53,3 +53,64 @@ pub struct PeerConnectionMetadata {
     pub endpoint: Option<SocketAddr>,
     pub updated_at_ms: u64,
 }
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TrustedDeviceRecord {
+    pub device_id: DeviceId,
+    pub public_key: PublicDeviceKey,
+    pub friendly_name: String,
+    pub paired_at_ms: u64,
+    pub last_seen_ms: Option<u64>,
+    pub last_sync_ms: Option<u64>,
+    pub state: TrustState,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PairingJournalStage {
+    Confirmed,
+    ProvisioningStored,
+    RootJoining,
+    TrustStored,
+    AwaitingAcknowledgement,
+    Complete,
+}
+
+impl PairingJournalStage {
+    pub(crate) const fn as_str(self) -> &'static str {
+        match self {
+            Self::Confirmed => "confirmed",
+            Self::ProvisioningStored => "provisioning_stored",
+            Self::RootJoining => "root_joining",
+            Self::TrustStored => "trust_stored",
+            Self::AwaitingAcknowledgement => "awaiting_acknowledgement",
+            Self::Complete => "complete",
+        }
+    }
+
+    pub(crate) fn parse(value: &str) -> Option<Self> {
+        Some(match value {
+            "confirmed" => Self::Confirmed,
+            "provisioning_stored" => Self::ProvisioningStored,
+            "root_joining" => Self::RootJoining,
+            "trust_stored" => Self::TrustStored,
+            "awaiting_acknowledgement" => Self::AwaitingAcknowledgement,
+            "complete" => Self::Complete,
+            _ => return None,
+        })
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PairingJournalRecord {
+    pub session_id: [u8; 16],
+    pub peer_device_id: DeviceId,
+    pub stage: PairingJournalStage,
+    pub joining_root: Option<String>,
+    pub updated_at_ms: u64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct DiscoveryGroupMetadata {
+    pub epoch: u64,
+    pub updated_at_ms: u64,
+}

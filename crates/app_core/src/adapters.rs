@@ -22,10 +22,15 @@ use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 use tokio::sync::mpsc;
 
 use crate::{
-    control::{LocalIdentityRecord, PeerConnectionMetadata, PeerTrustRecord, TrustState},
+    control::{
+        DiscoveryGroupMetadata, LocalIdentityRecord, PairingJournalRecord, PairingJournalStage,
+        PeerConnectionMetadata, PeerTrustRecord, TrustState, TrustedDeviceRecord,
+    },
     identity::{DeviceId, PublicDeviceKey},
     routing::{ConnectionFailure, PeerConnectionState},
 };
+
+type TrustedDeviceRow = (Vec<u8>, String, i64, Option<i64>, Option<i64>, String);
 
 fn storage_error(
     operation: &'static str,
@@ -264,6 +269,22 @@ impl SqliteControlStore {
              CREATE TABLE IF NOT EXISTS peer_connections (
                 device_id TEXT PRIMARY KEY, state TEXT NOT NULL, error_category TEXT,
                 endpoint TEXT, updated_at_ms INTEGER NOT NULL CHECK(updated_at_ms >= 0)
+             ) STRICT;
+             CREATE TABLE IF NOT EXISTS trusted_devices (
+                device_id TEXT PRIMARY KEY, public_key BLOB NOT NULL CHECK(length(public_key) = 32),
+                friendly_name TEXT NOT NULL, paired_at_ms INTEGER NOT NULL CHECK(paired_at_ms >= 0),
+                last_seen_ms INTEGER, last_sync_ms INTEGER,
+                trust_state TEXT NOT NULL CHECK(trust_state IN ('trusted', 'revoked'))
+             ) STRICT;
+             CREATE TABLE IF NOT EXISTS pairing_journal (
+                session_id BLOB PRIMARY KEY CHECK(length(session_id) = 16),
+                peer_device_id TEXT NOT NULL, stage TEXT NOT NULL,
+                joining_root TEXT, updated_at_ms INTEGER NOT NULL CHECK(updated_at_ms >= 0)
+             ) STRICT;
+             CREATE TABLE IF NOT EXISTS discovery_group (
+                singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
+                version INTEGER NOT NULL CHECK(version = 1), epoch INTEGER NOT NULL CHECK(epoch > 0),
+                updated_at_ms INTEGER NOT NULL CHECK(updated_at_ms >= 0)
              ) STRICT;",
         )
             .map_err(|e| storage_error("control_open", None, &path, e))?;
@@ -490,6 +511,384 @@ impl SqliteControlStore {
         })
         .transpose()
     }
+
+    pub fn upsert_trusted_device(&self, record: &TrustedDeviceRecord) -> Result<(), StorageError> {
+        self.ensure_open("trusted_device_store")?;
+        validate_trusted_device(record, &self.path)?;
+        let paired = checked_timestamp(record.paired_at_ms, "trusted_device_store", &self.path)?;
+        let seen = optional_timestamp(record.last_seen_ms, "trusted_device_store", &self.path)?;
+        let sync = optional_timestamp(record.last_sync_ms, "trusted_device_store", &self.path)?;
+        let mut connection = self.connection.lock().map_err(|_| {
+            storage_error(
+                "trusted_device_store",
+                None,
+                &self.path,
+                "connection lock poisoned",
+            )
+        })?;
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|error| storage_error("trusted_device_store", None, &self.path, error))?;
+        transaction.execute(
+            "INSERT INTO trusted_devices(device_id,public_key,friendly_name,paired_at_ms,last_seen_ms,last_sync_ms,trust_state)
+             VALUES(?1,?2,?3,?4,?5,?6,?7)
+             ON CONFLICT(device_id) DO UPDATE SET public_key=excluded.public_key,friendly_name=excluded.friendly_name,
+             paired_at_ms=MIN(trusted_devices.paired_at_ms,excluded.paired_at_ms),last_seen_ms=excluded.last_seen_ms,
+             last_sync_ms=excluded.last_sync_ms,trust_state=excluded.trust_state",
+            params![record.device_id.to_string(), record.public_key.as_bytes().as_slice(), record.friendly_name, paired, seen, sync, record.state.as_str()],
+        ).map_err(|error| storage_error("trusted_device_store", None, &self.path, error))?;
+        transaction.execute(
+            "INSERT INTO trusted_peers(device_id,public_key,trust_state,updated_at_ms,last_seen_ms) VALUES(?1,?2,?3,?4,?5)
+             ON CONFLICT(device_id) DO UPDATE SET public_key=excluded.public_key,trust_state=excluded.trust_state,updated_at_ms=excluded.updated_at_ms,last_seen_ms=excluded.last_seen_ms",
+            params![record.device_id.to_string(),record.public_key.as_bytes().as_slice(),record.state.as_str(),paired,seen],
+        ).map_err(|error| storage_error("trusted_device_store", None, &self.path, error))?;
+        transaction
+            .commit()
+            .map_err(|error| storage_error("trusted_device_store", None, &self.path, error))
+    }
+
+    pub fn trusted_device(
+        &self,
+        device: DeviceId,
+    ) -> Result<Option<TrustedDeviceRecord>, StorageError> {
+        self.ensure_open("trusted_device_load")?;
+        let connection = self.connection.lock().map_err(|_| {
+            storage_error(
+                "trusted_device_load",
+                None,
+                &self.path,
+                "connection lock poisoned",
+            )
+        })?;
+        let row: Option<TrustedDeviceRow> = connection
+            .query_row(
+                "SELECT public_key,friendly_name,paired_at_ms,last_seen_ms,last_sync_ms,trust_state FROM trusted_devices WHERE device_id=?1",
+                [device.to_string()],
+                |row| Ok((row.get(0)?,row.get(1)?,row.get(2)?,row.get(3)?,row.get(4)?,row.get(5)?)),
+            )
+            .optional()
+            .map_err(|error| storage_error("trusted_device_load", None, &self.path, error))?;
+        row.map(|(key, friendly_name, paired, seen, sync, state)| {
+            let public_key = decode_public_key(key, "trusted_device_load", &self.path)?;
+            if DeviceId::from_public_key(public_key.as_bytes()) != device {
+                return Err(storage_error(
+                    "trusted_device_load",
+                    None,
+                    &self.path,
+                    "device ID/key mismatch",
+                ));
+            }
+            Ok(TrustedDeviceRecord {
+                device_id: device,
+                public_key,
+                friendly_name,
+                paired_at_ms: decode_timestamp(paired, "trusted_device_load", &self.path)?,
+                last_seen_ms: decode_optional_timestamp(seen, "trusted_device_load", &self.path)?,
+                last_sync_ms: decode_optional_timestamp(sync, "trusted_device_load", &self.path)?,
+                state: TrustState::parse(&state).ok_or_else(|| {
+                    storage_error(
+                        "trusted_device_load",
+                        None,
+                        &self.path,
+                        "malformed trust state",
+                    )
+                })?,
+            })
+        })
+        .transpose()
+    }
+
+    pub fn trusted_devices(&self) -> Result<Vec<TrustedDeviceRecord>, StorageError> {
+        self.ensure_open("trusted_devices_list")?;
+        let ids = {
+            let connection = self.connection.lock().map_err(|_| {
+                storage_error(
+                    "trusted_devices_list",
+                    None,
+                    &self.path,
+                    "connection lock poisoned",
+                )
+            })?;
+            let mut query = connection
+                .prepare("SELECT device_id FROM trusted_devices ORDER BY paired_at_ms,device_id")
+                .map_err(|error| storage_error("trusted_devices_list", None, &self.path, error))?;
+            query
+                .query_map([], |row| row.get::<_, String>(0))
+                .map_err(|error| storage_error("trusted_devices_list", None, &self.path, error))?
+                .collect::<std::result::Result<Vec<_>, _>>()
+                .map_err(|error| storage_error("trusted_devices_list", None, &self.path, error))?
+        };
+        ids.into_iter()
+            .map(|id| {
+                let device = id.parse().map_err(|_| {
+                    storage_error(
+                        "trusted_devices_list",
+                        None,
+                        &self.path,
+                        "malformed device ID",
+                    )
+                })?;
+                self.trusted_device(device)?.ok_or_else(|| {
+                    storage_error(
+                        "trusted_devices_list",
+                        None,
+                        &self.path,
+                        "device disappeared",
+                    )
+                })
+            })
+            .collect()
+    }
+
+    pub fn rename_trusted_device(
+        &self,
+        device: DeviceId,
+        name: &str,
+    ) -> Result<bool, StorageError> {
+        self.ensure_open("trusted_device_rename")?;
+        if name.trim().is_empty() || name.len() > 64 {
+            return Err(storage_error(
+                "trusted_device_rename",
+                None,
+                &self.path,
+                "friendly name must contain 1..64 bytes",
+            ));
+        }
+        self.connection
+            .lock()
+            .map_err(|_| {
+                storage_error(
+                    "trusted_device_rename",
+                    None,
+                    &self.path,
+                    "connection lock poisoned",
+                )
+            })?
+            .execute(
+                "UPDATE trusted_devices SET friendly_name=?1 WHERE device_id=?2",
+                params![name, device.to_string()],
+            )
+            .map(|changed| changed == 1)
+            .map_err(|error| storage_error("trusted_device_rename", None, &self.path, error))
+    }
+
+    pub fn revoke_trusted_device(
+        &self,
+        device: DeviceId,
+        now_ms: u64,
+    ) -> Result<bool, StorageError> {
+        self.ensure_open("trusted_device_revoke")?;
+        let now = checked_timestamp(now_ms, "trusted_device_revoke", &self.path)?;
+        let mut connection = self.connection.lock().map_err(|_| {
+            storage_error(
+                "trusted_device_revoke",
+                None,
+                &self.path,
+                "connection lock poisoned",
+            )
+        })?;
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|error| storage_error("trusted_device_revoke", None, &self.path, error))?;
+        let changed = transaction
+            .execute(
+                "UPDATE trusted_devices SET trust_state='revoked' WHERE device_id=?1",
+                [device.to_string()],
+            )
+            .map_err(|error| storage_error("trusted_device_revoke", None, &self.path, error))?;
+        transaction.execute("UPDATE trusted_peers SET trust_state='revoked',updated_at_ms=?1 WHERE device_id=?2", params![now, device.to_string()])
+            .map_err(|error| storage_error("trusted_device_revoke", None, &self.path, error))?;
+        transaction
+            .commit()
+            .map_err(|error| storage_error("trusted_device_revoke", None, &self.path, error))?;
+        Ok(changed == 1)
+    }
+
+    pub fn store_pairing_journal(&self, record: &PairingJournalRecord) -> Result<(), StorageError> {
+        self.ensure_open("pairing_journal_store")?;
+        let updated = checked_timestamp(record.updated_at_ms, "pairing_journal_store", &self.path)?;
+        let connection = self.connection.lock().map_err(|_| {
+            storage_error(
+                "pairing_journal_store",
+                None,
+                &self.path,
+                "connection lock poisoned",
+            )
+        })?;
+        let existing: Option<(String, Option<String>)> = connection
+            .query_row(
+                "SELECT peer_device_id,joining_root FROM pairing_journal WHERE session_id=?1",
+                [record.session_id.as_slice()],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()
+            .map_err(|error| storage_error("pairing_journal_store", None, &self.path, error))?;
+        if let Some((peer, root)) = existing
+            && (peer != record.peer_device_id.to_string()
+                || root.is_some() && record.joining_root.is_some() && root != record.joining_root)
+        {
+            return Err(storage_error(
+                "pairing_journal_store",
+                None,
+                &self.path,
+                "session conflicts with durable pairing journal",
+            ));
+        }
+        connection.execute(
+                "INSERT INTO pairing_journal(session_id,peer_device_id,stage,joining_root,updated_at_ms) VALUES(?1,?2,?3,?4,?5)
+                 ON CONFLICT(session_id) DO UPDATE SET stage=excluded.stage,joining_root=COALESCE(pairing_journal.joining_root,excluded.joining_root),updated_at_ms=excluded.updated_at_ms",
+                params![record.session_id.as_slice(),record.peer_device_id.to_string(),record.stage.as_str(),record.joining_root,updated],
+            ).map(|_| ()).map_err(|error| storage_error("pairing_journal_store", None, &self.path, error))
+    }
+
+    pub fn pairing_journal(
+        &self,
+        session_id: [u8; 16],
+    ) -> Result<Option<PairingJournalRecord>, StorageError> {
+        self.ensure_open("pairing_journal_load")?;
+        let row: Option<(String,String,Option<String>,i64)> = self.connection.lock().map_err(|_| storage_error("pairing_journal_load", None, &self.path, "connection lock poisoned"))?
+            .query_row("SELECT peer_device_id,stage,joining_root,updated_at_ms FROM pairing_journal WHERE session_id=?1", [session_id.as_slice()], |row| Ok((row.get(0)?,row.get(1)?,row.get(2)?,row.get(3)?)))
+            .optional().map_err(|error| storage_error("pairing_journal_load", None, &self.path, error))?;
+        row.map(|(peer, stage, joining_root, updated)| {
+            Ok(PairingJournalRecord {
+                session_id,
+                peer_device_id: peer.parse().map_err(|_| {
+                    storage_error(
+                        "pairing_journal_load",
+                        None,
+                        &self.path,
+                        "malformed peer ID",
+                    )
+                })?,
+                stage: PairingJournalStage::parse(&stage).ok_or_else(|| {
+                    storage_error("pairing_journal_load", None, &self.path, "malformed stage")
+                })?,
+                joining_root,
+                updated_at_ms: decode_timestamp(updated, "pairing_journal_load", &self.path)?,
+            })
+        })
+        .transpose()
+    }
+
+    pub fn store_discovery_metadata(
+        &self,
+        value: DiscoveryGroupMetadata,
+    ) -> Result<(), StorageError> {
+        self.ensure_open("discovery_metadata_store")?;
+        let epoch = i64::try_from(value.epoch).map_err(|_| {
+            storage_error(
+                "discovery_metadata_store",
+                None,
+                &self.path,
+                "epoch out of range",
+            )
+        })?;
+        let updated =
+            checked_timestamp(value.updated_at_ms, "discovery_metadata_store", &self.path)?;
+        self.connection.lock().map_err(|_| storage_error("discovery_metadata_store", None, &self.path, "connection lock poisoned"))?
+            .execute("INSERT INTO discovery_group(singleton,version,epoch,updated_at_ms) VALUES(1,1,?1,?2) ON CONFLICT(singleton) DO UPDATE SET version=1,epoch=excluded.epoch,updated_at_ms=excluded.updated_at_ms", params![epoch,updated])
+            .map(|_| ()).map_err(|error| storage_error("discovery_metadata_store", None, &self.path, error))
+    }
+
+    pub fn discovery_metadata(&self) -> Result<Option<DiscoveryGroupMetadata>, StorageError> {
+        self.ensure_open("discovery_metadata_load")?;
+        let row: Option<(i64, i64, i64)> = self
+            .connection
+            .lock()
+            .map_err(|_| {
+                storage_error(
+                    "discovery_metadata_load",
+                    None,
+                    &self.path,
+                    "connection lock poisoned",
+                )
+            })?
+            .query_row(
+                "SELECT version,epoch,updated_at_ms FROM discovery_group WHERE singleton=1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .optional()
+            .map_err(|error| storage_error("discovery_metadata_load", None, &self.path, error))?;
+        row.map(|(version, epoch, updated)| {
+            if version != 1 || epoch <= 0 {
+                return Err(storage_error(
+                    "discovery_metadata_load",
+                    None,
+                    &self.path,
+                    "unsupported metadata",
+                ));
+            }
+            Ok(DiscoveryGroupMetadata {
+                epoch: u64::try_from(epoch).map_err(|_| {
+                    storage_error("discovery_metadata_load", None, &self.path, "invalid epoch")
+                })?,
+                updated_at_ms: decode_timestamp(updated, "discovery_metadata_load", &self.path)?,
+            })
+        })
+        .transpose()
+    }
+}
+
+fn validate_trusted_device(record: &TrustedDeviceRecord, path: &Path) -> Result<(), StorageError> {
+    if DeviceId::from_public_key(record.public_key.as_bytes()) != record.device_id {
+        return Err(storage_error(
+            "trusted_device_store",
+            None,
+            path,
+            "device ID/key mismatch",
+        ));
+    }
+    if record.friendly_name.trim().is_empty() || record.friendly_name.len() > 64 {
+        return Err(storage_error(
+            "trusted_device_store",
+            None,
+            path,
+            "friendly name must contain 1..64 bytes",
+        ));
+    }
+    Ok(())
+}
+
+fn checked_timestamp(
+    value: u64,
+    operation: &'static str,
+    path: &Path,
+) -> Result<i64, StorageError> {
+    i64::try_from(value)
+        .map_err(|_| storage_error(operation, None, path, "timestamp is out of range"))
+}
+fn optional_timestamp(
+    value: Option<u64>,
+    operation: &'static str,
+    path: &Path,
+) -> Result<Option<i64>, StorageError> {
+    value
+        .map(|v| checked_timestamp(v, operation, path))
+        .transpose()
+}
+fn decode_timestamp(value: i64, operation: &'static str, path: &Path) -> Result<u64, StorageError> {
+    u64::try_from(value).map_err(|_| storage_error(operation, None, path, "negative timestamp"))
+}
+fn decode_optional_timestamp(
+    value: Option<i64>,
+    operation: &'static str,
+    path: &Path,
+) -> Result<Option<u64>, StorageError> {
+    value
+        .map(|v| decode_timestamp(v, operation, path))
+        .transpose()
+}
+fn decode_public_key(
+    value: Vec<u8>,
+    operation: &'static str,
+    path: &Path,
+) -> Result<PublicDeviceKey, StorageError> {
+    let bytes: [u8; 32] = value
+        .try_into()
+        .map_err(|_| storage_error(operation, None, path, "malformed public key length"))?;
+    PublicDeviceKey::from_bytes(bytes)
+        .map_err(|_| storage_error(operation, None, path, "malformed public key"))
 }
 
 fn encode_connection_state(state: &PeerConnectionState) -> (&'static str, Option<&'static str>) {
@@ -703,6 +1102,101 @@ mod tests {
         assert_eq!(store.peer_connection(device_id).unwrap(), Some(connection));
         let bytes = std::fs::read(path).unwrap();
         assert!(!bytes.windows(32).any(|window| window == [7; 32]));
+    }
+
+    #[test]
+    fn trusted_devices_journal_and_discovery_metadata_are_restartable() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("control.sqlite");
+        let key = PrivateDeviceKey::from_seed(&[17; 32]).unwrap().public_key();
+        let device = DeviceId::from_public_key(key.as_bytes());
+        {
+            let store = SqliteControlStore::open(path.clone()).unwrap();
+            let trusted = TrustedDeviceRecord {
+                device_id: device,
+                public_key: key,
+                friendly_name: "Laptop".into(),
+                paired_at_ms: 10,
+                last_seen_ms: Some(11),
+                last_sync_ms: Some(12),
+                state: TrustState::Trusted,
+            };
+            store.upsert_trusted_device(&trusted).unwrap();
+            assert!(
+                store
+                    .rename_trusted_device(device, "Travel laptop")
+                    .unwrap()
+            );
+            store
+                .store_pairing_journal(&PairingJournalRecord {
+                    session_id: [3; 16],
+                    peer_device_id: device,
+                    stage: PairingJournalStage::RootJoining,
+                    joining_root: Some(DocumentId::new().to_string()),
+                    updated_at_ms: 13,
+                })
+                .unwrap();
+            let recovery_root = DocumentId::new().to_string();
+            for (index, stage) in [
+                PairingJournalStage::Confirmed,
+                PairingJournalStage::ProvisioningStored,
+                PairingJournalStage::RootJoining,
+                PairingJournalStage::TrustStored,
+                PairingJournalStage::AwaitingAcknowledgement,
+                PairingJournalStage::Complete,
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                store
+                    .store_pairing_journal(&PairingJournalRecord {
+                        session_id: [4; 16],
+                        peer_device_id: device,
+                        stage,
+                        joining_root: Some(recovery_root.clone()),
+                        updated_at_ms: 20 + index as u64,
+                    })
+                    .unwrap();
+            }
+            assert!(
+                store
+                    .store_pairing_journal(&PairingJournalRecord {
+                        session_id: [4; 16],
+                        peer_device_id: device,
+                        stage: PairingJournalStage::Complete,
+                        joining_root: Some(DocumentId::new().to_string()),
+                        updated_at_ms: 30,
+                    })
+                    .is_err()
+            );
+            store
+                .store_discovery_metadata(DiscoveryGroupMetadata {
+                    epoch: 1,
+                    updated_at_ms: 14,
+                })
+                .unwrap();
+        }
+        let reopened = SqliteControlStore::open(path).unwrap();
+        let trusted = reopened.trusted_device(device).unwrap().unwrap();
+        assert_eq!(trusted.friendly_name, "Travel laptop");
+        assert_eq!(
+            reopened.peer_trust(device).unwrap().unwrap().state,
+            TrustState::Trusted
+        );
+        assert_eq!(
+            reopened.pairing_journal([3; 16]).unwrap().unwrap().stage,
+            PairingJournalStage::RootJoining
+        );
+        assert_eq!(reopened.discovery_metadata().unwrap().unwrap().epoch, 1);
+        assert_eq!(
+            reopened.pairing_journal([4; 16]).unwrap().unwrap().stage,
+            PairingJournalStage::Complete
+        );
+        assert!(reopened.revoke_trusted_device(device, 15).unwrap());
+        assert_eq!(
+            reopened.peer_trust(device).unwrap().unwrap().state,
+            TrustState::Revoked
+        );
     }
 
     #[tokio::test]

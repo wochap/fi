@@ -24,6 +24,11 @@ use crate::{
     error::{AppError, BootstrapError, DomainError, Result},
     events::{ApplicationState, DataChanged, DomainKind, ErrorEvent, ProjectionState},
     identity::{DeviceId, DeviceIdentity, SecureKeyStore},
+    pairing::{
+        PairingCandidate, PairingEvent, PairingSessionId, PairingState, ProvisioningData,
+        RootCompatibility, RootState,
+    },
+    pairing_manager::PairingManager,
     projection::{AggregateView, ReadModel, project, reconcile},
     quinn_transport::{QuinnTransport, QuinnTransportConfig},
     routing::{ConnectionManager, EndpointRegistry, NetworkEndpoint, PeerConnectionState},
@@ -63,6 +68,7 @@ struct NetworkComponents {
     network: Option<Arc<QuinnTransport>>,
     endpoints: Arc<Mutex<EndpointRegistry>>,
     connections: Option<Arc<ConnectionManager>>,
+    pairing: Option<Arc<PairingManager>>,
 }
 
 /// Cloneable application handle. Mutable orchestration is confined to one bounded owner task.
@@ -79,6 +85,7 @@ pub struct AppCore {
     network: Option<Arc<QuinnTransport>>,
     endpoints: Arc<Mutex<EndpointRegistry>>,
     connections: Option<Arc<ConnectionManager>>,
+    pairing: Option<Arc<PairingManager>>,
     peer_sync: watch::Receiver<std::collections::HashMap<PeerId, PeerSyncProgress>>,
 }
 
@@ -133,6 +140,28 @@ impl AppCore {
         config: AppCoreConfig,
         network_config: QuinnTransportConfig,
     ) -> Result<Self> {
+        let discovery = Arc::new(crate::discovery::MdnsDiscovery::new().map_err(|error| {
+            AppError::Pairing(crate::pairing::PairingError::Transport(error.to_string()))
+        })?);
+        Self::open_networked_with_discovery(
+            data_dir,
+            key_store,
+            bind,
+            config,
+            network_config,
+            discovery,
+        )
+        .await
+    }
+
+    pub async fn open_networked_with_discovery(
+        data_dir: impl Into<PathBuf>,
+        key_store: Arc<dyn SecureKeyStore>,
+        bind: SocketAddr,
+        config: AppCoreConfig,
+        network_config: QuinnTransportConfig,
+        discovery: Arc<dyn crate::discovery::DiscoveryProvider>,
+    ) -> Result<Self> {
         let data_dir = data_dir.into();
         tokio::fs::create_dir_all(&data_dir)
             .await
@@ -161,6 +190,16 @@ impl AppCore {
             ConnectionManager::new(identity.id(), network.clone(), endpoints.clone(), 4)
                 .map_err(|message| AppError::Storage(message.into()))?,
         );
+        let pairing = PairingManager::new(
+            identity.clone(),
+            key_store,
+            control_store.clone(),
+            discovery,
+            bind.ip(),
+        )?;
+        pairing
+            .start_normal_discovery(network.local_addr()?.port())
+            .await?;
         Self::open_with_components(
             data_dir,
             config,
@@ -171,6 +210,7 @@ impl AppCore {
                 network: Some(network),
                 endpoints,
                 connections: Some(connections),
+                pairing: Some(pairing),
             },
         )
         .await
@@ -200,6 +240,7 @@ impl AppCore {
                 network: None,
                 endpoints: Arc::new(Mutex::new(EndpointRegistry::default())),
                 connections: None,
+                pairing: None,
             },
         )
         .await
@@ -230,6 +271,9 @@ impl AppCore {
         let peer_sync = repo.subscribe_peer_sync();
         if let Some(manager) = network_components.connections.clone() {
             spawn_sync_bridge(peer_sync.clone(), manager);
+        }
+        if let Some(pairing) = network_components.pairing.clone() {
+            spawn_discovery_bridge(pairing, network_components.endpoints.clone());
         }
 
         let initial = match repo.bootstrap_status() {
@@ -287,6 +331,7 @@ impl AppCore {
             network: network_components.network,
             endpoints: network_components.endpoints,
             connections: network_components.connections,
+            pairing: network_components.pairing,
             peer_sync,
         })
     }
@@ -376,6 +421,289 @@ impl AppCore {
             .await
             .map_err(|error| AppError::Repository(error.to_string()))?;
         Ok(())
+    }
+
+    pub async fn start_pairing(
+        &self,
+        duration_ms: u64,
+    ) -> Result<crate::discovery::PairingInstanceId> {
+        self.pairing
+            .as_ref()
+            .ok_or_else(|| AppError::Storage("pairing requires networked mode".into()))?
+            .start(
+                std::time::Duration::from_millis(duration_ms),
+                self.local_pairing_name(),
+                self.pairing_root_state(),
+            )
+            .await
+            .map_err(Into::into)
+    }
+    pub async fn stop_pairing(&self) -> Result<()> {
+        self.pairing
+            .as_ref()
+            .ok_or_else(|| AppError::Storage("pairing requires networked mode".into()))?
+            .stop()
+            .await
+            .map_err(Into::into)
+    }
+    #[must_use]
+    pub fn pairing_state(&self) -> PairingState {
+        self.pairing
+            .as_ref()
+            .map_or(PairingState::Idle, |pairing| pairing.state())
+    }
+    #[must_use]
+    pub fn pairing_candidates(&self) -> Vec<PairingCandidate> {
+        self.pairing
+            .as_ref()
+            .map_or_else(Vec::new, |pairing| pairing.candidates())
+    }
+    #[must_use]
+    pub fn pairing_addr(&self) -> Option<SocketAddr> {
+        self.pairing
+            .as_ref()
+            .and_then(|pairing| pairing.local_addr().ok())
+    }
+    pub fn subscribe_pairing(&self) -> Option<watch::Receiver<PairingState>> {
+        self.pairing
+            .as_ref()
+            .map(|pairing| pairing.subscribe_state())
+    }
+    pub fn subscribe_pairing_candidates(&self) -> Option<watch::Receiver<Vec<PairingCandidate>>> {
+        self.pairing
+            .as_ref()
+            .map(|pairing| pairing.subscribe_candidates())
+    }
+    pub fn subscribe_pairing_events(&self) -> Option<broadcast::Receiver<PairingEvent>> {
+        self.pairing
+            .as_ref()
+            .map(|pairing| pairing.subscribe_events())
+    }
+    pub async fn connect_pairing_candidate(
+        &self,
+        candidate: PairingCandidate,
+        timeout_ms: u64,
+    ) -> Result<PairingSessionId> {
+        self.pairing
+            .as_ref()
+            .ok_or_else(|| AppError::Storage("pairing requires networked mode".into()))?
+            .connect(
+                candidate,
+                self.local_pairing_name(),
+                self.pairing_root_state(),
+                std::time::Duration::from_millis(timeout_ms),
+            )
+            .await
+            .map_err(Into::into)
+    }
+    pub async fn confirm_pairing(&self, session: PairingSessionId) -> Result<()> {
+        let pairing = self
+            .pairing
+            .as_ref()
+            .ok_or_else(|| AppError::Storage("pairing requires networked mode".into()))?;
+        let plan = pairing.confirm(session).await?;
+        if plan.compatibility == RootCompatibility::SameRoot {
+            pairing.finish_trust(&plan, current_time_ms())?;
+            return Ok(());
+        }
+        if pairing.local_is_provisioner(&plan)? {
+            let ApplicationState::Ready { root } = self.lifecycle_state() else {
+                return Err(AppError::Pairing(
+                    crate::pairing::PairingError::InvalidTransition,
+                ));
+            };
+            let (secret, metadata) = pairing.ensure_discovery_secret(true).await?;
+            let identity = self
+                .identity
+                .as_ref()
+                .ok_or_else(|| AppError::Storage("pairing requires identity".into()))?;
+            let sync_port = self
+                .network_addr()
+                .ok_or_else(|| AppError::Storage("pairing requires networking".into()))?
+                .port();
+            pairing.start_normal_discovery(sync_port).await?;
+            pairing.journal(&plan, crate::control::PairingJournalStage::Confirmed, None)?;
+            pairing.establish_trust(
+                plan.peer_public_key,
+                plan.peer_name.clone(),
+                current_time_ms(),
+            )?;
+            pairing.journal(
+                &plan,
+                crate::control::PairingJournalStage::AwaitingAcknowledgement,
+                None,
+            )?;
+            pairing
+                .send_provisioning(
+                    &plan,
+                    &ProvisioningData {
+                        root,
+                        discovery_secret: secret,
+                        epoch: metadata.epoch,
+                        existing_device_id: identity.id(),
+                        existing_public_key: identity.public_key(),
+                        existing_name: self.local_pairing_name(),
+                        sync_port,
+                    },
+                )
+                .await?;
+            pairing.finish_trust(&plan, current_time_ms())?;
+            pairing.journal(&plan, crate::control::PairingJournalStage::Complete, None)?;
+            return Ok(());
+        }
+
+        let provision = pairing.receive_provisioning(&plan).await?;
+        if provision.existing_device_id != plan.peer_device_id
+            || !provision
+                .existing_public_key
+                .constant_time_eq(&plan.peer_public_key)
+            || plan.peer_root_state != RootState::Ready(provision.root)
+        {
+            return Err(AppError::Pairing(
+                crate::pairing::PairingError::Authentication,
+            ));
+        }
+        if !matches!(self.lifecycle_state(), ApplicationState::NeedsDecision) {
+            return Err(AppError::Pairing(
+                crate::pairing::PairingError::InvalidTransition,
+            ));
+        }
+        pairing.journal(
+            &plan,
+            crate::control::PairingJournalStage::ProvisioningStored,
+            Some(provision.root.to_string()),
+        )?;
+        pairing
+            .install_discovery_secret(
+                &provision.discovery_secret,
+                crate::control::DiscoveryGroupMetadata {
+                    epoch: provision.epoch,
+                    updated_at_ms: current_time_ms(),
+                },
+            )
+            .await?;
+        let local_sync_port = self
+            .network_addr()
+            .ok_or_else(|| AppError::Storage("pairing requires networking".into()))?
+            .port();
+        pairing.start_normal_discovery(local_sync_port).await?;
+        pairing.establish_trust(
+            plan.peer_public_key,
+            plan.peer_name.clone(),
+            current_time_ms(),
+        )?;
+        pairing.journal(
+            &plan,
+            crate::control::PairingJournalStage::TrustStored,
+            Some(provision.root.to_string()),
+        )?;
+        self.join_existing(provision.root).await?;
+        pairing.journal(
+            &plan,
+            crate::control::PairingJournalStage::RootJoining,
+            Some(provision.root.to_string()),
+        )?;
+        let now = current_time_ms();
+        let endpoint = std::net::SocketAddr::new(plan.peer_endpoint.ip(), provision.sync_port);
+        self.replace_endpoints(
+            plan.peer_device_id,
+            crate::routing::EndpointSource::Lan,
+            [NetworkEndpoint {
+                address: endpoint,
+                source: crate::routing::EndpointSource::Lan,
+                observed_at_ms: now,
+                expires_at_ms: now.saturating_add(120_000),
+                interface_scope: None,
+                last_success_ms: None,
+                failures: 0,
+                retry_after_ms: None,
+            }],
+        );
+        self.connect_peer(plan.peer_device_id, now).await?;
+        self.wait_for_join_ready(provision.root, std::time::Duration::from_secs(120))
+            .await?;
+        pairing.acknowledge_provisioning(&plan).await?;
+        pairing.finish_trust(&plan, current_time_ms())?;
+        pairing.journal(
+            &plan,
+            crate::control::PairingJournalStage::Complete,
+            Some(provision.root.to_string()),
+        )?;
+        Ok(())
+    }
+    pub async fn reject_pairing(&self, session: Option<PairingSessionId>) -> Result<()> {
+        self.pairing
+            .as_ref()
+            .ok_or_else(|| AppError::Storage("pairing requires networked mode".into()))?
+            .reject(session)
+            .await
+            .map_err(Into::into)
+    }
+    pub fn trusted_devices(&self) -> Result<Vec<crate::control::TrustedDeviceRecord>> {
+        self.pairing
+            .as_ref()
+            .ok_or_else(|| AppError::Storage("pairing requires networked mode".into()))?
+            .trusted_devices()
+            .map_err(Into::into)
+    }
+    pub fn rename_trusted_device(&self, peer: DeviceId, name: &str) -> Result<bool> {
+        self.pairing
+            .as_ref()
+            .ok_or_else(|| AppError::Storage("pairing requires networked mode".into()))?
+            .rename(peer, name)
+            .map_err(Into::into)
+    }
+    pub async fn revoke_trusted_device(&self, peer: DeviceId, now_ms: u64) -> Result<bool> {
+        let changed = self
+            .pairing
+            .as_ref()
+            .ok_or_else(|| AppError::Storage("pairing requires networked mode".into()))?
+            .revoke(peer, now_ms)?;
+        if changed {
+            let _ = self.disconnect_peer(peer).await;
+        }
+        Ok(changed)
+    }
+
+    fn pairing_root_state(&self) -> RootState {
+        match self.lifecycle_state() {
+            ApplicationState::Ready { root } | ApplicationState::Joining { root } => {
+                RootState::Ready(root)
+            }
+            _ => RootState::NeedsDecision,
+        }
+    }
+
+    fn local_pairing_name(&self) -> String {
+        self.device_id().map_or_else(
+            || "Fi device".into(),
+            |device| format!("Fi {}", &device.to_string()[..8]),
+        )
+    }
+
+    async fn wait_for_join_ready(
+        &self,
+        root: DocumentId,
+        timeout: std::time::Duration,
+    ) -> Result<()> {
+        let mut lifecycle = self.subscribe_lifecycle();
+        let mut projection = self.subscribe_projection();
+        tokio::time::timeout(timeout, async move {
+            loop {
+                let expected = ApplicationState::Ready { root };
+                if lifecycle.borrow().clone() == expected
+                    && matches!(projection.borrow().clone(), ProjectionState::Ready { .. })
+                {
+                    return Ok(());
+                }
+                tokio::select! {
+                    changed = lifecycle.changed() => changed.map_err(|_| AppError::OwnerStopped)?,
+                    changed = projection.changed() => changed.map_err(|_| AppError::OwnerStopped)?,
+                }
+            }
+        })
+        .await
+        .map_err(|_| AppError::Pairing(crate::pairing::PairingError::Expired))?
     }
 
     pub async fn create_new_dataset(&self) -> Result<DocumentId> {
@@ -499,6 +827,36 @@ fn spawn_sync_bridge(
             previous = current;
             if sync.changed().await.is_err() {
                 break;
+            }
+        }
+    });
+}
+
+fn spawn_discovery_bridge(pairing: Arc<PairingManager>, endpoints: Arc<Mutex<EndpointRegistry>>) {
+    let mut events = pairing.subscribe_normal_discovery();
+    tokio::spawn(async move {
+        while let Ok(event) = events.recv().await {
+            let crate::pairing_manager::NormalDiscoveryEvent::Upsert {
+                peer,
+                address,
+                expires_at_ms,
+            } = event;
+            let now = current_time_ms();
+            if let Ok(mut endpoints) = endpoints.lock() {
+                endpoints.replace_source(
+                    peer,
+                    crate::routing::EndpointSource::Lan,
+                    [NetworkEndpoint {
+                        address,
+                        source: crate::routing::EndpointSource::Lan,
+                        observed_at_ms: now,
+                        expires_at_ms,
+                        interface_scope: None,
+                        last_success_ms: None,
+                        failures: 0,
+                        retry_after_ms: None,
+                    }],
+                );
             }
         }
     });
@@ -816,6 +1174,15 @@ fn validate_against_snapshot(
                 id: id.to_string(),
             }),
     }
+}
+
+fn current_time_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+        .try_into()
+        .unwrap_or(u64::MAX)
 }
 
 /// Resolves a conventional per-platform application-data directory.

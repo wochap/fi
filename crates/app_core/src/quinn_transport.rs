@@ -153,7 +153,7 @@ impl TlsIdentity {
         })
     }
 
-    fn private_key(&self) -> PrivateKeyDer<'static> {
+    pub(crate) fn private_key(&self) -> PrivateKeyDer<'static> {
         PrivateKeyDer::Pkcs8(self.private_key.clone_key())
     }
 }
@@ -727,7 +727,7 @@ impl QuinnTransport {
 
 use std::future::Future;
 
-fn peer_certificate(
+pub(crate) fn peer_certificate(
     connection: &Connection,
 ) -> Result<CertificateDer<'static>, QuinnTransportError> {
     let identity = connection

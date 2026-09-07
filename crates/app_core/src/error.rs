@@ -55,6 +55,8 @@ pub enum AppError {
     Identity(#[from] crate::identity::IdentityError),
     #[error(transparent)]
     Network(#[from] crate::quinn_transport::QuinnTransportError),
+    #[error(transparent)]
+    Pairing(#[from] crate::pairing::PairingError),
     #[error("repository operation failed: {0}")]
     Repository(String),
     #[error("storage operation failed: {0}")]

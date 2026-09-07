@@ -6,8 +6,8 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `from_core`, `from_core`, `initialization`, `lifecycle`, `new`, `new`, `safe`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
+// These functions are ignored because they are not marked as `pub`: `from_core`, `from_core`, `hex_id`, `initialization`, `lifecycle`, `new`, `new`, `safe`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
 
 class AggregateDto {
   final int balanceMinor;
@@ -162,6 +162,88 @@ class DataChangedDto {
 
 enum DomainKindDto { categories, transactions }
 
+class PairingCandidateDto {
+  final String instanceId;
+  final String endpoint;
+  final int expiresAtMs;
+
+  const PairingCandidateDto({
+    required this.instanceId,
+    required this.endpoint,
+    required this.expiresAtMs,
+  });
+
+  @override
+  int get hashCode =>
+      instanceId.hashCode ^ endpoint.hashCode ^ expiresAtMs.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is PairingCandidateDto &&
+          runtimeType == other.runtimeType &&
+          instanceId == other.instanceId &&
+          endpoint == other.endpoint &&
+          expiresAtMs == other.expiresAtMs;
+}
+
+enum PairingKindDto {
+  idle,
+  discoverable,
+  connecting,
+  awaitingConfirmation,
+  committing,
+  trusted,
+  failed,
+}
+
+class PairingStateDto {
+  final PairingKindDto kind;
+  final String? sessionId;
+  final String? sas;
+  final String? peerDeviceId;
+  final int? deadlineMs;
+  final bool localConfirmed;
+  final bool remoteConfirmed;
+  final String? message;
+
+  const PairingStateDto({
+    required this.kind,
+    this.sessionId,
+    this.sas,
+    this.peerDeviceId,
+    this.deadlineMs,
+    required this.localConfirmed,
+    required this.remoteConfirmed,
+    this.message,
+  });
+
+  @override
+  int get hashCode =>
+      kind.hashCode ^
+      sessionId.hashCode ^
+      sas.hashCode ^
+      peerDeviceId.hashCode ^
+      deadlineMs.hashCode ^
+      localConfirmed.hashCode ^
+      remoteConfirmed.hashCode ^
+      message.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is PairingStateDto &&
+          runtimeType == other.runtimeType &&
+          kind == other.kind &&
+          sessionId == other.sessionId &&
+          sas == other.sas &&
+          peerDeviceId == other.peerDeviceId &&
+          deadlineMs == other.deadlineMs &&
+          localConfirmed == other.localConfirmed &&
+          remoteConfirmed == other.remoteConfirmed &&
+          message == other.message;
+}
+
 class ProjectionDto {
   final ProjectionKindDto kind;
   final String? checkpoint;
@@ -266,4 +348,43 @@ class TransactionFilterDto {
           categoryId == other.categoryId &&
           fromMs == other.fromMs &&
           throughMs == other.throughMs;
+}
+
+class TrustedDeviceDto {
+  final String deviceId;
+  final String friendlyName;
+  final int pairedAtMs;
+  final int? lastSeenMs;
+  final int? lastSyncMs;
+  final bool revoked;
+
+  const TrustedDeviceDto({
+    required this.deviceId,
+    required this.friendlyName,
+    required this.pairedAtMs,
+    this.lastSeenMs,
+    this.lastSyncMs,
+    required this.revoked,
+  });
+
+  @override
+  int get hashCode =>
+      deviceId.hashCode ^
+      friendlyName.hashCode ^
+      pairedAtMs.hashCode ^
+      lastSeenMs.hashCode ^
+      lastSyncMs.hashCode ^
+      revoked.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is TrustedDeviceDto &&
+          runtimeType == other.runtimeType &&
+          deviceId == other.deviceId &&
+          friendlyName == other.friendlyName &&
+          pairedAtMs == other.pairedAtMs &&
+          lastSeenMs == other.lastSeenMs &&
+          lastSyncMs == other.lastSyncMs &&
+          revoked == other.revoked;
 }

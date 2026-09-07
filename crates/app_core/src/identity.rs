@@ -10,6 +10,8 @@ use subtle::ConstantTimeEq;
 use thiserror::Error;
 use zeroize::Zeroizing;
 
+use crate::discovery::DiscoveryGroupSecret;
+
 const DEVICE_ID_DOMAIN: &[u8] = b"fi-device-id-v1";
 
 #[derive(Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -177,6 +179,13 @@ pub enum IdentityError {
 #[async_trait]
 pub trait SecureKeyStore: Send + Sync + 'static {
     async fn load_or_create_device_key(&self) -> Result<PrivateDeviceKey, SecureStoreError>;
+    async fn load_discovery_group_secret(
+        &self,
+    ) -> Result<Option<DiscoveryGroupSecret>, SecureStoreError>;
+    async fn store_discovery_group_secret(
+        &self,
+        secret: &DiscoveryGroupSecret,
+    ) -> Result<(), SecureStoreError>;
 }
 
 /// Linux adapter backed only by the desktop session's Secret Service.
@@ -244,6 +253,83 @@ impl SecureKeyStore for LinuxSecretServiceKeyStore {
             .map_err(map_error)?;
         Ok(generated)
     }
+
+    async fn load_discovery_group_secret(
+        &self,
+    ) -> Result<Option<DiscoveryGroupSecret>, SecureStoreError> {
+        use secret_service::{EncryptionType, SecretService};
+        use std::collections::HashMap;
+
+        let map_error = |error: secret_service::Error| match error {
+            secret_service::Error::Locked | secret_service::Error::Prompt => {
+                SecureStoreError::Locked
+            }
+            secret_service::Error::Unavailable => SecureStoreError::Unavailable(
+                "no Secret Service provider is available in this desktop session".into(),
+            ),
+            other => SecureStoreError::Operation(other.to_string()),
+        };
+        let service = SecretService::connect(EncryptionType::Dh)
+            .await
+            .map_err(map_error)?;
+        let collection = service.get_default_collection().await.map_err(map_error)?;
+        collection.ensure_unlocked().await.map_err(map_error)?;
+        let attributes = HashMap::from([
+            ("application", self.application_id.as_str()),
+            ("kind", "discovery-group-secret-v1"),
+        ]);
+        let items = collection
+            .search_items(attributes)
+            .await
+            .map_err(map_error)?;
+        let Some(item) = items.first() else {
+            return Ok(None);
+        };
+        let secret = Zeroizing::new(item.get_secret().await.map_err(map_error)?);
+        let bytes: [u8; 32] = secret
+            .as_slice()
+            .try_into()
+            .map_err(|_| SecureStoreError::MalformedKey)?;
+        Ok(Some(DiscoveryGroupSecret::from_bytes(bytes)))
+    }
+
+    async fn store_discovery_group_secret(
+        &self,
+        secret: &DiscoveryGroupSecret,
+    ) -> Result<(), SecureStoreError> {
+        use secret_service::{EncryptionType, SecretService};
+        use std::collections::HashMap;
+
+        let map_error = |error: secret_service::Error| match error {
+            secret_service::Error::Locked | secret_service::Error::Prompt => {
+                SecureStoreError::Locked
+            }
+            secret_service::Error::Unavailable => SecureStoreError::Unavailable(
+                "no Secret Service provider is available in this desktop session".into(),
+            ),
+            other => SecureStoreError::Operation(other.to_string()),
+        };
+        let service = SecretService::connect(EncryptionType::Dh)
+            .await
+            .map_err(map_error)?;
+        let collection = service.get_default_collection().await.map_err(map_error)?;
+        collection.ensure_unlocked().await.map_err(map_error)?;
+        let attributes = HashMap::from([
+            ("application", self.application_id.as_str()),
+            ("kind", "discovery-group-secret-v1"),
+        ]);
+        collection
+            .create_item(
+                "Fi discovery group",
+                attributes,
+                secret.expose(),
+                true,
+                "application/octet-stream",
+            )
+            .await
+            .map_err(map_error)?;
+        Ok(())
+    }
 }
 
 #[cfg(not(target_os = "linux"))]
@@ -254,12 +340,28 @@ impl SecureKeyStore for LinuxSecretServiceKeyStore {
             "Linux Secret Service is unavailable on this platform".into(),
         ))
     }
+    async fn load_discovery_group_secret(
+        &self,
+    ) -> Result<Option<DiscoveryGroupSecret>, SecureStoreError> {
+        Err(SecureStoreError::Unavailable(
+            "Linux Secret Service is unavailable on this platform".into(),
+        ))
+    }
+    async fn store_discovery_group_secret(
+        &self,
+        _secret: &DiscoveryGroupSecret,
+    ) -> Result<(), SecureStoreError> {
+        Err(SecureStoreError::Unavailable(
+            "Linux Secret Service is unavailable on this platform".into(),
+        ))
+    }
 }
 
 /// Deterministic adapter for tests. It never writes key material to disk.
 #[derive(Debug)]
 pub struct InMemorySecureKeyStore {
     seed: Mutex<Option<[u8; 32]>>,
+    discovery_secret: Mutex<Option<[u8; 32]>>,
 }
 
 impl InMemorySecureKeyStore {
@@ -267,6 +369,7 @@ impl InMemorySecureKeyStore {
     pub const fn empty() -> Self {
         Self {
             seed: Mutex::new(None),
+            discovery_secret: Mutex::new(None),
         }
     }
 
@@ -274,6 +377,7 @@ impl InMemorySecureKeyStore {
     pub const fn seeded(seed: [u8; 32]) -> Self {
         Self {
             seed: Mutex::new(Some(seed)),
+            discovery_secret: Mutex::new(None),
         }
     }
 }
@@ -294,6 +398,26 @@ impl SecureKeyStore for InMemorySecureKeyStore {
         let seed = *stored.get_or_insert_with(|| *PrivateDeviceKey::generate().expose_seed());
         PrivateDeviceKey::from_seed(&seed).map_err(|_| SecureStoreError::MalformedKey)
     }
+
+    async fn load_discovery_group_secret(
+        &self,
+    ) -> Result<Option<DiscoveryGroupSecret>, SecureStoreError> {
+        let secret = *self
+            .discovery_secret
+            .lock()
+            .map_err(|_| SecureStoreError::Operation("in-memory discovery lock poisoned".into()))?;
+        Ok(secret.map(DiscoveryGroupSecret::from_bytes))
+    }
+
+    async fn store_discovery_group_secret(
+        &self,
+        secret: &DiscoveryGroupSecret,
+    ) -> Result<(), SecureStoreError> {
+        *self.discovery_secret.lock().map_err(|_| {
+            SecureStoreError::Operation("in-memory discovery lock poisoned".into())
+        })? = Some(*secret.expose());
+        Ok(())
+    }
 }
 
 /// Adapter useful for deterministic failure and lifecycle tests.
@@ -303,6 +427,17 @@ pub struct UnavailableSecureKeyStore(pub SecureStoreError);
 #[async_trait]
 impl SecureKeyStore for UnavailableSecureKeyStore {
     async fn load_or_create_device_key(&self) -> Result<PrivateDeviceKey, SecureStoreError> {
+        Err(self.0.clone())
+    }
+    async fn load_discovery_group_secret(
+        &self,
+    ) -> Result<Option<DiscoveryGroupSecret>, SecureStoreError> {
+        Err(self.0.clone())
+    }
+    async fn store_discovery_group_secret(
+        &self,
+        _secret: &DiscoveryGroupSecret,
+    ) -> Result<(), SecureStoreError> {
         Err(self.0.clone())
     }
 }
@@ -318,6 +453,13 @@ mod tests {
         let second = DeviceIdentity::load_or_create(&store).await.unwrap();
         assert_eq!(first.id(), second.id());
         assert_eq!(first.public_key(), second.public_key());
+        assert!(store.load_discovery_group_secret().await.unwrap().is_none());
+        let group = DiscoveryGroupSecret::from_bytes([8; 32]);
+        store.store_discovery_group_secret(&group).await.unwrap();
+        assert_eq!(
+            store.load_discovery_group_secret().await.unwrap(),
+            Some(group)
+        );
     }
 
     #[test]
