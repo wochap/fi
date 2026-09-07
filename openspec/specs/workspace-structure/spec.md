@@ -5,11 +5,11 @@ TBD: Define the Rust workspace layout, crate dependency boundary, documentation 
 ## Requirements
 
 ### Requirement: Virtual Rust workspace
-The repository root SHALL be a virtual Cargo workspace using resolver version 2 with `crates/automerge_repo` and `crates/app_core` as explicit members, and workspace commands SHALL operate on both members from the repository root.
+The repository root SHALL be a virtual Cargo workspace using resolver version 2 with `crates/automerge_repo`, `crates/app_core`, and `crates/app_bridge` as explicit members, and workspace commands SHALL operate on all members from the repository root.
 
-#### Scenario: Cargo discovers both members
+#### Scenario: Cargo discovers all members
 - **WHEN** Cargo metadata is requested from the repository root
-- **THEN** the workspace contains the `automerge-repo` and `app-core` packages and the root is not an application package
+- **THEN** the workspace contains the `automerge-repo`, `app-core`, and FRB adapter packages and the root is not an application package
 
 ### Requirement: Independent generic Repo crate
 The existing Automerge Repo implementation SHALL reside in `crates/automerge_repo` as package `automerge-repo` and library `automerge_repo`, and SHALL retain ownership of generic document lifecycle, persistence ports, synchronization, peer and document state, wire protocol, network transport abstraction, bootstrap primitives, and generic testing support.
@@ -34,7 +34,15 @@ The `app-core` package SHALL declare a normal local workspace dependency on `aut
 - **THEN** the dependency direction is `app_core` to `automerge_repo` to `automerge`, with no edge from `automerge_repo` to `app_core`
 
 ### Requirement: Minimal application scaffold
-The `app_core` crate SHALL own the finance application backend, including explicit application bootstrap, domain commands and validation, Automerge root mapping, SQLite control and read-model adapters, projection orchestration, query services, and typed internal events. It SHALL depend on `automerge_repo` through its public API and MUST NOT move application-specific concerns into the generic Repo crate.
+The `app_core` crate SHALL own application/domain behavior independently of Flutter, while the dedicated bridge crate SHALL own only FRB-facing DTOs, error translation, event forwarding, native-library initialization, and generated glue integration. Neither crate MUST move application-specific concerns into `automerge_repo`.
+
+#### Scenario: Application boundary remains independent
+- **WHEN** the Rust sources are inspected
+- **THEN** finance commands, queries, projections, and application state live in `app_core`; FRB integration lives in the bridge crate; and generic Repo behavior remains in `automerge_repo`
+
+#### Scenario: Dependency graph has no reverse UI edge
+- **WHEN** Cargo metadata is inspected
+- **THEN** the bridge depends on `app_core`, `app_core` depends on `automerge_repo`, and neither lower layer depends on the bridge or Flutter
 
 #### Scenario: Application scope is implemented
 - **WHEN** the `app_core` source is inspected
@@ -67,11 +75,15 @@ Repository-wide OpenSpec artifacts, development instructions, workspace lockfile
 - **THEN** their references to the layout and package identity used when those changes were completed remain unmodified
 
 ### Requirement: Reserved Flutter application location
-The repository SHALL contain a tracked `flutter_app` location documenting that presentation and future FRB-facing UI state belong there, without claiming or implementing Flutter scaffolding when the Flutter toolchain is unavailable.
+The repository SHALL contain a generated Flutter application in `flutter_app` targeting Android and Linux desktop, with presentation and generated FRB-facing Dart code located there and no web target or JavaScript runtime required by the application.
 
-#### Scenario: Flutter toolchain is unavailable
-- **WHEN** Flutter is not installed during this restructuring change
-- **THEN** `flutter_app/README.md` reserves the location and no generated Flutter, Android, Linux runner, networking, business logic, or FRB configuration is added
+#### Scenario: Native Flutter scaffolding exists
+- **WHEN** `flutter_app` is inspected after generation
+- **THEN** it contains Dart application sources, tests, Android runner configuration, Linux runner configuration, and bridge integration for the supported native targets
+
+#### Scenario: Supported native builds
+- **WHEN** supported build commands run in the project development shell
+- **THEN** the Flutter application analyzes and builds for Linux and Android using the Rust native library
 
 ### Requirement: Workspace quality verification
 The restructured workspace SHALL satisfy Rust formatting, testing, and linting checks, and final verification SHALL expose the resulting tree and dependency boundary for review.
