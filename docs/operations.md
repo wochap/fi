@@ -48,8 +48,22 @@ Run connected instrumentation with:
 ```sh
 cd flutter_app
 flutter build apk --debug
-./android/gradlew connectedDebugAndroidTest
+flutter test integration_test/android_foreground_smoke_test.dart -d <device-id>
+
+# Nix Flutter's SDK is read-only, so keep Gradle and Kotlin project state in a
+# writable temporary directory when running native instrumentation directly:
+cd android
+./gradlew --project-cache-dir=/tmp/fi-android-gradle-cache \
+  -Pkotlin.project.persistent.dir=/tmp/fi-android-kotlin \
+  connectedDebugAndroidTest
 ```
+
+The Flutter smoke initializes the production Android secure store and Rust
+networked core, starts normal and pairing discovery, observes Quinn-backed sync
+status, stops foreground networking, and reopens the same identity/root. Native
+instrumentation separately verifies authenticated-storage tamper rejection and
+multicast-lock acquisition/release. A physical device must allow USB installs;
+MIUI devices may require Developer options -> Install via USB.
 
 ## Linux and quality gates
 

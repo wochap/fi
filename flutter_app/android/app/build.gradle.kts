@@ -45,6 +45,18 @@ dependencies {
     androidTestImplementation("androidx.test:rules:1.6.1")
 }
 
+configurations.configureEach {
+    resolutionStrategy.force(
+        "androidx.test:core:1.6.1",
+        "androidx.test:core-ktx:1.6.1",
+        "androidx.test:monitor:1.7.2",
+        "androidx.test:runner:1.6.2",
+        "androidx.test:rules:1.6.1",
+        "androidx.test.espresso:espresso-core:3.6.1",
+        "androidx.test.espresso:espresso-idling-resource:3.6.1",
+    )
+}
+
 flutter {
     source = "../.."
 }
