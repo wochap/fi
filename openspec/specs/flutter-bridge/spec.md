@@ -23,7 +23,7 @@ The bridge SHALL expose application initialization and explicit create-new-root 
 - **THEN** the returned state is ready and subsequent collection queries observe the initialized generic projection
 
 ### Requirement: Narrow command and query boundary
-The bridge SHALL expose explicit collection, field, enum-option, and generic record commands plus list/get queries using FRB-safe owned typed DTOs and canonical string IDs.
+The bridge SHALL expose explicit generic collection, record, query-definition, computed-field, and query-execution APIs using FRB-safe owned typed DTOs and canonical string IDs.
 
 #### Scenario: Generic record command
 - **WHEN** Dart invokes a record create, field-update, or logical-delete API
@@ -32,6 +32,18 @@ The bridge SHALL expose explicit collection, field, enum-option, and generic rec
 #### Scenario: Generic record query
 - **WHEN** Dart requests a collection schema or records
 - **THEN** the bridge delegates to the Rust query service and returns owned typed DTOs without exposing SQLite or Automerge handles
+
+#### Scenario: Query definition command
+- **WHEN** Dart creates, updates, reorders, or removes a query or computed-field definition
+- **THEN** the bridge delegates to a validated Rust application command and returns only after its durable projection boundary
+
+#### Scenario: Execute collection query
+- **WHEN** Dart submits a typed query or references a stored `QueryId`
+- **THEN** the bridge delegates to the SQLite-backed Rust query service and returns a typed result shape without exposing SQL or Automerge handles
+
+#### Scenario: Unsupported expression DTO
+- **WHEN** Dart receives a definition version it cannot construct or edit
+- **THEN** the bridge preserves its structured identity and returns a typed unsupported-definition status rather than coercing it
 
 ### Requirement: Typed bridge errors
 Rust initialization, validation, persistence, projection, lifecycle, and bootstrap failures SHALL cross the bridge as stable typed error categories with safe user-facing messages and stable entity/field context where applicable.
