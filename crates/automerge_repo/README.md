@@ -1,186 +1,97 @@
 # automerge-repo
 
-`automerge-repo` is a native Rust repository around Automerge 0.11. Each loaded
-document is exclusively owned by a bounded Tokio actor. A coordinator manages
-explicit bootstrap and whole-collection replication over application-supplied
-authenticated transport and storage ports.
+`automerge-repo` is a reusable Rust repository around Automerge 0.11. Each
+loaded document is owned by a bounded Tokio actor; a coordinator manages
+bootstrap, persistence, lifecycle, and peer replication through
+application-provided ports.
 
-It is the workspace's reusable local-first data layer. Finance rules, SQLite
-projections, device identity, discovery, pairing, and concrete QUIC policy
-belong to `app-core`, not this crate.
+Fi-specific finance, identity, discovery, and transport policy belongs to
+[`app-core`](../app_core/README.md).
 
-## Software stack and dependencies
+## Software stack
 
-| Dependency | Purpose |
-| --- | --- |
-| Automerge 0.11 | Conflict-free document state and synchronization protocol |
-| Tokio | Bounded actors, async storage work, channels, timers, and lifecycle coordination |
-| `async-trait` | Application-provided storage and authenticated transport ports |
-| `bytes` | Bounded network frame payloads |
-| UUID | Stable document identifiers |
-| `thiserror` | Typed repository, persistence, protocol, and shutdown failures |
+- Automerge: conflict-free documents and sync protocol.
+- Tokio: actors, channels, storage workers, and lifecycle coordination.
+- `async-trait`: storage and authenticated transport ports.
+- `bytes`, UUID, and `thiserror`: frames, identifiers, and typed errors.
 
-The public crate is runtime infrastructure only: it does not open sockets or
-choose an application database on its own. Callers supply `StorageAdapter`,
-`ControlStore`, and `NetworkTransport` implementations.
+The crate does not open sockets or choose an application database.
 
-## Development build
+## Basic API
 
-From the workspace root:
-
-```sh
-nix develop
-cargo build -p automerge-repo
-cargo test -p automerge-repo
-```
-
-Build the API documentation locally with:
-
-```sh
-cargo doc -p automerge-repo --no-deps --open
-```
-
-## Production build
-
-Create the optimized library with:
-
-```sh
-cargo build -p automerge-repo --release
-```
-
-The output under `target/release/` is a Rust library, not a daemon, executable,
-or independently deployable package. Applications embed it and provide the
-storage and network adapters appropriate to their platform.
-
-## Durable repository API
-
-Fresh storage requires an explicit application decision. Initialize the first
-device, then create and mutate documents through actor handles:
+Fresh storage requires an explicit initialize or join decision:
 
 ```no_run
 use std::sync::Arc;
-use automerge::{ROOT, transaction::Transactable};
-use automerge_repo::{Error, Repo, RepoConfig, testing::{MemoryStore, MemoryTransport}};
+use automerge::{transaction::Transactable, ROOT};
+use automerge_repo::{testing::{MemoryStore, MemoryTransport}, Repo, RepoConfig};
 
 # async fn example() -> automerge_repo::Result<()> {
 let documents = Arc::new(MemoryStore::default());
 let control = Arc::new(MemoryStore::default());
 let (transport, _remote) = MemoryTransport::pair("local", "remote", 128);
 let repo = Repo::open(documents, control, transport, RepoConfig::default()).await?;
-let _root = repo.initialize_new().await?;
 
+repo.initialize_new().await?;
 let document = repo.create().await?;
-let mut changes = document.subscribe();
 document.change(|tx| {
     tx.put(ROOT, "title", "Offline first")
-        .map_err(|error| Error::Change(error.to_string()))
+        .map_err(|error| automerge_repo::Error::Change(error.to_string()))
 }).await?;
-// The transaction is committed to the actor here. Automatic snapshot storage
-// runs independently and peer synchronization is a separate process.
-let event = changes.recv().await.expect("subscriber remains live");
-assert_eq!(event.document, document.id());
 
 repo.flush().await?;
-// Every revision captured by flush is now installed and the storage barriers
-// have succeeded. A failed barrier leaves durability uncertain and is reported.
 repo.shutdown().await?;
 # Ok(())
 # }
 ```
 
-A later device observes retained offers from authenticated ready peers and joins
-only after the application accepts the root:
+Read and change callbacks are synchronous and must not block. Changes are
+serialized per document; separate document actors remain independent.
 
-```no_run
-# use std::sync::Arc;
-# use automerge_repo::{Repo, RepoConfig, testing::{MemoryStore, MemoryTransport}};
-# async fn example() -> automerge_repo::Result<()> {
-# let documents = Arc::new(MemoryStore::default());
-# let control = Arc::new(MemoryStore::default());
-# let (transport, _remote) = MemoryTransport::pair("joining", "ready", 128);
-let repo = Repo::open(documents, control, transport, RepoConfig::default()).await?;
-if let Some(offer) = repo.bootstrap_offers().await?.first() {
-    let root = repo.join_existing(offer.root).await?;
-    root.ready().await?;
-}
-# Ok(())
-# }
-```
+## Contracts
 
-Read and change callbacks are synchronous and must not block. They execute on a
-single document actor, while actors for other documents remain independent.
-`read` can return only owned `Send + 'static` values, so Automerge references
-and transactions cannot escape. A callback error rolls back its transaction.
+- `StorageAdapter` stores complete, atomically replaced Automerge snapshots.
+- `ControlStore` persists bootstrap transitions separately from documents.
+- `NetworkTransport` provides authenticated peer IDs and reliable, ordered,
+  complete frames with bounded backpressure.
+- `flush` captures accepted revisions and waits for their durability barriers.
+- `shutdown` stops new work, drains accepted commands, flushes, and closes all
+  handles.
+- `remove_local` is local maintenance, not distributed deletion.
+- A lagging event subscriber must rebuild its view with `DocHandle::read`.
 
-`DocumentEvent::Remote(peer)` names the immediate authenticated peer that
-delivered the change, not the original Automerge actor. Event delivery uses a
-bounded Tokio broadcast channel. A lagging subscriber receives Tokio's
-`Lagged` error and should rebuild its materialized view with `DocHandle::read`.
-
-## Durability and lifecycle
-
-Every head-changing local or remote commit advances an actor-owned revision.
-Automatic snapshots are coalesced by `RepoConfig::persistence_debounce`; failed
-automatic saves stay dirty, emit a typed `Error::Persistence`, and retry with
-capped exponential backoff. Storage I/O runs in one private worker per document,
-so a blocked save does not block later commands for that document or other
-documents.
-
-`Repo::flush` has one repository-wide capture point. It immediately targets
-every revision accepted before that point, waits for document attempts, invokes
-the applicable durability barriers, and returns all independent failures in a
-stable aggregate. A successful consuming `Repo::shutdown(self)` additionally
-drains commands already admitted to bounded mailboxes, flushes dirty actors,
-closes every subsystem, and marks all handles closed. Once shutdown changes the
-shared lifecycle to Closing, new repository, document, and inbound-network work
-is rejected. An operation is accepted only once its mailbox send succeeds.
-
-`Repo::remove_local` is local maintenance, not distributed deletion. It rejects
-the root and any connected authenticated peer, closes and orders the document's
-persistence worker, removes and synchronizes its snapshot, then evicts the
-actor. A failed removal leaves the actor closed and evicted; explicitly reopen
-the surviving snapshot before inspecting it or retrying removal.
-
-Creation, initialization, joining readiness, flush, and successful shutdown are
-durability boundaries. In contrast, transaction commit, peer convergence, and
-an automatic snapshot `store` are not themselves crash-durability guarantees.
-Because generic barriers cannot reveal whether earlier writes reached stable
-storage, a failed barrier reports an uncertain outcome; bootstrap recovery and
-creation cleanup are designed to be safely repeatable.
-
-## Adapter contracts
-
-`StorageAdapter` stores complete Automerge snapshots; `ControlStore` separately
-stores bootstrap transitions. Implementations are asynchronous, thread-safe,
-and must make each `store` atomic. `NetworkTransport` supplies authenticated
-peer IDs and reliable, ordered, complete frames with bounded backpressure. It
-must expose only one active session per peer and must not emit stale events from
-a replaced session.
-
-The documentation-hidden `testing` module provides deterministic memory stores,
-paired transports, and a multi-peer network. Tests can inspect queues, manually
-deliver frames, replace connections, and inject or block storage operations.
+Automatic snapshots are debounced and retried after failure. Transaction commit
+and peer convergence are not themselves crash-durability guarantees.
 
 ## Filesystem storage
 
-`FilesystemStorage` implements both existing persistence traits beneath one
-repository directory:
+`FilesystemStorage` uses:
 
 ```text
 <repo>/
-  automerge/<lowercase-hyphenated-uuid>.automerge
-  control/bootstrap-v1.bin
+├── automerge/<document-uuid>.automerge
+└── control/bootstrap-v1.bin
 ```
 
-Each replacement uses an exclusively created recognizable sibling temporary,
-a complete write and file sync, atomic rename, then containing-directory sync.
-On Unix, directories use mode `0700` and files use `0600`. Startup ignores
-unrelated document-directory files, removes only exact adapter temporary names,
-rejects malformed `.automerge` names, and strictly validates every listed
-snapshot.
+On Unix, directories use mode `0700` and files use `0600`. Replacements use a
+temporary sibling, file sync, atomic rename, and directory sync.
 
-The control file is exactly 24 bytes: `FIBC`, big-endian version `1`, state byte
-(`0` Creating, `1` Joining, `2` Ready), zero reserved byte, and the 16 root UUID
-bytes. Invalid length, magic, version, state, or reserved data is preserved and
-reported with path context. All filesystem work is isolated through Tokio's
-blocking execution facility.
+## Build and test
+
+From the repository root:
+
+```sh
+nix develop
+cargo build -p automerge-repo
+cargo test -p automerge-repo
+cargo clippy -p automerge-repo --all-targets --all-features -- -D warnings
+```
+
+Optimized library and API documentation:
+
+```sh
+cargo build -p automerge-repo --release
+cargo doc -p automerge-repo --no-deps
+```
+
+The output is an embeddable Rust library, not a standalone service.

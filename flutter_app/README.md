@@ -1,66 +1,26 @@
 # Fi Flutter application
 
-This directory contains Fi's native presentation layer for Linux Wayland and
-Android. Dart owns widgets and short-lived view state; authoritative finance
-data, validation, device trust, pairing, and synchronization remain in Rust.
+Flutter presentation for Linux Wayland and Android. Dart owns widgets and view
+state; Rust remains authoritative for data, validation, trust, and sync. Other
+platforms are not supported.
 
-Only Linux Wayland and Android are supported. The generated iOS, macOS, Windows,
-and web paths in build tooling are not product targets.
+See the [root README](../README.md) for the project architecture, repository
+map, and screenshot placeholders.
 
-## Screenshots
+## Software stack
 
-The application screenshots have not been captured yet.
-
-| Compact Android layout | Wide Linux layout | Pairing confirmation |
-| --- | --- | --- |
-| _Screenshot placeholder_ | _Screenshot placeholder_ | _Screenshot placeholder_ |
-
-Future image files should live under `../docs/screenshots/` so the root and app
-READMEs can share them.
-
-## Software stack and dependencies
-
-| Component | Role |
+| Component | Purpose |
 | --- | --- |
-| Flutter and Dart | Material 3 screens, navigation, lifecycle observation, and controllers |
-| `flutter_rust_bridge` 2.12 | Generated Dart/Rust FFI boundary |
-| `app_bridge` path plugin | Builds and bundles the Rust `cdylib` through Cargokit |
-| `path_provider` | Selects the platform application-support directory |
-| `intl` | Locale-aware amount and date presentation |
-| GTK 3 and Wayland | Linux desktop window and rendering backend |
-| Android SDK/NDK and JDK 17 | Android runner, Kotlin adapter, and Rust cross-compilation |
-| Android Keystore | Non-exportable key used to wrap identity and discovery secrets |
-| Linux Secret Service | Desktop private identity and discovery-secret storage |
+| Flutter, Dart, Material 3 | Responsive UI and lifecycle observation |
+| `flutter_rust_bridge` | Typed Dart/Rust FFI |
+| Cargokit and `app_bridge` | Build and bundle Rust with Flutter |
+| GTK 3 and Wayland | Linux desktop runtime |
+| Android SDK/NDK, JDK 17, Keystore | Android build and secure storage |
 
-All supported versions and native build dependencies come from the repository's
-[`../flake.nix`](../flake.nix). Dart package versions are locked in
-[`pubspec.lock`](pubspec.lock).
+Versions are locked by [`pubspec.lock`](pubspec.lock), the Rust workspace, and
+[`../flake.nix`](../flake.nix).
 
-## Application structure
-
-```text
-flutter_app/
-├── lib/
-│   ├── main.dart                 Runtime initialization and data directory
-│   ├── app.dart                  Bootstrap, navigation, and application lifecycle
-│   ├── controllers.dart          Retained UI state and Rust-event subscriptions
-│   ├── transactions_page.dart   Finance screens and dialogs
-│   ├── bridge/                   Testable Dart abstraction over generated FFI
-│   └── src/rust/                 Generated flutter_rust_bridge bindings
-├── android/                      Android runner, Keystore, and multicast lock
-├── linux/                        GTK desktop runner and bundle rules
-├── rust_builder/                 Generated Cargokit integration for app_bridge
-├── test/                         Unit and widget tests
-└── integration_test/             Connected Android foreground-networking smoke
-```
-
-Commands go from widgets through controllers and `FinanceBridge` into the
-generated bridge. Rust returns complete query results plus typed streams used to
-invalidate or replace retained presentation state. The UI never calculates a
-pairing code, infers convergence from elapsed time, or mutates device trust
-locally.
-
-## Enter the development environment
+## Setup
 
 From the repository root:
 
@@ -70,53 +30,41 @@ cd flutter_app
 flutter pub get
 ```
 
-The Nix shell configures Flutter, Rust, Cargo, the Android SDK/NDK, JDK,
-`flutter_rust_bridge_codegen`, CMake, Ninja, GTK, and libclang. It does not
-include an Android emulator; use a physical device or provide your own emulator.
+The flake supplies Flutter, Rust, Android tooling, CMake, Ninja, GTK, and bridge
+code generation. It does not include an Android emulator.
 
 ## Development builds
 
 ### Linux Wayland
 
-Run with hot reload in the current Wayland session:
-
 ```sh
 GDK_BACKEND=wayland flutter run -d linux
 ```
 
-Build a reusable debug bundle without launching it:
+Build without launching:
 
 ```sh
 flutter build linux --debug
 ./build/linux/x64/debug/bundle/fi
 ```
 
-From the repository root, the headless compositor smoke test verifies that this
-debug bundle starts with Wayland forced:
-
-```sh
-scripts/smoke-linux-wayland.sh
-```
-
 ### Android
 
-Enable Developer options and USB debugging on the phone, connect it, and accept
-the authorization prompt. Then use the device identifier printed by Flutter:
+Connect a device with USB debugging enabled, then run:
 
 ```sh
 flutter devices
 flutter run -d <device-id>
 ```
 
-To build the debug APK without launching it:
+Build-only output:
 
 ```sh
 flutter build apk --debug
+# build/app/outputs/flutter-apk/app-debug.apk
 ```
 
-The result is `build/app/outputs/flutter-apk/app-debug.apk`.
-
-## Production-mode builds
+## Release builds and installation
 
 ### Linux Wayland
 
@@ -125,68 +73,68 @@ flutter build linux --release
 ./build/linux/x64/release/bundle/fi
 ```
 
-The entire `build/linux/x64/release/bundle/` directory is the application. Do
-not move only the executable: it loads assets and native libraries from sibling
-directories. See the root [packaging and local installation
-guide](../README.md#packaging-and-local-installation) for archiving and a
-per-user installation.
+Keep the complete `build/linux/x64/release/bundle/` directory together. To
+archive and install it for the current user:
+
+```sh
+tar -C build/linux/x64/release -czf fi-linux-x64.tar.gz bundle
+install -d "$HOME/.local/opt/fi" "$HOME/.local/bin"
+cp -a build/linux/x64/release/bundle/. "$HOME/.local/opt/fi/"
+ln -sfn "$HOME/.local/opt/fi/fi" "$HOME/.local/bin/fi"
+```
+
+The bundle requires compatible GTK, Wayland, and Secret Service libraries. It
+is not yet distributed as a flake package, AppImage, Flatpak, or distro package.
 
 ### Android
 
-Run an optimized build directly on a connected phone:
-
 ```sh
 flutter run --release -d <device-id>
-```
-
-Build installable and store-style artifacts:
-
-```sh
 flutter build apk --release
 flutter build appbundle --release
 ```
 
 Outputs:
 
-- `build/app/outputs/flutter-apk/app-release.apk` for direct installation.
-- `build/app/outputs/bundle/release/app-release.aab` for a store pipeline.
+- `build/app/outputs/flutter-apk/app-release.apk`
+- `build/app/outputs/bundle/release/app-release.aab`
 
-The current release build type deliberately uses the debug signing key for
-alpha testing. It is not suitable for publication. Configure a protected
-release keystore and replace the debug signing configuration in
-`android/app/build.gradle.kts` before distributing an APK or AAB.
-
-Install the local APK on a connected device with:
+Install the APK with:
 
 ```sh
 adb install -r build/app/outputs/flutter-apk/app-release.apk
 ```
 
+Release artifacts currently use the debug signing key for alpha testing. Add a
+protected release keystore and update `android/app/build.gradle.kts` before
+distribution. An AAB cannot be installed directly.
+
 ## Platform behavior
 
-Android declares internet, network-state, Wi-Fi-state, and multicast-state
-permissions, but no location or background-service permissions. The activity
-holds a scoped multicast lock only while the app is in the foreground. The app
-notifies Rust on resume and pause, and Rust starts or stops discovery and sync.
-
-Linux has no application-level X11 API. Use a working Secret Service provider
-such as GNOME Keyring or KWallet's Secret Service implementation so Rust can
-store private device material.
-
-The Devices screen presents Rust-supplied pairing candidates and six-digit SAS
-confirmation. Offline, Searching, Connected, Syncing, Synced, and Error are
-direct mappings from typed Rust states.
+Android discovery and sync run only in the foreground; no background service or
+location permission is used. Linux requires Wayland and a Secret Service
+provider. Both platforms require multicast DNS and direct peer traffic on the
+LAN for discovery and synchronization.
 
 ## Tests and generated code
 
-From the repository root, run Dart formatting, static analysis, and widget/unit
-tests together:
+From the repository root:
 
 ```sh
 scripts/check-flutter.sh
+scripts/check-frb-generated.sh
 ```
 
-Run the connected Android integration smoke against a selected device:
+Linux Wayland smoke test:
+
+```sh
+cd flutter_app
+flutter build linux --debug
+cd ..
+scripts/smoke-linux-wayland.sh
+```
+
+Connected Android smoke test:
 
 ```sh
 cd flutter_app
@@ -194,12 +142,5 @@ flutter build apk --debug
 flutter test integration_test/android_foreground_smoke_test.dart -d <device-id>
 ```
 
-The Rust and Dart bindings under `lib/src/rust/` are generated and committed.
-After changing the public Rust bridge API, verify regeneration from the root:
-
-```sh
-scripts/check-frb-generated.sh
-```
-
-Do not hand-edit generated bridge files or the Cargokit contents under
-`rust_builder/`.
+Generated bridge files live under `lib/src/rust/`; Cargokit glue lives under
+`rust_builder/`. Do not edit either by hand.
