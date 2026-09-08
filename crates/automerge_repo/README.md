@@ -5,6 +5,53 @@ document is exclusively owned by a bounded Tokio actor. A coordinator manages
 explicit bootstrap and whole-collection replication over application-supplied
 authenticated transport and storage ports.
 
+It is the workspace's reusable local-first data layer. Finance rules, SQLite
+projections, device identity, discovery, pairing, and concrete QUIC policy
+belong to `app-core`, not this crate.
+
+## Software stack and dependencies
+
+| Dependency | Purpose |
+| --- | --- |
+| Automerge 0.11 | Conflict-free document state and synchronization protocol |
+| Tokio | Bounded actors, async storage work, channels, timers, and lifecycle coordination |
+| `async-trait` | Application-provided storage and authenticated transport ports |
+| `bytes` | Bounded network frame payloads |
+| UUID | Stable document identifiers |
+| `thiserror` | Typed repository, persistence, protocol, and shutdown failures |
+
+The public crate is runtime infrastructure only: it does not open sockets or
+choose an application database on its own. Callers supply `StorageAdapter`,
+`ControlStore`, and `NetworkTransport` implementations.
+
+## Development build
+
+From the workspace root:
+
+```sh
+nix develop
+cargo build -p automerge-repo
+cargo test -p automerge-repo
+```
+
+Build the API documentation locally with:
+
+```sh
+cargo doc -p automerge-repo --no-deps --open
+```
+
+## Production build
+
+Create the optimized library with:
+
+```sh
+cargo build -p automerge-repo --release
+```
+
+The output under `target/release/` is a Rust library, not a daemon, executable,
+or independently deployable package. Applications embed it and provide the
+storage and network adapters appropriate to their platform.
+
 ## Durable repository API
 
 Fresh storage requires an explicit application decision. Initialize the first
