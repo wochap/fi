@@ -4,6 +4,7 @@ set -euo pipefail
 bundle="flutter_app/build/linux/x64/debug/bundle"
 binary="$bundle/fi"
 test -x "$binary"
+test -f "$bundle/lib/libapp_bridge.so"
 
 runtime_dir="$(mktemp -d)"
 weston_log="$runtime_dir/weston.log"
@@ -24,6 +25,7 @@ test -S "$runtime_dir/fi-wayland"
 
 set +e
 XDG_RUNTIME_DIR="$runtime_dir" \
+  XDG_DATA_HOME="$runtime_dir/data" \
   WAYLAND_DISPLAY=fi-wayland \
   GDK_BACKEND=wayland \
   timeout 5 "$binary" >"$app_log" 2>&1
@@ -34,3 +36,5 @@ if test "$status" -ne 0 && test "$status" -ne 124; then
   sed -n '1,200p' "$app_log"
   exit "$status"
 fi
+
+test -f "$runtime_dir/data/com.gean.fi/control.sqlite"

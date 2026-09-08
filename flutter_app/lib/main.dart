@@ -1,6 +1,6 @@
 import 'package:fi/app.dart';
 import 'package:fi/bridge/finance_bridge.dart';
-import 'package:fi/src/rust/frb_generated.dart';
+import 'package:fi/bridge/rust_bridge_loader.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -9,7 +9,7 @@ void main() {
   runApp(
     FinanceApp(
       bridge: RustFinanceBridge(),
-      initializeRust: RustLib.init,
+      initializeRust: initializeRustBridge,
       dataDirProvider: () async =>
           (await getApplicationSupportDirectory()).path,
     ),
