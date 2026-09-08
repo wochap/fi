@@ -1,0 +1,93 @@
+## Purpose
+
+TBD: Define end-to-end acceptance coverage for projection recovery, peer synchronization and authorization, pairing and discovery, joining and restart behavior, and supported platforms.
+
+## Requirements
+
+### Requirement: Projection recovery acceptance
+The end-to-end suite SHALL prove local command projection, complete recovery after read-model deletion, and complete recovery from a stale projection checkpoint.
+
+#### Scenario: Local command to query model
+- **WHEN** a command is executed through application core
+- **THEN** its durable Automerge change and matching SQLite query row/checkpoint are observed
+
+#### Scenario: Read model is deleted
+- **WHEN** a populated application's `read-model.sqlite` is removed and the app restarts
+- **THEN** all projected data is rebuilt from Automerge
+
+#### Scenario: Checkpoint is stale
+- **WHEN** SQLite contains valid rows with heads older than the authoritative root
+- **THEN** startup replaces them with a complete current projection
+
+### Requirement: Quinn convergence acceptance
+The end-to-end suite SHALL prove two application-core instances synchronize through real Quinn streams, converge concurrent offline transactions, and preserve trusted identity across endpoint changes.
+
+#### Scenario: Real Quinn synchronization
+- **WHEN** two compatible trusted cores connect through loopback Quinn
+- **THEN** Repo roots and SQLite query results converge
+
+#### Scenario: Concurrent offline transactions
+- **WHEN** both cores add distinct transactions while disconnected and reconnect
+- **THEN** both retain both transactions and identical Automerge heads
+
+#### Scenario: Peer endpoint changes
+- **WHEN** a trusted peer restarts Quinn on a different socket address
+- **THEN** its pinned DeviceId remains trusted and synchronization resumes through the new endpoint
+
+### Requirement: Peer authorization acceptance
+The end-to-end suite SHALL prove unknown and revoked public-key identities cannot enter Repo synchronization.
+
+#### Scenario: Unknown peer is rejected
+- **WHEN** an unpaired key connects to the normal sync ALPN
+- **THEN** neither core's Repo observes an authenticated peer event
+
+#### Scenario: Revoked peer is rejected
+- **WHEN** a formerly trusted key connects after local revocation
+- **THEN** the connection is closed before Repo synchronization
+
+### Requirement: Pairing acceptance
+The end-to-end suite SHALL prove successful transcript-bound SAS pairing, rejection with no trust, and timeout cleanup.
+
+#### Scenario: Successful SAS pairing
+- **WHEN** both devices compare and confirm matching derived SAS values
+- **THEN** both persist the expected peer trust and can establish a pinned normal connection
+
+#### Scenario: Pairing is rejected
+- **WHEN** either side rejects the SAS
+- **THEN** no new trust record or provisioned discovery secret exists on either side
+
+#### Scenario: Pairing times out
+- **WHEN** confirmations do not complete before the controlled deadline
+- **THEN** candidates, transient keys, sessions, and uncommitted journal data are cleaned up
+
+### Requirement: Discovery isolation acceptance
+The end-to-end suite SHALL prove two installations with independent discovery-group secrets do not intentionally discover, connect, or synchronize with one another.
+
+#### Scenario: Independent groups share one LAN harness
+- **WHEN** both advertise normal discovery simultaneously
+- **THEN** neither maps the other's selector/token to a trusted DeviceId or starts a sync connection
+
+### Requirement: Joining-device acceptance
+The end-to-end suite SHALL prove a rootless installation receives the existing root through successful pairing and obtains its complete authoritative and projected data.
+
+#### Scenario: Join populated root
+- **WHEN** a fresh device pairs with a ready device containing categories and transactions
+- **THEN** it uses the same root ID, synchronizes complete data, rebuilds SQLite, and only then permits commands
+
+### Requirement: Restart acceptance
+The end-to-end suite SHALL prove a complete application restart preserves authoritative finance data, root bootstrap, permanent identity, trust/revocation records, discovery epoch, and reconstructible queries.
+
+#### Scenario: Both application cores restart
+- **WHEN** paired synchronized applications shut down and reopen from retained storage
+- **THEN** they retain identities/trust/data, reject revoked peers, rebuild stale projections if needed, and can synchronize new changes
+
+### Requirement: Supported platform acceptance
+The project SHALL include Android foreground integration checks and a Linux desktop build/smoke check that does not rely on X11-specific application behavior.
+
+#### Scenario: Android foreground smoke
+- **WHEN** the app runs foregrounded on a supported Android test environment
+- **THEN** secure identity, multicast discovery capability, pairing discovery, and Quinn connectivity can initialize and stop with lifecycle
+
+#### Scenario: Linux Wayland smoke
+- **WHEN** the Linux application runs in a Wayland-capable test environment
+- **THEN** its finance, pairing, and device screens initialize without application-level X11 APIs
