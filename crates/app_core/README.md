@@ -1,8 +1,9 @@
 # app-core
 
-`app-core` is Fi's UI-independent backend. It owns finance rules, application
-lifecycle, SQLite projections, device identity, private discovery, pairing,
-trusted-device control, and authenticated QUIC synchronization.
+`app-core` is Fi's UI-independent backend. It owns collection schemas and typed
+records, application lifecycle, SQLite projections, device identity, private
+discovery, pairing, trusted-device control, and authenticated QUIC
+synchronization.
 
 Flutter calls it through [`app_bridge`](../app_bridge/README.md). Generic
 Automerge persistence and replication live in
@@ -23,7 +24,7 @@ Automerge persistence and replication live in
 
 ```text
 <application-data>/
-├── automerge/documents/   authoritative finance snapshots
+├── automerge/documents/   authoritative schema and record snapshots
 ├── control.sqlite         bootstrap, trust, pairing, and discovery metadata
 └── read-model.sqlite      disposable query projection
 ```
@@ -57,5 +58,5 @@ This produces an internal Rust library, not an executable. Use the
 - Revocation is durable before disconnect and route removal.
 - Discovery-secret rotation excludes revoked devices.
 - Pairing trust is committed only after SAS confirmation.
-- Traces must never contain finance data, SAS codes, private keys, discovery
+- Traces must never contain record values, SAS codes, private keys, discovery
   secrets, TLS material, or provisioning bytes.

@@ -5,48 +5,83 @@ import 'package:flutter_test/flutter_test.dart';
 import 'fake_bridge.dart';
 
 void main() {
-  test('commands and filters always refresh from bridge queries', () async {
-    final bridge = FakeFinanceBridge()
-      ..categories.add(const CategoryDto(id: 'food', name: 'Food'));
-    final controller = FinanceController(bridge);
+  test('controller refreshes generic projection events and CRUD', () async {
+    final bridge = FakeCollectionBridge();
+    final controller = CollectionsController(bridge);
     await controller.start();
-    await controller.createCategory('Travel');
-    expect(controller.categories.map((item) => item.name), contains('Travel'));
-    const filter = TransactionFilterDto(
-      text: 'lunch',
-      categoryId: 'food',
-      fromMs: 100,
-      throughMs: 200,
-    );
-    await controller.setFilter(filter);
-    expect(bridge.requestedFilters.last, filter);
-    await controller.saveTransaction(
-      occurredAtMs: 150,
-      categoryId: 'food',
-      amountMinor: -725,
-      description: 'Lunch',
-    );
-    expect(controller.transactions.single.description, 'Lunch');
-    await controller.deleteTransaction(controller.transactions.single.id);
-    expect(bridge.deletedTransactions, ['transaction-1']);
-    expect(controller.transactions, isEmpty);
+    final id = await controller.createCollection('Headaches');
+    expect(controller.collections.single.name, 'Headaches');
+    await controller.selectCollection(id);
+    expect(controller.schema?.id, id);
+    bridge.changed(id);
+    await Future<void>.delayed(Duration.zero);
+    expect(controller.selectedCollectionId, id);
     controller.dispose();
   });
 
-  test(
-    'invalidation refreshes queries and a closed stream is recreated',
-    () async {
-      final bridge = FakeFinanceBridge();
-      final controller = FinanceController(bridge);
-      await controller.start();
-      final calls = bridge.listTransactionCalls;
-      bridge.emitDataChanged();
-      await Future<void>.delayed(Duration.zero);
-      expect(bridge.listTransactionCalls, greaterThan(calls));
-      await bridge.closeDataStream();
-      await Future<void>.delayed(Duration.zero);
-      expect(bridge.dataSubscriptions, greaterThanOrEqualTo(2));
-      controller.dispose();
-    },
-  );
+  test('Rust errors remain visible', () async {
+    final bridge = FakeCollectionBridge();
+    final controller = CollectionsController(bridge);
+    await controller.start();
+    bridge.nextError = const BridgeError(
+      kind: BridgeErrorKind.validation,
+      field: 'name',
+      message: 'Name is required.',
+    );
+    await expectLater(
+      controller.createCollection(''),
+      throwsA(isA<BridgeError>()),
+    );
+    controller.dispose();
+  });
+
+  test('controller drives schema, enum option, and record CRUD', () async {
+    final bridge = FakeCollectionBridge();
+    final controller = CollectionsController(bridge);
+    await controller.start();
+    final collection = await controller.createCollection('Symptoms');
+    await controller.selectCollection(collection);
+    const enumField = FieldDefinitionDto(
+      id: '',
+      name: 'Severity',
+      fieldType: FieldTypeDto(kind: FieldTypeKindDto.enum_),
+      required_: true,
+      validation: ValidationMetadataDto(),
+      display: DisplayMetadataDto(multiline: false),
+      order: 0,
+      deleted: false,
+      enumOptions: [],
+    );
+    await controller.addField(enumField);
+    final fieldId = controller.schema!.fields.single.id;
+    await controller.upsertEnumOption(
+      fieldId,
+      const EnumOptionDto(id: '', label: 'High', order: 0, deleted: false),
+    );
+    final optionId = controller.schema!.fields.single.enumOptions.single.id;
+    await controller.createRecord([
+      RecordValueDto(
+        fieldId: fieldId,
+        value: FieldValueDto(
+          kind: FieldValueKindDto.enum_,
+          textValue: optionId,
+        ),
+      ),
+    ]);
+    expect(controller.records, hasLength(1));
+    await controller.updateRecord(controller.records.single.id, [
+      RecordValueDto(
+        fieldId: fieldId,
+        value: FieldValueDto(
+          kind: FieldValueKindDto.enum_,
+          textValue: optionId,
+        ),
+      ),
+    ]);
+    await controller.deleteRecord(controller.records.single.id);
+    expect(controller.records, isEmpty);
+    await controller.removeEnumOption(fieldId, optionId);
+    expect(controller.schema!.fields.single.enumOptions, isEmpty);
+    controller.dispose();
+  });
 }

@@ -6,7 +6,7 @@
 // Static analysis wrongly picks the IO variant, thus ignore this
 // ignore_for_file: argument_type_not_assignable
 
-import 'api/finance.dart';
+import 'api/collections.dart';
 import 'api/lifecycle.dart';
 import 'api/models.dart';
 import 'api/pairing.dart';
@@ -73,9 +73,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   String dco_decode_String(dynamic raw);
 
   @protected
-  AggregateDto dco_decode_aggregate_dto(dynamic raw);
-
-  @protected
   bool dco_decode_bool(dynamic raw);
 
   @protected
@@ -85,9 +82,28 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   BootstrapKindDto dco_decode_bootstrap_kind_dto(dynamic raw);
 
   @protected
-  TransactionFilterDto dco_decode_box_autoadd_transaction_filter_dto(
-    dynamic raw,
-  );
+  bool dco_decode_box_autoadd_bool(dynamic raw);
+
+  @protected
+  CollectionSchemaDto dco_decode_box_autoadd_collection_schema_dto(dynamic raw);
+
+  @protected
+  EnumOptionDto dco_decode_box_autoadd_enum_option_dto(dynamic raw);
+
+  @protected
+  FieldDefinitionDto dco_decode_box_autoadd_field_definition_dto(dynamic raw);
+
+  @protected
+  FieldValueDto dco_decode_box_autoadd_field_value_dto(dynamic raw);
+
+  @protected
+  RecordDto dco_decode_box_autoadd_record_dto(dynamic raw);
+
+  @protected
+  int dco_decode_box_autoadd_u_32(dynamic raw);
+
+  @protected
+  int dco_decode_box_autoadd_u_8(dynamic raw);
 
   @protected
   BridgeError dco_decode_bridge_error(dynamic raw);
@@ -99,13 +115,40 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   BridgeErrorKind dco_decode_bridge_error_kind(dynamic raw);
 
   @protected
-  CategoryDto dco_decode_category_dto(dynamic raw);
+  CollectionDto dco_decode_collection_dto(dynamic raw);
+
+  @protected
+  CollectionSchemaDto dco_decode_collection_schema_dto(dynamic raw);
 
   @protected
   DataChangedDto dco_decode_data_changed_dto(dynamic raw);
 
   @protected
+  DiagnosticDto dco_decode_diagnostic_dto(dynamic raw);
+
+  @protected
+  DisplayMetadataDto dco_decode_display_metadata_dto(dynamic raw);
+
+  @protected
   DomainKindDto dco_decode_domain_kind_dto(dynamic raw);
+
+  @protected
+  EnumOptionDto dco_decode_enum_option_dto(dynamic raw);
+
+  @protected
+  FieldDefinitionDto dco_decode_field_definition_dto(dynamic raw);
+
+  @protected
+  FieldTypeDto dco_decode_field_type_dto(dynamic raw);
+
+  @protected
+  FieldTypeKindDto dco_decode_field_type_kind_dto(dynamic raw);
+
+  @protected
+  FieldValueDto dco_decode_field_value_dto(dynamic raw);
+
+  @protected
+  FieldValueKindDto dco_decode_field_value_kind_dto(dynamic raw);
 
   @protected
   int dco_decode_i_32(dynamic raw);
@@ -114,10 +157,22 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   PlatformInt64 dco_decode_i_64(dynamic raw);
 
   @protected
-  List<CategoryDto> dco_decode_list_category_dto(dynamic raw);
+  List<String> dco_decode_list_String(dynamic raw);
+
+  @protected
+  List<CollectionDto> dco_decode_list_collection_dto(dynamic raw);
+
+  @protected
+  List<DiagnosticDto> dco_decode_list_diagnostic_dto(dynamic raw);
 
   @protected
   List<DomainKindDto> dco_decode_list_domain_kind_dto(dynamic raw);
+
+  @protected
+  List<EnumOptionDto> dco_decode_list_enum_option_dto(dynamic raw);
+
+  @protected
+  List<FieldDefinitionDto> dco_decode_list_field_definition_dto(dynamic raw);
 
   @protected
   List<PairingCandidateDto> dco_decode_list_pairing_candidate_dto(dynamic raw);
@@ -129,7 +184,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
 
   @protected
-  List<TransactionDto> dco_decode_list_transaction_dto(dynamic raw);
+  List<RecordDto> dco_decode_list_record_dto(dynamic raw);
+
+  @protected
+  List<RecordValueDto> dco_decode_list_record_value_dto(dynamic raw);
 
   @protected
   List<TrustedDeviceDto> dco_decode_list_trusted_device_dto(dynamic raw);
@@ -142,6 +200,26 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   String? dco_decode_opt_String(dynamic raw);
+
+  @protected
+  bool? dco_decode_opt_box_autoadd_bool(dynamic raw);
+
+  @protected
+  CollectionSchemaDto? dco_decode_opt_box_autoadd_collection_schema_dto(
+    dynamic raw,
+  );
+
+  @protected
+  FieldValueDto? dco_decode_opt_box_autoadd_field_value_dto(dynamic raw);
+
+  @protected
+  RecordDto? dco_decode_opt_box_autoadd_record_dto(dynamic raw);
+
+  @protected
+  int? dco_decode_opt_box_autoadd_u_32(dynamic raw);
+
+  @protected
+  int? dco_decode_opt_box_autoadd_u_8(dynamic raw);
 
   @protected
   Uint8List? dco_decode_opt_list_prim_u_8_strict(dynamic raw);
@@ -165,16 +243,19 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   ProjectionKindDto dco_decode_projection_kind_dto(dynamic raw);
 
   @protected
+  RecordDto dco_decode_record_dto(dynamic raw);
+
+  @protected
+  RecordValueDto dco_decode_record_value_dto(dynamic raw);
+
+  @protected
   SyncStatusDto dco_decode_sync_status_dto(dynamic raw);
 
   @protected
-  TransactionDto dco_decode_transaction_dto(dynamic raw);
-
-  @protected
-  TransactionFilterDto dco_decode_transaction_filter_dto(dynamic raw);
-
-  @protected
   TrustedDeviceDto dco_decode_trusted_device_dto(dynamic raw);
+
+  @protected
+  int dco_decode_u_32(dynamic raw);
 
   @protected
   BigInt dco_decode_u_64(dynamic raw);
@@ -184,6 +265,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void dco_decode_unit(dynamic raw);
+
+  @protected
+  ValidationMetadataDto dco_decode_validation_metadata_dto(dynamic raw);
 
   @protected
   AnyhowException sse_decode_AnyhowException(SseDeserializer deserializer);
@@ -241,9 +325,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   String sse_decode_String(SseDeserializer deserializer);
 
   @protected
-  AggregateDto sse_decode_aggregate_dto(SseDeserializer deserializer);
-
-  @protected
   bool sse_decode_bool(SseDeserializer deserializer);
 
   @protected
@@ -253,9 +334,36 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   BootstrapKindDto sse_decode_bootstrap_kind_dto(SseDeserializer deserializer);
 
   @protected
-  TransactionFilterDto sse_decode_box_autoadd_transaction_filter_dto(
+  bool sse_decode_box_autoadd_bool(SseDeserializer deserializer);
+
+  @protected
+  CollectionSchemaDto sse_decode_box_autoadd_collection_schema_dto(
     SseDeserializer deserializer,
   );
+
+  @protected
+  EnumOptionDto sse_decode_box_autoadd_enum_option_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  FieldDefinitionDto sse_decode_box_autoadd_field_definition_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  FieldValueDto sse_decode_box_autoadd_field_value_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  RecordDto sse_decode_box_autoadd_record_dto(SseDeserializer deserializer);
+
+  @protected
+  int sse_decode_box_autoadd_u_32(SseDeserializer deserializer);
+
+  @protected
+  int sse_decode_box_autoadd_u_8(SseDeserializer deserializer);
 
   @protected
   BridgeError sse_decode_bridge_error(SseDeserializer deserializer);
@@ -269,13 +377,48 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   BridgeErrorKind sse_decode_bridge_error_kind(SseDeserializer deserializer);
 
   @protected
-  CategoryDto sse_decode_category_dto(SseDeserializer deserializer);
+  CollectionDto sse_decode_collection_dto(SseDeserializer deserializer);
+
+  @protected
+  CollectionSchemaDto sse_decode_collection_schema_dto(
+    SseDeserializer deserializer,
+  );
 
   @protected
   DataChangedDto sse_decode_data_changed_dto(SseDeserializer deserializer);
 
   @protected
+  DiagnosticDto sse_decode_diagnostic_dto(SseDeserializer deserializer);
+
+  @protected
+  DisplayMetadataDto sse_decode_display_metadata_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   DomainKindDto sse_decode_domain_kind_dto(SseDeserializer deserializer);
+
+  @protected
+  EnumOptionDto sse_decode_enum_option_dto(SseDeserializer deserializer);
+
+  @protected
+  FieldDefinitionDto sse_decode_field_definition_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  FieldTypeDto sse_decode_field_type_dto(SseDeserializer deserializer);
+
+  @protected
+  FieldTypeKindDto sse_decode_field_type_kind_dto(SseDeserializer deserializer);
+
+  @protected
+  FieldValueDto sse_decode_field_value_dto(SseDeserializer deserializer);
+
+  @protected
+  FieldValueKindDto sse_decode_field_value_kind_dto(
+    SseDeserializer deserializer,
+  );
 
   @protected
   int sse_decode_i_32(SseDeserializer deserializer);
@@ -284,10 +427,30 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   PlatformInt64 sse_decode_i_64(SseDeserializer deserializer);
 
   @protected
-  List<CategoryDto> sse_decode_list_category_dto(SseDeserializer deserializer);
+  List<String> sse_decode_list_String(SseDeserializer deserializer);
+
+  @protected
+  List<CollectionDto> sse_decode_list_collection_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<DiagnosticDto> sse_decode_list_diagnostic_dto(
+    SseDeserializer deserializer,
+  );
 
   @protected
   List<DomainKindDto> sse_decode_list_domain_kind_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<EnumOptionDto> sse_decode_list_enum_option_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<FieldDefinitionDto> sse_decode_list_field_definition_dto(
     SseDeserializer deserializer,
   );
 
@@ -303,7 +466,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
 
   @protected
-  List<TransactionDto> sse_decode_list_transaction_dto(
+  List<RecordDto> sse_decode_list_record_dto(SseDeserializer deserializer);
+
+  @protected
+  List<RecordValueDto> sse_decode_list_record_value_dto(
     SseDeserializer deserializer,
   );
 
@@ -320,6 +486,30 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   String? sse_decode_opt_String(SseDeserializer deserializer);
+
+  @protected
+  bool? sse_decode_opt_box_autoadd_bool(SseDeserializer deserializer);
+
+  @protected
+  CollectionSchemaDto? sse_decode_opt_box_autoadd_collection_schema_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  FieldValueDto? sse_decode_opt_box_autoadd_field_value_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  RecordDto? sse_decode_opt_box_autoadd_record_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  int? sse_decode_opt_box_autoadd_u_32(SseDeserializer deserializer);
+
+  @protected
+  int? sse_decode_opt_box_autoadd_u_8(SseDeserializer deserializer);
 
   @protected
   Uint8List? sse_decode_opt_list_prim_u_8_strict(SseDeserializer deserializer);
@@ -349,18 +539,19 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  RecordDto sse_decode_record_dto(SseDeserializer deserializer);
+
+  @protected
+  RecordValueDto sse_decode_record_value_dto(SseDeserializer deserializer);
+
+  @protected
   SyncStatusDto sse_decode_sync_status_dto(SseDeserializer deserializer);
 
   @protected
-  TransactionDto sse_decode_transaction_dto(SseDeserializer deserializer);
-
-  @protected
-  TransactionFilterDto sse_decode_transaction_filter_dto(
-    SseDeserializer deserializer,
-  );
-
-  @protected
   TrustedDeviceDto sse_decode_trusted_device_dto(SseDeserializer deserializer);
+
+  @protected
+  int sse_decode_u_32(SseDeserializer deserializer);
 
   @protected
   BigInt sse_decode_u_64(SseDeserializer deserializer);
@@ -370,6 +561,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_decode_unit(SseDeserializer deserializer);
+
+  @protected
+  ValidationMetadataDto sse_decode_validation_metadata_dto(
+    SseDeserializer deserializer,
+  );
 
   @protected
   void sse_encode_AnyhowException(
@@ -435,9 +631,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_String(String self, SseSerializer serializer);
 
   @protected
-  void sse_encode_aggregate_dto(AggregateDto self, SseSerializer serializer);
-
-  @protected
   void sse_encode_bool(bool self, SseSerializer serializer);
 
   @protected
@@ -450,10 +643,43 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
-  void sse_encode_box_autoadd_transaction_filter_dto(
-    TransactionFilterDto self,
+  void sse_encode_box_autoadd_bool(bool self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_collection_schema_dto(
+    CollectionSchemaDto self,
     SseSerializer serializer,
   );
+
+  @protected
+  void sse_encode_box_autoadd_enum_option_dto(
+    EnumOptionDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_field_definition_dto(
+    FieldDefinitionDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_field_value_dto(
+    FieldValueDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_record_dto(
+    RecordDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_u_32(int self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_u_8(int self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_error(BridgeError self, SseSerializer serializer);
@@ -471,7 +697,13 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
-  void sse_encode_category_dto(CategoryDto self, SseSerializer serializer);
+  void sse_encode_collection_dto(CollectionDto self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_collection_schema_dto(
+    CollectionSchemaDto self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_data_changed_dto(
@@ -480,7 +712,43 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_diagnostic_dto(DiagnosticDto self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_display_metadata_dto(
+    DisplayMetadataDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_domain_kind_dto(DomainKindDto self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_enum_option_dto(EnumOptionDto self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_field_definition_dto(
+    FieldDefinitionDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_field_type_dto(FieldTypeDto self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_field_type_kind_dto(
+    FieldTypeKindDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_field_value_dto(FieldValueDto self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_field_value_kind_dto(
+    FieldValueKindDto self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_i_32(int self, SseSerializer serializer);
@@ -489,14 +757,35 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer);
 
   @protected
-  void sse_encode_list_category_dto(
-    List<CategoryDto> self,
+  void sse_encode_list_String(List<String> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_collection_dto(
+    List<CollectionDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_diagnostic_dto(
+    List<DiagnosticDto> self,
     SseSerializer serializer,
   );
 
   @protected
   void sse_encode_list_domain_kind_dto(
     List<DomainKindDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_enum_option_dto(
+    List<EnumOptionDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_field_definition_dto(
+    List<FieldDefinitionDto> self,
     SseSerializer serializer,
   );
 
@@ -516,8 +805,14 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
-  void sse_encode_list_transaction_dto(
-    List<TransactionDto> self,
+  void sse_encode_list_record_dto(
+    List<RecordDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_record_value_dto(
+    List<RecordValueDto> self,
     SseSerializer serializer,
   );
 
@@ -535,6 +830,33 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_opt_String(String? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_bool(bool? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_collection_schema_dto(
+    CollectionSchemaDto? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_field_value_dto(
+    FieldValueDto? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_record_dto(
+    RecordDto? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_u_32(int? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_u_8(int? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_list_prim_u_8_strict(
@@ -576,25 +898,25 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_record_dto(RecordDto self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_record_value_dto(
+    RecordValueDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_sync_status_dto(SyncStatusDto self, SseSerializer serializer);
-
-  @protected
-  void sse_encode_transaction_dto(
-    TransactionDto self,
-    SseSerializer serializer,
-  );
-
-  @protected
-  void sse_encode_transaction_filter_dto(
-    TransactionFilterDto self,
-    SseSerializer serializer,
-  );
 
   @protected
   void sse_encode_trusted_device_dto(
     TrustedDeviceDto self,
     SseSerializer serializer,
   );
+
+  @protected
+  void sse_encode_u_32(int self, SseSerializer serializer);
 
   @protected
   void sse_encode_u_64(BigInt self, SseSerializer serializer);
@@ -604,6 +926,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_unit(void self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_validation_metadata_dto(
+    ValidationMetadataDto self,
+    SseSerializer serializer,
+  );
 }
 
 // Section: wire_class

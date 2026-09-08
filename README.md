@@ -1,15 +1,15 @@
 # Fi
 
-Fi is a local-first personal finance app for Linux Wayland and Android. Flutter
-provides the UI; Rust owns finance rules, storage, pairing, and peer-to-peer
-synchronization. There is no application server.
+Fi is a local-first schema-driven collections app for Linux Wayland and Android.
+Flutter provides the UI; Rust owns schemas, typed records, storage, pairing, and
+peer-to-peer synchronization. There is no application server.
 
 > **Alpha:** breaking and data-format changes are expected. Other platforms are
 > not supported.
 
 ## Screenshots
 
-| Transactions | Categories | Device pairing |
+| Collections | Schema editor | Device pairing |
 | --- | --- | --- |
 | _Screenshot pending_ | _Screenshot pending_ | _Screenshot pending_ |
 
@@ -60,7 +60,7 @@ rebuildable. See [operations](docs/operations.md) for storage and recovery.
 fi/
 ├── crates/
 │   ├── automerge_repo/   Generic Automerge actors, persistence, and sync
-│   ├── app_core/         Finance domain, projection, identity, and networking
+│   ├── app_core/         Collection domain, projection, identity, and networking
 │   └── app_bridge/       Flutter-facing Rust API
 ├── flutter_app/          Linux Wayland and Android application
 ├── docs/                 Operations and compatibility notes

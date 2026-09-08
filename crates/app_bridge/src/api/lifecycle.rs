@@ -28,7 +28,7 @@ pub(crate) async fn core() -> Result<AppCore, BridgeError> {
         .read()
         .await
         .clone()
-        .ok_or_else(|| BridgeError::lifecycle("The local finance service is not initialized."))
+        .ok_or_else(|| BridgeError::lifecycle("The local collection service is not initialized."))
 }
 
 #[frb(init)]
@@ -191,9 +191,11 @@ pub async fn data_changed_stream(sink: StreamSink<DataChangedDto>) -> Result<(),
                 Ok(event) => event.into(),
                 Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => DataChangedDto {
                     kinds: vec![
-                        DomainKindDto::from(DomainKind::Categories),
-                        DomainKindDto::from(DomainKind::Transactions),
+                        DomainKindDto::from(DomainKind::Collections),
+                        DomainKindDto::from(DomainKind::Schemas),
+                        DomainKindDto::from(DomainKind::Records),
                     ],
+                    collection_ids: vec![],
                     checkpoint: String::new(),
                 },
                 Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
@@ -228,7 +230,7 @@ pub async fn error_stream(sink: StreamSink<BridgeErrorEventDto>) -> Result<(), B
 mod tests {
     use std::time::Duration;
 
-    use crate::api::{finance, models::BootstrapKindDto};
+    use crate::api::{collections, models::BootstrapKindDto};
 
     use super::{core, initialize, shutdown};
 
@@ -240,7 +242,7 @@ mod tests {
             .unwrap();
         assert_eq!(initial.kind, BootstrapKindDto::NeedsDecision);
 
-        let ready = finance::create_new_dataset().await.unwrap();
+        let ready = collections::create_new_dataset().await.unwrap();
         assert_eq!(ready.kind, BootstrapKindDto::Ready);
 
         let first_status = core().await.unwrap().subscribe_lifecycle();
@@ -258,21 +260,31 @@ mod tests {
         ));
 
         let mut changes = core().await.unwrap().subscribe_data_changed();
-        let category = finance::create_category("Food".into()).await.unwrap();
+        let collection = collections::create_collection("Food".into(), String::new())
+            .await
+            .unwrap();
         let event = tokio::time::timeout(Duration::from_secs(1), changes.recv())
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(event.kinds, vec![app_core::DomainKind::Categories]);
+        assert_eq!(
+            event.kinds,
+            vec![
+                app_core::DomainKind::Collections,
+                app_core::DomainKind::Schemas
+            ]
+        );
         assert!(
-            finance::list_categories()
+            collections::list_collections()
                 .await
                 .unwrap()
                 .iter()
-                .any(|item| item.id == category)
+                .any(|item| item.id == collection)
         );
 
-        let error = finance::create_category(" ".into()).await.unwrap_err();
+        let error = collections::create_collection(" ".into(), String::new())
+            .await
+            .unwrap_err();
         assert_eq!(error.kind, crate::api::models::BridgeErrorKind::Validation);
         shutdown().await.unwrap();
     }

@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:fi/bridge/finance_bridge.dart';
+import 'package:fi/bridge/collection_bridge.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:flutter/foundation.dart';
 
@@ -11,7 +11,7 @@ final class BootstrapController extends ChangeNotifier {
     required this.dataDirProvider,
   });
 
-  final FinanceBridge bridge;
+  final CollectionBridge bridge;
   final Future<void> Function() initializeRust;
   final Future<String> Function() dataDirProvider;
   BootstrapDto? state;
@@ -66,19 +66,14 @@ final class BootstrapController extends ChangeNotifier {
   }
 }
 
-final class FinanceController extends ChangeNotifier {
-  FinanceController(this.bridge);
+final class CollectionsController extends ChangeNotifier {
+  CollectionsController(this.bridge);
 
-  final FinanceBridge bridge;
-  List<CategoryDto> categories = const [];
-  List<TransactionDto> transactions = const [];
-  AggregateDto aggregate = const AggregateDto(
-    balanceMinor: 0,
-    incomeMinor: 0,
-    expenseMinor: 0,
-    transactionCount: 0,
-  );
-  TransactionFilterDto filter = const TransactionFilterDto();
+  final CollectionBridge bridge;
+  List<CollectionDto> collections = const [];
+  CollectionSchemaDto? schema;
+  List<RecordDto> records = const [];
+  String? selectedCollectionId;
   ProjectionDto projection = const ProjectionDto(
     kind: ProjectionKindDto.unavailable,
   );
@@ -138,14 +133,14 @@ final class FinanceController extends ChangeNotifier {
     loading = true;
     notifyListeners();
     try {
-      final results = await Future.wait<Object>([
-        bridge.listCategories(),
-        bridge.listTransactions(filter),
-        bridge.aggregates(),
-      ]);
-      categories = results[0] as List<CategoryDto>;
-      transactions = results[1] as List<TransactionDto>;
-      aggregate = results[2] as AggregateDto;
+      collections = await bridge.listCollections();
+      if (selectedCollectionId case final id?) {
+        schema = await bridge.getCollectionSchema(id);
+        records = await bridge.listRecords(id);
+      } else {
+        schema = null;
+        records = const [];
+      }
       errorMessage = null;
     } catch (error) {
       errorMessage = bridgeMessage(error);
@@ -155,49 +150,83 @@ final class FinanceController extends ChangeNotifier {
     }
   }
 
-  Future<void> setFilter(TransactionFilterDto value) async {
-    filter = value;
+  Future<void> selectCollection(String? id) async {
+    selectedCollectionId = id;
     await refresh();
   }
 
-  Future<void> createCategory(String name) async {
-    await bridge.createCategory(name);
+  Future<String> createCollection(
+    String name, [
+    String description = '',
+  ]) async {
+    final id = await bridge.createCollection(name, description);
+    await refresh();
+    return id;
+  }
+
+  Future<void> renameCollection(String id, String name) async {
+    await bridge.renameCollection(id, name);
     await refresh();
   }
 
-  Future<void> renameCategory(String id, String name) async {
-    await bridge.updateCategory(id, name);
+  Future<void> deleteCollection(String id) async {
+    await bridge.deleteCollection(id);
+    if (selectedCollectionId == id) selectedCollectionId = null;
     await refresh();
   }
 
-  Future<void> saveTransaction({
-    String? id,
-    required int occurredAtMs,
-    required String categoryId,
-    required int amountMinor,
-    required String description,
-  }) async {
-    if (id == null) {
-      await bridge.createTransaction(
-        occurredAtMs: occurredAtMs,
-        categoryId: categoryId,
-        amountMinor: amountMinor,
-        description: description,
-      );
-    } else {
-      await bridge.updateTransaction(
-        id: id,
-        occurredAtMs: occurredAtMs,
-        categoryId: categoryId,
-        amountMinor: amountMinor,
-        description: description,
+  Future<void> addField(FieldDefinitionDto field) async {
+    await bridge.addField(selectedCollectionId!, field);
+    await refresh();
+  }
+
+  Future<void> updateField(FieldDefinitionDto field) async {
+    await bridge.updateField(selectedCollectionId!, field);
+    await refresh();
+  }
+
+  Future<void> removeField(String fieldId) async {
+    await bridge.removeField(selectedCollectionId!, fieldId);
+    await refresh();
+  }
+
+  Future<void> reorderFields(List<String> fieldIds) async {
+    await bridge.reorderFields(selectedCollectionId!, fieldIds);
+    await refresh();
+  }
+
+  Future<void> upsertEnumOption(String fieldId, EnumOptionDto option) async {
+    await bridge.upsertEnumOption(selectedCollectionId!, fieldId, option);
+    await refresh();
+  }
+
+  Future<void> removeEnumOption(String fieldId, String optionId) async {
+    await bridge.removeEnumOption(selectedCollectionId!, fieldId, optionId);
+    await refresh();
+  }
+
+  Future<void> createRecord(List<RecordValueDto> values) async {
+    await bridge.createRecord(selectedCollectionId!, values);
+    await refresh();
+  }
+
+  Future<void> updateRecord(
+    String recordId,
+    List<RecordValueDto> values,
+  ) async {
+    for (final value in values) {
+      await bridge.updateRecordField(
+        recordId,
+        selectedCollectionId!,
+        value.fieldId,
+        value.value,
       );
     }
     await refresh();
   }
 
-  Future<void> deleteTransaction(String id) async {
-    await bridge.deleteTransaction(id);
+  Future<void> deleteRecord(String id) async {
+    await bridge.deleteRecord(id, selectedCollectionId!);
     await refresh();
   }
 
@@ -214,7 +243,7 @@ final class FinanceController extends ChangeNotifier {
 final class DevicesController extends ChangeNotifier {
   DevicesController(this.bridge);
 
-  final FinanceBridge bridge;
+  final CollectionBridge bridge;
   PairingStateDto pairing = const PairingStateDto(
     kind: PairingKindDto.idle,
     localConfirmed: false,
@@ -346,5 +375,5 @@ final class DevicesController extends ChangeNotifier {
 
 String bridgeMessage(Object error) => switch (error) {
   BridgeError(:final message) => message,
-  _ => 'The local finance service encountered an unexpected error.',
+  _ => 'The local collection service encountered an unexpected error.',
 };

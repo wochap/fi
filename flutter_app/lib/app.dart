@@ -1,15 +1,15 @@
 import 'dart:async';
 
-import 'package:fi/bridge/finance_bridge.dart';
+import 'package:fi/bridge/collection_bridge.dart';
 import 'package:fi/controllers.dart';
 import 'package:fi/src/rust/api/models.dart';
-import 'package:fi/transactions_page.dart';
+import 'package:fi/collections_page.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-class FinanceApp extends StatefulWidget {
-  const FinanceApp({
+class CollectionApp extends StatefulWidget {
+  const CollectionApp({
     required this.bridge,
     required this.initializeRust,
     required this.dataDirProvider,
@@ -17,16 +17,17 @@ class FinanceApp extends StatefulWidget {
     super.key,
   });
 
-  final FinanceBridge bridge;
+  final CollectionBridge bridge;
   final Future<void> Function() initializeRust;
   final Future<String> Function() dataDirProvider;
   final Future<void> Function(bool foreground)? setPlatformForeground;
 
   @override
-  State<FinanceApp> createState() => _FinanceAppState();
+  State<CollectionApp> createState() => _CollectionAppState();
 }
 
-class _FinanceAppState extends State<FinanceApp> with WidgetsBindingObserver {
+class _CollectionAppState extends State<CollectionApp>
+    with WidgetsBindingObserver {
   late final BootstrapController controller;
   static const _platform = MethodChannel('fi/platform');
 
@@ -118,7 +119,7 @@ class _FinanceAppState extends State<FinanceApp> with WidgetsBindingObserver {
           );
         }
         return switch (controller.state?.kind) {
-          BootstrapKindDto.ready => FinanceShell(bridge: widget.bridge),
+          BootstrapKindDto.ready => CollectionShell(bridge: widget.bridge),
           BootstrapKindDto.needsDecision => OnboardingPage(
             controller: controller,
           ),
@@ -129,7 +130,7 @@ class _FinanceAppState extends State<FinanceApp> with WidgetsBindingObserver {
             child: CircularProgressIndicator(),
           ),
           _ => const _CenteredSurface(
-            child: Text('The local finance service is unavailable.'),
+            child: Text('The local collection service is unavailable.'),
           ),
         };
       },
@@ -165,7 +166,7 @@ class OnboardingPage extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'Your private finance dataset',
+                'Your private collection space',
                 style: Theme.of(context).textTheme.headlineMedium,
               ),
               const SizedBox(height: 12),
@@ -201,23 +202,23 @@ class OnboardingPage extends StatelessWidget {
   );
 }
 
-class FinanceShell extends StatefulWidget {
-  const FinanceShell({required this.bridge, super.key});
-  final FinanceBridge bridge;
+class CollectionShell extends StatefulWidget {
+  const CollectionShell({required this.bridge, super.key});
+  final CollectionBridge bridge;
 
   @override
-  State<FinanceShell> createState() => _FinanceShellState();
+  State<CollectionShell> createState() => _CollectionShellState();
 }
 
-class _FinanceShellState extends State<FinanceShell> {
-  late final FinanceController controller;
+class _CollectionShellState extends State<CollectionShell> {
+  late final CollectionsController controller;
   late final DevicesController devices;
   int selected = 0;
 
   @override
   void initState() {
     super.initState();
-    controller = FinanceController(widget.bridge);
+    controller = CollectionsController(widget.bridge);
     devices = DevicesController(widget.bridge);
     unawaited(controller.start());
     unawaited(devices.start());
@@ -248,8 +249,7 @@ class _FinanceShellState extends State<FinanceShell> {
           final page = IndexedStack(
             index: selected,
             children: [
-              TransactionsPage(controller: controller),
-              CategoriesPage(controller: controller),
+              CollectionsPage(controller: controller),
               DevicesPage(controller: devices),
             ],
           );
@@ -264,12 +264,8 @@ class _FinanceShellState extends State<FinanceShell> {
                   labelType: NavigationRailLabelType.all,
                   destinations: const [
                     NavigationRailDestination(
-                      icon: Icon(Icons.receipt_long),
-                      label: Text('Transactions'),
-                    ),
-                    NavigationRailDestination(
-                      icon: Icon(Icons.category),
-                      label: Text('Categories'),
+                      icon: Icon(Icons.dataset_outlined),
+                      label: Text('Collections'),
                     ),
                     NavigationRailDestination(
                       icon: Icon(Icons.devices),
@@ -293,12 +289,8 @@ class _FinanceShellState extends State<FinanceShell> {
               },
               destinations: const [
                 NavigationDestination(
-                  icon: Icon(Icons.receipt_long),
-                  label: 'Transactions',
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.category),
-                  label: 'Categories',
+                  icon: Icon(Icons.dataset_outlined),
+                  label: 'Collections',
                 ),
                 NavigationDestination(
                   icon: Icon(Icons.devices),
@@ -580,114 +572,6 @@ String _timestamp(int? milliseconds) => milliseconds == null
     ? 'never'
     : DateTime.fromMillisecondsSinceEpoch(milliseconds).toLocal().toString();
 
-class CategoriesPage extends StatelessWidget {
-  const CategoriesPage({required this.controller, super.key});
-  final FinanceController controller;
-
-  @override
-  Widget build(BuildContext context) => Column(
-    children: [
-      _PageHeader(
-        title: 'Categories',
-        actionLabel: 'New category',
-        onAction: () => _editCategory(context),
-      ),
-      if (controller.errorMessage case final error?) _ErrorBanner(error),
-      Expanded(
-        child: controller.loading && controller.categories.isEmpty
-            ? const Center(child: CircularProgressIndicator())
-            : ListView.builder(
-                itemCount: controller.categories.length,
-                itemBuilder: (context, index) {
-                  final category = controller.categories[index];
-                  return ListTile(
-                    leading: const Icon(Icons.label_outline),
-                    title: Text(category.name),
-                    trailing: IconButton(
-                      tooltip: 'Rename',
-                      icon: const Icon(Icons.edit_outlined),
-                      onPressed: () => _editCategory(context, category),
-                    ),
-                  );
-                },
-              ),
-      ),
-    ],
-  );
-
-  Future<void> _editCategory(
-    BuildContext context, [
-    CategoryDto? category,
-  ]) async {
-    final field = TextEditingController(text: category?.name);
-    String? error;
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: Text(category == null ? 'New category' : 'Rename category'),
-          content: TextField(
-            key: const Key('category-name'),
-            controller: field,
-            autofocus: true,
-            decoration: InputDecoration(labelText: 'Name', errorText: error),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () async {
-                try {
-                  if (category == null) {
-                    await controller.createCategory(field.text);
-                  } else {
-                    await controller.renameCategory(category.id, field.text);
-                  }
-                  if (context.mounted) Navigator.pop(context);
-                } catch (failure) {
-                  setState(() => error = bridgeMessage(failure));
-                }
-              },
-              child: const Text('Save'),
-            ),
-          ],
-        ),
-      ),
-    );
-    field.dispose();
-  }
-}
-
-class _PageHeader extends StatelessWidget {
-  const _PageHeader({
-    required this.title,
-    required this.actionLabel,
-    required this.onAction,
-  });
-  final String title;
-  final String actionLabel;
-  final VoidCallback? onAction;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.all(16),
-    child: Row(
-      children: [
-        Expanded(
-          child: Text(title, style: Theme.of(context).textTheme.headlineSmall),
-        ),
-        FilledButton.icon(
-          onPressed: onAction,
-          icon: const Icon(Icons.add),
-          label: Text(actionLabel),
-        ),
-      ],
-    ),
-  );
-}
-
 class _ErrorBanner extends StatelessWidget {
   const _ErrorBanner(this.message);
   final String message;
@@ -697,8 +581,4 @@ class _ErrorBanner extends StatelessWidget {
     content: Text(message),
     actions: const [SizedBox.shrink()],
   );
-}
-
-void showFinanceError(BuildContext context, String message) {
-  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
 }

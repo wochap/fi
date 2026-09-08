@@ -1,57 +1,63 @@
 import 'dart:async';
 
-import 'package:fi/bridge/finance_bridge.dart';
+import 'package:fi/bridge/collection_bridge.dart';
 import 'package:fi/src/rust/api/models.dart';
 
-final class FakeFinanceBridge implements FinanceBridge {
+final class FakeCollectionBridge implements CollectionBridge {
   BootstrapDto bootstrap = const BootstrapDto(
     kind: BootstrapKindDto.needsDecision,
   );
   ProjectionDto projection = const ProjectionDto(
-    kind: ProjectionKindDto.ready,
-    checkpoint: 'test',
+    kind: ProjectionKindDto.unavailable,
   );
-  final List<CategoryDto> categories = [];
-  final List<TransactionDto> transactions = [];
-  final List<TransactionFilterDto> requestedFilters = [];
-  final List<String> deletedTransactions = [];
+  final List<CollectionDto> collections = [];
+  final Map<String, CollectionSchemaDto> schemas = {};
+  final Map<String, List<RecordDto>> records = {};
   final List<TrustedDeviceDto> devices = [];
+  final List<String> confirmedSessions = [];
+  final List<String> rejectedSessions = [];
+  final List<String> revokedDevices = [];
   PairingStateDto pairing = const PairingStateDto(
     kind: PairingKindDto.idle,
     localConfirmed: false,
     remoteConfirmed: false,
   );
-  List<PairingCandidateDto> candidates = const [];
-  SyncStatusDto syncStatusValue = SyncStatusDto.offline;
-  final pairingController = StreamController<PairingStateDto>.broadcast(
-    sync: true,
-  );
+  SyncStatusDto status = SyncStatusDto.offline;
+  Object? nextError;
+  int _next = 1;
+  final bootstrapController = StreamController<BootstrapDto>.broadcast();
+  final projectionController = StreamController<ProjectionDto>.broadcast();
+  final dataController = StreamController<DataChangedDto>.broadcast();
+  final errorController = StreamController<BridgeErrorEventDto>.broadcast();
+  final pairingController = StreamController<PairingStateDto>.broadcast();
   final candidateController =
-      StreamController<List<PairingCandidateDto>>.broadcast(sync: true);
-  final deviceController = StreamController<List<TrustedDeviceDto>>.broadcast(
-    sync: true,
-  );
-  final syncController = StreamController<SyncStatusDto>.broadcast(sync: true);
-  final List<String> confirmedSessions = [];
-  final List<String?> rejectedSessions = [];
-  final List<String> revokedDevices = [];
-  final bootstrapController = StreamController<BootstrapDto>.broadcast(
-    sync: true,
-  );
-  final projectionController = StreamController<ProjectionDto>.broadcast(
-    sync: true,
-  );
-  final errorController = StreamController<BridgeErrorEventDto>.broadcast(
-    sync: true,
-  );
-  StreamController<DataChangedDto> dataController =
-      StreamController<DataChangedDto>.broadcast(sync: true);
-  int listTransactionCalls = 0;
-  int dataSubscriptions = 0;
-  bool failNextCategory = false;
+      StreamController<List<PairingCandidateDto>>.broadcast();
+  final devicesController =
+      StreamController<List<TrustedDeviceDto>>.broadcast();
+  final statusController = StreamController<SyncStatusDto>.broadcast();
+  void _fail() {
+    final error = nextError;
+    nextError = null;
+    if (error != null) throw error;
+  }
 
+  void changed([String? id]) => dataController.add(
+    DataChangedDto(
+      kinds: const [
+        DomainKindDto.collections,
+        DomainKindDto.schemas,
+        DomainKindDto.records,
+      ],
+      collectionIds: id == null ? const [] : [id],
+      checkpoint: 'fake',
+    ),
+  );
   @override
-  Future<BootstrapDto> initialize(String dataDir) async => bootstrap;
+  Future<BootstrapDto> initialize(String dataDir) async {
+    _fail();
+    return bootstrap;
+  }
+
   @override
   Future<BootstrapDto> createNewDataset() async {
     bootstrap = const BootstrapDto(
@@ -69,20 +75,259 @@ final class FakeFinanceBridge implements FinanceBridge {
   @override
   Stream<ProjectionDto> projectionEvents() => projectionController.stream;
   @override
-  Stream<DataChangedDto> dataChangedEvents() {
-    dataSubscriptions++;
-    if (dataController.isClosed) {
-      dataController = StreamController<DataChangedDto>.broadcast(sync: true);
-    }
-    return dataController.stream;
-  }
-
+  Stream<DataChangedDto> dataChangedEvents() => dataController.stream;
   @override
   Stream<BridgeErrorEventDto> errorEvents() => errorController.stream;
   @override
   Future<void> shutdown() async {}
   @override
   Future<void> setForeground(bool foreground) async {}
+  @override
+  Future<List<CollectionDto>> listCollections() async {
+    _fail();
+    return List.of(collections);
+  }
+
+  @override
+  Future<CollectionSchemaDto?> getCollectionSchema(String id) async =>
+      schemas[id];
+  @override
+  Future<String> createCollection(String name, String description) async {
+    _fail();
+    final id = 'collection-${_next++}';
+    collections.add(
+      CollectionDto(id: id, name: name, description: description),
+    );
+    schemas[id] = CollectionSchemaDto(
+      id: id,
+      description: description,
+      name: name,
+      fields: const [],
+    );
+    records[id] = [];
+    changed(id);
+    return id;
+  }
+
+  @override
+  Future<void> renameCollection(String id, String name) async {
+    final index = collections.indexWhere((item) => item.id == id);
+    final old = collections[index];
+    collections[index] = CollectionDto(
+      id: id,
+      name: name,
+      description: old.description,
+    );
+    final schema = schemas[id]!;
+    schemas[id] = CollectionSchemaDto(
+      id: id,
+      description: schema.description,
+      name: name,
+      fields: schema.fields,
+    );
+    changed(id);
+  }
+
+  @override
+  Future<void> deleteCollection(String id) async {
+    collections.removeWhere((item) => item.id == id);
+    schemas.remove(id);
+    records.remove(id);
+    changed(id);
+  }
+
+  @override
+  Future<String> addField(String collectionId, FieldDefinitionDto field) async {
+    final id = field.id.isEmpty ? 'field-${_next++}' : field.id;
+    final normalized = _copyField(field, id: id);
+    final schema = schemas[collectionId]!;
+    schemas[collectionId] = CollectionSchemaDto(
+      id: schema.id,
+      description: schema.description,
+      name: schema.name,
+      fields: [...schema.fields, normalized],
+    );
+    changed(collectionId);
+    return id;
+  }
+
+  @override
+  Future<void> updateField(
+    String collectionId,
+    FieldDefinitionDto field,
+  ) async {
+    final schema = schemas[collectionId]!;
+    schemas[collectionId] = CollectionSchemaDto(
+      id: schema.id,
+      description: schema.description,
+      name: schema.name,
+      fields: [
+        for (final item in schema.fields)
+          if (item.id == field.id) field else item,
+      ],
+    );
+    changed(collectionId);
+  }
+
+  @override
+  Future<void> removeField(String collectionId, String fieldId) async {
+    final schema = schemas[collectionId]!;
+    schemas[collectionId] = CollectionSchemaDto(
+      id: schema.id,
+      description: schema.description,
+      name: schema.name,
+      fields: schema.fields.where((item) => item.id != fieldId).toList(),
+    );
+    changed(collectionId);
+  }
+
+  @override
+  Future<void> reorderFields(String collectionId, List<String> fieldIds) async {
+    final schema = schemas[collectionId]!;
+    final byId = {for (final field in schema.fields) field.id: field};
+    schemas[collectionId] = CollectionSchemaDto(
+      id: schema.id,
+      description: schema.description,
+      name: schema.name,
+      fields: [
+        for (var i = 0; i < fieldIds.length; i++)
+          _copyField(byId[fieldIds[i]]!, order: i),
+      ],
+    );
+    changed(collectionId);
+  }
+
+  @override
+  Future<String> upsertEnumOption(
+    String collectionId,
+    String fieldId,
+    EnumOptionDto option,
+  ) async {
+    final id = option.id.isEmpty ? 'option-${_next++}' : option.id;
+    final schema = schemas[collectionId]!;
+    final fields = [
+      for (final field in schema.fields)
+        if (field.id == fieldId)
+          _copyField(
+            field,
+            enumOptions: [
+              ...field.enumOptions.where((item) => item.id != id),
+              EnumOptionDto(
+                id: id,
+                label: option.label,
+                order: option.order,
+                deleted: false,
+              ),
+            ],
+          )
+        else
+          field,
+    ];
+    schemas[collectionId] = CollectionSchemaDto(
+      id: schema.id,
+      description: schema.description,
+      name: schema.name,
+      fields: fields,
+    );
+    changed(collectionId);
+    return id;
+  }
+
+  @override
+  Future<void> removeEnumOption(
+    String collectionId,
+    String fieldId,
+    String optionId,
+  ) async {
+    final schema = schemas[collectionId]!;
+    final fields = [
+      for (final field in schema.fields)
+        if (field.id == fieldId)
+          _copyField(
+            field,
+            enumOptions: field.enumOptions
+                .where((item) => item.id != optionId)
+                .toList(),
+          )
+        else
+          field,
+    ];
+    schemas[collectionId] = CollectionSchemaDto(
+      id: schema.id,
+      description: schema.description,
+      name: schema.name,
+      fields: fields,
+    );
+    changed(collectionId);
+  }
+
+  @override
+  Future<String> createRecord(
+    String collectionId,
+    List<RecordValueDto> values,
+  ) async {
+    _fail();
+    final id = 'record-${_next++}';
+    records
+        .putIfAbsent(collectionId, () => [])
+        .add(
+          RecordDto(
+            id: id,
+            collectionId: collectionId,
+            values: values,
+            valid: true,
+            diagnostics: const [],
+          ),
+        );
+    changed(collectionId);
+    return id;
+  }
+
+  @override
+  Future<void> updateRecordField(
+    String recordId,
+    String collectionId,
+    String fieldId,
+    FieldValueDto value,
+  ) async {
+    final items = records[collectionId]!;
+    final index = items.indexWhere((item) => item.id == recordId);
+    final old = items[index];
+    items[index] = RecordDto(
+      id: old.id,
+      collectionId: old.collectionId,
+      values: [
+        ...old.values.where((item) => item.fieldId != fieldId),
+        RecordValueDto(fieldId: fieldId, value: value),
+      ],
+      valid: true,
+      diagnostics: const [],
+    );
+    changed(collectionId);
+  }
+
+  @override
+  Future<void> deleteRecord(String recordId, String collectionId) async {
+    records[collectionId]?.removeWhere((item) => item.id == recordId);
+    changed(collectionId);
+  }
+
+  @override
+  Future<List<RecordDto>> listRecords(String collectionId) async {
+    _fail();
+    return List.of(records[collectionId] ?? const []);
+  }
+
+  @override
+  Future<RecordDto?> getRecord(String id) async {
+    for (final list in records.values) {
+      for (final item in list) {
+        if (item.id == id) return item;
+      }
+    }
+    return null;
+  }
+
   @override
   Future<void> startPairing(int durationMs) async {
     pairing = PairingStateDto(
@@ -101,9 +346,7 @@ final class FakeFinanceBridge implements FinanceBridge {
       localConfirmed: false,
       remoteConfirmed: false,
     );
-    candidates = const [];
     pairingController.add(pairing);
-    candidateController.add(candidates);
   }
 
   @override
@@ -115,7 +358,7 @@ final class FakeFinanceBridge implements FinanceBridge {
 
   @override
   Future<void> rejectPairing(String? sessionId) async {
-    rejectedSessions.add(sessionId);
+    if (sessionId != null) rejectedSessions.add(sessionId);
   }
 
   @override
@@ -123,38 +366,38 @@ final class FakeFinanceBridge implements FinanceBridge {
   @override
   Future<void> renameTrustedDevice(String deviceId, String name) async {
     final index = devices.indexWhere((item) => item.deviceId == deviceId);
-    final current = devices[index];
+    final old = devices[index];
     devices[index] = TrustedDeviceDto(
-      deviceId: current.deviceId,
+      deviceId: old.deviceId,
       friendlyName: name,
-      pairedAtMs: current.pairedAtMs,
-      lastSeenMs: current.lastSeenMs,
-      lastSyncMs: current.lastSyncMs,
-      revoked: current.revoked,
-      connection: current.connection,
+      pairedAtMs: old.pairedAtMs,
+      lastSeenMs: old.lastSeenMs,
+      lastSyncMs: old.lastSyncMs,
+      revoked: old.revoked,
+      connection: old.connection,
     );
-    deviceController.add(List.of(devices));
+    devicesController.add(List.of(devices));
   }
 
   @override
   Future<void> revokeTrustedDevice(String deviceId, int nowMs) async {
     revokedDevices.add(deviceId);
     final index = devices.indexWhere((item) => item.deviceId == deviceId);
-    final current = devices[index];
+    final old = devices[index];
     devices[index] = TrustedDeviceDto(
-      deviceId: current.deviceId,
-      friendlyName: current.friendlyName,
-      pairedAtMs: current.pairedAtMs,
-      lastSeenMs: current.lastSeenMs,
-      lastSyncMs: current.lastSyncMs,
+      deviceId: old.deviceId,
+      friendlyName: old.friendlyName,
+      pairedAtMs: old.pairedAtMs,
+      lastSeenMs: old.lastSeenMs,
+      lastSyncMs: old.lastSyncMs,
       revoked: true,
       connection: PeerConnectionKindDto.offline,
     );
-    deviceController.add(List.of(devices));
+    devicesController.add(List.of(devices));
   }
 
   @override
-  Future<SyncStatusDto> syncStatus() async => syncStatusValue;
+  Future<SyncStatusDto> syncStatus() async => status;
   @override
   Stream<PairingStateDto> pairingStateEvents() => pairingController.stream;
   @override
@@ -162,122 +405,25 @@ final class FakeFinanceBridge implements FinanceBridge {
       candidateController.stream;
   @override
   Stream<List<TrustedDeviceDto>> connectionStateEvents() =>
-      deviceController.stream;
+      devicesController.stream;
   @override
-  Stream<SyncStatusDto> syncStatusEvents() => syncController.stream;
-  @override
-  Future<List<CategoryDto>> listCategories() async => List.of(categories);
-  @override
-  Future<String> createCategory(String name) async {
-    if (failNextCategory) {
-      failNextCategory = false;
-      throw const BridgeError(
-        kind: BridgeErrorKind.validation,
-        field: 'name',
-        message: 'Name is required.',
-      );
-    }
-    final id = 'category-${categories.length + 1}';
-    categories.add(CategoryDto(id: id, name: name));
-    return id;
-  }
-
-  @override
-  Future<void> updateCategory(String id, String name) async {
-    final index = categories.indexWhere((item) => item.id == id);
-    categories[index] = CategoryDto(id: id, name: name);
-  }
-
-  @override
-  Future<void> deleteCategory(String id) async {
-    categories.removeWhere((item) => item.id == id);
-  }
-
-  @override
-  Future<List<TransactionDto>> listTransactions(
-    TransactionFilterDto filter,
-  ) async {
-    listTransactionCalls++;
-    requestedFilters.add(filter);
-    return List.of(transactions);
-  }
-
-  @override
-  Future<String> createTransaction({
-    required int occurredAtMs,
-    required String categoryId,
-    required int amountMinor,
-    required String description,
-  }) async {
-    final id = 'transaction-${transactions.length + 1}';
-    final category = categories.firstWhere((item) => item.id == categoryId);
-    transactions.add(
-      TransactionDto(
-        id: id,
-        occurredAtMs: occurredAtMs,
-        categoryId: categoryId,
-        categoryName: category.name,
-        categoryAvailable: true,
-        amountMinor: amountMinor,
-        description: description,
-      ),
-    );
-    return id;
-  }
-
-  @override
-  Future<void> updateTransaction({
-    required String id,
-    int? occurredAtMs,
-    String? categoryId,
-    int? amountMinor,
-    String? description,
-  }) async {
-    final index = transactions.indexWhere((item) => item.id == id);
-    final prior = transactions[index];
-    final selected = categoryId == null
-        ? null
-        : categories.firstWhere((item) => item.id == categoryId);
-    transactions[index] = TransactionDto(
-      id: id,
-      occurredAtMs: occurredAtMs ?? prior.occurredAtMs,
-      categoryId: categoryId ?? prior.categoryId,
-      categoryName: selected?.name ?? prior.categoryName,
-      categoryAvailable: true,
-      amountMinor: amountMinor ?? prior.amountMinor,
-      description: description ?? prior.description,
-    );
-  }
-
-  @override
-  Future<void> deleteTransaction(String id) async {
-    deletedTransactions.add(id);
-    transactions.removeWhere((item) => item.id == id);
-  }
-
-  @override
-  Future<AggregateDto> aggregates() async {
-    final amounts = transactions.map((item) => item.amountMinor);
-    return AggregateDto(
-      balanceMinor: amounts.fold(0, (sum, value) => sum + value),
-      incomeMinor: amounts
-          .where((value) => value > 0)
-          .fold(0, (sum, value) => sum + value),
-      expenseMinor: amounts
-          .where((value) => value < 0)
-          .fold(0, (sum, value) => sum + value),
-      transactionCount: transactions.length,
-    );
-  }
-
-  void emitDataChanged() {
-    dataController.add(
-      const DataChangedDto(
-        kinds: [DomainKindDto.categories, DomainKindDto.transactions],
-        checkpoint: 'next',
-      ),
-    );
-  }
-
-  Future<void> closeDataStream() => dataController.close();
+  Stream<SyncStatusDto> syncStatusEvents() => statusController.stream;
 }
+
+FieldDefinitionDto _copyField(
+  FieldDefinitionDto field, {
+  String? id,
+  int? order,
+  List<EnumOptionDto>? enumOptions,
+}) => FieldDefinitionDto(
+  id: id ?? field.id,
+  name: field.name,
+  fieldType: field.fieldType,
+  required_: field.required_,
+  defaultValue: field.defaultValue,
+  validation: field.validation,
+  display: field.display,
+  order: order ?? field.order,
+  deleted: field.deleted,
+  enumOptions: enumOptions ?? field.enumOptions,
+);

@@ -1,6 +1,5 @@
 use app_core::{
-    AggregateView, AppError, ApplicationState, CategoryView, DataChanged, DomainError, DomainKind,
-    ErrorEvent, ProjectionState, TransactionView,
+    AppError, ApplicationState, DataChanged, DomainError, DomainKind, ErrorEvent, ProjectionState,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -37,47 +36,120 @@ pub struct ProjectionDto {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct CategoryDto {
+pub struct CollectionDto {
     pub id: String,
     pub name: String,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct TransactionDto {
-    pub id: String,
-    pub occurred_at_ms: i64,
-    pub category_id: String,
-    pub category_name: Option<String>,
-    pub category_available: bool,
-    pub amount_minor: i64,
     pub description: String,
 }
 
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub struct TransactionFilterDto {
-    pub text: Option<String>,
-    pub category_id: Option<String>,
-    pub from_ms: Option<i64>,
-    pub through_ms: Option<i64>,
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CollectionSchemaDto {
+    pub id: String,
+    pub description: String,
+    pub name: String,
+    pub fields: Vec<FieldDefinitionDto>,
 }
 
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct AggregateDto {
-    pub balance_minor: i64,
-    pub income_minor: i64,
-    pub expense_minor: i64,
-    pub transaction_count: i64,
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum FieldTypeKindDto {
+    Text,
+    Integer,
+    FixedDecimal,
+    Boolean,
+    Date,
+    DateTime,
+    Duration,
+    Enum,
+}
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FieldTypeDto {
+    pub kind: FieldTypeKindDto,
+    pub scale: Option<u8>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum FieldValueKindDto {
+    Null,
+    Text,
+    Integer,
+    FixedDecimal,
+    Boolean,
+    Date,
+    DateTime,
+    Duration,
+    Enum,
+}
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FieldValueDto {
+    pub kind: FieldValueKindDto,
+    pub integer_value: Option<i64>,
+    pub text_value: Option<String>,
+    pub boolean_value: Option<bool>,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct ValidationMetadataDto {
+    pub min_integer: Option<i64>,
+    pub max_integer: Option<i64>,
+    pub min_length: Option<u32>,
+    pub max_length: Option<u32>,
+}
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct DisplayMetadataDto {
+    pub multiline: bool,
+}
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EnumOptionDto {
+    pub id: String,
+    pub label: String,
+    pub order: i64,
+    pub deleted: bool,
+}
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FieldDefinitionDto {
+    pub id: String,
+    pub name: String,
+    pub field_type: FieldTypeDto,
+    pub required: bool,
+    pub default_value: Option<FieldValueDto>,
+    pub validation: ValidationMetadataDto,
+    pub display: DisplayMetadataDto,
+    pub order: i64,
+    pub deleted: bool,
+    pub enum_options: Vec<EnumOptionDto>,
+}
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RecordValueDto {
+    pub field_id: String,
+    pub value: FieldValueDto,
+}
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DiagnosticDto {
+    pub kind: String,
+    pub entity_id: String,
+    pub field_id: Option<String>,
+    pub message: String,
+}
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RecordDto {
+    pub id: String,
+    pub collection_id: String,
+    pub values: Vec<RecordValueDto>,
+    pub valid: bool,
+    pub diagnostics: Vec<DiagnosticDto>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DomainKindDto {
-    Categories,
-    Transactions,
+    Collections,
+    Schemas,
+    Records,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DataChangedDto {
     pub kinds: Vec<DomainKindDto>,
+    pub collection_ids: Vec<String>,
     pub checkpoint: String,
 }
 
@@ -341,36 +413,232 @@ impl ProjectionDto {
     }
 }
 
-impl From<CategoryView> for CategoryDto {
-    fn from(value: CategoryView) -> Self {
+impl From<app_core::CollectionView> for CollectionDto {
+    fn from(value: app_core::CollectionView) -> Self {
         Self {
             id: value.id.to_string(),
             name: value.name,
-        }
-    }
-}
-
-impl From<TransactionView> for TransactionDto {
-    fn from(value: TransactionView) -> Self {
-        Self {
-            id: value.id.to_string(),
-            occurred_at_ms: value.occurred_at_ms,
-            category_id: value.category_id.to_string(),
-            category_name: value.category_name,
-            category_available: value.category_available,
-            amount_minor: value.amount_minor,
             description: value.description,
         }
     }
 }
-
-impl From<AggregateView> for AggregateDto {
-    fn from(value: AggregateView) -> Self {
+impl From<app_core::CollectionSchema> for CollectionSchemaDto {
+    fn from(value: app_core::CollectionSchema) -> Self {
         Self {
-            balance_minor: value.balance_minor,
-            income_minor: value.income_minor,
-            expense_minor: value.expense_minor,
-            transaction_count: value.transaction_count,
+            id: value.id.to_string(),
+            name: value.name,
+            description: value.description,
+            fields: value.fields.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+impl From<app_core::FieldType> for FieldTypeDto {
+    fn from(value: app_core::FieldType) -> Self {
+        let (kind, scale) = match value {
+            app_core::FieldType::Text => (FieldTypeKindDto::Text, None),
+            app_core::FieldType::Integer => (FieldTypeKindDto::Integer, None),
+            app_core::FieldType::FixedDecimal { scale } => {
+                (FieldTypeKindDto::FixedDecimal, Some(scale))
+            }
+            app_core::FieldType::Boolean => (FieldTypeKindDto::Boolean, None),
+            app_core::FieldType::Date => (FieldTypeKindDto::Date, None),
+            app_core::FieldType::DateTime => (FieldTypeKindDto::DateTime, None),
+            app_core::FieldType::Duration => (FieldTypeKindDto::Duration, None),
+            app_core::FieldType::Enum => (FieldTypeKindDto::Enum, None),
+        };
+        Self { kind, scale }
+    }
+}
+impl From<FieldTypeDto> for app_core::FieldType {
+    fn from(value: FieldTypeDto) -> Self {
+        match value.kind {
+            FieldTypeKindDto::Text => Self::Text,
+            FieldTypeKindDto::Integer => Self::Integer,
+            FieldTypeKindDto::FixedDecimal => Self::FixedDecimal {
+                scale: value.scale.unwrap_or(u8::MAX),
+            },
+            FieldTypeKindDto::Boolean => Self::Boolean,
+            FieldTypeKindDto::Date => Self::Date,
+            FieldTypeKindDto::DateTime => Self::DateTime,
+            FieldTypeKindDto::Duration => Self::Duration,
+            FieldTypeKindDto::Enum => Self::Enum,
+        }
+    }
+}
+impl From<app_core::FieldValue> for FieldValueDto {
+    fn from(value: app_core::FieldValue) -> Self {
+        let (kind, integer_value, text_value, boolean_value) = match value {
+            app_core::FieldValue::Null => (FieldValueKindDto::Null, None, None, None),
+            app_core::FieldValue::Text(value) => (FieldValueKindDto::Text, None, Some(value), None),
+            app_core::FieldValue::Integer(value) => {
+                (FieldValueKindDto::Integer, Some(value), None, None)
+            }
+            app_core::FieldValue::FixedDecimal(value) => {
+                (FieldValueKindDto::FixedDecimal, Some(value), None, None)
+            }
+            app_core::FieldValue::Boolean(value) => {
+                (FieldValueKindDto::Boolean, None, None, Some(value))
+            }
+            app_core::FieldValue::Date(value) => (FieldValueKindDto::Date, Some(value), None, None),
+            app_core::FieldValue::DateTime(value) => {
+                (FieldValueKindDto::DateTime, Some(value), None, None)
+            }
+            app_core::FieldValue::Duration(value) => {
+                (FieldValueKindDto::Duration, Some(value), None, None)
+            }
+            app_core::FieldValue::Enum(value) => {
+                (FieldValueKindDto::Enum, None, Some(value.to_string()), None)
+            }
+        };
+        Self {
+            kind,
+            integer_value,
+            text_value,
+            boolean_value,
+        }
+    }
+}
+impl FieldValueDto {
+    pub(crate) fn into_core(self) -> Result<app_core::FieldValue, BridgeError> {
+        let missing = || BridgeError::validation("value", "typed value payload is missing");
+        Ok(match self.kind {
+            FieldValueKindDto::Null => app_core::FieldValue::Null,
+            FieldValueKindDto::Text => {
+                app_core::FieldValue::Text(self.text_value.ok_or_else(missing)?)
+            }
+            FieldValueKindDto::Integer => {
+                app_core::FieldValue::Integer(self.integer_value.ok_or_else(missing)?)
+            }
+            FieldValueKindDto::FixedDecimal => {
+                app_core::FieldValue::FixedDecimal(self.integer_value.ok_or_else(missing)?)
+            }
+            FieldValueKindDto::Boolean => {
+                app_core::FieldValue::Boolean(self.boolean_value.ok_or_else(missing)?)
+            }
+            FieldValueKindDto::Date => {
+                app_core::FieldValue::Date(self.integer_value.ok_or_else(missing)?)
+            }
+            FieldValueKindDto::DateTime => {
+                app_core::FieldValue::DateTime(self.integer_value.ok_or_else(missing)?)
+            }
+            FieldValueKindDto::Duration => {
+                app_core::FieldValue::Duration(self.integer_value.ok_or_else(missing)?)
+            }
+            FieldValueKindDto::Enum => {
+                app_core::FieldValue::Enum(self.text_value.ok_or_else(missing)?.parse().map_err(
+                    |error: app_core::DomainError| BridgeError::from(AppError::from(error)),
+                )?)
+            }
+        })
+    }
+}
+impl From<app_core::FieldDefinition> for FieldDefinitionDto {
+    fn from(value: app_core::FieldDefinition) -> Self {
+        Self {
+            id: value.id.to_string(),
+            name: value.name,
+            field_type: value.field_type.into(),
+            required: value.required,
+            default_value: value.default.map(Into::into),
+            validation: ValidationMetadataDto {
+                min_integer: value.validation.min_integer,
+                max_integer: value.validation.max_integer,
+                min_length: value.validation.min_length,
+                max_length: value.validation.max_length,
+            },
+            display: DisplayMetadataDto {
+                multiline: value.display.multiline,
+            },
+            order: value.order,
+            deleted: value.deleted,
+            enum_options: value.enum_options.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+impl TryFrom<FieldDefinitionDto> for app_core::FieldDefinition {
+    type Error = BridgeError;
+    fn try_from(value: FieldDefinitionDto) -> Result<Self, Self::Error> {
+        Ok(Self {
+            id: value
+                .id
+                .parse()
+                .map_err(|error: app_core::DomainError| BridgeError::from(AppError::from(error)))?,
+            name: value.name,
+            field_type: value.field_type.into(),
+            required: value.required,
+            default: value
+                .default_value
+                .map(FieldValueDto::into_core)
+                .transpose()?,
+            validation: app_core::ValidationMetadata {
+                min_integer: value.validation.min_integer,
+                max_integer: value.validation.max_integer,
+                min_length: value.validation.min_length,
+                max_length: value.validation.max_length,
+            },
+            display: app_core::DisplayMetadata {
+                multiline: value.display.multiline,
+            },
+            order: value.order,
+            deleted: value.deleted,
+            enum_options: value
+                .enum_options
+                .into_iter()
+                .map(TryInto::try_into)
+                .collect::<Result<_, _>>()?,
+        })
+    }
+}
+impl From<app_core::EnumOption> for EnumOptionDto {
+    fn from(value: app_core::EnumOption) -> Self {
+        Self {
+            id: value.id.to_string(),
+            label: value.label,
+            order: value.order,
+            deleted: value.deleted,
+        }
+    }
+}
+impl TryFrom<EnumOptionDto> for app_core::EnumOption {
+    type Error = BridgeError;
+    fn try_from(value: EnumOptionDto) -> Result<Self, Self::Error> {
+        Ok(Self {
+            id: value
+                .id
+                .parse()
+                .map_err(|error: app_core::DomainError| BridgeError::from(AppError::from(error)))?,
+            label: value.label,
+            order: value.order,
+            deleted: value.deleted,
+        })
+    }
+}
+impl From<app_core::GenericDiagnostic> for DiagnosticDto {
+    fn from(value: app_core::GenericDiagnostic) -> Self {
+        Self {
+            kind: value.kind,
+            entity_id: value.entity_id,
+            field_id: value.field_id.map(|id| id.to_string()),
+            message: value.message,
+        }
+    }
+}
+impl From<app_core::RecordView> for RecordDto {
+    fn from(value: app_core::RecordView) -> Self {
+        Self {
+            id: value.record.id.to_string(),
+            collection_id: value.record.collection_id.to_string(),
+            values: value
+                .record
+                .values
+                .into_iter()
+                .map(|(field_id, value)| RecordValueDto {
+                    field_id: field_id.to_string(),
+                    value: value.into(),
+                })
+                .collect(),
+            valid: value.valid,
+            diagnostics: value.diagnostics.into_iter().map(Into::into).collect(),
         }
     }
 }
@@ -378,8 +646,9 @@ impl From<AggregateView> for AggregateDto {
 impl From<DomainKind> for DomainKindDto {
     fn from(value: DomainKind) -> Self {
         match value {
-            DomainKind::Categories => Self::Categories,
-            DomainKind::Transactions => Self::Transactions,
+            DomainKind::Collections => Self::Collections,
+            DomainKind::Schemas => Self::Schemas,
+            DomainKind::Records => Self::Records,
         }
     }
 }
@@ -388,6 +657,11 @@ impl From<DataChanged> for DataChangedDto {
     fn from(value: DataChanged) -> Self {
         Self {
             kinds: value.kinds.into_iter().map(Into::into).collect(),
+            collection_ids: value
+                .collection_ids
+                .into_iter()
+                .map(|id| id.to_string())
+                .collect(),
             checkpoint: value.checkpoint.heads,
         }
     }
@@ -411,17 +685,13 @@ impl From<AppError> for BridgeError {
                 field: Some(field.into()),
                 message,
             },
-            AppError::Domain(DomainError::CategoryUnavailable(_)) => Self::safe(
-                BridgeErrorKind::Validation,
-                "The selected category is unavailable.",
-            ),
             AppError::Domain(DomainError::NotFound { kind, .. }) => Self::safe(
                 BridgeErrorKind::Validation,
                 format!("The selected {kind} no longer exists."),
             ),
             AppError::Domain(_) => Self::safe(
                 BridgeErrorKind::Internal,
-                "The local finance data is not supported by this application version.",
+                "The local collection data is not supported by this application version.",
             ),
             AppError::Bootstrap(error) => Self::safe(BridgeErrorKind::Bootstrap, error.to_string()),
             AppError::Projection(_) => Self::safe(
@@ -436,15 +706,23 @@ impl From<AppError> for BridgeError {
                 BridgeErrorKind::Initialization,
                 "Secure device networking could not be initialized.",
             ),
+            AppError::Clock(error) => Self::safe(BridgeErrorKind::Validation, error.to_string()),
             AppError::OwnerStopped => Self::safe(
                 BridgeErrorKind::Lifecycle,
-                "The local finance service is not running.",
+                "The local collection service is not running.",
             ),
         }
     }
 }
 
 impl BridgeError {
+    pub(crate) fn validation(field: impl Into<String>, message: impl Into<String>) -> Self {
+        Self {
+            kind: BridgeErrorKind::Validation,
+            field: Some(field.into()),
+            message: message.into(),
+        }
+    }
     pub(crate) fn initialization(message: impl Into<String>) -> Self {
         Self::safe(BridgeErrorKind::Initialization, message)
     }

@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'fake_bridge.dart';
 
-Widget testApp(FakeFinanceBridge bridge) => FinanceApp(
+Widget testApp(FakeCollectionBridge bridge) => CollectionApp(
   bridge: bridge,
   initializeRust: () async {},
   dataDirProvider: () async => '/test',
@@ -34,13 +34,16 @@ PairingStateDto pairingState(
   message: message,
 );
 
-Future<void> openDevices(WidgetTester tester, FakeFinanceBridge bridge) async {
+Future<void> openDevices(
+  WidgetTester tester,
+  FakeCollectionBridge bridge,
+) async {
   bridge.bootstrap = const BootstrapDto(
     kind: BootstrapKindDto.ready,
     rootId: 'root',
   );
   await tester.pumpWidget(testApp(bridge));
-  await pumpUntilFound(tester, find.text('Transactions'));
+  await pumpUntilFound(tester, find.text('Collections'));
   await tester.tap(find.text('Devices').last);
   await tester.pump();
 }
@@ -49,7 +52,7 @@ void main() {
   testWidgets('pairing renders candidates, expiry, SAS actions, and errors', (
     tester,
   ) async {
-    final bridge = FakeFinanceBridge();
+    final bridge = FakeCollectionBridge();
     await openDevices(tester, bridge);
     await tester.tap(find.byKey(const Key('start-pairing')));
     await tester.pump();
@@ -93,8 +96,8 @@ void main() {
   testWidgets('device rows refresh rename, revoke, connection and sync state', (
     tester,
   ) async {
-    final bridge = FakeFinanceBridge()
-      ..syncStatusValue = SyncStatusDto.synced
+    final bridge = FakeCollectionBridge()
+      ..status = SyncStatusDto.synced
       ..devices.add(
         const TrustedDeviceDto(
           deviceId:

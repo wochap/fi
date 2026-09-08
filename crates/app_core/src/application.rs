@@ -13,6 +13,7 @@ use automerge_repo::{
     BootstrapStatus, DocHandle, DocumentId, DocumentStatus, PeerId, PeerSyncProgress,
     PeerSyncState, Repo, RepoConfig, network::NetworkTransport,
 };
+use rand_core::{OsRng, RngCore};
 use tokio::sync::{broadcast, mpsc, oneshot, watch};
 use tracing::{error, info, instrument};
 
@@ -20,29 +21,48 @@ use crate::{
     LocalIdentityRecord,
     adapters::{FileDocumentStore, LocalTransport, SqliteControlStore},
     discovery::DiscoveryGroupSecret,
-    domain::{
-        CategoryId, CategoryView, CreateCategory, CreateTransaction, FinanceCommand,
-        TransactionFilter, TransactionId, TransactionView, UpdateCategory, UpdateTransaction,
-        apply_command, decode_finance, initialize_finance,
-    },
-    error::{AppError, BootstrapError, DomainError, Result},
+    error::{AppError, BootstrapError, Result},
     events::{ApplicationState, DataChanged, DomainKind, ErrorEvent, ProjectionState},
+    generic::{
+        CollectionView, GenericCommand, RecordView, apply_generic_command, decode_generic,
+        initialize_generic,
+    },
+    hlc::{HlcNodeId, HybridLogicalClock, SystemWallTime, WallTime},
     identity::{DeviceId, DeviceIdentity, SecureKeyStore},
     pairing::{
         PairingCandidate, PairingEvent, PairingSessionId, PairingState, ProvisioningData,
         RootCompatibility, RootState,
     },
     pairing_manager::PairingManager,
-    projection::{AggregateView, ReadModel, project, reconcile},
+    projection::{ReadModel, project, reconcile},
     quinn_transport::{QuinnTransport, QuinnTransportConfig},
+    records::{GenericRecord, RecordId},
     routing::{ConnectionManager, EndpointRegistry, NetworkEndpoint, PeerConnectionState},
+    schema::{
+        CollectionSchema, CollectionSchemaId, EnumOption, EnumOptionId, FieldDefinition, FieldId,
+    },
+    values::FieldValue,
 };
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct AppCoreConfig {
     pub command_capacity: usize,
     pub transient_event_capacity: usize,
     pub repo: RepoConfig,
+    pub hlc_node_id: Option<HlcNodeId>,
+    pub wall_time: Arc<dyn WallTime>,
+}
+
+impl std::fmt::Debug for AppCoreConfig {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("AppCoreConfig")
+            .field("command_capacity", &self.command_capacity)
+            .field("transient_event_capacity", &self.transient_event_capacity)
+            .field("repo", &self.repo)
+            .field("hlc_node_id", &self.hlc_node_id)
+            .finish_non_exhaustive()
+    }
 }
 
 impl Default for AppCoreConfig {
@@ -51,6 +71,8 @@ impl Default for AppCoreConfig {
             command_capacity: 64,
             transient_event_capacity: 128,
             repo: RepoConfig::default(),
+            hlc_node_id: None,
+            wall_time: Arc::new(SystemWallTime),
         }
     }
 }
@@ -58,10 +80,10 @@ impl Default for AppCoreConfig {
 enum OwnerCommand {
     CreateNew(oneshot::Sender<Result<DocumentId>>),
     Join(DocumentId, oneshot::Sender<Result<()>>),
-    Finance(
-        FinanceCommand,
-        Option<String>,
+    Generic(
+        Box<GenericCommand>,
         Vec<DomainKind>,
+        Vec<CollectionSchemaId>,
         oneshot::Sender<Result<()>>,
     ),
     Shutdown(oneshot::Sender<Result<()>>),
@@ -266,6 +288,14 @@ impl AppCore {
                 "application queue capacities must be greater than zero".into(),
             ));
         }
+        let node_id = match config.hlc_node_id {
+            Some(node_id) => node_id,
+            None => {
+                load_or_create_hlc_node_id(&data_dir, network_components.identity.as_deref())
+                    .await?
+            }
+        };
+        let mut clock = HybridLogicalClock::new(node_id, config.wall_time.clone());
         let document_store =
             Arc::new(FileDocumentStore::open(data_dir.join("automerge/documents")).await?);
         let read_model = ReadModel::open_disposable(data_dir.join("read-model.sqlite"))?;
@@ -309,6 +339,16 @@ impl AppCore {
         let mut root = None;
         if let ApplicationState::Ready { root: root_id } = initial {
             let handle = repo.open_document(root_id).await?;
+            if let Some(stamp) = handle
+                .read(|doc| {
+                    decode_generic(doc)
+                        .ok()
+                        .and_then(|snapshot| snapshot.max_stamp)
+                })
+                .await?
+            {
+                clock.observe(stamp);
+            }
             projection_tx.send_replace(ProjectionState::Rebuilding);
             match reconcile(&repo, &handle, &read_model).await {
                 Ok(checkpoint) => {
@@ -333,6 +373,7 @@ impl AppCore {
                 projection: projection_tx,
                 data_events: data_events.clone(),
                 error_events: error_events.clone(),
+                clock,
             },
             command_rx,
         ));
@@ -819,83 +860,233 @@ impl AppCore {
         request(&self.commands, |reply| OwnerCommand::Join(root, reply)).await
     }
 
-    pub async fn create_category(&self, command: CreateCategory) -> Result<CategoryId> {
-        let id = CategoryId::new();
-        self.finance(
-            FinanceCommand::CreateCategory(command),
-            Some(id.to_string()),
-            vec![DomainKind::Categories],
-        )
-        .await?;
-        Ok(id)
-    }
-    pub async fn update_category(&self, command: UpdateCategory) -> Result<()> {
-        self.finance(
-            FinanceCommand::UpdateCategory(command),
-            None,
-            vec![DomainKind::Categories],
-        )
-        .await
-    }
-    pub async fn delete_category(&self, id: CategoryId) -> Result<()> {
-        self.finance(
-            FinanceCommand::DeleteCategory(id),
-            None,
-            vec![DomainKind::Categories, DomainKind::Transactions],
-        )
-        .await
-    }
-    pub async fn create_transaction(&self, command: CreateTransaction) -> Result<TransactionId> {
-        let id = TransactionId::new();
-        self.finance(
-            FinanceCommand::CreateTransaction(command),
-            Some(id.to_string()),
-            vec![DomainKind::Transactions],
-        )
-        .await?;
-        Ok(id)
-    }
-    pub async fn update_transaction(&self, command: UpdateTransaction) -> Result<()> {
-        self.finance(
-            FinanceCommand::UpdateTransaction(command),
-            None,
-            vec![DomainKind::Transactions],
-        )
-        .await
-    }
-    pub async fn delete_transaction(&self, id: TransactionId) -> Result<()> {
-        self.finance(
-            FinanceCommand::DeleteTransaction(id),
-            None,
-            vec![DomainKind::Transactions],
-        )
-        .await
-    }
-    async fn finance(
+    pub async fn create_collection(
         &self,
-        command: FinanceCommand,
-        generated: Option<String>,
+        name: String,
+        description: String,
+    ) -> Result<CollectionSchemaId> {
+        let id = CollectionSchemaId::new();
+        self.generic(
+            GenericCommand::CreateCollection(CollectionSchema {
+                id,
+                name,
+                description,
+                fields: vec![],
+                deleted: false,
+            }),
+            vec![DomainKind::Collections, DomainKind::Schemas],
+            vec![id],
+        )
+        .await?;
+        Ok(id)
+    }
+    pub async fn rename_collection(&self, id: CollectionSchemaId, name: String) -> Result<()> {
+        self.generic(
+            GenericCommand::RenameCollection { id, name },
+            vec![DomainKind::Collections, DomainKind::Schemas],
+            vec![id],
+        )
+        .await
+    }
+    pub async fn delete_collection(&self, id: CollectionSchemaId) -> Result<()> {
+        self.generic(
+            GenericCommand::DeleteCollection(id),
+            vec![
+                DomainKind::Collections,
+                DomainKind::Schemas,
+                DomainKind::Records,
+            ],
+            vec![id],
+        )
+        .await
+    }
+    pub async fn add_field(
+        &self,
+        collection_id: CollectionSchemaId,
+        field: FieldDefinition,
+    ) -> Result<()> {
+        self.generic(
+            GenericCommand::AddField {
+                collection_id,
+                field,
+            },
+            vec![DomainKind::Schemas, DomainKind::Records],
+            vec![collection_id],
+        )
+        .await
+    }
+    pub async fn update_field(
+        &self,
+        collection_id: CollectionSchemaId,
+        field: FieldDefinition,
+    ) -> Result<()> {
+        self.generic(
+            GenericCommand::UpdateField {
+                collection_id,
+                field,
+            },
+            vec![DomainKind::Schemas, DomainKind::Records],
+            vec![collection_id],
+        )
+        .await
+    }
+    pub async fn remove_field(
+        &self,
+        collection_id: CollectionSchemaId,
+        field_id: FieldId,
+    ) -> Result<()> {
+        self.generic(
+            GenericCommand::RemoveField {
+                collection_id,
+                field_id,
+            },
+            vec![DomainKind::Schemas, DomainKind::Records],
+            vec![collection_id],
+        )
+        .await
+    }
+    pub async fn reorder_fields(
+        &self,
+        collection_id: CollectionSchemaId,
+        field_ids: Vec<FieldId>,
+    ) -> Result<()> {
+        self.generic(
+            GenericCommand::ReorderFields {
+                collection_id,
+                field_ids,
+            },
+            vec![DomainKind::Schemas],
+            vec![collection_id],
+        )
+        .await
+    }
+    pub async fn upsert_enum_option(
+        &self,
+        collection_id: CollectionSchemaId,
+        field_id: FieldId,
+        option: EnumOption,
+    ) -> Result<()> {
+        self.generic(
+            GenericCommand::UpsertEnumOption {
+                collection_id,
+                field_id,
+                option,
+            },
+            vec![DomainKind::Schemas, DomainKind::Records],
+            vec![collection_id],
+        )
+        .await
+    }
+    pub async fn remove_enum_option(
+        &self,
+        collection_id: CollectionSchemaId,
+        field_id: FieldId,
+        option_id: EnumOptionId,
+    ) -> Result<()> {
+        self.generic(
+            GenericCommand::RemoveEnumOption {
+                collection_id,
+                field_id,
+                option_id,
+            },
+            vec![DomainKind::Schemas, DomainKind::Records],
+            vec![collection_id],
+        )
+        .await
+    }
+    pub async fn create_record(
+        &self,
+        collection_id: CollectionSchemaId,
+        values: std::collections::BTreeMap<FieldId, FieldValue>,
+    ) -> Result<RecordId> {
+        let id = RecordId::new();
+        self.generic(
+            GenericCommand::CreateRecord(GenericRecord {
+                id,
+                collection_id,
+                values,
+                stamps: std::collections::BTreeMap::new(),
+                deleted: false,
+            }),
+            vec![DomainKind::Records],
+            vec![collection_id],
+        )
+        .await?;
+        Ok(id)
+    }
+    pub async fn update_record_field(
+        &self,
+        record_id: RecordId,
+        collection_id: CollectionSchemaId,
+        field_id: FieldId,
+        value: FieldValue,
+    ) -> Result<()> {
+        self.generic(
+            GenericCommand::UpdateRecordField {
+                record_id,
+                field_id,
+                value,
+            },
+            vec![DomainKind::Records],
+            vec![collection_id],
+        )
+        .await
+    }
+    pub async fn delete_record(
+        &self,
+        record_id: RecordId,
+        collection_id: CollectionSchemaId,
+    ) -> Result<()> {
+        self.generic(
+            GenericCommand::DeleteRecord(record_id),
+            vec![DomainKind::Records],
+            vec![collection_id],
+        )
+        .await
+    }
+
+    pub async fn submit_generic(
+        &self,
+        command: GenericCommand,
         kinds: Vec<DomainKind>,
+        collection_ids: Vec<CollectionSchemaId>,
+    ) -> Result<()> {
+        self.generic(command, kinds, collection_ids).await
+    }
+    async fn generic(
+        &self,
+        command: GenericCommand,
+        kinds: Vec<DomainKind>,
+        collection_ids: Vec<CollectionSchemaId>,
     ) -> Result<()> {
         let (reply, receive) = oneshot::channel();
         self.commands
-            .send(OwnerCommand::Finance(command, generated, kinds, reply))
+            .send(OwnerCommand::Generic(
+                Box::new(command),
+                kinds,
+                collection_ids,
+                reply,
+            ))
             .await
             .map_err(|_| AppError::OwnerStopped)?;
         receive.await.map_err(|_| AppError::OwnerStopped)?
     }
 
-    pub fn categories(&self) -> Result<Vec<CategoryView>> {
+    pub fn collections(&self) -> Result<Vec<CollectionView>> {
         ensure_query_ready(self.lifecycle_state())?;
-        self.read_model.categories()
+        self.read_model.collections()
     }
-    pub fn transactions(&self, filter: &TransactionFilter) -> Result<Vec<TransactionView>> {
+    pub fn collection_schema(&self, id: CollectionSchemaId) -> Result<Option<CollectionSchema>> {
         ensure_query_ready(self.lifecycle_state())?;
-        self.read_model.transactions(filter)
+        self.read_model.schema(id)
     }
-    pub fn aggregates(&self) -> Result<AggregateView> {
+    pub fn records(&self, collection_id: CollectionSchemaId) -> Result<Vec<RecordView>> {
         ensure_query_ready(self.lifecycle_state())?;
-        self.read_model.aggregates()
+        self.read_model.records(collection_id)
+    }
+    pub fn record(&self, id: RecordId) -> Result<Option<RecordView>> {
+        ensure_query_ready(self.lifecycle_state())?;
+        self.read_model.record(id)
     }
     pub async fn shutdown(&self) -> Result<()> {
         request(&self.commands, OwnerCommand::Shutdown).await
@@ -1032,6 +1223,7 @@ struct Owner {
     projection: watch::Sender<ProjectionState>,
     data_events: broadcast::Sender<DataChanged>,
     error_events: broadcast::Sender<ErrorEvent>,
+    clock: HybridLogicalClock,
 }
 
 #[instrument(skip_all, fields(component = "app_core_owner"))]
@@ -1050,13 +1242,13 @@ async fn owner_loop(mut owner: Owner, mut commands: mpsc::Receiver<OwnerCommand>
                 match command {
                     OwnerCommand::CreateNew(reply) => { let _ = reply.send(owner.create_new().await); document_events = owner.root.as_ref().map(DocHandle::subscribe); }
                     OwnerCommand::Join(root, reply) => { let _ = reply.send(owner.join(root).await); document_events = owner.root.as_ref().map(DocHandle::subscribe); }
-                    OwnerCommand::Finance(command, generated, kinds, reply) => { let _ = reply.send(owner.finance(command, generated, kinds).await); }
+                    OwnerCommand::Generic(command, kinds, collection_ids, reply) => { let _ = reply.send(owner.generic(*command, kinds, collection_ids).await); }
                     OwnerCommand::Shutdown(reply) => { let result = owner.shutdown().await; let _ = reply.send(result); break; }
                 }
             }
             event = recv_document(&mut document_events) => {
                 match event {
-                    Ok(_) | Err(broadcast::error::RecvError::Lagged(_)) => { owner.refresh_projection(vec![DomainKind::Categories, DomainKind::Transactions]).await; },
+                    Ok(_) | Err(broadcast::error::RecvError::Lagged(_)) => { owner.refresh_projection(vec![DomainKind::Collections, DomainKind::Schemas, DomainKind::Records]).await; },
                     Err(broadcast::error::RecvError::Closed) => { document_events = None; }
                 }
             }
@@ -1068,7 +1260,7 @@ async fn owner_loop(mut owner: Owner, mut commands: mpsc::Receiver<OwnerCommand>
                     && let Some(handle) = &owner.root
                     && handle.id() == root
                     && handle.ready().await.is_ok()
-                    && owner.refresh_projection(vec![DomainKind::Categories, DomainKind::Transactions]).await
+                    && owner.refresh_projection(vec![DomainKind::Collections, DomainKind::Schemas, DomainKind::Records]).await
                 {
                     owner.lifecycle.send_replace(ApplicationState::Ready { root });
                 }
@@ -1098,10 +1290,7 @@ impl Owner {
         info!(lifecycle = "creating", "application lifecycle transition");
         let repo = self.repo.as_ref().ok_or(BootstrapError::Closed)?;
         let handle = repo.initialize_new().await?;
-        let default_id = CategoryId::new();
-        handle
-            .change(move |tx| initialize_finance(tx, default_id))
-            .await?;
+        handle.change(initialize_generic).await?;
         self.projection.send_replace(ProjectionState::Projecting);
         let checkpoint = project(repo, &handle, &self.read_model).await?;
         self.projection.send_replace(ProjectionState::Ready {
@@ -1112,7 +1301,8 @@ impl Owner {
         info!(lifecycle = "ready", root = %handle.id(), checkpoint = %checkpoint.heads, "application lifecycle transition");
         self.root = Some(handle.clone());
         let _ = self.data_events.send(DataChanged {
-            kinds: vec![DomainKind::Categories],
+            kinds: vec![DomainKind::Collections, DomainKind::Schemas],
+            collection_ids: vec![],
             checkpoint,
         });
         Ok(handle.id())
@@ -1140,13 +1330,12 @@ impl Owner {
     }
 
     #[instrument(skip_all, fields(command = command_name(&command)))]
-    async fn finance(
+    async fn generic(
         &mut self,
-        command: FinanceCommand,
-        generated: Option<String>,
+        mut command: GenericCommand,
         kinds: Vec<DomainKind>,
+        collection_ids: Vec<CollectionSchemaId>,
     ) -> Result<()> {
-        command.validate()?;
         let handle = self
             .root
             .as_ref()
@@ -1157,12 +1346,14 @@ impl Owner {
         if handle.status() != DocumentStatus::Ready {
             return Err(BootstrapError::Joining.into());
         }
-        let validation_command = command.clone();
+        let snapshot = handle.read(decode_generic).await??;
+        if let Some(stamp) = snapshot.max_stamp {
+            self.clock.observe(stamp);
+        }
+        command.validate_against(&snapshot)?;
+        let stamp = self.clock.tick()?;
         handle
-            .read(move |doc| validate_against_snapshot(&decode_finance(doc)?, &validation_command))
-            .await??;
-        handle
-            .change(move |tx| apply_command(tx, &command, generated))
+            .change(move |tx| apply_generic_command(tx, &command, stamp))
             .await?;
         self.projection.send_replace(ProjectionState::Projecting);
         let repo = self.repo.as_ref().ok_or(BootstrapError::Closed)?;
@@ -1172,7 +1363,11 @@ impl Owner {
                     checkpoint: checkpoint.clone(),
                 });
                 info!(checkpoint = %checkpoint.heads, "projection committed");
-                let _ = self.data_events.send(DataChanged { kinds, checkpoint });
+                let _ = self.data_events.send(DataChanged {
+                    kinds,
+                    collection_ids,
+                    checkpoint,
+                });
                 Ok(())
             }
             Err(failure) => {
@@ -1189,6 +1384,16 @@ impl Owner {
         if handle.status() != DocumentStatus::Ready {
             return false;
         }
+        if let Ok(Some(stamp)) = handle
+            .read(|doc| {
+                decode_generic(doc)
+                    .ok()
+                    .and_then(|snapshot| snapshot.max_stamp)
+            })
+            .await
+        {
+            self.clock.observe(stamp);
+        }
         let before = self.read_model.checkpoint().ok().flatten();
         self.projection.send_replace(ProjectionState::Projecting);
         match reconcile(repo, handle, &self.read_model).await {
@@ -1197,7 +1402,11 @@ impl Owner {
                     checkpoint: checkpoint.clone(),
                 });
                 if before.as_ref() != Some(&checkpoint) {
-                    let _ = self.data_events.send(DataChanged { kinds, checkpoint });
+                    let _ = self.data_events.send(DataChanged {
+                        kinds,
+                        collection_ids: vec![],
+                        checkpoint,
+                    });
                 }
                 true
             }
@@ -1239,78 +1448,48 @@ impl Owner {
     }
 }
 
-fn command_name(command: &FinanceCommand) -> &'static str {
+fn command_name(command: &GenericCommand) -> &'static str {
     match command {
-        FinanceCommand::CreateCategory(_) => "create_category",
-        FinanceCommand::UpdateCategory(_) => "update_category",
-        FinanceCommand::DeleteCategory(_) => "delete_category",
-        FinanceCommand::CreateTransaction(_) => "create_transaction",
-        FinanceCommand::UpdateTransaction(_) => "update_transaction",
-        FinanceCommand::DeleteTransaction(_) => "delete_transaction",
+        GenericCommand::CreateCollection(_) => "create_collection",
+        GenericCommand::RenameCollection { .. } => "rename_collection",
+        GenericCommand::DeleteCollection(_) => "delete_collection",
+        GenericCommand::AddField { .. } => "add_field",
+        GenericCommand::UpdateField { .. } => "update_field",
+        GenericCommand::RemoveField { .. } => "remove_field",
+        GenericCommand::ReorderFields { .. } => "reorder_fields",
+        GenericCommand::UpsertEnumOption { .. } => "upsert_enum_option",
+        GenericCommand::RemoveEnumOption { .. } => "remove_enum_option",
+        GenericCommand::CreateRecord(_) => "create_record",
+        GenericCommand::UpdateRecordField { .. } => "update_record_field",
+        GenericCommand::DeleteRecord(_) => "delete_record",
     }
 }
 
-fn validate_against_snapshot(
-    snapshot: &crate::domain::FinanceSnapshot,
-    command: &FinanceCommand,
-) -> std::result::Result<(), DomainError> {
-    let category_available = |id: CategoryId| {
-        snapshot
-            .categories
-            .iter()
-            .any(|item| item.id == id && !item.deleted)
-    };
-    match command {
-        FinanceCommand::CreateCategory(_) => Ok(()),
-        FinanceCommand::UpdateCategory(value) => snapshot
-            .categories
-            .iter()
-            .any(|item| item.id == value.id && !item.deleted)
-            .then_some(())
-            .ok_or_else(|| DomainError::NotFound {
-                kind: "category",
-                id: value.id.to_string(),
-            }),
-        FinanceCommand::DeleteCategory(id) => snapshot
-            .categories
-            .iter()
-            .any(|item| item.id == *id)
-            .then_some(())
-            .ok_or_else(|| DomainError::NotFound {
-                kind: "category",
-                id: id.to_string(),
-            }),
-        FinanceCommand::CreateTransaction(value) => category_available(value.category_id)
-            .then_some(())
-            .ok_or_else(|| DomainError::CategoryUnavailable(value.category_id.to_string())),
-        FinanceCommand::UpdateTransaction(value) => {
-            if !snapshot
-                .transactions
-                .iter()
-                .any(|item| item.id == value.id && !item.deleted)
-            {
-                return Err(DomainError::NotFound {
-                    kind: "transaction",
-                    id: value.id.to_string(),
-                });
-            }
-            if let Some(id) = value.category_id
-                && !category_available(id)
-            {
-                return Err(DomainError::CategoryUnavailable(id.to_string()));
-            }
-            Ok(())
-        }
-        FinanceCommand::DeleteTransaction(id) => snapshot
-            .transactions
-            .iter()
-            .any(|item| item.id == *id)
-            .then_some(())
-            .ok_or_else(|| DomainError::NotFound {
-                kind: "transaction",
-                id: id.to_string(),
-            }),
+async fn load_or_create_hlc_node_id(
+    data_dir: &Path,
+    identity: Option<&DeviceIdentity>,
+) -> Result<HlcNodeId> {
+    if let Some(identity) = identity {
+        return Ok(HlcNodeId(*identity.id().as_bytes()));
     }
+    let path = data_dir.join("hlc-node-id");
+    match tokio::fs::read_to_string(&path).await {
+        Ok(encoded) => {
+            let bytes = hex::decode(encoded.trim())
+                .map_err(|_| AppError::Storage("durable HLC node identity is malformed".into()))?;
+            return Ok(HlcNodeId(bytes.try_into().map_err(|_| {
+                AppError::Storage("durable HLC node identity is malformed".into())
+            })?));
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(AppError::Storage(error.to_string())),
+    }
+    let mut bytes = [0_u8; 32];
+    OsRng.fill_bytes(&mut bytes);
+    tokio::fs::write(&path, hex::encode(bytes))
+        .await
+        .map_err(|error| AppError::Storage(error.to_string()))?;
+    Ok(HlcNodeId(bytes))
 }
 
 fn current_time_ms() -> u64 {

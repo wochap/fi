@@ -5,7 +5,7 @@ loaded document is owned by a bounded Tokio actor; a coordinator manages
 bootstrap, persistence, lifecycle, and peer replication through
 application-provided ports.
 
-Fi-specific finance, identity, discovery, and transport policy belongs to
+Fi-specific collection, identity, discovery, and transport policy belongs to
 [`app-core`](../app_core/README.md).
 
 ## Software stack

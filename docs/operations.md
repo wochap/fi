@@ -12,9 +12,15 @@ read-model.sqlite      disposable query projection
 
 Deleting `read-model.sqlite`, presenting a stale checkpoint, or leaving a
 corrupt projection causes a complete rebuild from the authoritative root before
-commands are enabled. A restart retains the root, finance data, identity,
+commands are enabled. A restart retains the root, schemas and records, identity,
 trusted/revoked devices, and discovery epoch. Secret bytes are stored only in
 Linux Secret Service or Android Keystore-wrapped private app storage.
+
+The authoritative root format is versioned. This alpha release intentionally
+does not migrate the former finance-v1 root: opening an unsupported root returns
+an explicit reset-required error. Remove the application data directory only
+when discarding that development dataset is acceptable. Deleting only
+`read-model.sqlite` is safe because it is rebuilt from Automerge.
 
 ## Pairing and revocation
 

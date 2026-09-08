@@ -23,13 +23,15 @@ pub enum ProjectionState {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub enum DomainKind {
-    Categories,
-    Transactions,
+    Collections,
+    Schemas,
+    Records,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DataChanged {
     pub kinds: Vec<DomainKind>,
+    pub collection_ids: Vec<crate::schema::CollectionSchemaId>,
     pub checkpoint: ProjectionCheckpoint,
 }
 

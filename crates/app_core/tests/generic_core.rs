@@ -1,0 +1,364 @@
+use std::{collections::BTreeMap, sync::Arc, time::Duration};
+
+use app_core::{
+    AppCore, AppCoreConfig, BootstrapError, DisplayMetadata, EnumOption, EnumOptionId,
+    FieldDefinition, FieldId, FieldType, FieldValue, HlcError, HlcNodeId, ProjectionState,
+    ValidationMetadata, WallTime,
+};
+use automerge_repo::testing::MemoryTransport;
+use rusqlite::Connection;
+
+struct FixedTime(i64);
+impl WallTime for FixedTime {
+    fn now_ms(&self) -> Result<i64, HlcError> {
+        Ok(self.0)
+    }
+}
+
+fn field(name: &str, field_type: FieldType, required: bool, order: i64) -> FieldDefinition {
+    FieldDefinition {
+        id: FieldId::new(),
+        name: name.into(),
+        field_type,
+        required,
+        default: None,
+        validation: ValidationMetadata::default(),
+        display: DisplayMetadata::default(),
+        order,
+        deleted: false,
+        enum_options: vec![],
+    }
+}
+
+async fn drive_memory(a: &MemoryTransport, b: &MemoryTransport) {
+    for _ in 0..100 {
+        tokio::task::yield_now().await;
+        a.deliver_all().await;
+        b.deliver_all().await;
+    }
+}
+
+#[tokio::test]
+async fn commands_require_a_root_and_generic_crud_survives_restart_and_projection_rebuild() {
+    let directory = tempfile::tempdir().unwrap();
+    let app = AppCore::open(directory.path()).await.unwrap();
+    assert!(matches!(
+        app.create_collection("Nope".into(), String::new()).await,
+        Err(app_core::AppError::Bootstrap(
+            BootstrapError::DecisionRequired
+        ))
+    ));
+    let root = app.create_new_dataset().await.unwrap();
+    let collection = app
+        .create_collection("Headaches".into(), "Symptom diary".into())
+        .await
+        .unwrap();
+    let intensity = field("Intensity", FieldType::Integer, true, 0);
+    let notes = field("Notes", FieldType::Text, false, 1);
+    app.add_field(collection, intensity.clone()).await.unwrap();
+    app.add_field(collection, notes.clone()).await.unwrap();
+    let record = app
+        .create_record(
+            collection,
+            BTreeMap::from([
+                (intensity.id, FieldValue::Integer(7)),
+                (notes.id, FieldValue::Text("after lunch".into())),
+            ]),
+        )
+        .await
+        .unwrap();
+    app.update_record_field(record, collection, intensity.id, FieldValue::Integer(8))
+        .await
+        .unwrap();
+    assert_eq!(
+        app.record(record).unwrap().unwrap().record.values[&intensity.id],
+        FieldValue::Integer(8)
+    );
+    app.shutdown().await.unwrap();
+
+    let read_model = directory.path().join("read-model.sqlite");
+    std::fs::remove_file(&read_model).unwrap();
+    let reopened = AppCore::open(directory.path()).await.unwrap();
+    assert_eq!(
+        reopened.lifecycle_state(),
+        app_core::ApplicationState::Ready { root }
+    );
+    assert_eq!(reopened.collections().unwrap()[0].name, "Headaches");
+    assert_eq!(reopened.records(collection).unwrap().len(), 1);
+    reopened.delete_record(record, collection).await.unwrap();
+    assert!(reopened.records(collection).unwrap().is_empty());
+    reopened.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn signed_fixed_decimal_round_trips_through_authority_and_sqlite() {
+    let directory = tempfile::tempdir().unwrap();
+    let app = AppCore::open(directory.path()).await.unwrap();
+    app.create_new_dataset().await.unwrap();
+    let collection = app
+        .create_collection("Money Movement".into(), String::new())
+        .await
+        .unwrap();
+    let amount = field("Amount", FieldType::FixedDecimal { scale: 2 }, true, 0);
+    app.add_field(collection, amount.clone()).await.unwrap();
+    let record = app
+        .create_record(
+            collection,
+            BTreeMap::from([(amount.id, FieldValue::FixedDecimal(-2350))]),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        app.record(record).unwrap().unwrap().record.values[&amount.id],
+        FieldValue::FixedDecimal(-2350)
+    );
+    app.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn every_field_kind_defaults_null_diagnostics_and_enum_operations_project() {
+    let directory = tempfile::tempdir().unwrap();
+    let app = AppCore::open(directory.path()).await.unwrap();
+    app.create_new_dataset().await.unwrap();
+    let collection = app
+        .create_collection("Typed values".into(), String::new())
+        .await
+        .unwrap();
+    let option = EnumOption {
+        id: EnumOptionId::new(),
+        label: "Active".into(),
+        order: 0,
+        deleted: false,
+    };
+    let fields = [
+        field("Text", FieldType::Text, false, 0),
+        field("Integer", FieldType::Integer, true, 1),
+        field("Decimal", FieldType::FixedDecimal { scale: 3 }, true, 2),
+        field("Boolean", FieldType::Boolean, true, 3),
+        field("Date", FieldType::Date, true, 4),
+        field("DateTime", FieldType::DateTime, true, 5),
+        field("Duration", FieldType::Duration, true, 6),
+        field("Enum", FieldType::Enum, true, 7),
+    ];
+    for definition in &fields {
+        app.add_field(collection, definition.clone()).await.unwrap();
+    }
+    app.upsert_enum_option(collection, fields[7].id, option.clone())
+        .await
+        .unwrap();
+    let expected = BTreeMap::from([
+        (fields[0].id, FieldValue::Null),
+        (fields[1].id, FieldValue::Integer(i64::MIN)),
+        (fields[2].id, FieldValue::FixedDecimal(-12_345)),
+        (fields[3].id, FieldValue::Boolean(true)),
+        (fields[4].id, FieldValue::Date(20_000)),
+        (fields[5].id, FieldValue::DateTime(1_700_000_000_000)),
+        (fields[6].id, FieldValue::Duration(90_000)),
+        (fields[7].id, FieldValue::Enum(option.id)),
+    ]);
+    let record = app
+        .create_record(collection, expected.clone())
+        .await
+        .unwrap();
+    assert_eq!(app.record(record).unwrap().unwrap().record.values, expected);
+
+    let failure = app
+        .update_record_field(
+            record,
+            collection,
+            fields[1].id,
+            FieldValue::Text("wrong".into()),
+        )
+        .await
+        .unwrap_err();
+    assert!(matches!(failure, app_core::AppError::Domain(_)));
+    assert_eq!(
+        app.record(record).unwrap().unwrap().record.values[&fields[1].id],
+        FieldValue::Integer(i64::MIN)
+    );
+
+    let unused = EnumOption {
+        id: EnumOptionId::new(),
+        label: "Archived".into(),
+        order: 1,
+        deleted: false,
+    };
+    app.upsert_enum_option(collection, fields[7].id, unused.clone())
+        .await
+        .unwrap();
+    app.remove_enum_option(collection, fields[7].id, unused.id)
+        .await
+        .unwrap();
+    app.remove_field(collection, fields[7].id).await.unwrap();
+    let projected = app.record(record).unwrap().unwrap();
+    assert!(!projected.valid);
+    assert!(!projected.diagnostics.is_empty());
+    assert_eq!(
+        projected.record.values[&fields[7].id],
+        FieldValue::Enum(option.id)
+    );
+    app.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn injected_clock_advances_across_restart_and_local_node_identity_is_durable() {
+    let directory = tempfile::tempdir().unwrap();
+    let config = AppCoreConfig {
+        hlc_node_id: Some(HlcNodeId([9; 32])),
+        wall_time: Arc::new(FixedTime(100)),
+        ..AppCoreConfig::default()
+    };
+    let app = AppCore::open_with_config(directory.path(), config.clone())
+        .await
+        .unwrap();
+    app.create_new_dataset().await.unwrap();
+    let collection = app
+        .create_collection("Clock".into(), String::new())
+        .await
+        .unwrap();
+    let value = field("Value", FieldType::Integer, true, 0);
+    app.add_field(collection, value.clone()).await.unwrap();
+    let record = app
+        .create_record(
+            collection,
+            BTreeMap::from([(value.id, FieldValue::Integer(1))]),
+        )
+        .await
+        .unwrap();
+    let before = app.record(record).unwrap().unwrap().record.stamps[&value.id];
+    app.shutdown().await.unwrap();
+
+    let reopened = AppCore::open_with_config(directory.path(), config)
+        .await
+        .unwrap();
+    reopened
+        .update_record_field(record, collection, value.id, FieldValue::Integer(2))
+        .await
+        .unwrap();
+    let after = reopened.record(record).unwrap().unwrap().record.stamps[&value.id];
+    assert!(after > before);
+    assert_eq!(after.node_id, HlcNodeId([9; 32]));
+    reopened.shutdown().await.unwrap();
+
+    let identity_dir = tempfile::tempdir().unwrap();
+    let first = AppCore::open(identity_dir.path()).await.unwrap();
+    first.shutdown().await.unwrap();
+    let stored = std::fs::read_to_string(identity_dir.path().join("hlc-node-id")).unwrap();
+    let second = AppCore::open(identity_dir.path()).await.unwrap();
+    second.shutdown().await.unwrap();
+    assert_eq!(
+        std::fs::read_to_string(identity_dir.path().join("hlc-node-id")).unwrap(),
+        stored
+    );
+}
+
+#[tokio::test]
+async fn stale_and_corrupt_projections_rebuild_without_touching_authority() {
+    let directory = tempfile::tempdir().unwrap();
+    let first = AppCore::open(directory.path()).await.unwrap();
+    let root = first.create_new_dataset().await.unwrap();
+    first
+        .create_collection("Recovered".into(), String::new())
+        .await
+        .unwrap();
+    first.shutdown().await.unwrap();
+
+    let path = directory.path().join("read-model.sqlite");
+    let database = Connection::open(&path).unwrap();
+    database
+        .execute(
+            "UPDATE projection_metadata SET heads='v2:' WHERE singleton=1",
+            [],
+        )
+        .unwrap();
+    drop(database);
+    let stale = AppCore::open(directory.path()).await.unwrap();
+    let ProjectionState::Ready { checkpoint } = stale.projection_state() else {
+        panic!("projection did not recover");
+    };
+    assert_ne!(checkpoint.heads, "v2:");
+    assert_eq!(stale.collections().unwrap()[0].name, "Recovered");
+    stale.shutdown().await.unwrap();
+
+    std::fs::write(&path, b"not sqlite").unwrap();
+    let corrupt = AppCore::open(directory.path()).await.unwrap();
+    assert_eq!(
+        corrupt.lifecycle_state(),
+        app_core::ApplicationState::Ready { root }
+    );
+    assert_eq!(corrupt.collections().unwrap()[0].name, "Recovered");
+    corrupt.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn invalid_command_has_no_write_projection_or_event() {
+    let directory = tempfile::tempdir().unwrap();
+    let app = AppCore::open(directory.path()).await.unwrap();
+    app.create_new_dataset().await.unwrap();
+    let before = app.projection_state();
+    let mut events = app.subscribe_data_changed();
+    let failure = app
+        .create_collection("   ".into(), String::new())
+        .await
+        .unwrap_err();
+    assert!(matches!(failure, app_core::AppError::Domain(_)));
+    assert_eq!(app.projection_state(), before);
+    assert!(
+        tokio::time::timeout(Duration::from_millis(25), events.recv())
+            .await
+            .is_err()
+    );
+    app.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn in_memory_two_device_schema_and_record_sync() {
+    let a_dir = tempfile::tempdir().unwrap();
+    let b_dir = tempfile::tempdir().unwrap();
+    let (a_network, b_network) = MemoryTransport::pair("generic-a", "generic-b", 256);
+    let a = AppCore::open_with_transport(a_dir.path(), a_network.clone())
+        .await
+        .unwrap();
+    let b = AppCore::open_with_transport(b_dir.path(), b_network.clone())
+        .await
+        .unwrap();
+    let root = a.create_new_dataset().await.unwrap();
+    let collection = a
+        .create_collection("Shared".into(), String::new())
+        .await
+        .unwrap();
+    let title = field("Title", FieldType::Text, true, 0);
+    a.add_field(collection, title.clone()).await.unwrap();
+    let record = a
+        .create_record(
+            collection,
+            BTreeMap::from([(title.id, FieldValue::Text("hello".into()))]),
+        )
+        .await
+        .unwrap();
+    a_network.connect().await;
+    drive_memory(&a_network, &b_network).await;
+    b.join_existing(root).await.unwrap();
+    drive_memory(&a_network, &b_network).await;
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            if matches!(
+                b.lifecycle_state(),
+                app_core::ApplicationState::Ready { .. }
+            ) && b.record(record).is_ok_and(|value| value.is_some())
+            {
+                break;
+            }
+            drive_memory(&a_network, &b_network).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(
+        a.collection_schema(collection).unwrap(),
+        b.collection_schema(collection).unwrap()
+    );
+    assert_eq!(a.record(record).unwrap(), b.record(record).unwrap());
+    a.shutdown().await.unwrap();
+    b.shutdown().await.unwrap();
+}

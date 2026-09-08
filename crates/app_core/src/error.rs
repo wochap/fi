@@ -11,13 +11,11 @@ pub enum DomainError {
         field: &'static str,
         message: String,
     },
-    #[error("category {0} was not found or is deleted")]
-    CategoryUnavailable(String),
     #[error("{kind} {id} was not found")]
     NotFound { kind: &'static str, id: String },
-    #[error("unsupported finance schema version {0}")]
+    #[error("unsupported application schema version {0}; development data must be reset")]
     UnsupportedSchema(i64),
-    #[error("malformed finance document: {0}")]
+    #[error("malformed generic application document: {0}")]
     Malformed(String),
 }
 
@@ -49,6 +47,8 @@ pub enum AppError {
     Bootstrap(#[from] BootstrapError),
     #[error(transparent)]
     Domain(#[from] DomainError),
+    #[error(transparent)]
+    Clock(#[from] crate::hlc::HlcError),
     #[error(transparent)]
     Projection(#[from] ProjectionError),
     #[error(transparent)]

@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:fi/bridge/finance_bridge.dart';
+import 'package:fi/bridge/collection_bridge.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/src/rust/api/pairing.dart' as pairing;
 import 'package:fi/src/rust/frb_generated.dart';
@@ -13,7 +13,7 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   const platform = MethodChannel('fi/platform');
-  final bridge = RustFinanceBridge();
+  final bridge = RustCollectionBridge();
 
   setUpAll(RustLib.init);
 

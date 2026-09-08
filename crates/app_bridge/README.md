@@ -1,8 +1,8 @@
 # app-bridge
 
-`app_bridge` is Fi's narrow Flutter Rust Bridge boundary. It exposes finance,
-lifecycle, pairing, trusted-device, and sync APIs without leaking Automerge,
-SQLite, Quinn, or repository types to Dart.
+`app_bridge` is Fi's narrow Flutter Rust Bridge boundary. It exposes generic
+collection, schema, record, lifecycle, pairing, trusted-device, and sync APIs
+without leaking Automerge, SQLite, Quinn, or repository types to Dart.
 
 ## Software stack
 

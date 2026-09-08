@@ -6,42 +6,8 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `from_core`, `from_core`, `from_core`, `hex_id`, `initialization`, `lifecycle`, `new`, `new`, `safe`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
-
-class AggregateDto {
-  final int balanceMinor;
-  final int incomeMinor;
-  final int expenseMinor;
-  final int transactionCount;
-
-  const AggregateDto({
-    required this.balanceMinor,
-    required this.incomeMinor,
-    required this.expenseMinor,
-    required this.transactionCount,
-  });
-
-  static Future<AggregateDto> default_() =>
-      RustLib.instance.api.crateApiModelsAggregateDtoDefault();
-
-  @override
-  int get hashCode =>
-      balanceMinor.hashCode ^
-      incomeMinor.hashCode ^
-      expenseMinor.hashCode ^
-      transactionCount.hashCode;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is AggregateDto &&
-          runtimeType == other.runtimeType &&
-          balanceMinor == other.balanceMinor &&
-          incomeMinor == other.incomeMinor &&
-          expenseMinor == other.expenseMinor &&
-          transactionCount == other.transactionCount;
-}
+// These functions are ignored because they are not marked as `pub`: `from_core`, `from_core`, `from_core`, `hex_id`, `initialization`, `into_core`, `lifecycle`, `new`, `new`, `safe`, `validation`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `try_from`, `try_from`
 
 class BootstrapDto {
   final BootstrapKindDto kind;
@@ -124,32 +90,72 @@ enum BridgeErrorKind {
   internal,
 }
 
-class CategoryDto {
+class CollectionDto {
   final String id;
   final String name;
+  final String description;
 
-  const CategoryDto({required this.id, required this.name});
+  const CollectionDto({
+    required this.id,
+    required this.name,
+    required this.description,
+  });
 
   @override
-  int get hashCode => id.hashCode ^ name.hashCode;
+  int get hashCode => id.hashCode ^ name.hashCode ^ description.hashCode;
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is CategoryDto &&
+      other is CollectionDto &&
           runtimeType == other.runtimeType &&
           id == other.id &&
-          name == other.name;
+          name == other.name &&
+          description == other.description;
+}
+
+class CollectionSchemaDto {
+  final String id;
+  final String description;
+  final String name;
+  final List<FieldDefinitionDto> fields;
+
+  const CollectionSchemaDto({
+    required this.id,
+    required this.description,
+    required this.name,
+    required this.fields,
+  });
+
+  @override
+  int get hashCode =>
+      id.hashCode ^ description.hashCode ^ name.hashCode ^ fields.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is CollectionSchemaDto &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          description == other.description &&
+          name == other.name &&
+          fields == other.fields;
 }
 
 class DataChangedDto {
   final List<DomainKindDto> kinds;
+  final List<String> collectionIds;
   final String checkpoint;
 
-  const DataChangedDto({required this.kinds, required this.checkpoint});
+  const DataChangedDto({
+    required this.kinds,
+    required this.collectionIds,
+    required this.checkpoint,
+  });
 
   @override
-  int get hashCode => kinds.hashCode ^ checkpoint.hashCode;
+  int get hashCode =>
+      kinds.hashCode ^ collectionIds.hashCode ^ checkpoint.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -157,10 +163,213 @@ class DataChangedDto {
       other is DataChangedDto &&
           runtimeType == other.runtimeType &&
           kinds == other.kinds &&
+          collectionIds == other.collectionIds &&
           checkpoint == other.checkpoint;
 }
 
-enum DomainKindDto { categories, transactions }
+class DiagnosticDto {
+  final String kind;
+  final String entityId;
+  final String? fieldId;
+  final String message;
+
+  const DiagnosticDto({
+    required this.kind,
+    required this.entityId,
+    this.fieldId,
+    required this.message,
+  });
+
+  @override
+  int get hashCode =>
+      kind.hashCode ^ entityId.hashCode ^ fieldId.hashCode ^ message.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is DiagnosticDto &&
+          runtimeType == other.runtimeType &&
+          kind == other.kind &&
+          entityId == other.entityId &&
+          fieldId == other.fieldId &&
+          message == other.message;
+}
+
+class DisplayMetadataDto {
+  final bool multiline;
+
+  const DisplayMetadataDto({required this.multiline});
+
+  static Future<DisplayMetadataDto> default_() =>
+      RustLib.instance.api.crateApiModelsDisplayMetadataDtoDefault();
+
+  @override
+  int get hashCode => multiline.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is DisplayMetadataDto &&
+          runtimeType == other.runtimeType &&
+          multiline == other.multiline;
+}
+
+enum DomainKindDto { collections, schemas, records }
+
+class EnumOptionDto {
+  final String id;
+  final String label;
+  final int order;
+  final bool deleted;
+
+  const EnumOptionDto({
+    required this.id,
+    required this.label,
+    required this.order,
+    required this.deleted,
+  });
+
+  @override
+  int get hashCode =>
+      id.hashCode ^ label.hashCode ^ order.hashCode ^ deleted.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is EnumOptionDto &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          label == other.label &&
+          order == other.order &&
+          deleted == other.deleted;
+}
+
+class FieldDefinitionDto {
+  final String id;
+  final String name;
+  final FieldTypeDto fieldType;
+  final bool required_;
+  final FieldValueDto? defaultValue;
+  final ValidationMetadataDto validation;
+  final DisplayMetadataDto display;
+  final int order;
+  final bool deleted;
+  final List<EnumOptionDto> enumOptions;
+
+  const FieldDefinitionDto({
+    required this.id,
+    required this.name,
+    required this.fieldType,
+    required this.required_,
+    this.defaultValue,
+    required this.validation,
+    required this.display,
+    required this.order,
+    required this.deleted,
+    required this.enumOptions,
+  });
+
+  @override
+  int get hashCode =>
+      id.hashCode ^
+      name.hashCode ^
+      fieldType.hashCode ^
+      required_.hashCode ^
+      defaultValue.hashCode ^
+      validation.hashCode ^
+      display.hashCode ^
+      order.hashCode ^
+      deleted.hashCode ^
+      enumOptions.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is FieldDefinitionDto &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          name == other.name &&
+          fieldType == other.fieldType &&
+          required_ == other.required_ &&
+          defaultValue == other.defaultValue &&
+          validation == other.validation &&
+          display == other.display &&
+          order == other.order &&
+          deleted == other.deleted &&
+          enumOptions == other.enumOptions;
+}
+
+class FieldTypeDto {
+  final FieldTypeKindDto kind;
+  final int? scale;
+
+  const FieldTypeDto({required this.kind, this.scale});
+
+  @override
+  int get hashCode => kind.hashCode ^ scale.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is FieldTypeDto &&
+          runtimeType == other.runtimeType &&
+          kind == other.kind &&
+          scale == other.scale;
+}
+
+enum FieldTypeKindDto {
+  text,
+  integer,
+  fixedDecimal,
+  boolean,
+  date,
+  dateTime,
+  duration,
+  enum_,
+}
+
+class FieldValueDto {
+  final FieldValueKindDto kind;
+  final int? integerValue;
+  final String? textValue;
+  final bool? booleanValue;
+
+  const FieldValueDto({
+    required this.kind,
+    this.integerValue,
+    this.textValue,
+    this.booleanValue,
+  });
+
+  @override
+  int get hashCode =>
+      kind.hashCode ^
+      integerValue.hashCode ^
+      textValue.hashCode ^
+      booleanValue.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is FieldValueDto &&
+          runtimeType == other.runtimeType &&
+          kind == other.kind &&
+          integerValue == other.integerValue &&
+          textValue == other.textValue &&
+          booleanValue == other.booleanValue;
+}
+
+enum FieldValueKindDto {
+  null_,
+  text,
+  integer,
+  fixedDecimal,
+  boolean,
+  date,
+  dateTime,
+  duration,
+  enum_,
+}
 
 class PairingCandidateDto {
   final String instanceId;
@@ -282,84 +491,60 @@ enum ProjectionKindDto {
   closed,
 }
 
-enum SyncStatusDto { offline, searching, connected, syncing, synced, error }
-
-class TransactionDto {
+class RecordDto {
   final String id;
-  final int occurredAtMs;
-  final String categoryId;
-  final String? categoryName;
-  final bool categoryAvailable;
-  final int amountMinor;
-  final String description;
+  final String collectionId;
+  final List<RecordValueDto> values;
+  final bool valid;
+  final List<DiagnosticDto> diagnostics;
 
-  const TransactionDto({
+  const RecordDto({
     required this.id,
-    required this.occurredAtMs,
-    required this.categoryId,
-    this.categoryName,
-    required this.categoryAvailable,
-    required this.amountMinor,
-    required this.description,
+    required this.collectionId,
+    required this.values,
+    required this.valid,
+    required this.diagnostics,
   });
 
   @override
   int get hashCode =>
       id.hashCode ^
-      occurredAtMs.hashCode ^
-      categoryId.hashCode ^
-      categoryName.hashCode ^
-      categoryAvailable.hashCode ^
-      amountMinor.hashCode ^
-      description.hashCode;
+      collectionId.hashCode ^
+      values.hashCode ^
+      valid.hashCode ^
+      diagnostics.hashCode;
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is TransactionDto &&
+      other is RecordDto &&
           runtimeType == other.runtimeType &&
           id == other.id &&
-          occurredAtMs == other.occurredAtMs &&
-          categoryId == other.categoryId &&
-          categoryName == other.categoryName &&
-          categoryAvailable == other.categoryAvailable &&
-          amountMinor == other.amountMinor &&
-          description == other.description;
+          collectionId == other.collectionId &&
+          values == other.values &&
+          valid == other.valid &&
+          diagnostics == other.diagnostics;
 }
 
-class TransactionFilterDto {
-  final String? text;
-  final String? categoryId;
-  final int? fromMs;
-  final int? throughMs;
+class RecordValueDto {
+  final String fieldId;
+  final FieldValueDto value;
 
-  const TransactionFilterDto({
-    this.text,
-    this.categoryId,
-    this.fromMs,
-    this.throughMs,
-  });
-
-  static Future<TransactionFilterDto> default_() =>
-      RustLib.instance.api.crateApiModelsTransactionFilterDtoDefault();
+  const RecordValueDto({required this.fieldId, required this.value});
 
   @override
-  int get hashCode =>
-      text.hashCode ^
-      categoryId.hashCode ^
-      fromMs.hashCode ^
-      throughMs.hashCode;
+  int get hashCode => fieldId.hashCode ^ value.hashCode;
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is TransactionFilterDto &&
+      other is RecordValueDto &&
           runtimeType == other.runtimeType &&
-          text == other.text &&
-          categoryId == other.categoryId &&
-          fromMs == other.fromMs &&
-          throughMs == other.throughMs;
+          fieldId == other.fieldId &&
+          value == other.value;
 }
+
+enum SyncStatusDto { offline, searching, connected, syncing, synced, error }
 
 class TrustedDeviceDto {
   final String deviceId;
@@ -402,4 +587,38 @@ class TrustedDeviceDto {
           lastSyncMs == other.lastSyncMs &&
           revoked == other.revoked &&
           connection == other.connection;
+}
+
+class ValidationMetadataDto {
+  final int? minInteger;
+  final int? maxInteger;
+  final int? minLength;
+  final int? maxLength;
+
+  const ValidationMetadataDto({
+    this.minInteger,
+    this.maxInteger,
+    this.minLength,
+    this.maxLength,
+  });
+
+  static Future<ValidationMetadataDto> default_() =>
+      RustLib.instance.api.crateApiModelsValidationMetadataDtoDefault();
+
+  @override
+  int get hashCode =>
+      minInteger.hashCode ^
+      maxInteger.hashCode ^
+      minLength.hashCode ^
+      maxLength.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ValidationMetadataDto &&
+          runtimeType == other.runtimeType &&
+          minInteger == other.minInteger &&
+          maxInteger == other.maxInteger &&
+          minLength == other.minLength &&
+          maxLength == other.maxLength;
 }

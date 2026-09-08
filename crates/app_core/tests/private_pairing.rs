@@ -4,8 +4,8 @@ use std::{
 };
 
 use app_core::{
-    AppCore, AppCoreConfig, CreateCategory, FakeDiscoveryProvider, InMemorySecureKeyStore,
-    ManualClock, PairingCandidate, PairingState, QuinnTransportConfig,
+    AppCore, AppCoreConfig, FakeDiscoveryProvider, InMemorySecureKeyStore, ManualClock,
+    PairingCandidate, PairingState, QuinnTransportConfig,
 };
 
 fn now_ms() -> u64 {
@@ -44,9 +44,7 @@ async fn fresh_device_is_provisioned_and_synced_before_pairing_completes() {
 
     let root = existing.create_new_dataset().await.unwrap();
     existing
-        .create_category(CreateCategory {
-            name: "Food".into(),
-        })
+        .create_collection("Food".into(), String::new())
         .await
         .unwrap();
     let window = 20_000;
@@ -98,7 +96,7 @@ async fn fresh_device_is_provisioned_and_synced_before_pairing_completes() {
         joining.projection_state(),
         app_core::ProjectionState::Ready { .. }
     ));
-    assert_eq!(joining.categories().unwrap()[0].name, "Food");
+    assert_eq!(joining.collections().unwrap()[0].name, "Food");
     assert_eq!(existing.trusted_devices().unwrap().len(), 1);
     assert_eq!(joining.trusted_devices().unwrap().len(), 1);
     existing.shutdown().await.unwrap();
