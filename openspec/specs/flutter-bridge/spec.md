@@ -16,36 +16,36 @@ The bridge SHALL expose application initialization and explicit create-new-root 
 
 #### Scenario: Fresh bridge initialization
 - **WHEN** Flutter initializes the bridge against fresh storage
-- **THEN** it receives `NeedsDecision` and no authoritative finance data is created
+- **THEN** it receives `NeedsDecision` and no authoritative collection data is created
 
 #### Scenario: Explicit new dataset
 - **WHEN** Flutter invokes create-new-root and the operation succeeds
-- **THEN** the returned state is ready and subsequent finance queries observe the initialized projection
+- **THEN** the returned state is ready and subsequent collection queries observe the initialized generic projection
 
 ### Requirement: Narrow command and query boundary
-The bridge SHALL expose explicit category and transaction commands plus list, search, filter, and aggregate queries using FRB-safe owned DTOs, canonical string IDs, integer timestamps, and integer minor-unit amounts.
+The bridge SHALL expose explicit collection, field, enum-option, and generic record commands plus list/get queries using FRB-safe owned typed DTOs and canonical string IDs.
 
-#### Scenario: Transaction command
-- **WHEN** Dart invokes a transaction create, update, or delete API
+#### Scenario: Generic record command
+- **WHEN** Dart invokes a record create, field-update, or logical-delete API
 - **THEN** the bridge delegates to the corresponding Rust application command and returns only after its documented durable projection boundary
 
-#### Scenario: Transaction query
-- **WHEN** Dart requests transactions with filters
-- **THEN** the bridge delegates to the Rust query service and returns owned query DTOs without exposing SQLite or Automerge handles
+#### Scenario: Generic record query
+- **WHEN** Dart requests a collection schema or records
+- **THEN** the bridge delegates to the Rust query service and returns owned typed DTOs without exposing SQLite or Automerge handles
 
 ### Requirement: Typed bridge errors
-Rust initialization, validation, persistence, projection, lifecycle, and bootstrap failures SHALL cross the bridge as stable typed error categories with safe user-facing messages.
+Rust initialization, validation, persistence, projection, lifecycle, and bootstrap failures SHALL cross the bridge as stable typed error categories with safe user-facing messages and stable entity/field context where applicable.
 
-#### Scenario: Invalid form submission
-- **WHEN** Rust rejects a submitted finance value
-- **THEN** Flutter receives a validation category and field-safe message rather than a panic or opaque native failure
+#### Scenario: Invalid dynamic form submission
+- **WHEN** Rust rejects a submitted field value
+- **THEN** Flutter receives a validation category, target field ID, and safe message rather than a panic or opaque native failure
 
 ### Requirement: Typed event streams
-The bridge SHALL expose streams for retained application/projection state and transient data-change/error events, and stream loss SHALL be recoverable by reopening the stream and refreshing queries.
+The bridge SHALL expose streams for retained application/projection state and transient collection/schema/record change and error events, and stream loss SHALL be recoverable by reopening the stream and refreshing queries.
 
-#### Scenario: Data changes after subscription
-- **WHEN** a projected finance command completes
-- **THEN** Dart receives a typed data-changed event and can refresh the affected query
+#### Scenario: Record changes after subscription
+- **WHEN** a projected record command or synchronized record change completes
+- **THEN** Dart receives a typed data-changed event and can refresh the affected collection query
 
 #### Scenario: Subscriber is recreated
 - **WHEN** a widget or isolate cancels and reopens a status stream
