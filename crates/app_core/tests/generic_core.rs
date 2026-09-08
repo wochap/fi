@@ -1,9 +1,12 @@
 use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
 use app_core::{
-    AppCore, AppCoreConfig, BootstrapError, DisplayMetadata, EnumOption, EnumOptionId,
-    FieldDefinition, FieldId, FieldType, FieldValue, HlcError, HlcNodeId, ProjectionState,
-    ValidationMetadata, WallTime,
+    Aggregation, AppCore, AppCoreConfig, BootstrapError, CalendarPolicy, CollectionQuery,
+    ComparisonOperator, ComputedFieldDefinition, ComputedFieldId, DisplayMetadata, EnumOption,
+    EnumOptionId, Expression, FieldDefinition, FieldId, FieldReference, FieldType, FieldValue,
+    HlcError, HlcNodeId, NullOrder, ProjectionState, QueryDefinition, QueryId, QueryResult,
+    QueryShape, SortClause, SortDirection, TypedValue, ValidationMetadata, ValueType,
+    VersionedCollectionQuery, VersionedExpression, WallTime, execute_query,
 };
 use automerge_repo::testing::MemoryTransport;
 use rusqlite::Connection;
@@ -112,6 +115,186 @@ async fn signed_fixed_decimal_round_trips_through_authority_and_sqlite() {
         app.record(record).unwrap().unwrap().record.values[&amount.id],
         FieldValue::FixedDecimal(-2350)
     );
+    app.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn query_and_computed_definitions_and_results_survive_projection_rebuild() {
+    let directory = tempfile::tempdir().unwrap();
+    let app = AppCore::open(directory.path()).await.unwrap();
+    app.create_new_dataset().await.unwrap();
+    let collection = app
+        .create_collection("Values".into(), String::new())
+        .await
+        .unwrap();
+    let value = field("Value", FieldType::Integer, true, 0);
+    app.add_field(collection, value.clone()).await.unwrap();
+    app.create_record(
+        collection,
+        BTreeMap::from([(value.id, FieldValue::Integer(-7))]),
+    )
+    .await
+    .unwrap();
+    let computed = ComputedFieldDefinition {
+        id: ComputedFieldId::new(),
+        collection_id: collection,
+        name: "Absolute".into(),
+        declared_type: ValueType::Integer,
+        nullable: false,
+        expression: VersionedExpression::new(Expression::Abs {
+            expression: Box::new(Expression::Field {
+                field: FieldReference::Source(value.id),
+            }),
+        }),
+        order: 0,
+        deleted: false,
+    };
+    app.create_computed_field(computed.clone()).await.unwrap();
+    let query = CollectionQuery {
+        collection_id: collection,
+        filter: None,
+        grouping: None,
+        shape: QueryShape::Scalar {
+            aggregation: Aggregation::Sum {
+                expression: Expression::Field {
+                    field: FieldReference::Computed(computed.id),
+                },
+            },
+        },
+        sorting: vec![],
+        limit: None,
+        calendar: CalendarPolicy::default(),
+    };
+    let definition = QueryDefinition {
+        id: QueryId::new(),
+        collection_id: collection,
+        name: "Absolute sum".into(),
+        query: VersionedCollectionQuery::new(query.clone()),
+        order: 0,
+        deleted: false,
+    };
+    app.create_query_definition(definition.clone())
+        .await
+        .unwrap();
+    let before = app.execute_collection_query(&query, 0).unwrap();
+    assert_eq!(
+        before,
+        QueryResult::Scalar {
+            value: TypedValue::Integer(7),
+            value_type: ValueType::Integer
+        }
+    );
+    app.shutdown().await.unwrap();
+    std::fs::remove_file(directory.path().join("read-model.sqlite")).unwrap();
+    let reopened = AppCore::open(directory.path()).await.unwrap();
+    assert_eq!(
+        reopened.computed_fields(collection).unwrap(),
+        vec![computed]
+    );
+    assert_eq!(
+        reopened.query_definitions(collection).unwrap(),
+        vec![definition]
+    );
+    assert_eq!(
+        reopened.execute_collection_query(&query, 0).unwrap(),
+        before
+    );
+    reopened.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn pure_and_projected_execution_agree_for_supported_plans() {
+    let directory = tempfile::tempdir().unwrap();
+    let app = AppCore::open(directory.path()).await.unwrap();
+    app.create_new_dataset().await.unwrap();
+    let collection = app
+        .create_collection("Differential".into(), String::new())
+        .await
+        .unwrap();
+    let value = field("Value", FieldType::Integer, true, 0);
+    let label = field("Label", FieldType::Text, false, 1);
+    app.add_field(collection, value.clone()).await.unwrap();
+    app.add_field(collection, label.clone()).await.unwrap();
+    for (index, score) in [5_i64, -3, 9, 5, 0, -7].into_iter().enumerate() {
+        let mut values = BTreeMap::from([(value.id, FieldValue::Integer(score))]);
+        if index % 2 == 0 {
+            values.insert(label.id, FieldValue::Text(format!("row {index}")));
+        }
+        app.create_record(collection, values).await.unwrap();
+    }
+    let computed = ComputedFieldDefinition {
+        id: ComputedFieldId::new(),
+        collection_id: collection,
+        name: "Absolute".into(),
+        declared_type: ValueType::Integer,
+        nullable: false,
+        expression: VersionedExpression::new(Expression::Abs {
+            expression: Box::new(Expression::Field {
+                field: FieldReference::Source(value.id),
+            }),
+        }),
+        order: 0,
+        deleted: false,
+    };
+    app.create_computed_field(computed.clone()).await.unwrap();
+
+    let field_expr = Expression::Field {
+        field: FieldReference::Source(value.id),
+    };
+    let pushed_down = CollectionQuery {
+        collection_id: collection,
+        filter: Some(Expression::Compare {
+            operator: ComparisonOperator::GreaterThanOrEqual,
+            left: Box::new(field_expr.clone()),
+            right: Box::new(Expression::Constant {
+                value: TypedValue::Integer(-3),
+            }),
+        }),
+        grouping: None,
+        shape: QueryShape::RecordSet {
+            fields: vec![
+                FieldReference::Source(value.id),
+                FieldReference::Source(label.id),
+            ],
+        },
+        sorting: vec![SortClause {
+            expression: field_expr.clone(),
+            direction: SortDirection::Descending,
+            null_order: NullOrder::Last,
+        }],
+        limit: Some(3),
+        calendar: CalendarPolicy::default(),
+    };
+    let computed_aggregate = CollectionQuery {
+        collection_id: collection,
+        filter: None,
+        grouping: None,
+        shape: QueryShape::Scalar {
+            aggregation: Aggregation::Sum {
+                expression: Expression::Field {
+                    field: FieldReference::Computed(computed.id),
+                },
+            },
+        },
+        sorting: vec![],
+        limit: None,
+        calendar: CalendarPolicy::default(),
+    };
+
+    let schema = app.collection_schema(collection).unwrap().unwrap();
+    let computed_fields = app.computed_fields(collection).unwrap();
+    let all_records = app
+        .records(collection)
+        .unwrap()
+        .into_iter()
+        .filter(|view| view.valid)
+        .map(|view| view.record)
+        .collect::<Vec<_>>();
+    for query in [pushed_down, computed_aggregate] {
+        let projected = app.execute_collection_query(&query, 0).unwrap();
+        let pure = execute_query(&query, &schema, &computed_fields, &all_records, 0).unwrap();
+        assert_eq!(projected, pure);
+    }
     app.shutdown().await.unwrap();
 }
 

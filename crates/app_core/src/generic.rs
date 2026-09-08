@@ -12,6 +12,10 @@ use serde::{Deserialize, Serialize};
 use crate::{
     error::DomainError,
     hlc::HlcStamp,
+    query::{
+        ComputedFieldDefinition, ComputedFieldId, QueryDefinition, QueryId,
+        validate_computed_field, validate_query,
+    },
     records::{
         GenericRecord, RecordId, read_lww_candidates, read_lww_winner, validate_record,
         write_lww_register,
@@ -22,7 +26,7 @@ use crate::{
     values::FieldValue,
 };
 
-pub const APP_SCHEMA_VERSION: i64 = 2;
+pub const APP_SCHEMA_VERSION: i64 = 3;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct GenericDiagnostic {
@@ -37,6 +41,8 @@ pub struct GenericSnapshot {
     pub schema_version: i64,
     pub collections: Vec<CollectionSchema>,
     pub records: Vec<GenericRecord>,
+    pub computed_fields: Vec<ComputedFieldDefinition>,
+    pub query_definitions: Vec<QueryDefinition>,
     pub diagnostics: Vec<GenericDiagnostic>,
     pub max_stamp: Option<HlcStamp>,
 }
@@ -96,6 +102,26 @@ pub enum GenericCommand {
         value: FieldValue,
     },
     DeleteRecord(RecordId),
+    CreateComputedField(ComputedFieldDefinition),
+    UpdateComputedField(ComputedFieldDefinition),
+    RemoveComputedField {
+        collection_id: CollectionSchemaId,
+        id: ComputedFieldId,
+    },
+    ReorderComputedFields {
+        collection_id: CollectionSchemaId,
+        ids: Vec<ComputedFieldId>,
+    },
+    CreateQuery(QueryDefinition),
+    UpdateQuery(QueryDefinition),
+    RemoveQuery {
+        collection_id: CollectionSchemaId,
+        id: QueryId,
+    },
+    ReorderQueries {
+        collection_id: CollectionSchemaId,
+        ids: Vec<QueryId>,
+    },
 }
 
 impl GenericCommand {
@@ -234,6 +260,84 @@ impl GenericCommand {
             }
             Self::DeleteRecord(id) => {
                 record(snapshot, *id)?;
+            }
+            Self::CreateComputedField(definition) => {
+                let schema = active_collection(snapshot, definition.collection_id)?;
+                if snapshot
+                    .computed_fields
+                    .iter()
+                    .any(|item| item.id == definition.id)
+                {
+                    return Err(invalid("computed_field_id", "already exists"));
+                }
+                validate_computed_field(definition, schema)
+                    .map_err(|error| invalid("computed_field", error.to_string()))?;
+            }
+            Self::UpdateComputedField(definition) => {
+                let schema = active_collection(snapshot, definition.collection_id)?;
+                active_computed(snapshot, definition.collection_id, definition.id)?;
+                validate_computed_field(definition, schema)
+                    .map_err(|error| invalid("computed_field", error.to_string()))?;
+            }
+            Self::RemoveComputedField { collection_id, id } => {
+                active_collection(snapshot, *collection_id)?;
+                active_computed(snapshot, *collection_id, *id)?;
+            }
+            Self::ReorderComputedFields { collection_id, ids } => {
+                active_collection(snapshot, *collection_id)?;
+                validate_reorder(
+                    ids,
+                    snapshot
+                        .computed_fields
+                        .iter()
+                        .filter(|item| item.collection_id == *collection_id && !item.deleted)
+                        .map(|item| item.id),
+                    "computed_field_ids",
+                )?;
+            }
+            Self::CreateQuery(definition) => {
+                let schema = active_collection(snapshot, definition.collection_id)?;
+                if snapshot
+                    .query_definitions
+                    .iter()
+                    .any(|item| item.id == definition.id)
+                {
+                    return Err(invalid("query_id", "already exists"));
+                }
+                validate_name(&definition.name)?;
+                let query = definition
+                    .query
+                    .query()
+                    .map_err(|error| invalid("query", error.to_string()))?;
+                validate_query(&query, schema, &snapshot.computed_fields)
+                    .map_err(|error| invalid("query", error.to_string()))?;
+            }
+            Self::UpdateQuery(definition) => {
+                let schema = active_collection(snapshot, definition.collection_id)?;
+                active_query(snapshot, definition.collection_id, definition.id)?;
+                validate_name(&definition.name)?;
+                let query = definition
+                    .query
+                    .query()
+                    .map_err(|error| invalid("query", error.to_string()))?;
+                validate_query(&query, schema, &snapshot.computed_fields)
+                    .map_err(|error| invalid("query", error.to_string()))?;
+            }
+            Self::RemoveQuery { collection_id, id } => {
+                active_collection(snapshot, *collection_id)?;
+                active_query(snapshot, *collection_id, *id)?;
+            }
+            Self::ReorderQueries { collection_id, ids } => {
+                active_collection(snapshot, *collection_id)?;
+                validate_reorder(
+                    ids,
+                    snapshot
+                        .query_definitions
+                        .iter()
+                        .filter(|item| item.collection_id == *collection_id && !item.deleted)
+                        .map(|item| item.id),
+                    "query_ids",
+                )?;
             }
         }
         Ok(())
@@ -377,6 +481,109 @@ pub fn apply_generic_command(
             let record = object(tx, &records, &id.to_string()).map_err(repo_change)?;
             write_lww_register(tx, &record, "deleted", &FieldValue::Boolean(true), stamp)?;
         }
+        GenericCommand::CreateComputedField(definition)
+        | GenericCommand::UpdateComputedField(definition) => write_definition(
+            tx,
+            &collections,
+            definition.collection_id,
+            "computed_fields",
+            &definition.id.to_string(),
+            definition,
+            stamp,
+        )?,
+        GenericCommand::RemoveComputedField { collection_id, id } => {
+            let entry = definition_entry(
+                tx,
+                &collections,
+                *collection_id,
+                "computed_fields",
+                &id.to_string(),
+            )
+            .map_err(repo_change)?;
+            let mut definition =
+                decode_definition::<ComputedFieldDefinition>(tx, &entry).map_err(repo_change)?;
+            definition.deleted = true;
+            write_definition(
+                tx,
+                &collections,
+                *collection_id,
+                "computed_fields",
+                &id.to_string(),
+                &definition,
+                stamp,
+            )?;
+        }
+        GenericCommand::ReorderComputedFields { collection_id, ids } => {
+            for (order, id) in ids.iter().enumerate() {
+                let entry = definition_entry(
+                    tx,
+                    &collections,
+                    *collection_id,
+                    "computed_fields",
+                    &id.to_string(),
+                )
+                .map_err(repo_change)?;
+                let mut definition = decode_definition::<ComputedFieldDefinition>(tx, &entry)
+                    .map_err(repo_change)?;
+                definition.order = order as i64;
+                write_definition(
+                    tx,
+                    &collections,
+                    *collection_id,
+                    "computed_fields",
+                    &id.to_string(),
+                    &definition,
+                    stamp,
+                )?;
+            }
+        }
+        GenericCommand::CreateQuery(definition) | GenericCommand::UpdateQuery(definition) => {
+            write_definition(
+                tx,
+                &collections,
+                definition.collection_id,
+                "queries",
+                &definition.id.to_string(),
+                definition,
+                stamp,
+            )?;
+        }
+        GenericCommand::RemoveQuery { collection_id, id } => {
+            let entry =
+                definition_entry(tx, &collections, *collection_id, "queries", &id.to_string())
+                    .map_err(repo_change)?;
+            let mut definition =
+                decode_definition::<QueryDefinition>(tx, &entry).map_err(repo_change)?;
+            definition.deleted = true;
+            write_definition(
+                tx,
+                &collections,
+                *collection_id,
+                "queries",
+                &id.to_string(),
+                &definition,
+                stamp,
+            )?;
+        }
+        GenericCommand::ReorderQueries { collection_id, ids } => {
+            for (order, id) in ids.iter().enumerate() {
+                let entry =
+                    definition_entry(tx, &collections, *collection_id, "queries", &id.to_string())
+                        .map_err(repo_change)?;
+                let mut definition =
+                    decode_definition::<QueryDefinition>(tx, &entry).map_err(repo_change)?;
+                definition.order = order as i64;
+                write_definition(
+                    tx,
+                    &collections,
+                    *collection_id,
+                    "queries",
+                    &id.to_string(),
+                    &definition,
+                    stamp,
+                )?;
+            }
+        }
     }
     Ok(())
 }
@@ -398,6 +605,8 @@ pub fn decode_generic(doc: &Automerge) -> Result<GenericSnapshot, DomainError> {
     let records_map = object(doc, &app, "records")?;
     let mut max_stamp = None;
     let mut collections = Vec::new();
+    let mut computed_fields = Vec::new();
+    let mut query_definitions = Vec::new();
     for key in doc.keys(&collections_map) {
         let entry = object(doc, &collections_map, &key)?;
         let id = CollectionSchemaId::from_str(&string(doc, &entry, "id")?)?;
@@ -427,6 +636,26 @@ pub fn decode_generic(doc: &Automerge) -> Result<GenericSnapshot, DomainError> {
             fields.push(field);
         }
         fields.sort_by_key(|field| (field.order, field.id));
+        let computed_map = object(doc, &entry, "computed_fields")?;
+        for definition_key in doc.keys(&computed_map) {
+            let definition_entry = object(doc, &computed_map, &definition_key)?;
+            let definition: ComputedFieldDefinition =
+                decode_definition_tracking(doc, &definition_entry, &mut max_stamp)?;
+            if definition.id.to_string() != definition_key || definition.collection_id != id {
+                return Err(malformed("computed definition key/id mismatch"));
+            }
+            computed_fields.push(definition);
+        }
+        let query_map = object(doc, &entry, "queries")?;
+        for definition_key in doc.keys(&query_map) {
+            let definition_entry = object(doc, &query_map, &definition_key)?;
+            let definition: QueryDefinition =
+                decode_definition_tracking(doc, &definition_entry, &mut max_stamp)?;
+            if definition.id.to_string() != definition_key || definition.collection_id != id {
+                return Err(malformed("query definition key/id mismatch"));
+            }
+            query_definitions.push(definition);
+        }
         collections.push(CollectionSchema {
             id,
             name,
@@ -436,6 +665,8 @@ pub fn decode_generic(doc: &Automerge) -> Result<GenericSnapshot, DomainError> {
         });
     }
     collections.sort_by_key(|schema| schema.id);
+    computed_fields.sort_by_key(|field| (field.collection_id, field.order, field.id));
+    query_definitions.sort_by_key(|query| (query.collection_id, query.order, query.id));
     let mut records = Vec::new();
     for key in doc.keys(&records_map) {
         let entry = object(doc, &records_map, &key)?;
@@ -513,10 +744,54 @@ pub fn decode_generic(doc: &Automerge) -> Result<GenericSnapshot, DomainError> {
             });
         }
     }
+    for definition in &computed_fields {
+        let result = collections
+            .iter()
+            .find(|schema| schema.id == definition.collection_id)
+            .ok_or_else(|| {
+                crate::query::QueryValidationError::new(
+                    "collection_id",
+                    "collection is unavailable",
+                )
+            })
+            .and_then(|schema| validate_computed_field(definition, schema));
+        if let Err(error) = result {
+            diagnostics.push(GenericDiagnostic {
+                kind: "computed_field_validation".into(),
+                entity_id: definition.id.to_string(),
+                field_id: None,
+                message: error.to_string(),
+            });
+        }
+    }
+    for definition in &query_definitions {
+        let result = definition.query.query().and_then(|query| {
+            collections
+                .iter()
+                .find(|schema| schema.id == definition.collection_id)
+                .ok_or_else(|| {
+                    crate::query::QueryValidationError::new(
+                        "collection_id",
+                        "collection is unavailable",
+                    )
+                })
+                .and_then(|schema| validate_query(&query, schema, &computed_fields))
+        });
+        if let Err(error) = result {
+            diagnostics.push(GenericDiagnostic {
+                kind: "query_validation".into(),
+                entity_id: definition.id.to_string(),
+                field_id: None,
+                message: error.to_string(),
+            });
+        }
+    }
     Ok(GenericSnapshot {
         schema_version,
         collections,
         records,
+        computed_fields,
+        query_definitions,
         diagnostics,
         max_stamp,
     })
@@ -560,7 +835,66 @@ fn write_collection(
     for field in &schema.fields {
         write_field(tx, &fields, field, stamp)?;
     }
+    tx.put_object(&entry, "computed_fields", ObjType::Map)
+        .map_err(repo_change)?;
+    tx.put_object(&entry, "queries", ObjType::Map)
+        .map_err(repo_change)?;
     Ok(())
+}
+
+fn definition_entry(
+    doc: &impl ReadDoc,
+    collections: &ObjId,
+    collection_id: CollectionSchemaId,
+    map_name: &str,
+    id: &str,
+) -> Result<ObjId, DomainError> {
+    let collection = object(doc, collections, &collection_id.to_string())?;
+    let definitions = object(doc, &collection, map_name)?;
+    object(doc, &definitions, id)
+}
+
+fn write_definition<T: Serialize>(
+    tx: &mut AutomergeTransaction<'_>,
+    collections: &ObjId,
+    collection_id: CollectionSchemaId,
+    map_name: &str,
+    id: &str,
+    definition: &T,
+    stamp: HlcStamp,
+) -> automerge_repo::Result<()> {
+    let collection = object(tx, collections, &collection_id.to_string()).map_err(repo_change)?;
+    let definitions = object(tx, &collection, map_name).map_err(repo_change)?;
+    let entry = match tx.get(&definitions, id).map_err(repo_change)? {
+        Some((value, object)) if value.is_object() => object,
+        Some(_) => return Err(repo_change("definition entry is not an object")),
+        None => tx
+            .put_object(&definitions, id, ObjType::Map)
+            .map_err(repo_change)?,
+    };
+    tx.put(&entry, "id", id).map_err(repo_change)?;
+    let encoded = serde_json::to_string(definition).map_err(repo_change)?;
+    write_lww_register(tx, &entry, "definition", &FieldValue::Text(encoded), stamp)
+}
+
+fn decode_definition<T: for<'de> Deserialize<'de>>(
+    doc: &impl ReadDoc,
+    entry: &ObjId,
+) -> Result<T, DomainError> {
+    let mut max = None;
+    decode_definition_tracking(doc, entry, &mut max)
+}
+
+fn decode_definition_tracking<T: for<'de> Deserialize<'de>>(
+    doc: &impl ReadDoc,
+    entry: &ObjId,
+    max: &mut Option<HlcStamp>,
+) -> Result<T, DomainError> {
+    let encoded = expect_text(
+        read_winner_tracking(doc, entry, "definition", max)?,
+        "definition",
+    )?;
+    serde_json::from_str(&encoded).map_err(malformed)
 }
 fn write_field(
     tx: &mut AutomergeTransaction<'_>,
@@ -720,6 +1054,44 @@ fn active_field(
         .find(|field| field.id == field_id && !field.deleted)
         .ok_or_else(|| not_found("field", field_id))
 }
+fn active_computed(
+    snapshot: &GenericSnapshot,
+    collection_id: CollectionSchemaId,
+    id: ComputedFieldId,
+) -> Result<&ComputedFieldDefinition, DomainError> {
+    snapshot
+        .computed_fields
+        .iter()
+        .find(|item| item.id == id && item.collection_id == collection_id && !item.deleted)
+        .ok_or_else(|| not_found("computed field", id))
+}
+fn active_query(
+    snapshot: &GenericSnapshot,
+    collection_id: CollectionSchemaId,
+    id: QueryId,
+) -> Result<&QueryDefinition, DomainError> {
+    snapshot
+        .query_definitions
+        .iter()
+        .find(|item| item.id == id && item.collection_id == collection_id && !item.deleted)
+        .ok_or_else(|| not_found("query", id))
+}
+fn validate_reorder<T: Copy + Eq + std::hash::Hash>(
+    requested: &[T],
+    active: impl IntoIterator<Item = T>,
+    field: &'static str,
+) -> Result<(), DomainError> {
+    let active: HashSet<_> = active.into_iter().collect();
+    let requested_set: HashSet<_> = requested.iter().copied().collect();
+    if requested_set.len() != requested.len() || requested_set != active {
+        Err(invalid(
+            field,
+            "must contain every active definition exactly once",
+        ))
+    } else {
+        Ok(())
+    }
+}
 fn record(snapshot: &GenericSnapshot, id: RecordId) -> Result<&GenericRecord, DomainError> {
     snapshot
         .records
@@ -791,6 +1163,10 @@ mod tests {
     use super::*;
     use crate::{
         hlc::HlcNodeId,
+        query::{
+            Aggregation, CalendarPolicy, CollectionQuery, Expression, FieldReference, QueryShape,
+            ValueType, VersionedCollectionQuery, VersionedExpression,
+        },
         schema::{DisplayMetadata, FieldType, ValidationMetadata},
     };
 
@@ -929,6 +1305,182 @@ mod tests {
                 .is_err()
         );
         assert_eq!(doc.get_heads(), before);
+    }
+
+    #[test]
+    fn computed_and_query_definitions_round_trip_and_invalid_merge_is_isolated() {
+        let mut doc = initialized();
+        let schema = schema();
+        {
+            let mut tx = doc.transaction();
+            apply_generic_command(
+                &mut tx,
+                &GenericCommand::CreateCollection(schema.clone()),
+                stamp(1),
+            )
+            .unwrap();
+            tx.commit();
+        }
+        let computed = ComputedFieldDefinition {
+            id: ComputedFieldId::new(),
+            collection_id: schema.id,
+            name: "Absolute intensity".into(),
+            declared_type: ValueType::Integer,
+            nullable: false,
+            expression: VersionedExpression::new(Expression::Abs {
+                expression: Box::new(Expression::Field {
+                    field: FieldReference::Source(schema.fields[0].id),
+                }),
+            }),
+            order: 0,
+            deleted: false,
+        };
+        let query = QueryDefinition {
+            id: QueryId::new(),
+            collection_id: schema.id,
+            name: "Count".into(),
+            query: VersionedCollectionQuery::new(CollectionQuery {
+                collection_id: schema.id,
+                filter: None,
+                grouping: None,
+                shape: QueryShape::Scalar {
+                    aggregation: Aggregation::Count,
+                },
+                sorting: vec![],
+                limit: None,
+                calendar: CalendarPolicy::default(),
+            }),
+            order: 0,
+            deleted: false,
+        };
+        let mut create_computed = GenericCommand::CreateComputedField(computed.clone());
+        create_computed
+            .validate_against(&decode_generic(&doc).unwrap())
+            .unwrap();
+        let mut create_query = GenericCommand::CreateQuery(query.clone());
+        create_query
+            .validate_against(&decode_generic(&doc).unwrap())
+            .unwrap();
+        {
+            let mut tx = doc.transaction();
+            apply_generic_command(&mut tx, &create_computed, stamp(2)).unwrap();
+            apply_generic_command(&mut tx, &create_query, stamp(3)).unwrap();
+            tx.commit();
+        }
+        let snapshot = decode_generic(&doc).unwrap();
+        assert_eq!(snapshot.computed_fields, vec![computed]);
+        assert_eq!(snapshot.query_definitions, vec![query]);
+        {
+            let mut tx = doc.transaction();
+            apply_generic_command(
+                &mut tx,
+                &GenericCommand::RemoveField {
+                    collection_id: schema.id,
+                    field_id: schema.fields[0].id,
+                },
+                stamp(4),
+            )
+            .unwrap();
+            tx.commit();
+        }
+        let merged = decode_generic(&doc).unwrap();
+        assert_eq!(merged.computed_fields.len(), 1);
+        assert!(merged.diagnostics.iter().any(|item| {
+            item.kind == "computed_field_validation"
+                && item.entity_id == merged.computed_fields[0].id.to_string()
+        }));
+    }
+
+    #[test]
+    fn two_device_definition_changes_converge_and_invalid_dependency_is_preserved() {
+        let mut base = initialized();
+        let schema = schema();
+        {
+            let mut tx = base.transaction();
+            apply_generic_command(
+                &mut tx,
+                &GenericCommand::CreateCollection(schema.clone()),
+                stamp(1),
+            )
+            .unwrap();
+            tx.commit();
+        }
+        let computed = ComputedFieldDefinition {
+            id: ComputedFieldId::new(),
+            collection_id: schema.id,
+            name: "Absolute".into(),
+            declared_type: ValueType::Integer,
+            nullable: false,
+            expression: VersionedExpression::new(Expression::Abs {
+                expression: Box::new(Expression::Field {
+                    field: FieldReference::Source(schema.fields[0].id),
+                }),
+            }),
+            order: 0,
+            deleted: false,
+        };
+        let query = QueryDefinition {
+            id: QueryId::new(),
+            collection_id: schema.id,
+            name: "Count".into(),
+            query: VersionedCollectionQuery::new(CollectionQuery {
+                collection_id: schema.id,
+                filter: None,
+                grouping: None,
+                shape: QueryShape::Scalar {
+                    aggregation: Aggregation::Count,
+                },
+                sorting: vec![],
+                limit: None,
+                calendar: CalendarPolicy::default(),
+            }),
+            order: 0,
+            deleted: false,
+        };
+        let mut left = base.fork();
+        let mut right = base.fork();
+        {
+            let mut tx = left.transaction();
+            apply_generic_command(
+                &mut tx,
+                &GenericCommand::CreateComputedField(computed.clone()),
+                stamp(2),
+            )
+            .unwrap();
+            tx.commit();
+        }
+        {
+            let mut tx = right.transaction();
+            apply_generic_command(
+                &mut tx,
+                &GenericCommand::CreateQuery(query.clone()),
+                stamp(2),
+            )
+            .unwrap();
+            apply_generic_command(
+                &mut tx,
+                &GenericCommand::RemoveField {
+                    collection_id: schema.id,
+                    field_id: schema.fields[0].id,
+                },
+                stamp(3),
+            )
+            .unwrap();
+            tx.commit();
+        }
+        left.merge(&mut right).unwrap();
+        right.merge(&mut left).unwrap();
+        let left_snapshot = decode_generic(&left).unwrap();
+        let right_snapshot = decode_generic(&right).unwrap();
+        assert_eq!(left_snapshot.computed_fields, vec![computed]);
+        assert_eq!(left_snapshot.query_definitions, vec![query]);
+        assert_eq!(left_snapshot, right_snapshot);
+        assert!(
+            left_snapshot
+                .diagnostics
+                .iter()
+                .any(|item| item.kind == "computed_field_validation")
+        );
     }
 
     #[test]

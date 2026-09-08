@@ -7,17 +7,21 @@ use std::{
 
 use automerge::ChangeHash;
 use automerge_repo::{DocHandle, DocumentId, Repo};
-use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
+use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params, types::Value};
 
 use crate::{
     error::{AppError, ProjectionError, Result},
     generic::{CollectionView, GenericDiagnostic, GenericSnapshot, RecordView, decode_generic},
+    query::{
+        CollectionQuery, ComparisonOperator, ComputedFieldDefinition, Expression, FieldReference,
+        NullOrder, QueryDefinition, SortDirection, TypedValue,
+    },
     records::{GenericRecord, RecordId},
     schema::{CollectionSchema, CollectionSchemaId, FieldDefinition, FieldId},
     values::FieldValue,
 };
 
-pub const PROJECTION_SCHEMA_VERSION: i64 = 2;
+pub const PROJECTION_SCHEMA_VERSION: i64 = 3;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProjectionCheckpoint {
@@ -119,6 +123,16 @@ impl ReadModel {
                 id TEXT PRIMARY KEY NOT NULL, collection_id TEXT NOT NULL,
                 deleted INTEGER NOT NULL CHECK(deleted IN (0,1)), FOREIGN KEY(collection_id) REFERENCES collections(id)
              ) STRICT;
+             CREATE TABLE IF NOT EXISTS computed_fields (
+                id TEXT PRIMARY KEY NOT NULL, collection_id TEXT NOT NULL, name TEXT NOT NULL,
+                order_value INTEGER NOT NULL, deleted INTEGER NOT NULL CHECK(deleted IN (0,1)),
+                definition_json TEXT NOT NULL, FOREIGN KEY(collection_id) REFERENCES collections(id)
+             ) STRICT;
+             CREATE TABLE IF NOT EXISTS query_definitions (
+                id TEXT PRIMARY KEY NOT NULL, collection_id TEXT NOT NULL, name TEXT NOT NULL,
+                order_value INTEGER NOT NULL, deleted INTEGER NOT NULL CHECK(deleted IN (0,1)),
+                definition_json TEXT NOT NULL, FOREIGN KEY(collection_id) REFERENCES collections(id)
+             ) STRICT;
              CREATE TABLE IF NOT EXISTS record_values (
                 record_id TEXT NOT NULL, collection_id TEXT NOT NULL, field_id TEXT NOT NULL,
                 value_kind TEXT NOT NULL, integer_value INTEGER, text_value TEXT, boolean_value INTEGER,
@@ -141,6 +155,8 @@ impl ReadModel {
              CREATE INDEX IF NOT EXISTS fields_collection_order ON fields(collection_id,deleted,order_value,id);
              CREATE INDEX IF NOT EXISTS enum_options_field_order ON enum_options(field_id,deleted,order_value,id);
              CREATE INDEX IF NOT EXISTS records_collection_id ON records(collection_id,deleted,id);
+             CREATE INDEX IF NOT EXISTS computed_fields_collection_order ON computed_fields(collection_id,deleted,order_value,id);
+             CREATE INDEX IF NOT EXISTS query_definitions_collection_order ON query_definitions(collection_id,deleted,order_value,id);
              CREATE INDEX IF NOT EXISTS record_values_integer ON record_values(collection_id,field_id,integer_value,record_id);
              CREATE INDEX IF NOT EXISTS record_values_text ON record_values(collection_id,field_id,text_value,record_id);"
         ).map_err(|error| projection_db(&path, error))?;
@@ -186,6 +202,28 @@ impl ReadModel {
                 &["id", "field_id", "label", "order_value", "deleted"][..],
             ),
             ("records", &["id", "collection_id", "deleted"][..]),
+            (
+                "computed_fields",
+                &[
+                    "id",
+                    "collection_id",
+                    "name",
+                    "order_value",
+                    "deleted",
+                    "definition_json",
+                ][..],
+            ),
+            (
+                "query_definitions",
+                &[
+                    "id",
+                    "collection_id",
+                    "name",
+                    "order_value",
+                    "deleted",
+                    "definition_json",
+                ][..],
+            ),
             (
                 "record_values",
                 &[
@@ -262,7 +300,7 @@ impl ReadModel {
         let transaction = connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(|error| projection_db(&self.path, error))?;
-        transaction.execute_batch("DELETE FROM record_values; DELETE FROM projection_diagnostics; DELETE FROM records; DELETE FROM enum_options; DELETE FROM fields; DELETE FROM collections;").map_err(|error| projection_db(&self.path, error))?;
+        transaction.execute_batch("DELETE FROM record_values; DELETE FROM projection_diagnostics; DELETE FROM query_definitions; DELETE FROM computed_fields; DELETE FROM records; DELETE FROM enum_options; DELETE FROM fields; DELETE FROM collections;").map_err(|error| projection_db(&self.path, error))?;
         for schema in &snapshot.collections {
             transaction
                 .execute(
@@ -304,6 +342,16 @@ impl ReadModel {
                 let (kind, integer, text, boolean) = sql_value(value);
                 transaction.execute("INSERT INTO record_values(record_id,collection_id,field_id,value_kind,integer_value,text_value,boolean_value,physical_time_ms,logical_counter,node_id) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)", params![record.id.to_string(), record.collection_id.to_string(), field.to_string(), kind, integer, text, boolean, stamp.physical_time_ms, i64::from(stamp.logical_counter), stamp.node_id.to_string()]).map_err(|error| projection_db(&self.path, error))?;
             }
+        }
+        for definition in &snapshot.computed_fields {
+            let encoded = serde_json::to_string(definition)
+                .map_err(|error| projection_db(&self.path, error))?;
+            transaction.execute("INSERT INTO computed_fields(id,collection_id,name,order_value,deleted,definition_json) VALUES(?1,?2,?3,?4,?5,?6)", params![definition.id.to_string(), definition.collection_id.to_string(), definition.name, definition.order, definition.deleted, encoded]).map_err(|error| projection_db(&self.path, error))?;
+        }
+        for definition in &snapshot.query_definitions {
+            let encoded = serde_json::to_string(definition)
+                .map_err(|error| projection_db(&self.path, error))?;
+            transaction.execute("INSERT INTO query_definitions(id,collection_id,name,order_value,deleted,definition_json) VALUES(?1,?2,?3,?4,?5,?6)", params![definition.id.to_string(), definition.collection_id.to_string(), definition.name, definition.order, definition.deleted, encoded]).map_err(|error| projection_db(&self.path, error))?;
         }
         for diagnostic in &snapshot.diagnostics {
             transaction.execute("INSERT INTO projection_diagnostics(kind,entity_id,field_id,message) VALUES(?1,?2,?3,?4)", params![diagnostic.kind, diagnostic.entity_id, diagnostic.field_id.map(|id| id.to_string()), diagnostic.message]).map_err(|error| projection_db(&self.path, error))?;
@@ -390,6 +438,26 @@ impl ReadModel {
             .collect()
     }
 
+    /// Selects candidate records through fixed SQL fragments and bound values only.
+    /// Rust still re-evaluates the complete query semantic contract afterward.
+    pub fn query_candidates(&self, query: &CollectionQuery) -> Result<Vec<RecordView>> {
+        let plan = compile_sqlite_plan(query);
+        let connection = self.lock()?;
+        let mut statement = connection
+            .prepare(&plan.sql)
+            .map_err(|error| projection_db(&self.path, error))?;
+        let ids = statement
+            .query_map(rusqlite::params_from_iter(plan.parameters), |row| {
+                row.get::<_, String>(0)
+            })
+            .map_err(|error| projection_db(&self.path, error))?
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(|error| projection_db(&self.path, error))?;
+        ids.into_iter()
+            .map(|id| load_record(&connection, &self.path, &id))
+            .collect()
+    }
+
     pub fn record(&self, id: RecordId) -> Result<Option<RecordView>> {
         let connection = self.lock()?;
         let exists: bool = connection
@@ -403,10 +471,151 @@ impl ReadModel {
             .then(|| load_record(&connection, &self.path, &id.to_string()))
             .transpose()
     }
+    pub fn computed_fields(
+        &self,
+        collection_id: CollectionSchemaId,
+    ) -> Result<Vec<ComputedFieldDefinition>> {
+        self.load_definitions(
+            "SELECT definition_json FROM computed_fields WHERE collection_id=?1 AND deleted=0 ORDER BY order_value,id",
+            collection_id,
+        )
+    }
+    pub fn query_definitions(
+        &self,
+        collection_id: CollectionSchemaId,
+    ) -> Result<Vec<QueryDefinition>> {
+        self.load_definitions(
+            "SELECT definition_json FROM query_definitions WHERE collection_id=?1 AND deleted=0 ORDER BY order_value,id",
+            collection_id,
+        )
+    }
+    fn load_definitions<T: serde::de::DeserializeOwned>(
+        &self,
+        sql: &str,
+        collection_id: CollectionSchemaId,
+    ) -> Result<Vec<T>> {
+        let connection = self.lock()?;
+        let mut statement = connection
+            .prepare(sql)
+            .map_err(|error| projection_db(&self.path, error))?;
+        statement
+            .query_map([collection_id.to_string()], |row| row.get::<_, String>(0))
+            .map_err(|error| projection_db(&self.path, error))?
+            .map(|row| {
+                serde_json::from_str(&row.map_err(|error| projection_db(&self.path, error))?)
+                    .map_err(|error| projection_db(&self.path, error))
+            })
+            .collect()
+    }
     fn lock(&self) -> Result<std::sync::MutexGuard<'_, Connection>> {
         self.connection
             .lock()
             .map_err(|_| projection_db(&self.path, "connection lock poisoned"))
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct SqliteQueryPlan {
+    pub sql: String,
+    pub parameters: Vec<Value>,
+}
+
+pub(crate) fn compile_sqlite_plan(query: &CollectionQuery) -> SqliteQueryPlan {
+    let mut sql = "SELECT r.id FROM records r WHERE r.collection_id=?1 AND r.deleted=0".to_owned();
+    let mut parameters = vec![Value::Text(query.collection_id.to_string())];
+    let filter_equivalent = query
+        .filter
+        .as_ref()
+        .is_none_or(|filter| push_filter(filter, &mut sql, &mut parameters));
+    let mut sort_equivalent = query.sorting.is_empty();
+    if let Some(sort) = query.sorting.first()
+        && let Expression::Field {
+            field: FieldReference::Source(field),
+        } = &sort.expression
+    {
+        sort_equivalent = query.sorting.len() == 1;
+        parameters.push(Value::Text(field.to_string()));
+        let index = parameters.len();
+        let null_direction = match sort.null_order {
+            NullOrder::First => "DESC",
+            NullOrder::Last => "ASC",
+        };
+        let direction = match sort.direction {
+            SortDirection::Ascending => "ASC",
+            SortDirection::Descending => "DESC",
+        };
+        sql.push_str(&format!(
+            " ORDER BY ((SELECT value_kind FROM record_values WHERE record_id=r.id AND field_id=?{index}) IS NULL) {null_direction}, (SELECT COALESCE(integer_value,text_value) FROM record_values WHERE record_id=r.id AND field_id=?{index}) {direction}, r.id ASC"
+        ));
+    } else {
+        sql.push_str(" ORDER BY r.id ASC");
+    }
+    if filter_equivalent
+        && sort_equivalent
+        && matches!(
+            query.shape,
+            crate::query::QueryShape::RecordSet { .. } | crate::query::QueryShape::Series { .. }
+        )
+        && let Some(limit) = query.limit
+    {
+        parameters.push(Value::Integer(i64::from(limit)));
+        sql.push_str(&format!(" LIMIT ?{}", parameters.len()));
+    }
+    SqliteQueryPlan { sql, parameters }
+}
+
+fn push_filter(expression: &Expression, sql: &mut String, parameters: &mut Vec<Value>) -> bool {
+    let Expression::Compare {
+        operator,
+        left,
+        right,
+    } = expression
+    else {
+        return false;
+    };
+    let (
+        Expression::Field {
+            field: FieldReference::Source(field),
+        },
+        Expression::Constant { value },
+    ) = (&**left, &**right)
+    else {
+        return false;
+    };
+    let Some((column, value)) = sql_typed_value(value) else {
+        return false;
+    };
+    let operator = match operator {
+        ComparisonOperator::Equal => "=",
+        ComparisonOperator::NotEqual => "!=",
+        ComparisonOperator::GreaterThan => ">",
+        ComparisonOperator::GreaterThanOrEqual => ">=",
+        ComparisonOperator::LessThan => "<",
+        ComparisonOperator::LessThanOrEqual => "<=",
+    };
+    parameters.push(Value::Text(field.to_string()));
+    let field_index = parameters.len();
+    parameters.push(value);
+    let value_index = parameters.len();
+    sql.push_str(&format!(
+        " AND EXISTS (SELECT 1 FROM record_values rv WHERE rv.record_id=r.id AND rv.field_id=?{field_index} AND rv.{column} {operator} ?{value_index})"
+    ));
+    true
+}
+
+fn sql_typed_value(value: &TypedValue) -> Option<(&'static str, Value)> {
+    match value {
+        TypedValue::Text(value) => Some(("text_value", Value::Text(value.clone()))),
+        TypedValue::Integer(value)
+        | TypedValue::Date(value)
+        | TypedValue::DateTime(value)
+        | TypedValue::Duration(value) => Some(("integer_value", Value::Integer(*value))),
+        TypedValue::FixedDecimal { representation, .. } => {
+            Some(("integer_value", Value::Integer(*representation)))
+        }
+        TypedValue::Boolean(value) => Some(("boolean_value", Value::Integer(i64::from(*value)))),
+        TypedValue::Enum(value) => Some(("text_value", Value::Text(value.to_string()))),
+        TypedValue::Null => None,
     }
 }
 
@@ -629,6 +838,10 @@ mod tests {
     use crate::{
         APP_SCHEMA_VERSION,
         hlc::{HlcNodeId, HlcStamp},
+        query::{
+            CalendarPolicy, CollectionQuery, ComparisonOperator, Expression, FieldReference,
+            QueryShape, TypedValue,
+        },
         records::{GenericRecord, RecordId},
         schema::{
             CollectionSchema, CollectionSchemaId, DisplayMetadata, FieldDefinition, FieldId,
@@ -658,6 +871,35 @@ mod tests {
         }
         let model = ReadModel::open_disposable(path).unwrap();
         assert!(model.schema_compatible());
+    }
+
+    #[test]
+    fn sqlite_planner_whitelists_syntax_and_binds_adversarial_text() {
+        let collection_id = CollectionSchemaId::new();
+        let field_id = FieldId::new();
+        let attack = "x' OR 1=1; DROP TABLE records; --";
+        let plan = compile_sqlite_plan(&CollectionQuery {
+            collection_id,
+            filter: Some(Expression::Compare {
+                operator: ComparisonOperator::Equal,
+                left: Box::new(Expression::Field {
+                    field: FieldReference::Source(field_id),
+                }),
+                right: Box::new(Expression::Constant {
+                    value: TypedValue::Text(attack.into()),
+                }),
+            }),
+            grouping: None,
+            shape: QueryShape::RecordSet {
+                fields: vec![FieldReference::Source(field_id)],
+            },
+            sorting: vec![],
+            limit: Some(10),
+            calendar: CalendarPolicy::default(),
+        });
+        assert!(!plan.sql.contains(attack));
+        assert!(plan.parameters.contains(&Value::Text(attack.into())));
+        assert!(plan.sql.contains("rv.text_value = ?3"));
     }
 
     #[test]
@@ -708,6 +950,8 @@ mod tests {
                 )]),
                 deleted: false,
             }],
+            computed_fields: vec![],
+            query_definitions: vec![],
             diagnostics: vec![diagnostic.clone()],
             max_stamp: None,
         };
@@ -729,6 +973,8 @@ mod tests {
             schema_version: APP_SCHEMA_VERSION,
             collections: vec![],
             records: vec![],
+            computed_fields: vec![],
+            query_definitions: vec![],
             diagnostics: vec![],
             max_stamp: None,
         };

@@ -26,6 +26,8 @@ pub enum DomainKind {
     Collections,
     Schemas,
     Records,
+    ComputedFields,
+    Queries,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

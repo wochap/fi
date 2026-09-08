@@ -140,10 +140,274 @@ pub struct RecordDto {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ValueTypeKindDto {
+    Text,
+    Integer,
+    FixedDecimal,
+    Boolean,
+    Date,
+    DateTime,
+    Duration,
+    Enum,
+    Null,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ValueTypeDto {
+    pub kind: ValueTypeKindDto,
+    pub scale: Option<u8>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TypedValueDto {
+    pub value_type: ValueTypeDto,
+    pub integer_value: Option<i64>,
+    pub text_value: Option<String>,
+    pub boolean_value: Option<bool>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum FieldReferenceKindDto {
+    Source,
+    Computed,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FieldReferenceDto {
+    pub kind: FieldReferenceKindDto,
+    pub id: String,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ExpressionKindDto {
+    Constant,
+    Field,
+    Arithmetic,
+    Divide,
+    Compare,
+    Boolean,
+    Not,
+    IsNull,
+    IsNotNull,
+    Abs,
+    StartOfCurrent,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ArithmeticOperatorDto {
+    Add,
+    Subtract,
+    Multiply,
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ComparisonOperatorDto {
+    Equal,
+    NotEqual,
+    GreaterThan,
+    GreaterThanOrEqual,
+    LessThan,
+    LessThanOrEqual,
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum BooleanOperatorDto {
+    And,
+    Or,
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RoundingPolicyDto {
+    RejectInexact,
+    HalfEven,
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CurrentBoundaryDto {
+    Day,
+    Week,
+    Month,
+    Year,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ExpressionDto {
+    pub root: u32,
+    pub nodes: Vec<ExpressionNodeDto>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ExpressionNodeDto {
+    pub kind: ExpressionKindDto,
+    pub value: Option<TypedValueDto>,
+    pub field: Option<FieldReferenceDto>,
+    pub arithmetic_operator: Option<ArithmeticOperatorDto>,
+    pub comparison_operator: Option<ComparisonOperatorDto>,
+    pub boolean_operator: Option<BooleanOperatorDto>,
+    pub left: Option<u32>,
+    pub right: Option<u32>,
+    pub expression: Option<u32>,
+    pub output_scale: Option<u8>,
+    pub rounding: Option<RoundingPolicyDto>,
+    pub boundary: Option<CurrentBoundaryDto>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum WeekStartDto {
+    Monday,
+    Tuesday,
+    Wednesday,
+    Thursday,
+    Friday,
+    Saturday,
+    Sunday,
+}
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CalendarPolicyDto {
+    pub timezone: String,
+    pub week_start: WeekStartDto,
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SortDirectionDto {
+    Ascending,
+    Descending,
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum NullOrderDto {
+    First,
+    Last,
+}
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SortClauseDto {
+    pub expression: ExpressionDto,
+    pub direction: SortDirectionDto,
+    pub null_order: NullOrderDto,
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum BucketPeriodDto {
+    Day,
+    Week,
+    Month,
+    Year,
+}
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GroupingDto {
+    pub expression: ExpressionDto,
+    pub period: BucketPeriodDto,
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AggregationKindDto {
+    Count,
+    Sum,
+    Average,
+    Min,
+    Max,
+}
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AggregationDto {
+    pub kind: AggregationKindDto,
+    pub expression: Option<ExpressionDto>,
+    pub output_scale: Option<u8>,
+    pub rounding: Option<RoundingPolicyDto>,
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum QueryShapeKindDto {
+    Scalar,
+    Series,
+    CategorySeries,
+    RecordSet,
+}
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct QueryShapeDto {
+    pub kind: QueryShapeKindDto,
+    pub aggregation: Option<AggregationDto>,
+    pub x: Option<ExpressionDto>,
+    pub y: Option<ExpressionDto>,
+    pub category: Option<ExpressionDto>,
+    pub fields: Vec<FieldReferenceDto>,
+}
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CollectionQueryDto {
+    pub collection_id: String,
+    pub filter: Option<ExpressionDto>,
+    pub grouping: Option<GroupingDto>,
+    pub shape: QueryShapeDto,
+    pub sorting: Vec<SortClauseDto>,
+    pub limit: Option<u32>,
+    pub calendar: CalendarPolicyDto,
+}
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ComputedFieldDefinitionDto {
+    pub id: String,
+    pub collection_id: String,
+    pub name: String,
+    pub declared_type: ValueTypeDto,
+    pub nullable: bool,
+    pub expression_version: u32,
+    pub expression: Option<ExpressionDto>,
+    pub unsupported_body_json: Option<String>,
+    pub order: i64,
+    pub deleted: bool,
+}
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct QueryDefinitionDto {
+    pub id: String,
+    pub collection_id: String,
+    pub name: String,
+    pub query_version: u32,
+    pub query: Option<CollectionQueryDto>,
+    pub unsupported_body_json: Option<String>,
+    pub order: i64,
+    pub deleted: bool,
+}
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct QueryValidationErrorDto {
+    pub path: String,
+    pub message: String,
+}
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SeriesPointDto {
+    pub x: TypedValueDto,
+    pub y: TypedValueDto,
+}
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CategoryPointDto {
+    pub category: TypedValueDto,
+    pub value: TypedValueDto,
+}
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ResultRecordValueDto {
+    pub field: FieldReferenceDto,
+    pub value: TypedValueDto,
+}
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ResultRecordDto {
+    pub id: String,
+    pub values: Vec<ResultRecordValueDto>,
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum QueryResultKindDto {
+    Scalar,
+    Series,
+    CategorySeries,
+    RecordSet,
+}
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct QueryResultDto {
+    pub kind: QueryResultKindDto,
+    pub value: Option<TypedValueDto>,
+    pub value_type: Option<ValueTypeDto>,
+    pub points: Vec<SeriesPointDto>,
+    pub category_points: Vec<CategoryPointDto>,
+    pub x_type: Option<ValueTypeDto>,
+    pub y_type: Option<ValueTypeDto>,
+    pub category_type: Option<ValueTypeDto>,
+    pub records: Vec<ResultRecordDto>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DomainKindDto {
     Collections,
     Schemas,
     Records,
+    ComputedFields,
+    Queries,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -649,6 +913,8 @@ impl From<DomainKind> for DomainKindDto {
             DomainKind::Collections => Self::Collections,
             DomainKind::Schemas => Self::Schemas,
             DomainKind::Records => Self::Records,
+            DomainKind::ComputedFields => Self::ComputedFields,
+            DomainKind::Queries => Self::Queries,
         }
     }
 }

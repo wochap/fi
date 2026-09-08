@@ -35,6 +35,10 @@ use crate::{
     },
     pairing_manager::PairingManager,
     projection::{ReadModel, project, reconcile},
+    query::{
+        CollectionQuery, ComputedFieldDefinition, ComputedFieldId, QueryDefinition, QueryId,
+        QueryResult, QueryValidationError, execute_query, validate_query,
+    },
     quinn_transport::{QuinnTransport, QuinnTransportConfig},
     records::{GenericRecord, RecordId},
     routing::{ConnectionManager, EndpointRegistry, NetworkEndpoint, PeerConnectionState},
@@ -1045,6 +1049,91 @@ impl AppCore {
         .await
     }
 
+    pub async fn create_computed_field(&self, definition: ComputedFieldDefinition) -> Result<()> {
+        let collection_id = definition.collection_id;
+        self.generic(
+            GenericCommand::CreateComputedField(definition),
+            vec![DomainKind::ComputedFields],
+            vec![collection_id],
+        )
+        .await
+    }
+    pub async fn update_computed_field(&self, definition: ComputedFieldDefinition) -> Result<()> {
+        let collection_id = definition.collection_id;
+        self.generic(
+            GenericCommand::UpdateComputedField(definition),
+            vec![DomainKind::ComputedFields],
+            vec![collection_id],
+        )
+        .await
+    }
+    pub async fn remove_computed_field(
+        &self,
+        collection_id: CollectionSchemaId,
+        id: ComputedFieldId,
+    ) -> Result<()> {
+        self.generic(
+            GenericCommand::RemoveComputedField { collection_id, id },
+            vec![DomainKind::ComputedFields],
+            vec![collection_id],
+        )
+        .await
+    }
+    pub async fn reorder_computed_fields(
+        &self,
+        collection_id: CollectionSchemaId,
+        ids: Vec<ComputedFieldId>,
+    ) -> Result<()> {
+        self.generic(
+            GenericCommand::ReorderComputedFields { collection_id, ids },
+            vec![DomainKind::ComputedFields],
+            vec![collection_id],
+        )
+        .await
+    }
+    pub async fn create_query_definition(&self, definition: QueryDefinition) -> Result<()> {
+        let collection_id = definition.collection_id;
+        self.generic(
+            GenericCommand::CreateQuery(definition),
+            vec![DomainKind::Queries],
+            vec![collection_id],
+        )
+        .await
+    }
+    pub async fn update_query_definition(&self, definition: QueryDefinition) -> Result<()> {
+        let collection_id = definition.collection_id;
+        self.generic(
+            GenericCommand::UpdateQuery(definition),
+            vec![DomainKind::Queries],
+            vec![collection_id],
+        )
+        .await
+    }
+    pub async fn remove_query_definition(
+        &self,
+        collection_id: CollectionSchemaId,
+        id: QueryId,
+    ) -> Result<()> {
+        self.generic(
+            GenericCommand::RemoveQuery { collection_id, id },
+            vec![DomainKind::Queries],
+            vec![collection_id],
+        )
+        .await
+    }
+    pub async fn reorder_query_definitions(
+        &self,
+        collection_id: CollectionSchemaId,
+        ids: Vec<QueryId>,
+    ) -> Result<()> {
+        self.generic(
+            GenericCommand::ReorderQueries { collection_id, ids },
+            vec![DomainKind::Queries],
+            vec![collection_id],
+        )
+        .await
+    }
+
     pub async fn submit_generic(
         &self,
         command: GenericCommand,
@@ -1087,6 +1176,90 @@ impl AppCore {
     pub fn record(&self, id: RecordId) -> Result<Option<RecordView>> {
         ensure_query_ready(self.lifecycle_state())?;
         self.read_model.record(id)
+    }
+    pub fn computed_fields(
+        &self,
+        collection_id: CollectionSchemaId,
+    ) -> Result<Vec<ComputedFieldDefinition>> {
+        ensure_query_ready(self.lifecycle_state())?;
+        self.read_model.computed_fields(collection_id)
+    }
+    pub fn query_definitions(
+        &self,
+        collection_id: CollectionSchemaId,
+    ) -> Result<Vec<QueryDefinition>> {
+        ensure_query_ready(self.lifecycle_state())?;
+        self.read_model.query_definitions(collection_id)
+    }
+    pub fn validate_collection_query(
+        &self,
+        query: &CollectionQuery,
+    ) -> std::result::Result<(), QueryValidationError> {
+        ensure_query_ready(self.lifecycle_state())
+            .map_err(|error| QueryValidationError::new("application", error.to_string()))?;
+        let schema = self
+            .read_model
+            .schema(query.collection_id)
+            .map_err(|error| QueryValidationError::new("projection", error.to_string()))?
+            .ok_or_else(|| QueryValidationError::new("collection_id", "collection not found"))?;
+        let computed = self
+            .read_model
+            .computed_fields(query.collection_id)
+            .map_err(|error| QueryValidationError::new("projection", error.to_string()))?;
+        validate_query(query, &schema, &computed)
+    }
+    pub fn execute_collection_query(
+        &self,
+        query: &CollectionQuery,
+        now_utc_ms: i64,
+    ) -> std::result::Result<QueryResult, crate::query::QueryEvaluationError> {
+        self.validate_collection_query(query).map_err(|error| {
+            crate::query::QueryEvaluationError::InvalidDefinition(error.to_string())
+        })?;
+        let schema = self
+            .read_model
+            .schema(query.collection_id)
+            .map_err(|error| crate::query::QueryEvaluationError::InvalidRecord(error.to_string()))?
+            .ok_or_else(|| {
+                crate::query::QueryEvaluationError::InvalidDefinition("collection not found".into())
+            })?;
+        let computed = self
+            .read_model
+            .computed_fields(query.collection_id)
+            .map_err(|error| {
+                crate::query::QueryEvaluationError::InvalidRecord(error.to_string())
+            })?;
+        let records = self
+            .read_model
+            .query_candidates(query)
+            .map_err(|error| crate::query::QueryEvaluationError::InvalidRecord(error.to_string()))?
+            .into_iter()
+            .filter(|view| view.valid)
+            .map(|view| view.record)
+            .collect::<Vec<_>>();
+        execute_query(query, &schema, &computed, &records, now_utc_ms)
+    }
+    pub fn execute_query_definition(
+        &self,
+        collection_id: CollectionSchemaId,
+        id: QueryId,
+        now_utc_ms: i64,
+    ) -> std::result::Result<QueryResult, crate::query::QueryEvaluationError> {
+        let definition = self
+            .read_model
+            .query_definitions(collection_id)
+            .map_err(|error| crate::query::QueryEvaluationError::InvalidRecord(error.to_string()))?
+            .into_iter()
+            .find(|definition| definition.id == id && !definition.deleted)
+            .ok_or_else(|| {
+                crate::query::QueryEvaluationError::InvalidDefinition(
+                    "query definition not found".into(),
+                )
+            })?;
+        let query = definition.query.query().map_err(|error| {
+            crate::query::QueryEvaluationError::InvalidDefinition(error.to_string())
+        })?;
+        self.execute_collection_query(&query, now_utc_ms)
     }
     pub async fn shutdown(&self) -> Result<()> {
         request(&self.commands, OwnerCommand::Shutdown).await
@@ -1248,7 +1421,7 @@ async fn owner_loop(mut owner: Owner, mut commands: mpsc::Receiver<OwnerCommand>
             }
             event = recv_document(&mut document_events) => {
                 match event {
-                    Ok(_) | Err(broadcast::error::RecvError::Lagged(_)) => { owner.refresh_projection(vec![DomainKind::Collections, DomainKind::Schemas, DomainKind::Records]).await; },
+                    Ok(_) | Err(broadcast::error::RecvError::Lagged(_)) => { owner.refresh_projection(vec![DomainKind::Collections, DomainKind::Schemas, DomainKind::Records, DomainKind::ComputedFields, DomainKind::Queries]).await; },
                     Err(broadcast::error::RecvError::Closed) => { document_events = None; }
                 }
             }
@@ -1260,7 +1433,7 @@ async fn owner_loop(mut owner: Owner, mut commands: mpsc::Receiver<OwnerCommand>
                     && let Some(handle) = &owner.root
                     && handle.id() == root
                     && handle.ready().await.is_ok()
-                    && owner.refresh_projection(vec![DomainKind::Collections, DomainKind::Schemas, DomainKind::Records]).await
+                    && owner.refresh_projection(vec![DomainKind::Collections, DomainKind::Schemas, DomainKind::Records, DomainKind::ComputedFields, DomainKind::Queries]).await
                 {
                     owner.lifecycle.send_replace(ApplicationState::Ready { root });
                 }
@@ -1462,6 +1635,14 @@ fn command_name(command: &GenericCommand) -> &'static str {
         GenericCommand::CreateRecord(_) => "create_record",
         GenericCommand::UpdateRecordField { .. } => "update_record_field",
         GenericCommand::DeleteRecord(_) => "delete_record",
+        GenericCommand::CreateComputedField(_) => "create_computed_field",
+        GenericCommand::UpdateComputedField(_) => "update_computed_field",
+        GenericCommand::RemoveComputedField { .. } => "remove_computed_field",
+        GenericCommand::ReorderComputedFields { .. } => "reorder_computed_fields",
+        GenericCommand::CreateQuery(_) => "create_query",
+        GenericCommand::UpdateQuery(_) => "update_query",
+        GenericCommand::RemoveQuery { .. } => "remove_query",
+        GenericCommand::ReorderQueries { .. } => "reorder_queries",
     }
 }
 

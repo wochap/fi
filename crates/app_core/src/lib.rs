@@ -15,6 +15,7 @@ pub mod pairing_manager;
 pub mod pairing_transport;
 pub mod ports;
 pub mod projection;
+pub mod query;
 pub mod quinn_transport;
 pub mod records;
 pub mod routing;
@@ -64,6 +65,7 @@ pub use pairing::{
 pub use pairing_manager::{NormalDiscoveryEvent, PairingCommitPlan, PairingManager};
 pub use pairing_transport::{PairingConnection, PairingStream, PairingTransport};
 pub use projection::ProjectionCheckpoint;
+pub use query::*;
 pub use quinn_transport::{
     MemoryTrustResolver, QuinnTransport, QuinnTransportConfig, QuinnTransportError, SYNC_ALPN,
     TlsIdentity, TrustResolver, extract_public_key,

@@ -73,6 +73,8 @@ final class CollectionsController extends ChangeNotifier {
   List<CollectionDto> collections = const [];
   CollectionSchemaDto? schema;
   List<RecordDto> records = const [];
+  List<ComputedFieldDefinitionDto> computedFields = const [];
+  List<QueryDefinitionDto> queryDefinitions = const [];
   String? selectedCollectionId;
   ProjectionDto projection = const ProjectionDto(
     kind: ProjectionKindDto.unavailable,
@@ -137,9 +139,13 @@ final class CollectionsController extends ChangeNotifier {
       if (selectedCollectionId case final id?) {
         schema = await bridge.getCollectionSchema(id);
         records = await bridge.listRecords(id);
+        computedFields = await bridge.listComputedFields(id);
+        queryDefinitions = await bridge.listQueryDefinitions(id);
       } else {
         schema = null;
         records = const [];
+        computedFields = const [];
+        queryDefinitions = const [];
       }
       errorMessage = null;
     } catch (error) {
@@ -152,6 +158,28 @@ final class CollectionsController extends ChangeNotifier {
 
   Future<void> selectCollection(String? id) async {
     selectedCollectionId = id;
+    await refresh();
+  }
+
+  Future<void> createComputedField(
+    ComputedFieldDefinitionDto definition,
+  ) async {
+    await bridge.createComputedField(definition);
+    await refresh();
+  }
+
+  Future<void> createQueryDefinition(QueryDefinitionDto definition) async {
+    await bridge.createQueryDefinition(definition);
+    await refresh();
+  }
+
+  Future<void> removeComputedField(String id) async {
+    await bridge.removeComputedField(selectedCollectionId!, id);
+    await refresh();
+  }
+
+  Future<void> removeQueryDefinition(String id) async {
+    await bridge.removeQueryDefinition(selectedCollectionId!, id);
     await refresh();
   }
 

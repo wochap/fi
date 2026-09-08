@@ -13,6 +13,9 @@ final class FakeCollectionBridge implements CollectionBridge {
   final List<CollectionDto> collections = [];
   final Map<String, CollectionSchemaDto> schemas = {};
   final Map<String, List<RecordDto>> records = {};
+  final Map<String, List<ComputedFieldDefinitionDto>> computedFields = {};
+  final Map<String, List<QueryDefinitionDto>> queryDefinitions = {};
+  QueryResultDto? nextQueryResult;
   final List<TrustedDeviceDto> devices = [];
   final List<String> confirmedSessions = [];
   final List<String> rejectedSessions = [];
@@ -326,6 +329,156 @@ final class FakeCollectionBridge implements CollectionBridge {
       }
     }
     return null;
+  }
+
+  @override
+  Future<String> createComputedField(
+    ComputedFieldDefinitionDto definition,
+  ) async {
+    final id = definition.id.isEmpty ? 'computed-${_next++}' : definition.id;
+    computedFields
+        .putIfAbsent(definition.collectionId, () => [])
+        .add(
+          ComputedFieldDefinitionDto(
+            id: id,
+            collectionId: definition.collectionId,
+            name: definition.name,
+            declaredType: definition.declaredType,
+            nullable: definition.nullable,
+            expressionVersion: definition.expressionVersion,
+            expression: definition.expression,
+            unsupportedBodyJson: definition.unsupportedBodyJson,
+            order: definition.order,
+            deleted: false,
+          ),
+        );
+    changed(definition.collectionId);
+    return id;
+  }
+
+  @override
+  Future<void> updateComputedField(
+    ComputedFieldDefinitionDto definition,
+  ) async {
+    final items = computedFields[definition.collectionId]!;
+    items[items.indexWhere((item) => item.id == definition.id)] = definition;
+    changed(definition.collectionId);
+  }
+
+  @override
+  Future<void> removeComputedField(String collectionId, String id) async {
+    computedFields[collectionId]?.removeWhere((item) => item.id == id);
+    changed(collectionId);
+  }
+
+  @override
+  Future<void> reorderComputedFields(
+    String collectionId,
+    List<String> ids,
+  ) async {
+    final items = computedFields[collectionId] ?? [];
+    final byId = {for (final item in items) item.id: item};
+    computedFields[collectionId] = [
+      for (var i = 0; i < ids.length; i++)
+        ComputedFieldDefinitionDto(
+          id: byId[ids[i]]!.id,
+          collectionId: collectionId,
+          name: byId[ids[i]]!.name,
+          declaredType: byId[ids[i]]!.declaredType,
+          nullable: byId[ids[i]]!.nullable,
+          expressionVersion: byId[ids[i]]!.expressionVersion,
+          expression: byId[ids[i]]!.expression,
+          unsupportedBodyJson: byId[ids[i]]!.unsupportedBodyJson,
+          order: i,
+          deleted: byId[ids[i]]!.deleted,
+        ),
+    ];
+    changed(collectionId);
+  }
+
+  @override
+  Future<List<ComputedFieldDefinitionDto>> listComputedFields(
+    String collectionId,
+  ) async => List.of(computedFields[collectionId] ?? const []);
+  @override
+  Future<String> createQueryDefinition(QueryDefinitionDto definition) async {
+    final id = definition.id.isEmpty ? 'query-${_next++}' : definition.id;
+    queryDefinitions
+        .putIfAbsent(definition.collectionId, () => [])
+        .add(
+          QueryDefinitionDto(
+            id: id,
+            collectionId: definition.collectionId,
+            name: definition.name,
+            queryVersion: definition.queryVersion,
+            query: definition.query,
+            unsupportedBodyJson: definition.unsupportedBodyJson,
+            order: definition.order,
+            deleted: false,
+          ),
+        );
+    changed(definition.collectionId);
+    return id;
+  }
+
+  @override
+  Future<void> updateQueryDefinition(QueryDefinitionDto definition) async {
+    final items = queryDefinitions[definition.collectionId]!;
+    items[items.indexWhere((item) => item.id == definition.id)] = definition;
+    changed(definition.collectionId);
+  }
+
+  @override
+  Future<void> removeQueryDefinition(String collectionId, String id) async {
+    queryDefinitions[collectionId]?.removeWhere((item) => item.id == id);
+    changed(collectionId);
+  }
+
+  @override
+  Future<void> reorderQueryDefinitions(
+    String collectionId,
+    List<String> ids,
+  ) async {
+    final items = queryDefinitions[collectionId] ?? [];
+    final byId = {for (final item in items) item.id: item};
+    queryDefinitions[collectionId] = [
+      for (var i = 0; i < ids.length; i++)
+        QueryDefinitionDto(
+          id: byId[ids[i]]!.id,
+          collectionId: collectionId,
+          name: byId[ids[i]]!.name,
+          queryVersion: byId[ids[i]]!.queryVersion,
+          query: byId[ids[i]]!.query,
+          unsupportedBodyJson: byId[ids[i]]!.unsupportedBodyJson,
+          order: i,
+          deleted: byId[ids[i]]!.deleted,
+        ),
+    ];
+    changed(collectionId);
+  }
+
+  @override
+  Future<List<QueryDefinitionDto>> listQueryDefinitions(
+    String collectionId,
+  ) async => List.of(queryDefinitions[collectionId] ?? const []);
+  @override
+  Future<void> validateCollectionQuery(CollectionQueryDto query) async {
+    _fail();
+  }
+
+  @override
+  Future<QueryResultDto> executeCollectionQuery(
+    CollectionQueryDto query,
+    int nowUtcMs,
+  ) async {
+    _fail();
+    return nextQueryResult ??
+        const QueryResultDto(
+          kind: QueryResultKindDto.recordSet,
+          points: [],
+          categoryPoints: [],
+          records: [],
+        );
   }
 
   @override

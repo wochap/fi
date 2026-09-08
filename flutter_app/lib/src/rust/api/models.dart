@@ -7,7 +7,45 @@ import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `from_core`, `from_core`, `from_core`, `hex_id`, `initialization`, `into_core`, `lifecycle`, `new`, `new`, `safe`, `validation`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `try_from`, `try_from`
+// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `QueryValidationErrorDto`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `try_from`, `try_from`
+
+class AggregationDto {
+  final AggregationKindDto kind;
+  final ExpressionDto? expression;
+  final int? outputScale;
+  final RoundingPolicyDto? rounding;
+
+  const AggregationDto({
+    required this.kind,
+    this.expression,
+    this.outputScale,
+    this.rounding,
+  });
+
+  @override
+  int get hashCode =>
+      kind.hashCode ^
+      expression.hashCode ^
+      outputScale.hashCode ^
+      rounding.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AggregationDto &&
+          runtimeType == other.runtimeType &&
+          kind == other.kind &&
+          expression == other.expression &&
+          outputScale == other.outputScale &&
+          rounding == other.rounding;
+}
+
+enum AggregationKindDto { count, sum, average, min, max }
+
+enum ArithmeticOperatorDto { add, subtract, multiply }
+
+enum BooleanOperatorDto { and, or }
 
 class BootstrapDto {
   final BootstrapKindDto kind;
@@ -90,6 +128,44 @@ enum BridgeErrorKind {
   internal,
 }
 
+enum BucketPeriodDto { day, week, month, year }
+
+class CalendarPolicyDto {
+  final String timezone;
+  final WeekStartDto weekStart;
+
+  const CalendarPolicyDto({required this.timezone, required this.weekStart});
+
+  @override
+  int get hashCode => timezone.hashCode ^ weekStart.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is CalendarPolicyDto &&
+          runtimeType == other.runtimeType &&
+          timezone == other.timezone &&
+          weekStart == other.weekStart;
+}
+
+class CategoryPointDto {
+  final TypedValueDto category;
+  final TypedValueDto value;
+
+  const CategoryPointDto({required this.category, required this.value});
+
+  @override
+  int get hashCode => category.hashCode ^ value.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is CategoryPointDto &&
+          runtimeType == other.runtimeType &&
+          category == other.category &&
+          value == other.value;
+}
+
 class CollectionDto {
   final String id;
   final String name;
@@ -112,6 +188,49 @@ class CollectionDto {
           id == other.id &&
           name == other.name &&
           description == other.description;
+}
+
+class CollectionQueryDto {
+  final String collectionId;
+  final ExpressionDto? filter;
+  final GroupingDto? grouping;
+  final QueryShapeDto shape;
+  final List<SortClauseDto> sorting;
+  final int? limit;
+  final CalendarPolicyDto calendar;
+
+  const CollectionQueryDto({
+    required this.collectionId,
+    this.filter,
+    this.grouping,
+    required this.shape,
+    required this.sorting,
+    this.limit,
+    required this.calendar,
+  });
+
+  @override
+  int get hashCode =>
+      collectionId.hashCode ^
+      filter.hashCode ^
+      grouping.hashCode ^
+      shape.hashCode ^
+      sorting.hashCode ^
+      limit.hashCode ^
+      calendar.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is CollectionQueryDto &&
+          runtimeType == other.runtimeType &&
+          collectionId == other.collectionId &&
+          filter == other.filter &&
+          grouping == other.grouping &&
+          shape == other.shape &&
+          sorting == other.sorting &&
+          limit == other.limit &&
+          calendar == other.calendar;
 }
 
 class CollectionSchemaDto {
@@ -141,6 +260,72 @@ class CollectionSchemaDto {
           name == other.name &&
           fields == other.fields;
 }
+
+enum ComparisonOperatorDto {
+  equal,
+  notEqual,
+  greaterThan,
+  greaterThanOrEqual,
+  lessThan,
+  lessThanOrEqual,
+}
+
+class ComputedFieldDefinitionDto {
+  final String id;
+  final String collectionId;
+  final String name;
+  final ValueTypeDto declaredType;
+  final bool nullable;
+  final int expressionVersion;
+  final ExpressionDto? expression;
+  final String? unsupportedBodyJson;
+  final int order;
+  final bool deleted;
+
+  const ComputedFieldDefinitionDto({
+    required this.id,
+    required this.collectionId,
+    required this.name,
+    required this.declaredType,
+    required this.nullable,
+    required this.expressionVersion,
+    this.expression,
+    this.unsupportedBodyJson,
+    required this.order,
+    required this.deleted,
+  });
+
+  @override
+  int get hashCode =>
+      id.hashCode ^
+      collectionId.hashCode ^
+      name.hashCode ^
+      declaredType.hashCode ^
+      nullable.hashCode ^
+      expressionVersion.hashCode ^
+      expression.hashCode ^
+      unsupportedBodyJson.hashCode ^
+      order.hashCode ^
+      deleted.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ComputedFieldDefinitionDto &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          collectionId == other.collectionId &&
+          name == other.name &&
+          declaredType == other.declaredType &&
+          nullable == other.nullable &&
+          expressionVersion == other.expressionVersion &&
+          expression == other.expression &&
+          unsupportedBodyJson == other.unsupportedBodyJson &&
+          order == other.order &&
+          deleted == other.deleted;
+}
+
+enum CurrentBoundaryDto { day, week, month, year }
 
 class DataChangedDto {
   final List<DomainKindDto> kinds;
@@ -214,7 +399,7 @@ class DisplayMetadataDto {
           multiline == other.multiline;
 }
 
-enum DomainKindDto { collections, schemas, records }
+enum DomainKindDto { collections, schemas, records, computedFields, queries }
 
 class EnumOptionDto {
   final String id;
@@ -242,6 +427,101 @@ class EnumOptionDto {
           label == other.label &&
           order == other.order &&
           deleted == other.deleted;
+}
+
+class ExpressionDto {
+  final int root;
+  final List<ExpressionNodeDto> nodes;
+
+  const ExpressionDto({required this.root, required this.nodes});
+
+  @override
+  int get hashCode => root.hashCode ^ nodes.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ExpressionDto &&
+          runtimeType == other.runtimeType &&
+          root == other.root &&
+          nodes == other.nodes;
+}
+
+enum ExpressionKindDto {
+  constant,
+  field,
+  arithmetic,
+  divide,
+  compare,
+  boolean,
+  not,
+  isNull,
+  isNotNull,
+  abs,
+  startOfCurrent,
+}
+
+class ExpressionNodeDto {
+  final ExpressionKindDto kind;
+  final TypedValueDto? value;
+  final FieldReferenceDto? field;
+  final ArithmeticOperatorDto? arithmeticOperator;
+  final ComparisonOperatorDto? comparisonOperator;
+  final BooleanOperatorDto? booleanOperator;
+  final int? left;
+  final int? right;
+  final int? expression;
+  final int? outputScale;
+  final RoundingPolicyDto? rounding;
+  final CurrentBoundaryDto? boundary;
+
+  const ExpressionNodeDto({
+    required this.kind,
+    this.value,
+    this.field,
+    this.arithmeticOperator,
+    this.comparisonOperator,
+    this.booleanOperator,
+    this.left,
+    this.right,
+    this.expression,
+    this.outputScale,
+    this.rounding,
+    this.boundary,
+  });
+
+  @override
+  int get hashCode =>
+      kind.hashCode ^
+      value.hashCode ^
+      field.hashCode ^
+      arithmeticOperator.hashCode ^
+      comparisonOperator.hashCode ^
+      booleanOperator.hashCode ^
+      left.hashCode ^
+      right.hashCode ^
+      expression.hashCode ^
+      outputScale.hashCode ^
+      rounding.hashCode ^
+      boundary.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ExpressionNodeDto &&
+          runtimeType == other.runtimeType &&
+          kind == other.kind &&
+          value == other.value &&
+          field == other.field &&
+          arithmeticOperator == other.arithmeticOperator &&
+          comparisonOperator == other.comparisonOperator &&
+          booleanOperator == other.booleanOperator &&
+          left == other.left &&
+          right == other.right &&
+          expression == other.expression &&
+          outputScale == other.outputScale &&
+          rounding == other.rounding &&
+          boundary == other.boundary;
 }
 
 class FieldDefinitionDto {
@@ -298,6 +578,26 @@ class FieldDefinitionDto {
           deleted == other.deleted &&
           enumOptions == other.enumOptions;
 }
+
+class FieldReferenceDto {
+  final FieldReferenceKindDto kind;
+  final String id;
+
+  const FieldReferenceDto({required this.kind, required this.id});
+
+  @override
+  int get hashCode => kind.hashCode ^ id.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is FieldReferenceDto &&
+          runtimeType == other.runtimeType &&
+          kind == other.kind &&
+          id == other.id;
+}
+
+enum FieldReferenceKindDto { source, computed }
 
 class FieldTypeDto {
   final FieldTypeKindDto kind;
@@ -370,6 +670,26 @@ enum FieldValueKindDto {
   duration,
   enum_,
 }
+
+class GroupingDto {
+  final ExpressionDto expression;
+  final BucketPeriodDto period;
+
+  const GroupingDto({required this.expression, required this.period});
+
+  @override
+  int get hashCode => expression.hashCode ^ period.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is GroupingDto &&
+          runtimeType == other.runtimeType &&
+          expression == other.expression &&
+          period == other.period;
+}
+
+enum NullOrderDto { first, last }
 
 class PairingCandidateDto {
   final String instanceId;
@@ -491,6 +811,147 @@ enum ProjectionKindDto {
   closed,
 }
 
+class QueryDefinitionDto {
+  final String id;
+  final String collectionId;
+  final String name;
+  final int queryVersion;
+  final CollectionQueryDto? query;
+  final String? unsupportedBodyJson;
+  final int order;
+  final bool deleted;
+
+  const QueryDefinitionDto({
+    required this.id,
+    required this.collectionId,
+    required this.name,
+    required this.queryVersion,
+    this.query,
+    this.unsupportedBodyJson,
+    required this.order,
+    required this.deleted,
+  });
+
+  @override
+  int get hashCode =>
+      id.hashCode ^
+      collectionId.hashCode ^
+      name.hashCode ^
+      queryVersion.hashCode ^
+      query.hashCode ^
+      unsupportedBodyJson.hashCode ^
+      order.hashCode ^
+      deleted.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is QueryDefinitionDto &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          collectionId == other.collectionId &&
+          name == other.name &&
+          queryVersion == other.queryVersion &&
+          query == other.query &&
+          unsupportedBodyJson == other.unsupportedBodyJson &&
+          order == other.order &&
+          deleted == other.deleted;
+}
+
+class QueryResultDto {
+  final QueryResultKindDto kind;
+  final TypedValueDto? value;
+  final ValueTypeDto? valueType;
+  final List<SeriesPointDto> points;
+  final List<CategoryPointDto> categoryPoints;
+  final ValueTypeDto? xType;
+  final ValueTypeDto? yType;
+  final ValueTypeDto? categoryType;
+  final List<ResultRecordDto> records;
+
+  const QueryResultDto({
+    required this.kind,
+    this.value,
+    this.valueType,
+    required this.points,
+    required this.categoryPoints,
+    this.xType,
+    this.yType,
+    this.categoryType,
+    required this.records,
+  });
+
+  @override
+  int get hashCode =>
+      kind.hashCode ^
+      value.hashCode ^
+      valueType.hashCode ^
+      points.hashCode ^
+      categoryPoints.hashCode ^
+      xType.hashCode ^
+      yType.hashCode ^
+      categoryType.hashCode ^
+      records.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is QueryResultDto &&
+          runtimeType == other.runtimeType &&
+          kind == other.kind &&
+          value == other.value &&
+          valueType == other.valueType &&
+          points == other.points &&
+          categoryPoints == other.categoryPoints &&
+          xType == other.xType &&
+          yType == other.yType &&
+          categoryType == other.categoryType &&
+          records == other.records;
+}
+
+enum QueryResultKindDto { scalar, series, categorySeries, recordSet }
+
+class QueryShapeDto {
+  final QueryShapeKindDto kind;
+  final AggregationDto? aggregation;
+  final ExpressionDto? x;
+  final ExpressionDto? y;
+  final ExpressionDto? category;
+  final List<FieldReferenceDto> fields;
+
+  const QueryShapeDto({
+    required this.kind,
+    this.aggregation,
+    this.x,
+    this.y,
+    this.category,
+    required this.fields,
+  });
+
+  @override
+  int get hashCode =>
+      kind.hashCode ^
+      aggregation.hashCode ^
+      x.hashCode ^
+      y.hashCode ^
+      category.hashCode ^
+      fields.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is QueryShapeDto &&
+          runtimeType == other.runtimeType &&
+          kind == other.kind &&
+          aggregation == other.aggregation &&
+          x == other.x &&
+          y == other.y &&
+          category == other.category &&
+          fields == other.fields;
+}
+
+enum QueryShapeKindDto { scalar, series, categorySeries, recordSet }
+
 class RecordDto {
   final String id;
   final String collectionId;
@@ -544,6 +1005,89 @@ class RecordValueDto {
           value == other.value;
 }
 
+class ResultRecordDto {
+  final String id;
+  final List<ResultRecordValueDto> values;
+
+  const ResultRecordDto({required this.id, required this.values});
+
+  @override
+  int get hashCode => id.hashCode ^ values.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ResultRecordDto &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          values == other.values;
+}
+
+class ResultRecordValueDto {
+  final FieldReferenceDto field;
+  final TypedValueDto value;
+
+  const ResultRecordValueDto({required this.field, required this.value});
+
+  @override
+  int get hashCode => field.hashCode ^ value.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ResultRecordValueDto &&
+          runtimeType == other.runtimeType &&
+          field == other.field &&
+          value == other.value;
+}
+
+enum RoundingPolicyDto { rejectInexact, halfEven }
+
+class SeriesPointDto {
+  final TypedValueDto x;
+  final TypedValueDto y;
+
+  const SeriesPointDto({required this.x, required this.y});
+
+  @override
+  int get hashCode => x.hashCode ^ y.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is SeriesPointDto &&
+          runtimeType == other.runtimeType &&
+          x == other.x &&
+          y == other.y;
+}
+
+class SortClauseDto {
+  final ExpressionDto expression;
+  final SortDirectionDto direction;
+  final NullOrderDto nullOrder;
+
+  const SortClauseDto({
+    required this.expression,
+    required this.direction,
+    required this.nullOrder,
+  });
+
+  @override
+  int get hashCode =>
+      expression.hashCode ^ direction.hashCode ^ nullOrder.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is SortClauseDto &&
+          runtimeType == other.runtimeType &&
+          expression == other.expression &&
+          direction == other.direction &&
+          nullOrder == other.nullOrder;
+}
+
+enum SortDirectionDto { ascending, descending }
+
 enum SyncStatusDto { offline, searching, connected, syncing, synced, error }
 
 class TrustedDeviceDto {
@@ -589,6 +1133,37 @@ class TrustedDeviceDto {
           connection == other.connection;
 }
 
+class TypedValueDto {
+  final ValueTypeDto valueType;
+  final int? integerValue;
+  final String? textValue;
+  final bool? booleanValue;
+
+  const TypedValueDto({
+    required this.valueType,
+    this.integerValue,
+    this.textValue,
+    this.booleanValue,
+  });
+
+  @override
+  int get hashCode =>
+      valueType.hashCode ^
+      integerValue.hashCode ^
+      textValue.hashCode ^
+      booleanValue.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is TypedValueDto &&
+          runtimeType == other.runtimeType &&
+          valueType == other.valueType &&
+          integerValue == other.integerValue &&
+          textValue == other.textValue &&
+          booleanValue == other.booleanValue;
+}
+
 class ValidationMetadataDto {
   final int? minInteger;
   final int? maxInteger;
@@ -621,4 +1196,44 @@ class ValidationMetadataDto {
           maxInteger == other.maxInteger &&
           minLength == other.minLength &&
           maxLength == other.maxLength;
+}
+
+class ValueTypeDto {
+  final ValueTypeKindDto kind;
+  final int? scale;
+
+  const ValueTypeDto({required this.kind, this.scale});
+
+  @override
+  int get hashCode => kind.hashCode ^ scale.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ValueTypeDto &&
+          runtimeType == other.runtimeType &&
+          kind == other.kind &&
+          scale == other.scale;
+}
+
+enum ValueTypeKindDto {
+  text,
+  integer,
+  fixedDecimal,
+  boolean,
+  date,
+  dateTime,
+  duration,
+  enum_,
+  null_,
+}
+
+enum WeekStartDto {
+  monday,
+  tuesday,
+  wednesday,
+  thursday,
+  friday,
+  saturday,
+  sunday,
 }

@@ -93,6 +93,12 @@ class CollectionsPage extends StatelessWidget {
                 label: const Text('Schema'),
               ),
               const SizedBox(width: 8),
+              OutlinedButton.icon(
+                onPressed: () => _queryEditor(context, schema),
+                icon: const Icon(Icons.query_stats),
+                label: const Text('Queries'),
+              ),
+              const SizedBox(width: 8),
               FilledButton.icon(
                 onPressed: () => _recordEditor(context, schema),
                 icon: const Icon(Icons.add),
@@ -319,6 +325,177 @@ class CollectionsPage extends StatelessWidget {
             child: const Text('Done'),
           ),
         ],
+      ),
+    );
+  }
+
+  Future<void> _queryEditor(
+    BuildContext context,
+    CollectionSchemaDto schema,
+  ) async {
+    final numericFields = schema.fields
+        .where(
+          (field) =>
+              !field.deleted &&
+              (field.fieldType.kind == FieldTypeKindDto.integer ||
+                  field.fieldType.kind == FieldTypeKindDto.fixedDecimal ||
+                  field.fieldType.kind == FieldTypeKindDto.duration),
+        )
+        .toList();
+    String? selected = numericFields.isEmpty ? null : numericFields.first.id;
+    final name = TextEditingController();
+    await showDialog<void>(
+      context: context,
+      builder: (dialog) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Computed fields and queries'),
+          content: SizedBox(
+            width: 600,
+            height: 430,
+            child: ListenableBuilder(
+              listenable: controller,
+              builder: (context, _) => ListView(
+                children: [
+                  Text(
+                    'Computed fields',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  for (final item in controller.computedFields)
+                    ListTile(
+                      title: Text(item.name),
+                      subtitle: Text(item.declaredType.kind.name),
+                      trailing: IconButton(
+                        tooltip: 'Remove computed field',
+                        icon: const Icon(Icons.delete_outline),
+                        onPressed: () =>
+                            unawaited(controller.removeComputedField(item.id)),
+                      ),
+                    ),
+                  TextField(
+                    controller: name,
+                    decoration: const InputDecoration(
+                      labelText: 'Computed field name',
+                    ),
+                  ),
+                  DropdownButtonFormField<String>(
+                    initialValue: selected,
+                    decoration: const InputDecoration(
+                      labelText: 'Source numeric field',
+                    ),
+                    items: [
+                      for (final field in numericFields)
+                        DropdownMenuItem(
+                          value: field.id,
+                          child: Text(field.name),
+                        ),
+                    ],
+                    onChanged: (value) => setState(() => selected = value),
+                  ),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: FilledButton.tonalIcon(
+                      onPressed: selected == null || name.text.trim().isEmpty
+                          ? null
+                          : () async {
+                              final field = numericFields.firstWhere(
+                                (item) => item.id == selected,
+                              );
+                              final source = ExpressionNodeDto(
+                                kind: ExpressionKindDto.field,
+                                field: FieldReferenceDto(
+                                  kind: FieldReferenceKindDto.source,
+                                  id: field.id,
+                                ),
+                              );
+                              final absolute = ExpressionNodeDto(
+                                kind: ExpressionKindDto.abs,
+                                expression: 0,
+                              );
+                              await controller.createComputedField(
+                                ComputedFieldDefinitionDto(
+                                  id: '',
+                                  collectionId: schema.id,
+                                  name: name.text.trim(),
+                                  declaredType: _queryValueType(
+                                    field.fieldType,
+                                  ),
+                                  nullable: !field.required_,
+                                  expressionVersion: 1,
+                                  expression: ExpressionDto(
+                                    root: 1,
+                                    nodes: [source, absolute],
+                                  ),
+                                  order: controller.computedFields.length,
+                                  deleted: false,
+                                ),
+                              );
+                              name.clear();
+                              setState(() {});
+                            },
+                      icon: const Icon(Icons.add),
+                      label: const Text('Add absolute-value field'),
+                    ),
+                  ),
+                  const Divider(height: 32),
+                  Text(
+                    'Saved queries',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  for (final item in controller.queryDefinitions)
+                    ListTile(
+                      title: Text(item.name),
+                      subtitle: const Text('Typed collection query'),
+                      trailing: IconButton(
+                        tooltip: 'Remove query',
+                        icon: const Icon(Icons.delete_outline),
+                        onPressed: () => unawaited(
+                          controller.removeQueryDefinition(item.id),
+                        ),
+                      ),
+                    ),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: FilledButton.tonalIcon(
+                      onPressed: () => controller.createQueryDefinition(
+                        QueryDefinitionDto(
+                          id: '',
+                          collectionId: schema.id,
+                          name: 'Record count',
+                          queryVersion: 1,
+                          query: CollectionQueryDto(
+                            collectionId: schema.id,
+                            shape: const QueryShapeDto(
+                              kind: QueryShapeKindDto.scalar,
+                              aggregation: AggregationDto(
+                                kind: AggregationKindDto.count,
+                              ),
+                              fields: [],
+                            ),
+                            sorting: const [],
+                            calendar: const CalendarPolicyDto(
+                              timezone: 'UTC',
+                              weekStart: WeekStartDto.monday,
+                            ),
+                          ),
+                          order: controller.queryDefinitions.length,
+                          deleted: false,
+                        ),
+                      ),
+                      icon: const Icon(Icons.add_chart),
+                      label: const Text('Add record-count query'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialog),
+              child: const Text('Done'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -725,6 +902,28 @@ int _fieldOrder(FieldDefinitionDto left, FieldDefinitionDto right) {
   final order = left.order.compareTo(right.order);
   return order == 0 ? left.id.compareTo(right.id) : order;
 }
+
+ValueTypeDto _queryValueType(FieldTypeDto type) => switch (type.kind) {
+  FieldTypeKindDto.text => const ValueTypeDto(kind: ValueTypeKindDto.text),
+  FieldTypeKindDto.integer => const ValueTypeDto(
+    kind: ValueTypeKindDto.integer,
+  ),
+  FieldTypeKindDto.fixedDecimal => ValueTypeDto(
+    kind: ValueTypeKindDto.fixedDecimal,
+    scale: type.scale,
+  ),
+  FieldTypeKindDto.boolean => const ValueTypeDto(
+    kind: ValueTypeKindDto.boolean,
+  ),
+  FieldTypeKindDto.date => const ValueTypeDto(kind: ValueTypeKindDto.date),
+  FieldTypeKindDto.dateTime => const ValueTypeDto(
+    kind: ValueTypeKindDto.dateTime,
+  ),
+  FieldTypeKindDto.duration => const ValueTypeDto(
+    kind: ValueTypeKindDto.duration,
+  ),
+  FieldTypeKindDto.enum_ => const ValueTypeDto(kind: ValueTypeKindDto.enum_),
+};
 
 String _defaultText(FieldValueDto? value, FieldTypeKindDto kind, int scale) {
   if (value == null || value.kind == FieldValueKindDto.null_) return '';

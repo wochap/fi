@@ -2,6 +2,7 @@ import 'package:fi/src/rust/api/collections.dart' as collections;
 import 'package:fi/src/rust/api/lifecycle.dart' as lifecycle;
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/src/rust/api/pairing.dart' as pairing;
+import 'package:fi/src/rust/api/queries.dart' as queries;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
@@ -58,6 +59,23 @@ abstract interface class CollectionBridge {
   Future<void> deleteRecord(String recordId, String collectionId);
   Future<List<RecordDto>> listRecords(String collectionId);
   Future<RecordDto?> getRecord(String id);
+  Future<String> createComputedField(ComputedFieldDefinitionDto definition);
+  Future<void> updateComputedField(ComputedFieldDefinitionDto definition);
+  Future<void> removeComputedField(String collectionId, String id);
+  Future<void> reorderComputedFields(String collectionId, List<String> ids);
+  Future<List<ComputedFieldDefinitionDto>> listComputedFields(
+    String collectionId,
+  );
+  Future<String> createQueryDefinition(QueryDefinitionDto definition);
+  Future<void> updateQueryDefinition(QueryDefinitionDto definition);
+  Future<void> removeQueryDefinition(String collectionId, String id);
+  Future<void> reorderQueryDefinitions(String collectionId, List<String> ids);
+  Future<List<QueryDefinitionDto>> listQueryDefinitions(String collectionId);
+  Future<void> validateCollectionQuery(CollectionQueryDto query);
+  Future<QueryResultDto> executeCollectionQuery(
+    CollectionQueryDto query,
+    int nowUtcMs,
+  );
 }
 
 final class RustCollectionBridge implements CollectionBridge {
@@ -228,4 +246,43 @@ final class RustCollectionBridge implements CollectionBridge {
       collections.listRecords(collectionId: collectionId);
   @override
   Future<RecordDto?> getRecord(String id) => collections.getRecord(id: id);
+  @override
+  Future<String> createComputedField(ComputedFieldDefinitionDto definition) =>
+      queries.createComputedField(definition: definition);
+  @override
+  Future<void> updateComputedField(ComputedFieldDefinitionDto definition) =>
+      queries.updateComputedField(definition: definition);
+  @override
+  Future<void> removeComputedField(String collectionId, String id) =>
+      queries.removeComputedField(collectionId: collectionId, id: id);
+  @override
+  Future<void> reorderComputedFields(String collectionId, List<String> ids) =>
+      queries.reorderComputedFields(collectionId: collectionId, ids: ids);
+  @override
+  Future<List<ComputedFieldDefinitionDto>> listComputedFields(
+    String collectionId,
+  ) => queries.listComputedFields(collectionId: collectionId);
+  @override
+  Future<String> createQueryDefinition(QueryDefinitionDto definition) =>
+      queries.createQueryDefinition(definition: definition);
+  @override
+  Future<void> updateQueryDefinition(QueryDefinitionDto definition) =>
+      queries.updateQueryDefinition(definition: definition);
+  @override
+  Future<void> removeQueryDefinition(String collectionId, String id) =>
+      queries.removeQueryDefinition(collectionId: collectionId, id: id);
+  @override
+  Future<void> reorderQueryDefinitions(String collectionId, List<String> ids) =>
+      queries.reorderQueryDefinitions(collectionId: collectionId, ids: ids);
+  @override
+  Future<List<QueryDefinitionDto>> listQueryDefinitions(String collectionId) =>
+      queries.listQueryDefinitions(collectionId: collectionId);
+  @override
+  Future<void> validateCollectionQuery(CollectionQueryDto query) =>
+      queries.validateCollectionQuery(query: query);
+  @override
+  Future<QueryResultDto> executeCollectionQuery(
+    CollectionQueryDto query,
+    int nowUtcMs,
+  ) => queries.executeCollectionQuery(query: query, nowUtcMs: nowUtcMs);
 }

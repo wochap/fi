@@ -9,7 +9,8 @@ mod tests {
             include_str!("api/collections.rs"),
             include_str!("api/lifecycle.rs"),
             include_str!("api/models.rs"),
-            include_str!("api/pairing.rs")
+            include_str!("api/pairing.rs"),
+            include_str!("api/queries.rs")
         );
         for forbidden in [
             "automerge::",
