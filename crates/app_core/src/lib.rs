@@ -23,6 +23,8 @@ pub mod schema;
 #[doc(hidden)]
 pub mod test_support;
 pub mod values;
+pub mod widget_registry;
+pub mod widgets;
 
 pub use application::{AppCore, AppCoreConfig};
 pub use control::{
@@ -81,3 +83,16 @@ pub use schema::{
     FieldDefinition, FieldId, FieldType, ValidationMetadata,
 };
 pub use values::{DecimalError, FieldValue, FixedDecimal};
+pub use widget_registry::{
+    AggregateNumberConfig, BarChartConfig, CORE_AGGREGATE_NUMBER, CORE_BAR_CHART, CORE_LINE_CHART,
+    CORE_SCATTER_PLOT, DecodedConfiguration, LineChartConfig, QueryResultShape,
+    ResolvedWidgetQuery, ScatterPlotConfig, WidgetDescriptor, WidgetError, WidgetEvaluation,
+    builtin_descriptors, decode_configuration, descriptor_for, evaluate_widget, is_supported,
+    validate_configuration, validate_widget_configuration,
+};
+pub use widgets::{
+    MAX_STRUCTURED_DEPTH, MAX_STRUCTURED_KEY_LENGTH, MAX_STRUCTURED_NODES, MAX_WIDGET_TITLE_LENGTH,
+    MAX_WIDGET_TYPE_LENGTH, StructuredValue, WIDGET_CONFIGURATION_VERSION, WIDGET_LAYOUT_VERSION,
+    WidgetConfiguration, WidgetDefinition, WidgetId, WidgetLayout, WidgetSize, WidgetType,
+    WidgetUpdate, WidgetValidationError, validate_title, validate_widget_type,
+};

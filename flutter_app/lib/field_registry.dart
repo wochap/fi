@@ -1,5 +1,8 @@
+import 'package:fi/exact_format.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:flutter/material.dart';
+
+export 'package:fi/exact_format.dart' show formatScaled, parseScaled;
 
 typedef FieldValueChanged = void Function(FieldValueDto value);
 
@@ -286,32 +289,3 @@ DateTime _dateFromDays(int days) => DateTime.fromMillisecondsSinceEpoch(
   days * Duration.millisecondsPerDay,
   isUtc: true,
 );
-
-int? parseScaled(String input, int scale) {
-  final match = RegExp(r'^([+-]?)([0-9]+)(?:\.([0-9]*))?$').firstMatch(input);
-  if (match == null) return null;
-  final fraction = match.group(3) ?? '';
-  if (fraction.length > scale) return null;
-  final magnitude =
-      BigInt.parse(match.group(2)!) * BigInt.from(10).pow(scale) +
-      BigInt.parse(
-        (fraction + '0' * scale).substring(0, scale).isEmpty
-            ? '0'
-            : (fraction + '0' * scale).substring(0, scale),
-      );
-  final signed = match.group(1) == '-' ? -magnitude : magnitude;
-  final min = BigInt.from(-9223372036854775807) - BigInt.one;
-  final max = BigInt.from(9223372036854775807);
-  return signed < min || signed > max ? null : signed.toInt();
-}
-
-String formatScaled(int representation, int scale) {
-  final negative = representation < 0;
-  final digits = BigInt.from(
-    representation,
-  ).abs().toString().padLeft(scale + 1, '0');
-  final value = scale == 0
-      ? digits
-      : '${digits.substring(0, digits.length - scale)}.${digits.substring(digits.length - scale)}';
-  return negative ? '-$value' : value;
-}

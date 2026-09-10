@@ -75,11 +75,15 @@ final class CollectionsController extends ChangeNotifier {
   List<RecordDto> records = const [];
   List<ComputedFieldDefinitionDto> computedFields = const [];
   List<QueryDefinitionDto> queryDefinitions = const [];
+  List<WidgetDefinitionDto> widgetDefinitions = const [];
+  List<WidgetEvaluationDto> widgetEvaluations = const [];
+  List<WidgetDescriptorDto> widgetDescriptors = const [];
   String? selectedCollectionId;
   ProjectionDto projection = const ProjectionDto(
     kind: ProjectionKindDto.unavailable,
   );
   String? errorMessage;
+  String? widgetErrorMessage;
   bool loading = true;
   bool _disposed = false;
   StreamSubscription<DataChangedDto>? _dataSubscription;
@@ -94,6 +98,7 @@ final class CollectionsController extends ChangeNotifier {
       errorMessage = event.message;
       notifyListeners();
     });
+    widgetDescriptors = await bridge.listWidgetDescriptors();
     await refresh();
   }
 
@@ -141,11 +146,14 @@ final class CollectionsController extends ChangeNotifier {
         records = await bridge.listRecords(id);
         computedFields = await bridge.listComputedFields(id);
         queryDefinitions = await bridge.listQueryDefinitions(id);
+        widgetDefinitions = await bridge.listWidgets(id);
       } else {
         schema = null;
         records = const [];
         computedFields = const [];
         queryDefinitions = const [];
+        widgetDefinitions = const [];
+        widgetEvaluations = const [];
       }
       errorMessage = null;
     } catch (error) {
@@ -154,6 +162,62 @@ final class CollectionsController extends ChangeNotifier {
       loading = false;
       notifyListeners();
     }
+    // Evaluation is isolated so a widget-layer failure can never blank the record list above.
+    await refreshWidgets();
+  }
+
+  /// Reevaluates the visible widgets. Duplicate query references are deduplicated by query ID and
+  /// projection checkpoint inside a single bridge call, and nothing here is persisted.
+  Future<void> refreshWidgets() async {
+    final id = selectedCollectionId;
+    if (id == null) return;
+    try {
+      widgetEvaluations = await bridge.evaluateWidgets(
+        id,
+        DateTime.now().millisecondsSinceEpoch,
+      );
+      widgetErrorMessage = null;
+    } catch (error) {
+      widgetErrorMessage = bridgeMessage(error);
+    }
+    if (!_disposed) notifyListeners();
+  }
+
+  /// The evaluation for one widget, or null while it is still loading.
+  WidgetEvaluationDto? evaluationFor(String widgetId) {
+    for (final evaluation in widgetEvaluations) {
+      if (evaluation.widgetId == widgetId) return evaluation;
+    }
+    return null;
+  }
+
+  /// The descriptor for a widget type. An unrecognized type yields null, which renders as the
+  /// unsupported placeholder rather than an error.
+  WidgetDescriptorDto? descriptorFor(String widgetType) {
+    for (final descriptor in widgetDescriptors) {
+      if (descriptor.widgetType == widgetType) return descriptor;
+    }
+    return null;
+  }
+
+  Future<void> createWidget(WidgetDefinitionDto definition) async {
+    await bridge.createWidget(definition);
+    await refresh();
+  }
+
+  Future<void> updateWidget(WidgetUpdateDto update) async {
+    await bridge.updateWidget(update);
+    await refresh();
+  }
+
+  Future<void> removeWidget(String id) async {
+    await bridge.removeWidget(selectedCollectionId!, id);
+    await refresh();
+  }
+
+  Future<void> reorderWidgets(List<String> ids) async {
+    await bridge.reorderWidgets(selectedCollectionId!, ids);
+    await refresh();
   }
 
   Future<void> selectCollection(String? id) async {
@@ -168,9 +232,11 @@ final class CollectionsController extends ChangeNotifier {
     await refresh();
   }
 
-  Future<void> createQueryDefinition(QueryDefinitionDto definition) async {
-    await bridge.createQueryDefinition(definition);
+  /// Creates a saved query and returns its new id, so a widget can reference it immediately.
+  Future<String> createQueryDefinition(QueryDefinitionDto definition) async {
+    final id = await bridge.createQueryDefinition(definition);
     await refresh();
+    return id;
   }
 
   Future<void> removeComputedField(String id) async {

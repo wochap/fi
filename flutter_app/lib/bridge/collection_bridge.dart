@@ -3,6 +3,7 @@ import 'package:fi/src/rust/api/lifecycle.dart' as lifecycle;
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/src/rust/api/pairing.dart' as pairing;
 import 'package:fi/src/rust/api/queries.dart' as queries;
+import 'package:fi/src/rust/api/widgets.dart' as widgets;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
@@ -76,6 +77,24 @@ abstract interface class CollectionBridge {
     CollectionQueryDto query,
     int nowUtcMs,
   );
+  Future<List<WidgetDefinitionDto>> listWidgets(String collectionId);
+  Future<WidgetDefinitionDto?> getWidget(String collectionId, String id);
+  Future<String> createWidget(WidgetDefinitionDto definition);
+  Future<void> updateWidget(WidgetUpdateDto update);
+  Future<void> removeWidget(String collectionId, String id);
+  Future<void> reorderWidgets(String collectionId, List<String> ids);
+  Future<List<WidgetDescriptorDto>> listWidgetDescriptors();
+  Future<WidgetDescriptorDto> widgetDescriptor(String widgetType);
+  Future<WidgetEvaluationDto> evaluateWidget(
+    String collectionId,
+    String id,
+    int nowUtcMs,
+  );
+  Future<List<WidgetEvaluationDto>> evaluateWidgets(
+    String collectionId,
+    int nowUtcMs,
+  );
+  Future<List<DiagnosticDto>> widgetDiagnostics(String id);
 }
 
 final class RustCollectionBridge implements CollectionBridge {
@@ -285,4 +304,46 @@ final class RustCollectionBridge implements CollectionBridge {
     CollectionQueryDto query,
     int nowUtcMs,
   ) => queries.executeCollectionQuery(query: query, nowUtcMs: nowUtcMs);
+  @override
+  Future<List<WidgetDefinitionDto>> listWidgets(String collectionId) =>
+      widgets.listWidgets(collectionId: collectionId);
+  @override
+  Future<WidgetDefinitionDto?> getWidget(String collectionId, String id) =>
+      widgets.getWidget(collectionId: collectionId, id: id);
+  @override
+  Future<String> createWidget(WidgetDefinitionDto definition) =>
+      widgets.createWidget(definition: definition);
+  @override
+  Future<void> updateWidget(WidgetUpdateDto update) =>
+      widgets.updateWidget(update: update);
+  @override
+  Future<void> removeWidget(String collectionId, String id) =>
+      widgets.removeWidget(collectionId: collectionId, id: id);
+  @override
+  Future<void> reorderWidgets(String collectionId, List<String> ids) =>
+      widgets.reorderWidgets(collectionId: collectionId, ids: ids);
+  @override
+  Future<List<WidgetDescriptorDto>> listWidgetDescriptors() =>
+      widgets.listWidgetDescriptors();
+  @override
+  Future<WidgetDescriptorDto> widgetDescriptor(String widgetType) =>
+      widgets.getWidgetDescriptor(widgetType: widgetType);
+  @override
+  Future<WidgetEvaluationDto> evaluateWidget(
+    String collectionId,
+    String id,
+    int nowUtcMs,
+  ) => widgets.evaluateWidget(
+    collectionId: collectionId,
+    id: id,
+    nowUtcMs: nowUtcMs,
+  );
+  @override
+  Future<List<WidgetEvaluationDto>> evaluateWidgets(
+    String collectionId,
+    int nowUtcMs,
+  ) => widgets.evaluateWidgets(collectionId: collectionId, nowUtcMs: nowUtcMs);
+  @override
+  Future<List<DiagnosticDto>> widgetDiagnostics(String id) =>
+      widgets.widgetDiagnostics(id: id);
 }

@@ -167,4 +167,234 @@ void main() {
     expect(controller.queryDefinitions, isEmpty);
     controller.dispose();
   });
+
+  test('controller drives widget lifecycle, evaluation, and unknown types', () async {
+    final bridge = FakeCollectionBridge();
+    final controller = CollectionsController(bridge);
+    await controller.start();
+    final collection = await controller.createCollection('Money Movement');
+    await controller.selectCollection(collection);
+    const amount = FieldDefinitionDto(
+      id: '',
+      name: 'Amount',
+      fieldType: FieldTypeDto(kind: FieldTypeKindDto.fixedDecimal, scale: 2),
+      required_: true,
+      validation: ValidationMetadataDto(),
+      display: DisplayMetadataDto(multiline: false),
+      order: 0,
+      deleted: false,
+      enumOptions: [],
+    );
+    await controller.addField(amount);
+    final queryId = await controller.createQueryDefinition(
+      QueryDefinitionDto(
+        id: '',
+        collectionId: collection,
+        name: 'Record count',
+        queryVersion: 1,
+        query: CollectionQueryDto(
+          collectionId: collection,
+          shape: const QueryShapeDto(
+            kind: QueryShapeKindDto.scalar,
+            aggregation: AggregationDto(kind: AggregationKindDto.count),
+            fields: [],
+          ),
+          sorting: const [],
+          calendar: const CalendarPolicyDto(
+            timezone: 'UTC',
+            weekStart: WeekStartDto.monday,
+          ),
+        ),
+        order: 0,
+        deleted: false,
+      ),
+    );
+    expect(queryId, isNotEmpty);
+
+    // The descriptor registry is loaded once and drives what the UI offers.
+    expect(controller.widgetDescriptors, hasLength(4));
+    expect(
+      controller.descriptorFor('core.aggregate-number')?.supported,
+      isTrue,
+    );
+    expect(controller.descriptorFor('com.example.future-widget'), isNull);
+
+    final balance = WidgetDefinitionDto(
+      id: '',
+      collectionId: collection,
+      widgetType: 'core.aggregate-number',
+      queryId: queryId,
+      title: 'Balance',
+      configuration: WidgetConfigurationDto(
+        version: 1,
+        body: _map({'suffix': _text('EUR')}),
+      ),
+      layout: WidgetLayoutDto(
+        version: 1,
+        size: WidgetSizeDto.medium,
+        hints: _map(const {}),
+      ),
+      order: 0,
+      deleted: false,
+    );
+    await controller.createWidget(balance);
+    expect(controller.widgetDefinitions.single.title, 'Balance');
+    expect(
+      controller.evaluationFor(controller.widgetDefinitions.single.id)?.ready,
+      isTrue,
+    );
+
+    // A granular update changes only what it names.
+    final id = controller.widgetDefinitions.single.id;
+    await controller.updateWidget(
+      WidgetUpdateDto(
+        id: id,
+        collectionId: collection,
+        title: 'Renamed balance',
+        order: 3,
+      ),
+    );
+    final renamed = controller.widgetDefinitions.single;
+    expect(renamed.title, 'Renamed balance');
+    expect(renamed.order, 3);
+    expect(renamed.configuration, balance.configuration);
+    expect(renamed.widgetType, 'core.aggregate-number');
+
+    // An unknown widget type is preserved and evaluates to a typed per-widget error.
+    final future = WidgetDefinitionDto(
+      id: '',
+      collectionId: collection,
+      widgetType: 'com.example.future-widget',
+      queryId: queryId,
+      title: 'Future',
+      configuration: WidgetConfigurationDto(
+        version: 9,
+        body: _map({'opaque': _integer(7)}),
+      ),
+      layout: WidgetLayoutDto(
+        version: 1,
+        size: WidgetSizeDto.small,
+        hints: _map(const {}),
+      ),
+      order: 1,
+      deleted: false,
+    );
+    await controller.createWidget(future);
+    final futureId = controller.widgetDefinitions
+        .firstWhere((item) => item.widgetType == 'com.example.future-widget')
+        .id;
+    final evaluation = controller.evaluationFor(futureId);
+    expect(evaluation?.ready, isFalse);
+    expect(evaluation?.errorKind, WidgetErrorKindDto.unsupportedType);
+    // The other widget still evaluates; one unsupported definition isolates itself.
+    expect(controller.evaluationFor(id)?.ready, isTrue);
+
+    // Renaming an unknown widget omits its configuration, so the opaque value is untouched.
+    await controller.updateWidget(
+      WidgetUpdateDto(
+        id: futureId,
+        collectionId: collection,
+        title: 'Renamed future',
+      ),
+    );
+    final preserved = controller.widgetDefinitions.firstWhere(
+      (item) => item.id == futureId,
+    );
+    expect(preserved.title, 'Renamed future');
+    expect(preserved.configuration.version, 9);
+    expect(preserved.configuration, future.configuration);
+    expect(preserved.widgetType, 'com.example.future-widget');
+
+    await controller.reorderWidgets([futureId, id]);
+    expect(controller.widgetDefinitions.map((item) => item.id).toList(), [
+      futureId,
+      id,
+    ]);
+
+    await controller.removeWidget(futureId);
+    expect(controller.widgetDefinitions.map((item) => item.id), [id]);
+    controller.dispose();
+  });
+
+  test('a failing widget evaluation never blanks the record list', () async {
+    final bridge = FakeCollectionBridge();
+    final controller = CollectionsController(bridge);
+    await controller.start();
+    final collection = await controller.createCollection('Headaches');
+    await controller.selectCollection(collection);
+    await controller.createRecord(const []);
+    expect(controller.records, hasLength(1));
+
+    // The widget layer fails while records keep loading.
+    bridge.nextError = const BridgeError(
+      kind: BridgeErrorKind.projection,
+      message: 'projection is not ready',
+    );
+    await controller.refresh();
+    expect(controller.errorMessage, 'projection is not ready');
+    controller.dispose();
+  });
+
+  test('evaluation errors stay isolated from definitions and records', () async {
+    final bridge = FakeCollectionBridge();
+    final controller = CollectionsController(bridge);
+    await controller.start();
+    final collection = await controller.createCollection('Headaches');
+    await controller.selectCollection(collection);
+    await controller.createRecord(const []);
+    await controller.createWidget(
+      WidgetDefinitionDto(
+        id: '',
+        collectionId: collection,
+        widgetType: 'core.aggregate-number',
+        queryId: 'query-1',
+        title: 'Balance',
+        configuration: WidgetConfigurationDto(version: 1, body: _map(const {})),
+        layout: WidgetLayoutDto(
+          version: 1,
+          size: WidgetSizeDto.medium,
+          hints: _map(const {}),
+        ),
+        order: 0,
+        deleted: false,
+      ),
+    );
+    expect(controller.widgetDefinitions, hasLength(1));
+    expect(controller.records, hasLength(1));
+
+    // A later refresh where only evaluation fails keeps definitions and records intact.
+    bridge.nextError = const BridgeError(
+      kind: BridgeErrorKind.projection,
+      message: 'evaluation unavailable',
+    );
+    await controller.refreshWidgets();
+    expect(controller.widgetErrorMessage, 'evaluation unavailable');
+    expect(controller.widgetDefinitions, hasLength(1));
+    expect(controller.records, hasLength(1));
+    controller.dispose();
+  });
 }
+
+StructuredValueDto _map(Map<String, StructuredValueDto> entries) =>
+    StructuredValueDto(
+      kind: StructuredValueKindDto.map,
+      items: const [],
+      entries: [
+        for (final entry in entries.entries)
+          StructuredEntryDto(key: entry.key, value: entry.value),
+      ],
+    );
+
+StructuredValueDto _text(String value) => StructuredValueDto(
+  kind: StructuredValueKindDto.text,
+  textValue: value,
+  items: const [],
+  entries: const [],
+);
+
+StructuredValueDto _integer(int value) => StructuredValueDto(
+  kind: StructuredValueKindDto.integer,
+  integerValue: value,
+  items: const [],
+  entries: const [],
+);

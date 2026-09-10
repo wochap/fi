@@ -46,6 +46,8 @@ use crate::{
         CollectionSchema, CollectionSchemaId, EnumOption, EnumOptionId, FieldDefinition, FieldId,
     },
     values::FieldValue,
+    widget_registry::{ResolvedWidgetQuery, WidgetEvaluation, evaluate_widget},
+    widgets::{WidgetDefinition, WidgetId, WidgetUpdate},
 };
 
 #[derive(Clone)]
@@ -1133,6 +1135,48 @@ impl AppCore {
         )
         .await
     }
+    pub async fn create_widget(&self, definition: WidgetDefinition) -> Result<()> {
+        let collection_id = definition.collection_id;
+        self.generic(
+            GenericCommand::CreateWidget(definition),
+            vec![DomainKind::Widgets],
+            vec![collection_id],
+        )
+        .await
+    }
+    pub async fn update_widget(&self, update: WidgetUpdate) -> Result<()> {
+        let collection_id = update.collection_id;
+        self.generic(
+            GenericCommand::UpdateWidget(update),
+            vec![DomainKind::Widgets],
+            vec![collection_id],
+        )
+        .await
+    }
+    pub async fn remove_widget(
+        &self,
+        collection_id: CollectionSchemaId,
+        id: WidgetId,
+    ) -> Result<()> {
+        self.generic(
+            GenericCommand::RemoveWidget { collection_id, id },
+            vec![DomainKind::Widgets],
+            vec![collection_id],
+        )
+        .await
+    }
+    pub async fn reorder_widgets(
+        &self,
+        collection_id: CollectionSchemaId,
+        ids: Vec<WidgetId>,
+    ) -> Result<()> {
+        self.generic(
+            GenericCommand::ReorderWidgets { collection_id, ids },
+            vec![DomainKind::Widgets],
+            vec![collection_id],
+        )
+        .await
+    }
 
     pub async fn submit_generic(
         &self,
@@ -1190,6 +1234,31 @@ impl AppCore {
     ) -> Result<Vec<QueryDefinition>> {
         ensure_query_ready(self.lifecycle_state())?;
         self.read_model.query_definitions(collection_id)
+    }
+    /// Active widgets in deterministic dashboard order.
+    pub fn widget_definitions(
+        &self,
+        collection_id: CollectionSchemaId,
+    ) -> Result<Vec<WidgetDefinition>> {
+        ensure_query_ready(self.lifecycle_state())?;
+        self.read_model.widgets(collection_id)
+    }
+    /// One widget including tombstoned and unsupported definitions, so preserved data can be read
+    /// back and edited through safe metadata changes only.
+    pub fn widget_definition(
+        &self,
+        collection_id: CollectionSchemaId,
+        id: WidgetId,
+    ) -> Result<Option<WidgetDefinition>> {
+        ensure_query_ready(self.lifecycle_state())?;
+        Ok(self
+            .read_model
+            .widget(id)?
+            .filter(|widget| widget.collection_id == collection_id))
+    }
+    pub fn widget_diagnostics(&self, id: WidgetId) -> Result<Vec<crate::GenericDiagnostic>> {
+        ensure_query_ready(self.lifecycle_state())?;
+        self.read_model.entity_diagnostics(&id.to_string())
     }
     pub fn validate_collection_query(
         &self,
@@ -1260,6 +1329,90 @@ impl AppCore {
             crate::query::QueryEvaluationError::InvalidDefinition(error.to_string())
         })?;
         self.execute_collection_query(&query, now_utc_ms)
+    }
+
+    /// Evaluates one widget in isolation. Any failure — unsupported type, unavailable or invalid
+    /// query, shape mismatch, overflow — is a typed per-widget error, never a dashboard failure.
+    pub fn evaluate_widget(
+        &self,
+        collection_id: CollectionSchemaId,
+        id: WidgetId,
+        now_utc_ms: i64,
+    ) -> Result<WidgetEvaluation> {
+        let definition = self.widget_definition(collection_id, id)?.ok_or_else(|| {
+            AppError::from(crate::DomainError::NotFound {
+                kind: "widget",
+                id: id.to_string(),
+            })
+        })?;
+        Ok(self.evaluate_widget_definition(&definition, now_utc_ms, &mut None))
+    }
+
+    /// Evaluates every active widget of a collection. Duplicate query references are executed once
+    /// per call, so one refresh cycle never repeats identical work. Nothing here is persisted or
+    /// synchronized: results are derived from the current projection only.
+    pub fn evaluate_widgets(
+        &self,
+        collection_id: CollectionSchemaId,
+        now_utc_ms: i64,
+    ) -> Result<Vec<WidgetEvaluation>> {
+        let definitions = self.widget_definitions(collection_id)?;
+        let mut cache = None;
+        Ok(definitions
+            .iter()
+            .map(|definition| self.evaluate_widget_definition(definition, now_utc_ms, &mut cache))
+            .collect())
+    }
+
+    fn evaluate_widget_definition(
+        &self,
+        definition: &WidgetDefinition,
+        now_utc_ms: i64,
+        cache: &mut Option<(
+            QueryId,
+            std::result::Result<QueryResult, crate::query::QueryEvaluationError>,
+        )>,
+    ) -> WidgetEvaluation {
+        let stored = self
+            .read_model
+            .query_definitions(definition.collection_id)
+            .ok()
+            .and_then(|definitions| {
+                definitions
+                    .into_iter()
+                    .find(|item| item.id == definition.query_id && !item.deleted)
+            });
+        let decoded = stored.as_ref().map(|item| item.query.query());
+        let query = decoded.as_ref().and_then(|result| result.as_ref().ok());
+        let resolved = match (stored.is_some(), query) {
+            (_, Some(query)) => ResolvedWidgetQuery::Query(query),
+            (false, None) => ResolvedWidgetQuery::Missing,
+            (true, None) => ResolvedWidgetQuery::Invalid {
+                message: decoded
+                    .as_ref()
+                    .and_then(|result| result.as_ref().err())
+                    .map(|error| error.to_string())
+                    .unwrap_or_else(|| "widget query is unavailable".into()),
+            },
+        };
+        // Execution is only attempted for a resolvable query, and duplicate references inside one
+        // refresh cycle are evaluated once.
+        let outcome = match &resolved {
+            ResolvedWidgetQuery::Query(query) => match cache {
+                Some((cached_id, cached)) if *cached_id == definition.query_id => cached.clone(),
+                _ => {
+                    let evaluated = self.execute_collection_query(query, now_utc_ms);
+                    *cache = Some((definition.query_id, evaluated.clone()));
+                    evaluated
+                }
+            },
+            ResolvedWidgetQuery::Missing | ResolvedWidgetQuery::Invalid { .. } => {
+                Err(crate::query::QueryEvaluationError::InvalidDefinition(
+                    "widget query is unavailable".into(),
+                ))
+            }
+        };
+        evaluate_widget(definition, resolved, outcome)
     }
     pub async fn shutdown(&self) -> Result<()> {
         request(&self.commands, OwnerCommand::Shutdown).await
@@ -1421,7 +1574,7 @@ async fn owner_loop(mut owner: Owner, mut commands: mpsc::Receiver<OwnerCommand>
             }
             event = recv_document(&mut document_events) => {
                 match event {
-                    Ok(_) | Err(broadcast::error::RecvError::Lagged(_)) => { owner.refresh_projection(vec![DomainKind::Collections, DomainKind::Schemas, DomainKind::Records, DomainKind::ComputedFields, DomainKind::Queries]).await; },
+                    Ok(_) | Err(broadcast::error::RecvError::Lagged(_)) => { owner.refresh_projection(vec![DomainKind::Collections, DomainKind::Schemas, DomainKind::Records, DomainKind::ComputedFields, DomainKind::Queries, DomainKind::Widgets]).await; },
                     Err(broadcast::error::RecvError::Closed) => { document_events = None; }
                 }
             }
@@ -1433,7 +1586,7 @@ async fn owner_loop(mut owner: Owner, mut commands: mpsc::Receiver<OwnerCommand>
                     && let Some(handle) = &owner.root
                     && handle.id() == root
                     && handle.ready().await.is_ok()
-                    && owner.refresh_projection(vec![DomainKind::Collections, DomainKind::Schemas, DomainKind::Records, DomainKind::ComputedFields, DomainKind::Queries]).await
+                    && owner.refresh_projection(vec![DomainKind::Collections, DomainKind::Schemas, DomainKind::Records, DomainKind::ComputedFields, DomainKind::Queries, DomainKind::Widgets]).await
                 {
                     owner.lifecycle.send_replace(ApplicationState::Ready { root });
                 }
@@ -1643,6 +1796,10 @@ fn command_name(command: &GenericCommand) -> &'static str {
         GenericCommand::UpdateQuery(_) => "update_query",
         GenericCommand::RemoveQuery { .. } => "remove_query",
         GenericCommand::ReorderQueries { .. } => "reorder_queries",
+        GenericCommand::CreateWidget(_) => "create_widget",
+        GenericCommand::UpdateWidget(_) => "update_widget",
+        GenericCommand::RemoveWidget { .. } => "remove_widget",
+        GenericCommand::ReorderWidgets { .. } => "reorder_widgets",
     }
 }
 

@@ -16,6 +16,49 @@ final class FakeCollectionBridge implements CollectionBridge {
   final Map<String, List<ComputedFieldDefinitionDto>> computedFields = {};
   final Map<String, List<QueryDefinitionDto>> queryDefinitions = {};
   QueryResultDto? nextQueryResult;
+  final Map<String, List<WidgetDefinitionDto>> widgetDefinitions = {};
+  final Map<String, List<DiagnosticDto>> diagnostics = {};
+  final List<String> evaluatedCollections = [];
+  int evaluationsRequested = 0;
+
+  /// The renderer registry this fake advertises. Tests drop an entry to simulate a build that
+  /// cannot render a synchronized widget type.
+  List<WidgetDescriptorDto> descriptors = const [
+    WidgetDescriptorDto(
+      widgetType: 'core.aggregate-number',
+      label: 'Aggregate number',
+      acceptedShapes: [QueryResultShapeDto.scalar],
+      configurationVersion: 1,
+      supported: true,
+    ),
+    WidgetDescriptorDto(
+      widgetType: 'core.line-chart',
+      label: 'Line chart',
+      acceptedShapes: [
+        QueryResultShapeDto.series,
+        QueryResultShapeDto.categorySeries,
+      ],
+      configurationVersion: 1,
+      supported: true,
+    ),
+    WidgetDescriptorDto(
+      widgetType: 'core.bar-chart',
+      label: 'Bar chart',
+      acceptedShapes: [
+        QueryResultShapeDto.categorySeries,
+        QueryResultShapeDto.series,
+      ],
+      configurationVersion: 1,
+      supported: true,
+    ),
+    WidgetDescriptorDto(
+      widgetType: 'core.scatter-plot',
+      label: 'Scatter plot',
+      acceptedShapes: [QueryResultShapeDto.series],
+      configurationVersion: 1,
+      supported: true,
+    ),
+  ];
   final List<TrustedDeviceDto> devices = [];
   final List<String> confirmedSessions = [];
   final List<String> rejectedSessions = [];
@@ -51,6 +94,15 @@ final class FakeCollectionBridge implements CollectionBridge {
         DomainKindDto.schemas,
         DomainKindDto.records,
       ],
+      collectionIds: id == null ? const [] : [id],
+      checkpoint: 'fake',
+    ),
+  );
+
+  /// Widget commands emit only the Widgets domain kind, matching the authoritative event scope.
+  void changedWidgets([String? id]) => dataController.add(
+    DataChangedDto(
+      kinds: const [DomainKindDto.widgets],
       collectionIds: id == null ? const [] : [id],
       checkpoint: 'fake',
     ),
@@ -479,6 +531,171 @@ final class FakeCollectionBridge implements CollectionBridge {
           categoryPoints: [],
           records: [],
         );
+  }
+
+  @override
+  Future<List<WidgetDefinitionDto>> listWidgets(String collectionId) async {
+    _fail();
+    return List.of(widgetDefinitions[collectionId] ?? const []);
+  }
+
+  @override
+  Future<WidgetDefinitionDto?> getWidget(String collectionId, String id) async {
+    for (final item in widgetDefinitions[collectionId] ?? const []) {
+      if (item.id == id) return item;
+    }
+    return null;
+  }
+
+  @override
+  Future<String> createWidget(WidgetDefinitionDto definition) async {
+    _fail();
+    final id = definition.id.isEmpty ? 'widget-${_next++}' : definition.id;
+    widgetDefinitions
+        .putIfAbsent(definition.collectionId, () => [])
+        .add(
+          WidgetDefinitionDto(
+            id: id,
+            collectionId: definition.collectionId,
+            widgetType: definition.widgetType,
+            queryId: definition.queryId,
+            title: definition.title,
+            configuration: definition.configuration,
+            layout: definition.layout,
+            order: definition.order,
+            deleted: false,
+          ),
+        );
+    changedWidgets(definition.collectionId);
+    return id;
+  }
+
+  @override
+  Future<void> updateWidget(WidgetUpdateDto update) async {
+    _fail();
+    final items = widgetDefinitions[update.collectionId]!;
+    final index = items.indexWhere((item) => item.id == update.id);
+    final old = items[index];
+    // Omitted fields stay untouched, mirroring the authoritative register granularity.
+    items[index] = WidgetDefinitionDto(
+      id: old.id,
+      collectionId: old.collectionId,
+      widgetType: old.widgetType,
+      queryId: update.queryId ?? old.queryId,
+      title: update.title ?? old.title,
+      configuration: update.configuration ?? old.configuration,
+      layout: update.layout ?? old.layout,
+      order: update.order ?? old.order,
+      deleted: old.deleted,
+    );
+    changedWidgets(update.collectionId);
+  }
+
+  @override
+  Future<void> removeWidget(String collectionId, String id) async {
+    widgetDefinitions[collectionId]?.removeWhere((item) => item.id == id);
+    changedWidgets(collectionId);
+  }
+
+  @override
+  Future<void> reorderWidgets(String collectionId, List<String> ids) async {
+    final items = widgetDefinitions[collectionId] ?? [];
+    final byId = {for (final item in items) item.id: item};
+    widgetDefinitions[collectionId] = [
+      for (var i = 0; i < ids.length; i++)
+        WidgetDefinitionDto(
+          id: byId[ids[i]]!.id,
+          collectionId: collectionId,
+          widgetType: byId[ids[i]]!.widgetType,
+          queryId: byId[ids[i]]!.queryId,
+          title: byId[ids[i]]!.title,
+          configuration: byId[ids[i]]!.configuration,
+          layout: byId[ids[i]]!.layout,
+          order: i,
+          deleted: byId[ids[i]]!.deleted,
+        ),
+    ];
+    changedWidgets(collectionId);
+  }
+
+  @override
+  Future<List<WidgetDescriptorDto>> listWidgetDescriptors() async =>
+      List.of(descriptors.where((descriptor) => descriptor.supported));
+
+  @override
+  Future<WidgetDescriptorDto> widgetDescriptor(String widgetType) async =>
+      descriptors.firstWhere(
+        (descriptor) => descriptor.widgetType == widgetType,
+        orElse: () => WidgetDescriptorDto(
+          widgetType: widgetType,
+          label: '',
+          acceptedShapes: const [],
+          configurationVersion: 0,
+          supported: false,
+        ),
+      );
+
+  @override
+  Future<WidgetEvaluationDto> evaluateWidget(
+    String collectionId,
+    String id,
+    int nowUtcMs,
+  ) async {
+    _fail();
+    final definition = await getWidget(collectionId, id);
+    if (definition == null) {
+      throw BridgeError(
+        kind: BridgeErrorKind.validation,
+        message: 'The selected widget no longer exists.',
+      );
+    }
+    return _evaluate(definition);
+  }
+
+  @override
+  Future<List<WidgetEvaluationDto>> evaluateWidgets(
+    String collectionId,
+    int nowUtcMs,
+  ) async {
+    _fail();
+    evaluationsRequested++;
+    evaluatedCollections.add(collectionId);
+    return widgetDefinitions[collectionId]?.map(_evaluate).toList() ?? const [];
+  }
+
+  @override
+  Future<List<DiagnosticDto>> widgetDiagnostics(String id) async =>
+      List.of(diagnostics[id] ?? const []);
+
+  WidgetEvaluationDto _evaluate(WidgetDefinitionDto definition) {
+    final supported = descriptors.any(
+      (descriptor) =>
+          descriptor.supported &&
+          descriptor.widgetType == definition.widgetType,
+    );
+    if (!supported) {
+      return WidgetEvaluationDto(
+        widgetId: definition.id,
+        widgetType: definition.widgetType,
+        ready: false,
+        errorKind: WidgetErrorKindDto.unsupportedType,
+        message:
+            'widget type ${definition.widgetType} has no local implementation',
+      );
+    }
+    return WidgetEvaluationDto(
+      widgetId: definition.id,
+      widgetType: definition.widgetType,
+      ready: true,
+      result:
+          nextQueryResult ??
+          const QueryResultDto(
+            kind: QueryResultKindDto.scalar,
+            points: [],
+            categoryPoints: [],
+            records: [],
+          ),
+    );
   }
 
   @override

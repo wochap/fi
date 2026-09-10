@@ -19,9 +19,10 @@ use crate::{
     records::{GenericRecord, RecordId},
     schema::{CollectionSchema, CollectionSchemaId, FieldDefinition, FieldId},
     values::FieldValue,
+    widgets::{WidgetDefinition, WidgetId},
 };
 
-pub const PROJECTION_SCHEMA_VERSION: i64 = 3;
+pub const PROJECTION_SCHEMA_VERSION: i64 = 4;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProjectionCheckpoint {
@@ -133,6 +134,12 @@ impl ReadModel {
                 order_value INTEGER NOT NULL, deleted INTEGER NOT NULL CHECK(deleted IN (0,1)),
                 definition_json TEXT NOT NULL, FOREIGN KEY(collection_id) REFERENCES collections(id)
              ) STRICT;
+             CREATE TABLE IF NOT EXISTS widgets (
+                id TEXT PRIMARY KEY NOT NULL, collection_id TEXT NOT NULL, widget_type TEXT NOT NULL,
+                query_id TEXT NOT NULL, title TEXT NOT NULL,
+                order_value INTEGER NOT NULL, deleted INTEGER NOT NULL CHECK(deleted IN (0,1)),
+                definition_json TEXT NOT NULL, FOREIGN KEY(collection_id) REFERENCES collections(id)
+             ) STRICT;
              CREATE TABLE IF NOT EXISTS record_values (
                 record_id TEXT NOT NULL, collection_id TEXT NOT NULL, field_id TEXT NOT NULL,
                 value_kind TEXT NOT NULL, integer_value INTEGER, text_value TEXT, boolean_value INTEGER,
@@ -145,7 +152,7 @@ impl ReadModel {
                    OR (value_kind='boolean' AND integer_value IS NULL AND text_value IS NULL AND boolean_value IS NOT NULL))
              ) STRICT;
              CREATE TABLE IF NOT EXISTS projection_diagnostics (
-                kind TEXT NOT NULL, entity_id TEXT NOT NULL, field_id TEXT, message TEXT NOT NULL,
+                kind TEXT NOT NULL, entity_id TEXT NOT NULL, field_id TEXT NOT NULL, message TEXT NOT NULL,
                 PRIMARY KEY(kind,entity_id,field_id,message)
              ) STRICT;
              CREATE TABLE IF NOT EXISTS projection_metadata (
@@ -157,6 +164,7 @@ impl ReadModel {
              CREATE INDEX IF NOT EXISTS records_collection_id ON records(collection_id,deleted,id);
              CREATE INDEX IF NOT EXISTS computed_fields_collection_order ON computed_fields(collection_id,deleted,order_value,id);
              CREATE INDEX IF NOT EXISTS query_definitions_collection_order ON query_definitions(collection_id,deleted,order_value,id);
+             CREATE INDEX IF NOT EXISTS widgets_collection_order ON widgets(collection_id,deleted,order_value,id);
              CREATE INDEX IF NOT EXISTS record_values_integer ON record_values(collection_id,field_id,integer_value,record_id);
              CREATE INDEX IF NOT EXISTS record_values_text ON record_values(collection_id,field_id,text_value,record_id);"
         ).map_err(|error| projection_db(&path, error))?;
@@ -219,6 +227,19 @@ impl ReadModel {
                     "id",
                     "collection_id",
                     "name",
+                    "order_value",
+                    "deleted",
+                    "definition_json",
+                ][..],
+            ),
+            (
+                "widgets",
+                &[
+                    "id",
+                    "collection_id",
+                    "widget_type",
+                    "query_id",
+                    "title",
                     "order_value",
                     "deleted",
                     "definition_json",
@@ -300,7 +321,7 @@ impl ReadModel {
         let transaction = connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(|error| projection_db(&self.path, error))?;
-        transaction.execute_batch("DELETE FROM record_values; DELETE FROM projection_diagnostics; DELETE FROM query_definitions; DELETE FROM computed_fields; DELETE FROM records; DELETE FROM enum_options; DELETE FROM fields; DELETE FROM collections;").map_err(|error| projection_db(&self.path, error))?;
+        transaction.execute_batch("DELETE FROM record_values; DELETE FROM projection_diagnostics; DELETE FROM widgets; DELETE FROM query_definitions; DELETE FROM computed_fields; DELETE FROM records; DELETE FROM enum_options; DELETE FROM fields; DELETE FROM collections;").map_err(|error| projection_db(&self.path, error))?;
         for schema in &snapshot.collections {
             transaction
                 .execute(
@@ -353,8 +374,17 @@ impl ReadModel {
                 .map_err(|error| projection_db(&self.path, error))?;
             transaction.execute("INSERT INTO query_definitions(id,collection_id,name,order_value,deleted,definition_json) VALUES(?1,?2,?3,?4,?5,?6)", params![definition.id.to_string(), definition.collection_id.to_string(), definition.name, definition.order, definition.deleted, encoded]).map_err(|error| projection_db(&self.path, error))?;
         }
+        // The complete definition stays in `definition_json` so unknown widget types and unknown
+        // configuration keys survive a read-model rebuild byte for byte.
+        for widget in &snapshot.widgets {
+            let encoded =
+                serde_json::to_string(widget).map_err(|error| projection_db(&self.path, error))?;
+            transaction.execute("INSERT INTO widgets(id,collection_id,widget_type,query_id,title,order_value,deleted,definition_json) VALUES(?1,?2,?3,?4,?5,?6,?7,?8)", params![widget.id.to_string(), widget.collection_id.to_string(), widget.widget_type.to_string(), widget.query_id.to_string(), widget.title, widget.order, widget.deleted, encoded]).map_err(|error| projection_db(&self.path, error))?;
+        }
         for diagnostic in &snapshot.diagnostics {
-            transaction.execute("INSERT INTO projection_diagnostics(kind,entity_id,field_id,message) VALUES(?1,?2,?3,?4)", params![diagnostic.kind, diagnostic.entity_id, diagnostic.field_id.map(|id| id.to_string()), diagnostic.message]).map_err(|error| projection_db(&self.path, error))?;
+            // `field_id` participates in the STRICT primary key, so an entity-level diagnostic
+            // without a field is stored as an empty string rather than NULL.
+            transaction.execute("INSERT INTO projection_diagnostics(kind,entity_id,field_id,message) VALUES(?1,?2,?3,?4)", params![diagnostic.kind, diagnostic.entity_id, diagnostic.field_id.map_or_else(String::new, |id| id.to_string()), diagnostic.message]).map_err(|error| projection_db(&self.path, error))?;
         }
         transaction.execute("INSERT INTO projection_metadata(singleton,root_id,schema_version,heads) VALUES(1,?1,?2,?3) ON CONFLICT(singleton) DO UPDATE SET root_id=excluded.root_id,schema_version=excluded.schema_version,heads=excluded.heads", params![checkpoint.root.to_string(), checkpoint.schema_version, checkpoint.heads]).map_err(|error| projection_db(&self.path, error))?;
         transaction
@@ -488,6 +518,36 @@ impl ReadModel {
             "SELECT definition_json FROM query_definitions WHERE collection_id=?1 AND deleted=0 ORDER BY order_value,id",
             collection_id,
         )
+    }
+    /// Active widgets in deterministic order: explicit order first, stable ID as tie breaker.
+    pub fn widgets(&self, collection_id: CollectionSchemaId) -> Result<Vec<WidgetDefinition>> {
+        self.load_definitions(
+            "SELECT definition_json FROM widgets WHERE collection_id=?1 AND deleted=0 ORDER BY order_value,id",
+            collection_id,
+        )
+    }
+    /// Projected validation diagnostics for one entity, including merged widget definitions this
+    /// device would have rejected locally.
+    pub fn entity_diagnostics(&self, entity_id: &str) -> Result<Vec<GenericDiagnostic>> {
+        let connection = self.lock()?;
+        diagnostics(&connection, &self.path, entity_id)
+    }
+    /// One widget regardless of tombstone, so an unsupported definition can be read back and
+    /// edited through safe metadata changes only.
+    pub fn widget(&self, id: WidgetId) -> Result<Option<WidgetDefinition>> {
+        let connection = self.lock()?;
+        connection
+            .query_row(
+                "SELECT definition_json FROM widgets WHERE id=?1",
+                [id.to_string()],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(|error| projection_db(&self.path, error))?
+            .map(|encoded| {
+                serde_json::from_str(&encoded).map_err(|error| projection_db(&self.path, error))
+            })
+            .transpose()
     }
     fn load_definitions<T: serde::de::DeserializeOwned>(
         &self,
@@ -691,7 +751,7 @@ fn diagnostics(
             Ok((
                 row.get::<_, String>(0)?,
                 row.get::<_, String>(1)?,
-                row.get::<_, Option<String>>(2)?,
+                row.get::<_, String>(2)?,
                 row.get::<_, String>(3)?,
             ))
         })
@@ -702,7 +762,9 @@ fn diagnostics(
             Ok(GenericDiagnostic {
                 kind,
                 entity_id,
-                field_id: field_id.map(|id| id.parse()).transpose()?,
+                field_id: (!field_id.is_empty())
+                    .then(|| field_id.parse())
+                    .transpose()?,
                 message,
             })
         })
@@ -836,7 +898,7 @@ fn projection_db(path: &Path, error: impl std::fmt::Display) -> AppError {
 mod tests {
     use super::*;
     use crate::{
-        APP_SCHEMA_VERSION,
+        APP_SCHEMA_VERSION, QueryId,
         hlc::{HlcNodeId, HlcStamp},
         query::{
             CalendarPolicy, CollectionQuery, ComparisonOperator, Expression, FieldReference,
@@ -846,6 +908,10 @@ mod tests {
         schema::{
             CollectionSchema, CollectionSchemaId, DisplayMetadata, FieldDefinition, FieldId,
             FieldType, ValidationMetadata,
+        },
+        widgets::{
+            StructuredValue, WidgetConfiguration, WidgetDefinition, WidgetId, WidgetLayout,
+            WidgetType,
         },
     };
     use std::collections::BTreeMap;
@@ -927,6 +993,27 @@ mod tests {
             field_id: Some(field_id),
             message: "repairable conflict".into(),
         };
+        let widget_id = WidgetId::new();
+        let unknown_widget = WidgetDefinition {
+            id: widget_id,
+            collection_id,
+            widget_type: WidgetType::preserved("com.example.future-widget".into()),
+            query_id: QueryId::new(),
+            title: "Future".into(),
+            configuration: WidgetConfiguration {
+                version: 9,
+                body: StructuredValue::Map(BTreeMap::from([(
+                    "opaque".into(),
+                    StructuredValue::List(vec![
+                        StructuredValue::Integer(-2350),
+                        StructuredValue::Null,
+                    ]),
+                )])),
+            },
+            layout: WidgetLayout::default(),
+            order: 3,
+            deleted: false,
+        };
         let snapshot = GenericSnapshot {
             schema_version: APP_SCHEMA_VERSION,
             collections: vec![CollectionSchema {
@@ -952,7 +1039,16 @@ mod tests {
             }],
             computed_fields: vec![],
             query_definitions: vec![],
-            diagnostics: vec![diagnostic.clone()],
+            widgets: vec![unknown_widget.clone()],
+            diagnostics: vec![
+                diagnostic.clone(),
+                GenericDiagnostic {
+                    kind: "widget_validation".into(),
+                    entity_id: widget_id.to_string(),
+                    field_id: None,
+                    message: "query_id: query was not found".into(),
+                },
+            ],
             max_stamp: None,
         };
         let checkpoint =
@@ -968,6 +1064,19 @@ mod tests {
         assert_eq!(projected.diagnostics, vec![diagnostic]);
         assert!(!projected.valid);
         assert_eq!(model.checkpoint().unwrap(), Some(checkpoint.clone()));
+        // An unrecognized widget type and its opaque configuration survive the read model intact.
+        assert_eq!(model.widgets(collection_id).unwrap(), vec![unknown_widget]);
+        assert_eq!(
+            model.widget(widget_id).unwrap().unwrap().widget_type,
+            WidgetType::preserved("com.example.future-widget".into())
+        );
+        assert!(
+            model
+                .entity_diagnostics(&widget_id.to_string())
+                .unwrap()
+                .iter()
+                .any(|item| item.kind == "widget_validation")
+        );
 
         let empty = GenericSnapshot {
             schema_version: APP_SCHEMA_VERSION,
@@ -975,6 +1084,7 @@ mod tests {
             records: vec![],
             computed_fields: vec![],
             query_definitions: vec![],
+            widgets: vec![],
             diagnostics: vec![],
             max_stamp: None,
         };

@@ -28,6 +28,9 @@ pub enum DomainKind {
     Records,
     ComputedFields,
     Queries,
+    /// Widget definitions changed. Derived widget results are never synchronized, so this always
+    /// means "reread definitions and reevaluate visible widgets".
+    Widgets,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

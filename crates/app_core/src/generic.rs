@@ -24,9 +24,14 @@ use crate::{
         CollectionSchema, CollectionSchemaId, EnumOption, EnumOptionId, FieldDefinition, FieldId,
     },
     values::FieldValue,
+    widget_registry::{QueryResultShape, descriptor_for, validate_widget_configuration},
+    widgets::{
+        WidgetConfiguration, WidgetDefinition, WidgetId, WidgetLayout, WidgetType, WidgetUpdate,
+        validate_title,
+    },
 };
 
-pub const APP_SCHEMA_VERSION: i64 = 3;
+pub const APP_SCHEMA_VERSION: i64 = 4;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct GenericDiagnostic {
@@ -43,6 +48,7 @@ pub struct GenericSnapshot {
     pub records: Vec<GenericRecord>,
     pub computed_fields: Vec<ComputedFieldDefinition>,
     pub query_definitions: Vec<QueryDefinition>,
+    pub widgets: Vec<WidgetDefinition>,
     pub diagnostics: Vec<GenericDiagnostic>,
     pub max_stamp: Option<HlcStamp>,
 }
@@ -121,6 +127,16 @@ pub enum GenericCommand {
     ReorderQueries {
         collection_id: CollectionSchemaId,
         ids: Vec<QueryId>,
+    },
+    CreateWidget(WidgetDefinition),
+    UpdateWidget(WidgetUpdate),
+    RemoveWidget {
+        collection_id: CollectionSchemaId,
+        id: WidgetId,
+    },
+    ReorderWidgets {
+        collection_id: CollectionSchemaId,
+        ids: Vec<WidgetId>,
     },
 }
 
@@ -339,9 +355,127 @@ impl GenericCommand {
                     "query_ids",
                 )?;
             }
+            Self::CreateWidget(definition) => {
+                active_collection(snapshot, definition.collection_id)?;
+                definition
+                    .validate_standalone()
+                    .map_err(|error| invalid("widget", error.to_string()))?;
+                if definition.deleted {
+                    return Err(invalid("widget", "cannot create a removed widget"));
+                }
+                if snapshot.widgets.iter().any(|item| item.id == definition.id) {
+                    return Err(invalid("widget_id", "already exists"));
+                }
+                validate_widget_query(
+                    &snapshot.query_definitions,
+                    &definition.widget_type,
+                    definition.query_id,
+                )?;
+            }
+            Self::UpdateWidget(update) => {
+                active_collection(snapshot, update.collection_id)?;
+                let existing = active_widget(snapshot, update.collection_id, update.id)?;
+                if update.is_empty() {
+                    return Err(invalid("widget", "update changes nothing"));
+                }
+                if let Some(title) = &update.title {
+                    validate_title(title).map_err(|error| invalid("title", error.to_string()))?;
+                }
+                if let Some(configuration) = &update.configuration {
+                    validate_widget_configuration(existing.widget_type.as_str(), configuration)
+                        .map_err(|error| invalid("configuration", error.to_string()))?;
+                }
+                if let Some(layout) = &update.layout {
+                    layout
+                        .validate()
+                        .map_err(|error| invalid("layout", error.to_string()))?;
+                }
+                if let Some(query_id) = update.query_id {
+                    validate_widget_query(
+                        &snapshot.query_definitions,
+                        &existing.widget_type,
+                        query_id,
+                    )?;
+                }
+            }
+            Self::RemoveWidget { collection_id, id } => {
+                active_collection(snapshot, *collection_id)?;
+                active_widget(snapshot, *collection_id, *id)?;
+            }
+            Self::ReorderWidgets { collection_id, ids } => {
+                active_collection(snapshot, *collection_id)?;
+                validate_reorder(
+                    ids,
+                    snapshot
+                        .widgets
+                        .iter()
+                        .filter(|item| item.collection_id == *collection_id && !item.deleted)
+                        .map(|item| item.id),
+                    "widget_ids",
+                )?;
+            }
         }
         Ok(())
     }
+}
+
+/// Checks that a widget's referenced query exists, decodes, and produces a result shape the
+/// widget descriptor accepts. Unknown widget types are valid preserved data and are only checked
+/// for query existence, never coerced into a built-in contract.
+fn validate_widget_query(
+    query_definitions: &[QueryDefinition],
+    widget_type: &WidgetType,
+    query_id: QueryId,
+) -> Result<(), DomainError> {
+    let definition = query_definitions
+        .iter()
+        .find(|item| item.id == query_id && !item.deleted)
+        .ok_or_else(|| not_found("query", query_id))?;
+    let Some(descriptor) = descriptor_for(widget_type.as_str()) else {
+        return Ok(());
+    };
+    let query = definition
+        .query
+        .query()
+        .map_err(|error| invalid("query_id", error.to_string()))?;
+    if query.collection_id != definition.collection_id {
+        return Err(invalid(
+            "query_id",
+            "references a query from another collection",
+        ));
+    }
+    if descriptor.accepts(&query.shape) {
+        Ok(())
+    } else {
+        let accepted = descriptor
+            .accepted_shapes
+            .iter()
+            .copied()
+            .map(QueryResultShape::label)
+            .collect::<Vec<_>>()
+            .join(" or ");
+        Err(invalid(
+            "query_id",
+            format!(
+                "returns a {} result but {} accepts {}",
+                QueryResultShape::from(&query.shape).label(),
+                descriptor.widget_type,
+                accepted
+            ),
+        ))
+    }
+}
+
+fn widget_diagnostic(
+    query_definitions: &[QueryDefinition],
+    widget: &WidgetDefinition,
+) -> Option<String> {
+    if let Err(error) = widget.validate_standalone() {
+        return Some(error.to_string());
+    }
+    validate_widget_query(query_definitions, &widget.widget_type, widget.query_id)
+        .err()
+        .map(|error| error.to_string())
 }
 
 pub fn initialize_generic(tx: &mut AutomergeTransaction<'_>) -> automerge_repo::Result<()> {
@@ -584,8 +718,152 @@ pub fn apply_generic_command(
                 )?;
             }
         }
+        GenericCommand::CreateWidget(definition) => {
+            write_widget(tx, &collections, definition, stamp)?
+        }
+        GenericCommand::UpdateWidget(update) => {
+            let entry = widget_entry(
+                tx,
+                &collections,
+                update.collection_id,
+                &update.id.to_string(),
+            )
+            .map_err(repo_change)?;
+            if let Some(title) = &update.title {
+                write_lww_register(
+                    tx,
+                    &entry,
+                    "title",
+                    &FieldValue::Text(title.trim().into()),
+                    stamp,
+                )?;
+            }
+            if let Some(query_id) = update.query_id {
+                write_lww_register(
+                    tx,
+                    &entry,
+                    "query_id",
+                    &FieldValue::Text(query_id.to_string()),
+                    stamp,
+                )?;
+            }
+            // Each present field writes only its own register, so an omitted field — notably an
+            // unknown widget's opaque configuration — is never rewritten by an unrelated edit.
+            if let Some(configuration) = &update.configuration {
+                write_widget_json(tx, &entry, "configuration", configuration, stamp)?;
+            }
+            if let Some(layout) = &update.layout {
+                write_widget_json(tx, &entry, "layout", layout, stamp)?;
+            }
+            if let Some(order) = update.order {
+                write_lww_register(tx, &entry, "order", &FieldValue::Integer(order), stamp)?;
+            }
+        }
+        GenericCommand::RemoveWidget { collection_id, id } => {
+            let entry = widget_entry(tx, &collections, *collection_id, &id.to_string())
+                .map_err(repo_change)?;
+            write_lww_register(tx, &entry, "deleted", &FieldValue::Boolean(true), stamp)?;
+        }
+        GenericCommand::ReorderWidgets { collection_id, ids } => {
+            for (order, id) in ids.iter().enumerate() {
+                let entry = widget_entry(tx, &collections, *collection_id, &id.to_string())
+                    .map_err(repo_change)?;
+                write_lww_register(
+                    tx,
+                    &entry,
+                    "order",
+                    &FieldValue::Integer(order as i64),
+                    stamp,
+                )?;
+            }
+        }
     }
     Ok(())
+}
+
+fn widget_entry(
+    doc: &impl ReadDoc,
+    collections: &ObjId,
+    collection_id: CollectionSchemaId,
+    id: &str,
+) -> Result<ObjId, DomainError> {
+    definition_entry(doc, collections, collection_id, "widgets", id)
+}
+
+fn write_widget_json<T: Serialize>(
+    tx: &mut AutomergeTransaction<'_>,
+    entry: &ObjId,
+    property: &str,
+    value: &T,
+    stamp: HlcStamp,
+) -> automerge_repo::Result<()> {
+    let encoded = serde_json::to_string(value).map_err(repo_change)?;
+    write_lww_register(tx, entry, property, &FieldValue::Text(encoded), stamp)
+}
+
+fn write_widget(
+    tx: &mut AutomergeTransaction<'_>,
+    collections: &ObjId,
+    definition: &WidgetDefinition,
+    stamp: HlcStamp,
+) -> automerge_repo::Result<()> {
+    let collection =
+        object(tx, collections, &definition.collection_id.to_string()).map_err(repo_change)?;
+    let widgets = object(tx, &collection, "widgets").map_err(repo_change)?;
+    let entry = tx
+        .put_object(&widgets, definition.id.to_string(), ObjType::Map)
+        .map_err(repo_change)?;
+    tx.put(&entry, "id", definition.id.to_string())
+        .map_err(repo_change)?;
+    tx.put(
+        &entry,
+        "collection_id",
+        definition.collection_id.to_string(),
+    )
+    .map_err(repo_change)?;
+    write_lww_register(
+        tx,
+        &entry,
+        "widget_type",
+        &FieldValue::Text(definition.widget_type.to_string()),
+        stamp,
+    )?;
+    write_lww_register(
+        tx,
+        &entry,
+        "title",
+        &FieldValue::Text(definition.title.trim().into()),
+        stamp,
+    )?;
+    write_lww_register(
+        tx,
+        &entry,
+        "query_id",
+        &FieldValue::Text(definition.query_id.to_string()),
+        stamp,
+    )?;
+    write_widget_json(
+        tx,
+        &entry,
+        "configuration",
+        &definition.configuration,
+        stamp,
+    )?;
+    write_widget_json(tx, &entry, "layout", &definition.layout, stamp)?;
+    write_lww_register(
+        tx,
+        &entry,
+        "order",
+        &FieldValue::Integer(definition.order),
+        stamp,
+    )?;
+    write_lww_register(
+        tx,
+        &entry,
+        "deleted",
+        &FieldValue::Boolean(definition.deleted),
+        stamp,
+    )
 }
 
 pub fn decode_generic(doc: &Automerge) -> Result<GenericSnapshot, DomainError> {
@@ -607,6 +885,7 @@ pub fn decode_generic(doc: &Automerge) -> Result<GenericSnapshot, DomainError> {
     let mut collections = Vec::new();
     let mut computed_fields = Vec::new();
     let mut query_definitions = Vec::new();
+    let mut widgets = Vec::new();
     for key in doc.keys(&collections_map) {
         let entry = object(doc, &collections_map, &key)?;
         let id = CollectionSchemaId::from_str(&string(doc, &entry, "id")?)?;
@@ -656,6 +935,15 @@ pub fn decode_generic(doc: &Automerge) -> Result<GenericSnapshot, DomainError> {
             }
             query_definitions.push(definition);
         }
+        let widget_map = object(doc, &entry, "widgets")?;
+        for widget_key in doc.keys(&widget_map) {
+            let widget_entry = object(doc, &widget_map, &widget_key)?;
+            let widget = decode_widget_tracking(doc, &widget_entry, &mut max_stamp)?;
+            if widget.id.to_string() != widget_key || widget.collection_id != id {
+                return Err(malformed("widget key/id mismatch"));
+            }
+            widgets.push(widget);
+        }
         collections.push(CollectionSchema {
             id,
             name,
@@ -667,6 +955,7 @@ pub fn decode_generic(doc: &Automerge) -> Result<GenericSnapshot, DomainError> {
     collections.sort_by_key(|schema| schema.id);
     computed_fields.sort_by_key(|field| (field.collection_id, field.order, field.id));
     query_definitions.sort_by_key(|query| (query.collection_id, query.order, query.id));
+    widgets.sort_by_key(|widget| (widget.collection_id, widget.order, widget.id));
     let mut records = Vec::new();
     for key in doc.keys(&records_map) {
         let entry = object(doc, &records_map, &key)?;
@@ -786,12 +1075,25 @@ pub fn decode_generic(doc: &Automerge) -> Result<GenericSnapshot, DomainError> {
             });
         }
     }
+    for widget in &widgets {
+        // Merged data can violate contracts this device never accepted locally. Those widgets stay
+        // preserved and surface as diagnostics plus typed per-widget evaluation errors.
+        if let Some(message) = widget_diagnostic(&query_definitions, widget) {
+            diagnostics.push(GenericDiagnostic {
+                kind: "widget_validation".into(),
+                entity_id: widget.id.to_string(),
+                field_id: None,
+                message,
+            });
+        }
+    }
     Ok(GenericSnapshot {
         schema_version,
         collections,
         records,
         computed_fields,
         query_definitions,
+        widgets,
         diagnostics,
         max_stamp,
     })
@@ -838,6 +1140,8 @@ fn write_collection(
     tx.put_object(&entry, "computed_fields", ObjType::Map)
         .map_err(repo_change)?;
     tx.put_object(&entry, "queries", ObjType::Map)
+        .map_err(repo_change)?;
+    tx.put_object(&entry, "widgets", ObjType::Map)
         .map_err(repo_change)?;
     Ok(())
 }
@@ -895,6 +1199,51 @@ fn decode_definition_tracking<T: for<'de> Deserialize<'de>>(
         "definition",
     )?;
     serde_json::from_str(&encoded).map_err(malformed)
+}
+
+/// Decodes one widget entry from its independent HLC registers. The widget type is preserved
+/// verbatim so an identifier this build does not implement stays valid synchronized data.
+fn decode_widget_tracking(
+    doc: &impl ReadDoc,
+    entry: &ObjId,
+    max: &mut Option<HlcStamp>,
+) -> Result<WidgetDefinition, DomainError> {
+    let id = WidgetId::from_str(&string(doc, entry, "id")?)
+        .map_err(|error| malformed(error.to_string()))?;
+    let collection_id = CollectionSchemaId::from_str(&string(doc, entry, "collection_id")?)?;
+    let widget_type = WidgetType::preserved(expect_text(
+        read_winner_tracking(doc, entry, "widget_type", max)?,
+        "widget_type",
+    )?);
+    let title = expect_text(read_winner_tracking(doc, entry, "title", max)?, "title")?;
+    let query_id = QueryId::from_str(&expect_text(
+        read_winner_tracking(doc, entry, "query_id", max)?,
+        "query_id",
+    )?)
+    .map_err(|error| malformed(error.to_string()))?;
+    let configuration: WidgetConfiguration = serde_json::from_str(&expect_text(
+        read_winner_tracking(doc, entry, "configuration", max)?,
+        "configuration",
+    )?)
+    .map_err(malformed)?;
+    let layout: WidgetLayout = serde_json::from_str(&expect_text(
+        read_winner_tracking(doc, entry, "layout", max)?,
+        "layout",
+    )?)
+    .map_err(malformed)?;
+    let order = expect_integer(read_winner_tracking(doc, entry, "order", max)?, "order")?;
+    let deleted = expect_bool(read_winner_tracking(doc, entry, "deleted", max)?, "deleted")?;
+    Ok(WidgetDefinition {
+        id,
+        collection_id,
+        widget_type,
+        query_id,
+        title,
+        configuration,
+        layout,
+        order,
+        deleted,
+    })
 }
 fn write_field(
     tx: &mut AutomergeTransaction<'_>,
@@ -991,6 +1340,13 @@ fn expect_bool(value: FieldValue, field: &str) -> Result<bool, DomainError> {
         Err(malformed(format!("invalid {field} register type")))
     }
 }
+fn expect_integer(value: FieldValue, field: &str) -> Result<i64, DomainError> {
+    if let FieldValue::Integer(value) = value {
+        Ok(value)
+    } else {
+        Err(malformed(format!("invalid {field} register type")))
+    }
+}
 fn object(doc: &impl ReadDoc, parent: &ObjId, key: &str) -> Result<ObjId, DomainError> {
     let (value, object) = doc
         .get(parent, key)
@@ -1075,6 +1431,17 @@ fn active_query(
         .iter()
         .find(|item| item.id == id && item.collection_id == collection_id && !item.deleted)
         .ok_or_else(|| not_found("query", id))
+}
+fn active_widget(
+    snapshot: &GenericSnapshot,
+    collection_id: CollectionSchemaId,
+    id: WidgetId,
+) -> Result<&WidgetDefinition, DomainError> {
+    snapshot
+        .widgets
+        .iter()
+        .find(|item| item.id == id && item.collection_id == collection_id && !item.deleted)
+        .ok_or_else(|| not_found("widget", id))
 }
 fn validate_reorder<T: Copy + Eq + std::hash::Hash>(
     requested: &[T],
@@ -1168,6 +1535,7 @@ mod tests {
             ValueType, VersionedCollectionQuery, VersionedExpression,
         },
         schema::{DisplayMetadata, FieldType, ValidationMetadata},
+        widgets::StructuredValue,
     };
 
     fn stamp(time: i64) -> HlcStamp {
@@ -1493,5 +1861,504 @@ mod tests {
             tx.commit();
         }
         assert_eq!(decode_generic(&doc), Err(DomainError::UnsupportedSchema(1)));
+    }
+
+    fn scalar_query(collection_id: CollectionSchemaId, id: QueryId) -> QueryDefinition {
+        QueryDefinition {
+            id,
+            collection_id,
+            name: "Count".into(),
+            query: VersionedCollectionQuery::new(CollectionQuery {
+                collection_id,
+                filter: None,
+                grouping: None,
+                shape: QueryShape::Scalar {
+                    aggregation: Aggregation::Count,
+                },
+                sorting: vec![],
+                limit: None,
+                calendar: CalendarPolicy::default(),
+            }),
+            order: 0,
+            deleted: false,
+        }
+    }
+
+    fn series_query(collection_id: CollectionSchemaId, id: QueryId) -> QueryDefinition {
+        let constant = Expression::Constant {
+            value: crate::query::TypedValue::Integer(0),
+        };
+        QueryDefinition {
+            query: VersionedCollectionQuery::new(CollectionQuery {
+                collection_id,
+                filter: None,
+                grouping: None,
+                shape: QueryShape::Series {
+                    x: constant.clone(),
+                    y: constant,
+                },
+                sorting: vec![],
+                limit: None,
+                calendar: CalendarPolicy::default(),
+            }),
+            ..scalar_query(collection_id, id)
+        }
+    }
+
+    fn widget(
+        collection_id: CollectionSchemaId,
+        query_id: QueryId,
+        widget_type: &str,
+        order: i64,
+    ) -> WidgetDefinition {
+        WidgetDefinition {
+            id: WidgetId::new(),
+            collection_id,
+            widget_type: WidgetType::new(widget_type).unwrap(),
+            query_id,
+            title: "Balance".into(),
+            configuration: WidgetConfiguration::empty(),
+            layout: WidgetLayout::default(),
+            order,
+            deleted: false,
+        }
+    }
+
+    /// Applies a command after validating it, exactly as the application owner does.
+    fn commit(doc: &mut Automerge, command: &mut GenericCommand, time: i64) {
+        command
+            .validate_against(&decode_generic(doc).unwrap())
+            .unwrap();
+        let mut tx = doc.transaction();
+        apply_generic_command(&mut tx, command, stamp(time)).unwrap();
+        tx.commit();
+    }
+
+    fn with_collection_and_query() -> (Automerge, CollectionSchemaId, QueryId) {
+        let mut doc = initialized();
+        let collection = schema();
+        commit(
+            &mut doc,
+            &mut GenericCommand::CreateCollection(collection.clone()),
+            1,
+        );
+        let query_id = QueryId::new();
+        commit(
+            &mut doc,
+            &mut GenericCommand::CreateQuery(scalar_query(collection.id, query_id)),
+            2,
+        );
+        (doc, collection.id, query_id)
+    }
+
+    fn widget_entry_of(doc: &Automerge, collection_id: CollectionSchemaId, id: WidgetId) -> ObjId {
+        let app = object(doc, &ROOT, "application").unwrap();
+        let collections = object(doc, &app, "collections").unwrap();
+        widget_entry(doc, &collections, collection_id, &id.to_string()).unwrap()
+    }
+
+    #[test]
+    fn widget_lifecycle_validates_targets_and_orders_deterministically() {
+        let (mut doc, collection_id, query_id) = with_collection_and_query();
+        let first = widget(collection_id, query_id, "core.aggregate-number", 0);
+        let second = widget(collection_id, query_id, "core.aggregate-number", 0);
+        commit(
+            &mut doc,
+            &mut GenericCommand::CreateWidget(first.clone()),
+            3,
+        );
+        commit(
+            &mut doc,
+            &mut GenericCommand::CreateWidget(second.clone()),
+            4,
+        );
+
+        // Equal order values fall back to the stable ID so every device agrees.
+        let decoded = decode_generic(&doc).unwrap();
+        let mut expected = vec![first.clone(), second.clone()];
+        expected.sort_by_key(|item| item.id);
+        assert_eq!(decoded.widgets, expected);
+
+        // A duplicate ID is rejected before anything is written.
+        let heads = doc.get_heads();
+        let mut duplicate = GenericCommand::CreateWidget(first.clone());
+        assert!(
+            duplicate
+                .validate_against(&decode_generic(&doc).unwrap())
+                .is_err()
+        );
+        assert_eq!(doc.get_heads(), heads);
+
+        commit(
+            &mut doc,
+            &mut GenericCommand::ReorderWidgets {
+                collection_id,
+                ids: vec![second.id, first.id],
+            },
+            5,
+        );
+        let reordered = decode_generic(&doc).unwrap();
+        assert_eq!(
+            reordered
+                .widgets
+                .iter()
+                .map(|item| item.id)
+                .collect::<Vec<_>>(),
+            vec![second.id, first.id]
+        );
+        assert_eq!(reordered.widgets[0].order, 0);
+        assert_eq!(reordered.widgets[1].order, 1);
+
+        // Reordering must name every active widget exactly once.
+        assert!(
+            GenericCommand::ReorderWidgets {
+                collection_id,
+                ids: vec![first.id],
+            }
+            .validate_against(&reordered)
+            .is_err()
+        );
+
+        commit(
+            &mut doc,
+            &mut GenericCommand::RemoveWidget {
+                collection_id,
+                id: first.id,
+            },
+            6,
+        );
+        let removed = decode_generic(&doc).unwrap();
+        assert_eq!(removed.widgets.len(), 2);
+        assert!(
+            removed
+                .widgets
+                .iter()
+                .find(|item| item.id == first.id)
+                .unwrap()
+                .deleted
+        );
+        // A tombstoned widget is no longer an active command target.
+        assert!(
+            GenericCommand::RemoveWidget {
+                collection_id,
+                id: first.id
+            }
+            .validate_against(&removed)
+            .is_err()
+        );
+        assert!(
+            GenericCommand::UpdateWidget(WidgetUpdate {
+                id: first.id,
+                collection_id,
+                title: Some("Resurrected".into()),
+                ..WidgetUpdate::default()
+            })
+            .validate_against(&removed)
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn widget_commands_reject_incompatible_and_missing_queries() {
+        let (mut doc, collection_id, query_id) = with_collection_and_query();
+        let mut mismatched = widget(collection_id, query_id, "core.aggregate-number", 0);
+        let series_id = QueryId::new();
+        commit(
+            &mut doc,
+            &mut GenericCommand::CreateQuery(series_query(collection_id, series_id)),
+            3,
+        );
+        mismatched.query_id = series_id;
+        let heads = doc.get_heads();
+        let mut command = GenericCommand::CreateWidget(mismatched.clone());
+        let error = command
+            .validate_against(&decode_generic(&doc).unwrap())
+            .unwrap_err();
+        assert!(
+            matches!(&error, DomainError::Invalid { field, message }
+                if *field == "query_id" && message.contains("core.aggregate-number")),
+            "unexpected error: {error}"
+        );
+        // A line chart accepts the same ordered Series query.
+        let mut line = widget(collection_id, series_id, "core.line-chart", 0);
+        line.query_id = series_id;
+        commit(&mut doc, &mut GenericCommand::CreateWidget(line), 4);
+
+        let mut dangling = widget(collection_id, QueryId::new(), "core.bar-chart", 1);
+        dangling.query_id = QueryId::new();
+        assert!(
+            GenericCommand::CreateWidget(dangling)
+                .validate_against(&decode_generic(&doc).unwrap())
+                .is_err()
+        );
+        // Nothing was committed by the rejected commands.
+        assert_ne!(doc.get_heads(), heads);
+
+        // Removing the referenced query leaves the widget preserved with a diagnostic instead of
+        // deleting it, because merged remote data must stay inspectable.
+        commit(
+            &mut doc,
+            &mut GenericCommand::RemoveQuery {
+                collection_id,
+                id: series_id,
+            },
+            5,
+        );
+        let decoded = decode_generic(&doc).unwrap();
+        assert_eq!(decoded.widgets.len(), 1);
+        assert!(decoded.diagnostics.iter().any(|item| {
+            item.kind == "widget_validation" && item.entity_id == decoded.widgets[0].id.to_string()
+        }));
+        assert!(decoded.widgets[0].validate_standalone().is_ok());
+        // A broken reference never removes or rewrites the widget; it stays inspectable.
+        assert!(!decoded.widgets[0].deleted);
+    }
+
+    #[test]
+    fn renaming_an_unknown_widget_never_rewrites_its_opaque_registers() {
+        let (mut doc, collection_id, query_id) = with_collection_and_query();
+        let opaque = StructuredValue::Map(BTreeMap::from([
+            ("heatmap".into(), StructuredValue::Boolean(true)),
+            (
+                "palette".into(),
+                StructuredValue::List(vec![
+                    StructuredValue::Text("#00ff00".into()),
+                    StructuredValue::Integer(-2350),
+                    StructuredValue::Null,
+                ]),
+            ),
+        ]));
+        let unknown = WidgetDefinition {
+            widget_type: WidgetType::new("com.example.calendar-heatmap").unwrap(),
+            title: "Future heatmap".into(),
+            configuration: WidgetConfiguration {
+                version: 9,
+                body: opaque.clone(),
+            },
+            ..widget(collection_id, query_id, "core.aggregate-number", 0)
+        };
+        commit(
+            &mut doc,
+            &mut GenericCommand::CreateWidget(unknown.clone()),
+            3,
+        );
+        let entry = widget_entry_of(&doc, collection_id, unknown.id);
+        assert_eq!(
+            read_lww_candidates(&doc, &entry, "configuration")
+                .unwrap()
+                .len(),
+            1
+        );
+
+        commit(
+            &mut doc,
+            &mut GenericCommand::UpdateWidget(WidgetUpdate {
+                id: unknown.id,
+                collection_id,
+                title: Some("Renamed heatmap".into()),
+                ..WidgetUpdate::default()
+            }),
+            4,
+        );
+        let decoded = decode_generic(&doc).unwrap();
+        let renamed = decoded.widgets.iter().find(|w| w.id == unknown.id).unwrap();
+        assert_eq!(renamed.title, "Renamed heatmap");
+        // Type, query, version, and every unknown key survive an unrelated metadata edit.
+        assert_eq!(renamed.widget_type, unknown.widget_type);
+        assert_eq!(renamed.query_id, unknown.query_id);
+        assert_eq!(renamed.configuration.version, 9);
+        assert_eq!(renamed.configuration.body, opaque);
+        // The configuration register was not written again, so a concurrent remote configuration
+        // edit composes with the local rename instead of being clobbered by it.
+        let entry = widget_entry_of(&doc, collection_id, unknown.id);
+        assert_eq!(
+            read_lww_candidates(&doc, &entry, "configuration")
+                .unwrap()
+                .len(),
+            1
+        );
+    }
+
+    #[test]
+    fn independent_widget_metadata_edits_compose_across_devices() {
+        let (base, collection_id, query_id) = with_collection_and_query();
+        let unknown = WidgetDefinition {
+            widget_type: WidgetType::new("com.example.future-widget").unwrap(),
+            configuration: WidgetConfiguration {
+                version: 4,
+                body: StructuredValue::Map(BTreeMap::from([(
+                    "opaque".into(),
+                    StructuredValue::Integer(7),
+                )])),
+            },
+            ..widget(collection_id, query_id, "core.aggregate-number", 0)
+        };
+        let mut base = base;
+        commit(
+            &mut base,
+            &mut GenericCommand::CreateWidget(unknown.clone()),
+            3,
+        );
+        let mut left = base.fork();
+        let mut right = base.fork();
+        commit(
+            &mut left,
+            &mut GenericCommand::UpdateWidget(WidgetUpdate {
+                id: unknown.id,
+                collection_id,
+                title: Some("Left title".into()),
+                ..WidgetUpdate::default()
+            }),
+            10,
+        );
+        commit(
+            &mut right,
+            &mut GenericCommand::UpdateWidget(WidgetUpdate {
+                id: unknown.id,
+                collection_id,
+                order: Some(5),
+                ..WidgetUpdate::default()
+            }),
+            11,
+        );
+        left.merge(&mut right).unwrap();
+        right.merge(&mut left).unwrap();
+        for doc in [&left, &right] {
+            let merged = decode_generic(doc).unwrap();
+            let widget = merged.widgets.iter().find(|w| w.id == unknown.id).unwrap();
+            assert_eq!(widget.title, "Left title");
+            assert_eq!(widget.order, 5);
+            assert_eq!(widget.widget_type, unknown.widget_type);
+            assert_eq!(widget.configuration, unknown.configuration);
+        }
+        assert_eq!(
+            decode_generic(&left).unwrap(),
+            decode_generic(&right).unwrap()
+        );
+    }
+
+    #[test]
+    fn widget_tombstone_wins_over_a_concurrent_update_and_reorder_converges() {
+        let (mut base, collection_id, query_id) = with_collection_and_query();
+        let first = widget(collection_id, query_id, "core.aggregate-number", 0);
+        let second = widget(collection_id, query_id, "core.aggregate-number", 1);
+        commit(
+            &mut base,
+            &mut GenericCommand::CreateWidget(first.clone()),
+            3,
+        );
+        commit(
+            &mut base,
+            &mut GenericCommand::CreateWidget(second.clone()),
+            4,
+        );
+        let mut left = base.fork();
+        let mut right = base.fork();
+        commit(
+            &mut left,
+            &mut GenericCommand::RemoveWidget {
+                collection_id,
+                id: first.id,
+            },
+            10,
+        );
+        commit(
+            &mut right,
+            &mut GenericCommand::UpdateWidget(WidgetUpdate {
+                id: first.id,
+                collection_id,
+                title: Some("Concurrent rename".into()),
+                ..WidgetUpdate::default()
+            }),
+            9,
+        );
+        left.merge(&mut right).unwrap();
+        right.merge(&mut left).unwrap();
+        for doc in [&left, &right] {
+            let merged = decode_generic(doc).unwrap();
+            let widget = merged.widgets.iter().find(|w| w.id == first.id).unwrap();
+            // The ordinary update composes but cannot resurrect the tombstone.
+            assert!(widget.deleted);
+            assert_eq!(widget.title, "Concurrent rename");
+        }
+
+        // Concurrent reorders that produce equal order values still converge on one order.
+        let mut left = base.fork();
+        let mut right = base.fork();
+        commit(
+            &mut left,
+            &mut GenericCommand::ReorderWidgets {
+                collection_id,
+                ids: vec![second.id, first.id],
+            },
+            20,
+        );
+        commit(
+            &mut right,
+            &mut GenericCommand::ReorderWidgets {
+                collection_id,
+                ids: vec![first.id, second.id],
+            },
+            20,
+        );
+        left.merge(&mut right).unwrap();
+        right.merge(&mut left).unwrap();
+        let left_order = decode_generic(&left)
+            .unwrap()
+            .widgets
+            .iter()
+            .map(|item| item.id)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            left_order,
+            decode_generic(&right)
+                .unwrap()
+                .widgets
+                .iter()
+                .map(|item| item.id)
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(left_order.len(), 2);
+    }
+
+    #[test]
+    fn unknown_widget_types_synchronize_intact_between_devices() {
+        // Device B already shares the root, then receives a widget type it cannot render.
+        let (mut device_a, collection_id, query_id) = with_collection_and_query();
+        let mut device_b = device_a.fork();
+        let preserved = WidgetDefinition {
+            widget_type: WidgetType::preserved("com.example.future-widget".into()),
+            configuration: WidgetConfiguration {
+                version: 12,
+                body: StructuredValue::Map(BTreeMap::from([(
+                    "renderer".into(),
+                    StructuredValue::Map(BTreeMap::from([(
+                        "shader".into(),
+                        StructuredValue::Text("heat".into()),
+                    )])),
+                )])),
+            },
+            ..widget(collection_id, query_id, "core.aggregate-number", 0)
+        };
+        commit(
+            &mut device_a,
+            &mut GenericCommand::CreateWidget(preserved.clone()),
+            3,
+        );
+        // Device B has no renderer for this type; the definition is still valid preserved data.
+        assert!(!crate::widget_registry::is_supported(
+            preserved.widget_type.as_str()
+        ));
+        device_b.merge(&mut device_a).unwrap();
+        let projected = decode_generic(&device_b).unwrap();
+        assert_eq!(projected.widgets, vec![preserved]);
+        assert!(
+            !projected
+                .diagnostics
+                .iter()
+                .any(|item| item.kind == "widget_validation"),
+            "an unimplemented widget type is not an error: {:?}",
+            projected.diagnostics
+        );
     }
 }

@@ -3,3 +3,4 @@ pub mod lifecycle;
 pub mod models;
 pub mod pairing;
 pub mod queries;
+pub mod widgets;

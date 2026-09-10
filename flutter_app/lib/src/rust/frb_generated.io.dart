@@ -8,6 +8,7 @@ import 'api/lifecycle.dart';
 import 'api/models.dart';
 import 'api/pairing.dart';
 import 'api/queries.dart';
+import 'api/widgets.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:ffi' as ffi;
@@ -146,6 +147,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   QueryDefinitionDto dco_decode_box_autoadd_query_definition_dto(dynamic raw);
 
   @protected
+  QueryResultDto dco_decode_box_autoadd_query_result_dto(dynamic raw);
+
+  @protected
   RecordDto dco_decode_box_autoadd_record_dto(dynamic raw);
 
   @protected
@@ -162,6 +166,29 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ValueTypeDto dco_decode_box_autoadd_value_type_dto(dynamic raw);
+
+  @protected
+  WidgetConfigurationDto dco_decode_box_autoadd_widget_configuration_dto(
+    dynamic raw,
+  );
+
+  @protected
+  WidgetDefinitionDto dco_decode_box_autoadd_widget_definition_dto(dynamic raw);
+
+  @protected
+  WidgetErrorKindDto dco_decode_box_autoadd_widget_error_kind_dto(dynamic raw);
+
+  @protected
+  WidgetLayoutDto dco_decode_box_autoadd_widget_layout_dto(dynamic raw);
+
+  @protected
+  WidgetUpdateDto dco_decode_box_autoadd_widget_update_dto(dynamic raw);
+
+  @protected
+  StructuredEntryDto dco_decode_box_structured_entry_dto(dynamic raw);
+
+  @protected
+  StructuredValueDto dco_decode_box_structured_value_dto(dynamic raw);
 
   @protected
   BridgeError dco_decode_bridge_error(dynamic raw);
@@ -259,6 +286,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<String> dco_decode_list_String(dynamic raw);
 
   @protected
+  List<StructuredEntryDto> dco_decode_list_box_structured_entry_dto(
+    dynamic raw,
+  );
+
+  @protected
+  List<StructuredValueDto> dco_decode_list_box_structured_value_dto(
+    dynamic raw,
+  );
+
+  @protected
   List<CategoryPointDto> dco_decode_list_category_point_dto(dynamic raw);
 
   @protected
@@ -299,6 +336,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<QueryDefinitionDto> dco_decode_list_query_definition_dto(dynamic raw);
 
   @protected
+  List<QueryResultShapeDto> dco_decode_list_query_result_shape_dto(dynamic raw);
+
+  @protected
   List<RecordDto> dco_decode_list_record_dto(dynamic raw);
 
   @protected
@@ -320,6 +360,15 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<TrustedDeviceDto> dco_decode_list_trusted_device_dto(dynamic raw);
+
+  @protected
+  List<WidgetDefinitionDto> dco_decode_list_widget_definition_dto(dynamic raw);
+
+  @protected
+  List<WidgetDescriptorDto> dco_decode_list_widget_descriptor_dto(dynamic raw);
+
+  @protected
+  List<WidgetEvaluationDto> dco_decode_list_widget_evaluation_dto(dynamic raw);
 
   @protected
   NullOrderDto dco_decode_null_order_dto(dynamic raw);
@@ -384,6 +433,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   GroupingDto? dco_decode_opt_box_autoadd_grouping_dto(dynamic raw);
 
   @protected
+  QueryResultDto? dco_decode_opt_box_autoadd_query_result_dto(dynamic raw);
+
+  @protected
   RecordDto? dco_decode_opt_box_autoadd_record_dto(dynamic raw);
 
   @protected
@@ -402,6 +454,24 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ValueTypeDto? dco_decode_opt_box_autoadd_value_type_dto(dynamic raw);
+
+  @protected
+  WidgetConfigurationDto? dco_decode_opt_box_autoadd_widget_configuration_dto(
+    dynamic raw,
+  );
+
+  @protected
+  WidgetDefinitionDto? dco_decode_opt_box_autoadd_widget_definition_dto(
+    dynamic raw,
+  );
+
+  @protected
+  WidgetErrorKindDto? dco_decode_opt_box_autoadd_widget_error_kind_dto(
+    dynamic raw,
+  );
+
+  @protected
+  WidgetLayoutDto? dco_decode_opt_box_autoadd_widget_layout_dto(dynamic raw);
 
   @protected
   Uint8List? dco_decode_opt_list_prim_u_8_strict(dynamic raw);
@@ -434,6 +504,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   QueryResultKindDto dco_decode_query_result_kind_dto(dynamic raw);
 
   @protected
+  QueryResultShapeDto dco_decode_query_result_shape_dto(dynamic raw);
+
+  @protected
   QueryShapeDto dco_decode_query_shape_dto(dynamic raw);
 
   @protected
@@ -462,6 +535,15 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   SortDirectionDto dco_decode_sort_direction_dto(dynamic raw);
+
+  @protected
+  StructuredEntryDto dco_decode_structured_entry_dto(dynamic raw);
+
+  @protected
+  StructuredValueDto dco_decode_structured_value_dto(dynamic raw);
+
+  @protected
+  StructuredValueKindDto dco_decode_structured_value_kind_dto(dynamic raw);
 
   @protected
   SyncStatusDto dco_decode_sync_status_dto(dynamic raw);
@@ -495,6 +577,30 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   WeekStartDto dco_decode_week_start_dto(dynamic raw);
+
+  @protected
+  WidgetConfigurationDto dco_decode_widget_configuration_dto(dynamic raw);
+
+  @protected
+  WidgetDefinitionDto dco_decode_widget_definition_dto(dynamic raw);
+
+  @protected
+  WidgetDescriptorDto dco_decode_widget_descriptor_dto(dynamic raw);
+
+  @protected
+  WidgetErrorKindDto dco_decode_widget_error_kind_dto(dynamic raw);
+
+  @protected
+  WidgetEvaluationDto dco_decode_widget_evaluation_dto(dynamic raw);
+
+  @protected
+  WidgetLayoutDto dco_decode_widget_layout_dto(dynamic raw);
+
+  @protected
+  WidgetSizeDto dco_decode_widget_size_dto(dynamic raw);
+
+  @protected
+  WidgetUpdateDto dco_decode_widget_update_dto(dynamic raw);
 
   @protected
   AnyhowException sse_decode_AnyhowException(SseDeserializer deserializer);
@@ -656,6 +762,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  QueryResultDto sse_decode_box_autoadd_query_result_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   RecordDto sse_decode_box_autoadd_record_dto(SseDeserializer deserializer);
 
   @protected
@@ -676,6 +787,41 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ValueTypeDto sse_decode_box_autoadd_value_type_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  WidgetConfigurationDto sse_decode_box_autoadd_widget_configuration_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  WidgetDefinitionDto sse_decode_box_autoadd_widget_definition_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  WidgetErrorKindDto sse_decode_box_autoadd_widget_error_kind_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  WidgetLayoutDto sse_decode_box_autoadd_widget_layout_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  WidgetUpdateDto sse_decode_box_autoadd_widget_update_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  StructuredEntryDto sse_decode_box_structured_entry_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  StructuredValueDto sse_decode_box_structured_value_dto(
     SseDeserializer deserializer,
   );
 
@@ -801,6 +947,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<String> sse_decode_list_String(SseDeserializer deserializer);
 
   @protected
+  List<StructuredEntryDto> sse_decode_list_box_structured_entry_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<StructuredValueDto> sse_decode_list_box_structured_value_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   List<CategoryPointDto> sse_decode_list_category_point_dto(
     SseDeserializer deserializer,
   );
@@ -861,6 +1017,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  List<QueryResultShapeDto> sse_decode_list_query_result_shape_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   List<RecordDto> sse_decode_list_record_dto(SseDeserializer deserializer);
 
   @protected
@@ -890,6 +1051,21 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<TrustedDeviceDto> sse_decode_list_trusted_device_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<WidgetDefinitionDto> sse_decode_list_widget_definition_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<WidgetDescriptorDto> sse_decode_list_widget_descriptor_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<WidgetEvaluationDto> sse_decode_list_widget_evaluation_dto(
     SseDeserializer deserializer,
   );
 
@@ -964,6 +1140,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  QueryResultDto? sse_decode_opt_box_autoadd_query_result_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   RecordDto? sse_decode_opt_box_autoadd_record_dto(
     SseDeserializer deserializer,
   );
@@ -986,6 +1167,26 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ValueTypeDto? sse_decode_opt_box_autoadd_value_type_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  WidgetConfigurationDto? sse_decode_opt_box_autoadd_widget_configuration_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  WidgetDefinitionDto? sse_decode_opt_box_autoadd_widget_definition_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  WidgetErrorKindDto? sse_decode_opt_box_autoadd_widget_error_kind_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  WidgetLayoutDto? sse_decode_opt_box_autoadd_widget_layout_dto(
     SseDeserializer deserializer,
   );
 
@@ -1030,6 +1231,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  QueryResultShapeDto sse_decode_query_result_shape_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   QueryShapeDto sse_decode_query_shape_dto(SseDeserializer deserializer);
 
   @protected
@@ -1066,6 +1272,21 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   SortDirectionDto sse_decode_sort_direction_dto(SseDeserializer deserializer);
 
   @protected
+  StructuredEntryDto sse_decode_structured_entry_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  StructuredValueDto sse_decode_structured_value_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  StructuredValueKindDto sse_decode_structured_value_kind_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   SyncStatusDto sse_decode_sync_status_dto(SseDeserializer deserializer);
 
   @protected
@@ -1099,6 +1320,40 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   WeekStartDto sse_decode_week_start_dto(SseDeserializer deserializer);
+
+  @protected
+  WidgetConfigurationDto sse_decode_widget_configuration_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  WidgetDefinitionDto sse_decode_widget_definition_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  WidgetDescriptorDto sse_decode_widget_descriptor_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  WidgetErrorKindDto sse_decode_widget_error_kind_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  WidgetEvaluationDto sse_decode_widget_evaluation_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  WidgetLayoutDto sse_decode_widget_layout_dto(SseDeserializer deserializer);
+
+  @protected
+  WidgetSizeDto sse_decode_widget_size_dto(SseDeserializer deserializer);
+
+  @protected
+  WidgetUpdateDto sse_decode_widget_update_dto(SseDeserializer deserializer);
 
   @protected
   void sse_encode_AnyhowException(
@@ -1293,6 +1548,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_box_autoadd_query_result_dto(
+    QueryResultDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_box_autoadd_record_dto(
     RecordDto self,
     SseSerializer serializer,
@@ -1319,6 +1580,48 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_box_autoadd_value_type_dto(
     ValueTypeDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_widget_configuration_dto(
+    WidgetConfigurationDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_widget_definition_dto(
+    WidgetDefinitionDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_widget_error_kind_dto(
+    WidgetErrorKindDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_widget_layout_dto(
+    WidgetLayoutDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_widget_update_dto(
+    WidgetUpdateDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_structured_entry_dto(
+    StructuredEntryDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_structured_value_dto(
+    StructuredValueDto self,
     SseSerializer serializer,
   );
 
@@ -1473,6 +1776,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_list_String(List<String> self, SseSerializer serializer);
 
   @protected
+  void sse_encode_list_box_structured_entry_dto(
+    List<StructuredEntryDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_box_structured_value_dto(
+    List<StructuredValueDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_list_category_point_dto(
     List<CategoryPointDto> self,
     SseSerializer serializer,
@@ -1548,6 +1863,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_list_query_result_shape_dto(
+    List<QueryResultShapeDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_list_record_dto(
     List<RecordDto> self,
     SseSerializer serializer,
@@ -1586,6 +1907,24 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_list_trusted_device_dto(
     List<TrustedDeviceDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_widget_definition_dto(
+    List<WidgetDefinitionDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_widget_descriptor_dto(
+    List<WidgetDescriptorDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_widget_evaluation_dto(
+    List<WidgetEvaluationDto> self,
     SseSerializer serializer,
   );
 
@@ -1671,6 +2010,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_opt_box_autoadd_query_result_dto(
+    QueryResultDto? self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_opt_box_autoadd_record_dto(
     RecordDto? self,
     SseSerializer serializer,
@@ -1697,6 +2042,30 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_opt_box_autoadd_value_type_dto(
     ValueTypeDto? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_widget_configuration_dto(
+    WidgetConfigurationDto? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_widget_definition_dto(
+    WidgetDefinitionDto? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_widget_error_kind_dto(
+    WidgetErrorKindDto? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_widget_layout_dto(
+    WidgetLayoutDto? self,
     SseSerializer serializer,
   );
 
@@ -1758,6 +2127,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_query_result_shape_dto(
+    QueryResultShapeDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_query_shape_dto(QueryShapeDto self, SseSerializer serializer);
 
   @protected
@@ -1809,6 +2184,24 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_structured_entry_dto(
+    StructuredEntryDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_structured_value_dto(
+    StructuredValueDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_structured_value_kind_dto(
+    StructuredValueKindDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_sync_status_dto(SyncStatusDto self, SseSerializer serializer);
 
   @protected
@@ -1849,6 +2242,51 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_week_start_dto(WeekStartDto self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_widget_configuration_dto(
+    WidgetConfigurationDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_widget_definition_dto(
+    WidgetDefinitionDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_widget_descriptor_dto(
+    WidgetDescriptorDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_widget_error_kind_dto(
+    WidgetErrorKindDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_widget_evaluation_dto(
+    WidgetEvaluationDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_widget_layout_dto(
+    WidgetLayoutDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_widget_size_dto(WidgetSizeDto self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_widget_update_dto(
+    WidgetUpdateDto self,
+    SseSerializer serializer,
+  );
 }
 
 // Section: wire_class

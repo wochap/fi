@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:fi/controllers.dart';
 import 'package:fi/field_registry.dart';
 import 'package:fi/src/rust/api/models.dart';
+import 'package:fi/widgets/widget_dashboard.dart';
 import 'package:flutter/material.dart';
 
 class CollectionsPage extends StatelessWidget {
@@ -74,37 +75,65 @@ class CollectionsPage extends StatelessWidget {
       children: [
         Padding(
           padding: const EdgeInsets.all(12),
-          child: Row(
-            children: [
-              IconButton(
-                tooltip: 'Back to collections',
-                onPressed: () => unawaited(controller.selectCollection(null)),
-                icon: const Icon(Icons.arrow_back),
-              ),
-              Expanded(
-                child: Text(
-                  schema.name,
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
-              ),
-              OutlinedButton.icon(
-                onPressed: () => _schemaEditor(context, schema),
-                icon: const Icon(Icons.tune),
-                label: const Text('Schema'),
-              ),
-              const SizedBox(width: 8),
-              OutlinedButton.icon(
-                onPressed: () => _queryEditor(context, schema),
-                icon: const Icon(Icons.query_stats),
-                label: const Text('Queries'),
-              ),
-              const SizedBox(width: 8),
-              FilledButton.icon(
-                onPressed: () => _recordEditor(context, schema),
-                icon: const Icon(Icons.add),
-                label: const Text('New record'),
-              ),
-            ],
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              // Narrow Android widths cannot fit three labelled buttons next to the title, so the
+              // same actions collapse to icons and stay reachable.
+              final wide = constraints.maxWidth >= 620;
+              return Row(
+                children: [
+                  IconButton(
+                    tooltip: 'Back to collections',
+                    onPressed: () =>
+                        unawaited(controller.selectCollection(null)),
+                    icon: const Icon(Icons.arrow_back),
+                  ),
+                  Expanded(
+                    child: Text(
+                      schema.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.headlineSmall,
+                    ),
+                  ),
+                  if (wide) ...[
+                    OutlinedButton.icon(
+                      onPressed: () => _schemaEditor(context, schema),
+                      icon: const Icon(Icons.tune),
+                      label: const Text('Schema'),
+                    ),
+                    const SizedBox(width: 8),
+                    OutlinedButton.icon(
+                      onPressed: () => _queryEditor(context, schema),
+                      icon: const Icon(Icons.query_stats),
+                      label: const Text('Queries'),
+                    ),
+                    const SizedBox(width: 8),
+                    FilledButton.icon(
+                      onPressed: () => _recordEditor(context, schema),
+                      icon: const Icon(Icons.add),
+                      label: const Text('New record'),
+                    ),
+                  ] else ...[
+                    IconButton(
+                      tooltip: 'Schema',
+                      onPressed: () => _schemaEditor(context, schema),
+                      icon: const Icon(Icons.tune),
+                    ),
+                    IconButton(
+                      tooltip: 'Queries',
+                      onPressed: () => _queryEditor(context, schema),
+                      icon: const Icon(Icons.query_stats),
+                    ),
+                    IconButton(
+                      tooltip: 'New record',
+                      onPressed: () => _recordEditor(context, schema),
+                      icon: const Icon(Icons.add),
+                    ),
+                  ],
+                ],
+              );
+            },
           ),
         ),
         if (controller.errorMessage case final error?)
@@ -113,9 +142,19 @@ class CollectionsPage extends StatelessWidget {
             actions: const [SizedBox.shrink()],
           ),
         Expanded(
-          child: controller.records.isEmpty
-              ? const Center(child: Text('No records yet.'))
-              : ListView.builder(
+          child: CustomScrollView(
+            slivers: [
+              // The dashboard sits above the record list and never replaces record CRUD.
+              SliverToBoxAdapter(
+                child: CollectionDashboard(controller: controller),
+              ),
+              if (controller.records.isEmpty)
+                const SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(child: Text('No records yet.')),
+                )
+              else
+                SliverList.builder(
                   itemCount: controller.records.length,
                   itemBuilder: (context, index) {
                     final record = controller.records[index];
@@ -159,6 +198,8 @@ class CollectionsPage extends StatelessWidget {
                     );
                   },
                 ),
+            ],
+          ),
         ),
       ],
     );

@@ -8,7 +8,7 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `from_core`, `from_core`, `from_core`, `hex_id`, `initialization`, `into_core`, `lifecycle`, `new`, `new`, `safe`, `validation`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `QueryValidationErrorDto`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `try_from`, `try_from`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `try_from`, `try_from`
 
 class AggregationDto {
   final AggregationKindDto kind;
@@ -399,7 +399,17 @@ class DisplayMetadataDto {
           multiline == other.multiline;
 }
 
-enum DomainKindDto { collections, schemas, records, computedFields, queries }
+enum DomainKindDto {
+  collections,
+  schemas,
+  records,
+  computedFields,
+  queries,
+
+  /// Widget definitions changed. Derived results are never synchronized, so this always means
+  /// "reread definitions and reevaluate visible widgets".
+  widgets,
+}
 
 class EnumOptionDto {
   final String id;
@@ -911,6 +921,9 @@ class QueryResultDto {
 
 enum QueryResultKindDto { scalar, series, categorySeries, recordSet }
 
+/// The result shape contract a widget declares it can render.
+enum QueryResultShapeDto { scalar, series, categorySeries, recordSet }
+
 class QueryShapeDto {
   final QueryShapeKindDto kind;
   final AggregationDto? aggregation;
@@ -1088,6 +1101,67 @@ class SortClauseDto {
 
 enum SortDirectionDto { ascending, descending }
 
+class StructuredEntryDto {
+  final String key;
+  final StructuredValueDto value;
+
+  const StructuredEntryDto({required this.key, required this.value});
+
+  @override
+  int get hashCode => key.hashCode ^ value.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is StructuredEntryDto &&
+          runtimeType == other.runtimeType &&
+          key == other.key &&
+          value == other.value;
+}
+
+/// A lossless generic presentation value. Signed integers never pass through a double, so exact
+/// scaled decimals and 64-bit identities stay intact across the bridge.
+class StructuredValueDto {
+  final StructuredValueKindDto kind;
+  final bool? booleanValue;
+  final int? integerValue;
+  final String? textValue;
+  final List<StructuredValueDto> items;
+  final List<StructuredEntryDto> entries;
+
+  const StructuredValueDto({
+    required this.kind,
+    this.booleanValue,
+    this.integerValue,
+    this.textValue,
+    required this.items,
+    required this.entries,
+  });
+
+  @override
+  int get hashCode =>
+      kind.hashCode ^
+      booleanValue.hashCode ^
+      integerValue.hashCode ^
+      textValue.hashCode ^
+      items.hashCode ^
+      entries.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is StructuredValueDto &&
+          runtimeType == other.runtimeType &&
+          kind == other.kind &&
+          booleanValue == other.booleanValue &&
+          integerValue == other.integerValue &&
+          textValue == other.textValue &&
+          items == other.items &&
+          entries == other.entries;
+}
+
+enum StructuredValueKindDto { null_, boolean, integer, text, list, map }
+
 enum SyncStatusDto { offline, searching, connected, syncing, synced, error }
 
 class TrustedDeviceDto {
@@ -1236,4 +1310,236 @@ enum WeekStartDto {
   friday,
   saturday,
   sunday,
+}
+
+class WidgetConfigurationDto {
+  final int version;
+  final StructuredValueDto body;
+
+  const WidgetConfigurationDto({required this.version, required this.body});
+
+  @override
+  int get hashCode => version.hashCode ^ body.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is WidgetConfigurationDto &&
+          runtimeType == other.runtimeType &&
+          version == other.version &&
+          body == other.body;
+}
+
+/// A widget definition. `widget_type` is an open string, never a closed enum: an unrecognized
+/// value is preserved data, not an error.
+class WidgetDefinitionDto {
+  final String id;
+  final String collectionId;
+  final String widgetType;
+  final String queryId;
+  final String title;
+  final WidgetConfigurationDto configuration;
+  final WidgetLayoutDto layout;
+  final int order;
+  final bool deleted;
+
+  const WidgetDefinitionDto({
+    required this.id,
+    required this.collectionId,
+    required this.widgetType,
+    required this.queryId,
+    required this.title,
+    required this.configuration,
+    required this.layout,
+    required this.order,
+    required this.deleted,
+  });
+
+  @override
+  int get hashCode =>
+      id.hashCode ^
+      collectionId.hashCode ^
+      widgetType.hashCode ^
+      queryId.hashCode ^
+      title.hashCode ^
+      configuration.hashCode ^
+      layout.hashCode ^
+      order.hashCode ^
+      deleted.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is WidgetDefinitionDto &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          collectionId == other.collectionId &&
+          widgetType == other.widgetType &&
+          queryId == other.queryId &&
+          title == other.title &&
+          configuration == other.configuration &&
+          layout == other.layout &&
+          order == other.order &&
+          deleted == other.deleted;
+}
+
+/// One entry of the local renderer/descriptor registry. `supported` is false for a synchronized
+/// widget type this build cannot render; its definition is still exposed unchanged.
+class WidgetDescriptorDto {
+  final String widgetType;
+  final String label;
+  final List<QueryResultShapeDto> acceptedShapes;
+  final int configurationVersion;
+  final bool supported;
+
+  const WidgetDescriptorDto({
+    required this.widgetType,
+    required this.label,
+    required this.acceptedShapes,
+    required this.configurationVersion,
+    required this.supported,
+  });
+
+  @override
+  int get hashCode =>
+      widgetType.hashCode ^
+      label.hashCode ^
+      acceptedShapes.hashCode ^
+      configurationVersion.hashCode ^
+      supported.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is WidgetDescriptorDto &&
+          runtimeType == other.runtimeType &&
+          widgetType == other.widgetType &&
+          label == other.label &&
+          acceptedShapes == other.acceptedShapes &&
+          configurationVersion == other.configurationVersion &&
+          supported == other.supported;
+}
+
+enum WidgetErrorKindDto {
+  removed,
+  unsupportedType,
+  unsupportedConfigurationVersion,
+  invalidConfiguration,
+  unknownQuery,
+  invalidQuery,
+  shapeMismatch,
+  overflow,
+  queryFailed,
+}
+
+/// One widget's evaluation. A failure carries a typed kind and message instead of a result; it
+/// never fails the whole dashboard.
+class WidgetEvaluationDto {
+  final String widgetId;
+  final String widgetType;
+  final bool ready;
+  final QueryResultDto? result;
+  final WidgetErrorKindDto? errorKind;
+  final String? message;
+
+  const WidgetEvaluationDto({
+    required this.widgetId,
+    required this.widgetType,
+    required this.ready,
+    this.result,
+    this.errorKind,
+    this.message,
+  });
+
+  @override
+  int get hashCode =>
+      widgetId.hashCode ^
+      widgetType.hashCode ^
+      ready.hashCode ^
+      result.hashCode ^
+      errorKind.hashCode ^
+      message.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is WidgetEvaluationDto &&
+          runtimeType == other.runtimeType &&
+          widgetId == other.widgetId &&
+          widgetType == other.widgetType &&
+          ready == other.ready &&
+          result == other.result &&
+          errorKind == other.errorKind &&
+          message == other.message;
+}
+
+class WidgetLayoutDto {
+  final int version;
+  final WidgetSizeDto size;
+  final StructuredValueDto hints;
+
+  const WidgetLayoutDto({
+    required this.version,
+    required this.size,
+    required this.hints,
+  });
+
+  @override
+  int get hashCode => version.hashCode ^ size.hashCode ^ hints.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is WidgetLayoutDto &&
+          runtimeType == other.runtimeType &&
+          version == other.version &&
+          size == other.size &&
+          hints == other.hints;
+}
+
+enum WidgetSizeDto { small, medium, large, full }
+
+/// A granular metadata update. Omitted fields are untouched in the authoritative document, so
+/// renaming an unknown widget cannot rewrite its opaque configuration.
+class WidgetUpdateDto {
+  final String id;
+  final String collectionId;
+  final String? title;
+  final String? queryId;
+  final WidgetConfigurationDto? configuration;
+  final WidgetLayoutDto? layout;
+  final int? order;
+
+  const WidgetUpdateDto({
+    required this.id,
+    required this.collectionId,
+    this.title,
+    this.queryId,
+    this.configuration,
+    this.layout,
+    this.order,
+  });
+
+  @override
+  int get hashCode =>
+      id.hashCode ^
+      collectionId.hashCode ^
+      title.hashCode ^
+      queryId.hashCode ^
+      configuration.hashCode ^
+      layout.hashCode ^
+      order.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is WidgetUpdateDto &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          collectionId == other.collectionId &&
+          title == other.title &&
+          queryId == other.queryId &&
+          configuration == other.configuration &&
+          layout == other.layout &&
+          order == other.order;
 }

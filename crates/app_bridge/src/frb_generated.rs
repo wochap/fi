@@ -38,7 +38,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1589931431;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 447762921;
 
 // Section: executor
 
@@ -471,6 +471,43 @@ fn wire__crate__api__collections__create_record_impl(
         },
     )
 }
+fn wire__crate__api__widgets__create_widget_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "create_widget",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_definition =
+                <crate::api::models::WidgetDefinitionDto>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, crate::api::models::BridgeError>(
+                    (move || async move {
+                        let output_ok = crate::api::widgets::create_widget(api_definition).await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
 fn wire__crate__api__lifecycle__data_changed_stream_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -696,6 +733,90 @@ fn wire__crate__api__lifecycle__error_stream_impl(
         },
     )
 }
+fn wire__crate__api__widgets__evaluate_widget_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "evaluate_widget",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_collection_id = <String>::sse_decode(&mut deserializer);
+            let api_id = <String>::sse_decode(&mut deserializer);
+            let api_now_utc_ms = <i64>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, crate::api::models::BridgeError>(
+                    (move || async move {
+                        let output_ok = crate::api::widgets::evaluate_widget(
+                            api_collection_id,
+                            api_id,
+                            api_now_utc_ms,
+                        )
+                        .await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
+fn wire__crate__api__widgets__evaluate_widgets_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "evaluate_widgets",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_collection_id = <String>::sse_decode(&mut deserializer);
+            let api_now_utc_ms = <i64>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, crate::api::models::BridgeError>(
+                    (move || async move {
+                        let output_ok = crate::api::widgets::evaluate_widgets(
+                            api_collection_id,
+                            api_now_utc_ms,
+                        )
+                        .await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
 fn wire__crate__api__queries__execute_collection_query_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -849,6 +970,79 @@ fn wire__crate__api__collections__get_record_impl(
                     })()
                     .await,
                 )
+            }
+        },
+    )
+}
+fn wire__crate__api__widgets__get_widget_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "get_widget",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_collection_id = <String>::sse_decode(&mut deserializer);
+            let api_id = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, crate::api::models::BridgeError>(
+                    (move || async move {
+                        let output_ok =
+                            crate::api::widgets::get_widget(api_collection_id, api_id).await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
+fn wire__crate__api__widgets__get_widget_descriptor_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "get_widget_descriptor",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_widget_type = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok = Result::<_, ()>::Ok(
+                        crate::api::widgets::get_widget_descriptor(api_widget_type),
+                    )?;
+                    Ok(output_ok)
+                })())
             }
         },
     )
@@ -1142,6 +1336,76 @@ fn wire__crate__api__collections__list_records_impl(
                     (move || async move {
                         let output_ok =
                             crate::api::collections::list_records(api_collection_id).await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
+fn wire__crate__api__widgets__list_widget_descriptors_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "list_widget_descriptors",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok =
+                        Result::<_, ()>::Ok(crate::api::widgets::list_widget_descriptors())?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__widgets__list_widgets_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "list_widgets",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_collection_id = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, crate::api::models::BridgeError>(
+                    (move || async move {
+                        let output_ok =
+                            crate::api::widgets::list_widgets(api_collection_id).await?;
                         Ok(output_ok)
                     })()
                     .await,
@@ -1569,6 +1833,44 @@ fn wire__crate__api__queries__remove_query_definition_impl(
         },
     )
 }
+fn wire__crate__api__widgets__remove_widget_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "remove_widget",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_collection_id = <String>::sse_decode(&mut deserializer);
+            let api_id = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, crate::api::models::BridgeError>(
+                    (move || async move {
+                        let output_ok =
+                            crate::api::widgets::remove_widget(api_collection_id, api_id).await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
 fn wire__crate__api__collections__rename_collection_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -1761,6 +2063,45 @@ fn wire__crate__api__queries__reorder_query_definitions_impl(
                             api_ids,
                         )
                         .await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
+fn wire__crate__api__widgets__reorder_widgets_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "reorder_widgets",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_collection_id = <String>::sse_decode(&mut deserializer);
+            let api_ids = <Vec<String>>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, crate::api::models::BridgeError>(
+                    (move || async move {
+                        let output_ok =
+                            crate::api::widgets::reorder_widgets(api_collection_id, api_ids)
+                                .await?;
                         Ok(output_ok)
                     })()
                     .await,
@@ -2220,6 +2561,42 @@ fn wire__crate__api__collections__update_record_field_impl(
         },
     )
 }
+fn wire__crate__api__widgets__update_widget_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "update_widget",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_update = <crate::api::models::WidgetUpdateDto>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, crate::api::models::BridgeError>(
+                    (move || async move {
+                        let output_ok = crate::api::widgets::update_widget(api_update).await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
 fn wire__crate__api__collections__upsert_enum_option_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -2329,6 +2706,42 @@ fn wire__crate__api__models__validation_metadata_dto_default_impl(
                         Result::<_, ()>::Ok(crate::api::models::ValidationMetadataDto::default())?;
                     Ok(output_ok)
                 })())
+            }
+        },
+    )
+}
+fn wire__crate__api__widgets__widget_diagnostics_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "widget_diagnostics",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_id = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, crate::api::models::BridgeError>(
+                    (move || async move {
+                        let output_ok = crate::api::widgets::widget_diagnostics(api_id).await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
             }
         },
     )
@@ -2534,6 +2947,24 @@ impl SseDecode for crate::api::models::BootstrapKindDto {
             5 => crate::api::models::BootstrapKindDto::Closed,
             _ => unreachable!("Invalid variant for BootstrapKindDto: {}", inner),
         };
+    }
+}
+
+impl SseDecode for Box<crate::api::models::StructuredEntryDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        return Box::new(<crate::api::models::StructuredEntryDto>::sse_decode(
+            deserializer,
+        ));
+    }
+}
+
+impl SseDecode for Box<crate::api::models::StructuredValueDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        return Box::new(<crate::api::models::StructuredValueDto>::sse_decode(
+            deserializer,
+        ));
     }
 }
 
@@ -2782,6 +3213,7 @@ impl SseDecode for crate::api::models::DomainKindDto {
             2 => crate::api::models::DomainKindDto::Records,
             3 => crate::api::models::DomainKindDto::ComputedFields,
             4 => crate::api::models::DomainKindDto::Queries,
+            5 => crate::api::models::DomainKindDto::Widgets,
             _ => unreachable!("Invalid variant for DomainKindDto: {}", inner),
         };
     }
@@ -3032,6 +3464,34 @@ impl SseDecode for Vec<String> {
     }
 }
 
+impl SseDecode for Vec<Box<crate::api::models::StructuredEntryDto>> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<Box<crate::api::models::StructuredEntryDto>>::sse_decode(
+                deserializer,
+            ));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<Box<crate::api::models::StructuredValueDto>> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<Box<crate::api::models::StructuredValueDto>>::sse_decode(
+                deserializer,
+            ));
+        }
+        return ans_;
+    }
+}
+
 impl SseDecode for Vec<crate::api::models::CategoryPointDto> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -3196,6 +3656,20 @@ impl SseDecode for Vec<crate::api::models::QueryDefinitionDto> {
     }
 }
 
+impl SseDecode for Vec<crate::api::models::QueryResultShapeDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::models::QueryResultShapeDto>::sse_decode(
+                deserializer,
+            ));
+        }
+        return ans_;
+    }
+}
+
 impl SseDecode for Vec<crate::api::models::RecordDto> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -3285,6 +3759,48 @@ impl SseDecode for Vec<crate::api::models::TrustedDeviceDto> {
         let mut ans_ = Vec::with_capacity(len_ as usize);
         for idx_ in 0..len_ {
             ans_.push(<crate::api::models::TrustedDeviceDto>::sse_decode(
+                deserializer,
+            ));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::api::models::WidgetDefinitionDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::models::WidgetDefinitionDto>::sse_decode(
+                deserializer,
+            ));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::api::models::WidgetDescriptorDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::models::WidgetDescriptorDto>::sse_decode(
+                deserializer,
+            ));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::api::models::WidgetEvaluationDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::models::WidgetEvaluationDto>::sse_decode(
                 deserializer,
             ));
         }
@@ -3489,6 +4005,19 @@ impl SseDecode for Option<crate::api::models::GroupingDto> {
     }
 }
 
+impl SseDecode for Option<crate::api::models::QueryResultDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<crate::api::models::QueryResultDto>::sse_decode(
+                deserializer,
+            ));
+        } else {
+            return None;
+        }
+    }
+}
+
 impl SseDecode for Option<crate::api::models::RecordDto> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -3553,6 +4082,58 @@ impl SseDecode for Option<crate::api::models::ValueTypeDto> {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         if (<bool>::sse_decode(deserializer)) {
             return Some(<crate::api::models::ValueTypeDto>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode for Option<crate::api::models::WidgetConfigurationDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<crate::api::models::WidgetConfigurationDto>::sse_decode(
+                deserializer,
+            ));
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode for Option<crate::api::models::WidgetDefinitionDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<crate::api::models::WidgetDefinitionDto>::sse_decode(
+                deserializer,
+            ));
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode for Option<crate::api::models::WidgetErrorKindDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<crate::api::models::WidgetErrorKindDto>::sse_decode(
+                deserializer,
+            ));
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode for Option<crate::api::models::WidgetLayoutDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<crate::api::models::WidgetLayoutDto>::sse_decode(
+                deserializer,
+            ));
         } else {
             return None;
         }
@@ -3739,6 +4320,20 @@ impl SseDecode for crate::api::models::QueryResultKindDto {
     }
 }
 
+impl SseDecode for crate::api::models::QueryResultShapeDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::api::models::QueryResultShapeDto::Scalar,
+            1 => crate::api::models::QueryResultShapeDto::Series,
+            2 => crate::api::models::QueryResultShapeDto::CategorySeries,
+            3 => crate::api::models::QueryResultShapeDto::RecordSet,
+            _ => unreachable!("Invalid variant for QueryResultShapeDto: {}", inner),
+        };
+    }
+}
+
 impl SseDecode for crate::api::models::QueryShapeDto {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -3874,6 +4469,56 @@ impl SseDecode for crate::api::models::SortDirectionDto {
             0 => crate::api::models::SortDirectionDto::Ascending,
             1 => crate::api::models::SortDirectionDto::Descending,
             _ => unreachable!("Invalid variant for SortDirectionDto: {}", inner),
+        };
+    }
+}
+
+impl SseDecode for crate::api::models::StructuredEntryDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_key = <String>::sse_decode(deserializer);
+        let mut var_value = <Box<crate::api::models::StructuredValueDto>>::sse_decode(deserializer);
+        return crate::api::models::StructuredEntryDto {
+            key: var_key,
+            value: var_value,
+        };
+    }
+}
+
+impl SseDecode for crate::api::models::StructuredValueDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_kind = <crate::api::models::StructuredValueKindDto>::sse_decode(deserializer);
+        let mut var_booleanValue = <Option<bool>>::sse_decode(deserializer);
+        let mut var_integerValue = <Option<i64>>::sse_decode(deserializer);
+        let mut var_textValue = <Option<String>>::sse_decode(deserializer);
+        let mut var_items =
+            <Vec<Box<crate::api::models::StructuredValueDto>>>::sse_decode(deserializer);
+        let mut var_entries =
+            <Vec<Box<crate::api::models::StructuredEntryDto>>>::sse_decode(deserializer);
+        return crate::api::models::StructuredValueDto {
+            kind: var_kind,
+            boolean_value: var_booleanValue,
+            integer_value: var_integerValue,
+            text_value: var_textValue,
+            items: var_items,
+            entries: var_entries,
+        };
+    }
+}
+
+impl SseDecode for crate::api::models::StructuredValueKindDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::api::models::StructuredValueKindDto::Null,
+            1 => crate::api::models::StructuredValueKindDto::Boolean,
+            2 => crate::api::models::StructuredValueKindDto::Integer,
+            3 => crate::api::models::StructuredValueKindDto::Text,
+            4 => crate::api::models::StructuredValueKindDto::List,
+            5 => crate::api::models::StructuredValueKindDto::Map,
+            _ => unreachable!("Invalid variant for StructuredValueKindDto: {}", inner),
         };
     }
 }
@@ -4023,6 +4668,156 @@ impl SseDecode for crate::api::models::WeekStartDto {
     }
 }
 
+impl SseDecode for crate::api::models::WidgetConfigurationDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_version = <i64>::sse_decode(deserializer);
+        let mut var_body = <crate::api::models::StructuredValueDto>::sse_decode(deserializer);
+        return crate::api::models::WidgetConfigurationDto {
+            version: var_version,
+            body: var_body,
+        };
+    }
+}
+
+impl SseDecode for crate::api::models::WidgetDefinitionDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_id = <String>::sse_decode(deserializer);
+        let mut var_collectionId = <String>::sse_decode(deserializer);
+        let mut var_widgetType = <String>::sse_decode(deserializer);
+        let mut var_queryId = <String>::sse_decode(deserializer);
+        let mut var_title = <String>::sse_decode(deserializer);
+        let mut var_configuration =
+            <crate::api::models::WidgetConfigurationDto>::sse_decode(deserializer);
+        let mut var_layout = <crate::api::models::WidgetLayoutDto>::sse_decode(deserializer);
+        let mut var_order = <i64>::sse_decode(deserializer);
+        let mut var_deleted = <bool>::sse_decode(deserializer);
+        return crate::api::models::WidgetDefinitionDto {
+            id: var_id,
+            collection_id: var_collectionId,
+            widget_type: var_widgetType,
+            query_id: var_queryId,
+            title: var_title,
+            configuration: var_configuration,
+            layout: var_layout,
+            order: var_order,
+            deleted: var_deleted,
+        };
+    }
+}
+
+impl SseDecode for crate::api::models::WidgetDescriptorDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_widgetType = <String>::sse_decode(deserializer);
+        let mut var_label = <String>::sse_decode(deserializer);
+        let mut var_acceptedShapes =
+            <Vec<crate::api::models::QueryResultShapeDto>>::sse_decode(deserializer);
+        let mut var_configurationVersion = <i64>::sse_decode(deserializer);
+        let mut var_supported = <bool>::sse_decode(deserializer);
+        return crate::api::models::WidgetDescriptorDto {
+            widget_type: var_widgetType,
+            label: var_label,
+            accepted_shapes: var_acceptedShapes,
+            configuration_version: var_configurationVersion,
+            supported: var_supported,
+        };
+    }
+}
+
+impl SseDecode for crate::api::models::WidgetErrorKindDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::api::models::WidgetErrorKindDto::Removed,
+            1 => crate::api::models::WidgetErrorKindDto::UnsupportedType,
+            2 => crate::api::models::WidgetErrorKindDto::UnsupportedConfigurationVersion,
+            3 => crate::api::models::WidgetErrorKindDto::InvalidConfiguration,
+            4 => crate::api::models::WidgetErrorKindDto::UnknownQuery,
+            5 => crate::api::models::WidgetErrorKindDto::InvalidQuery,
+            6 => crate::api::models::WidgetErrorKindDto::ShapeMismatch,
+            7 => crate::api::models::WidgetErrorKindDto::Overflow,
+            8 => crate::api::models::WidgetErrorKindDto::QueryFailed,
+            _ => unreachable!("Invalid variant for WidgetErrorKindDto: {}", inner),
+        };
+    }
+}
+
+impl SseDecode for crate::api::models::WidgetEvaluationDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_widgetId = <String>::sse_decode(deserializer);
+        let mut var_widgetType = <String>::sse_decode(deserializer);
+        let mut var_ready = <bool>::sse_decode(deserializer);
+        let mut var_result = <Option<crate::api::models::QueryResultDto>>::sse_decode(deserializer);
+        let mut var_errorKind =
+            <Option<crate::api::models::WidgetErrorKindDto>>::sse_decode(deserializer);
+        let mut var_message = <Option<String>>::sse_decode(deserializer);
+        return crate::api::models::WidgetEvaluationDto {
+            widget_id: var_widgetId,
+            widget_type: var_widgetType,
+            ready: var_ready,
+            result: var_result,
+            error_kind: var_errorKind,
+            message: var_message,
+        };
+    }
+}
+
+impl SseDecode for crate::api::models::WidgetLayoutDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_version = <i64>::sse_decode(deserializer);
+        let mut var_size = <crate::api::models::WidgetSizeDto>::sse_decode(deserializer);
+        let mut var_hints = <crate::api::models::StructuredValueDto>::sse_decode(deserializer);
+        return crate::api::models::WidgetLayoutDto {
+            version: var_version,
+            size: var_size,
+            hints: var_hints,
+        };
+    }
+}
+
+impl SseDecode for crate::api::models::WidgetSizeDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::api::models::WidgetSizeDto::Small,
+            1 => crate::api::models::WidgetSizeDto::Medium,
+            2 => crate::api::models::WidgetSizeDto::Large,
+            3 => crate::api::models::WidgetSizeDto::Full,
+            _ => unreachable!("Invalid variant for WidgetSizeDto: {}", inner),
+        };
+    }
+}
+
+impl SseDecode for crate::api::models::WidgetUpdateDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_id = <String>::sse_decode(deserializer);
+        let mut var_collectionId = <String>::sse_decode(deserializer);
+        let mut var_title = <Option<String>>::sse_decode(deserializer);
+        let mut var_queryId = <Option<String>>::sse_decode(deserializer);
+        let mut var_configuration =
+            <Option<crate::api::models::WidgetConfigurationDto>>::sse_decode(deserializer);
+        let mut var_layout =
+            <Option<crate::api::models::WidgetLayoutDto>>::sse_decode(deserializer);
+        let mut var_order = <Option<i64>>::sse_decode(deserializer);
+        return crate::api::models::WidgetUpdateDto {
+            id: var_id,
+            collection_id: var_collectionId,
+            title: var_title,
+            query_id: var_queryId,
+            configuration: var_configuration,
+            layout: var_layout,
+            order: var_order,
+        };
+    }
+}
+
 fn pde_ffi_dispatcher_primary_impl(
     func_id: i32,
     port: flutter_rust_bridge::for_generated::MessagePort,
@@ -4067,167 +4862,185 @@ fn pde_ffi_dispatcher_primary_impl(
             data_len,
         ),
         11 => wire__crate__api__collections__create_record_impl(port, ptr, rust_vec_len, data_len),
-        12 => {
+        12 => wire__crate__api__widgets__create_widget_impl(port, ptr, rust_vec_len, data_len),
+        13 => {
             wire__crate__api__lifecycle__data_changed_stream_impl(port, ptr, rust_vec_len, data_len)
         }
-        13 => {
+        14 => {
             wire__crate__api__collections__delete_collection_impl(port, ptr, rust_vec_len, data_len)
         }
-        14 => wire__crate__api__collections__delete_record_impl(port, ptr, rust_vec_len, data_len),
-        15 => wire__crate__api__pairing__discovery_secret_for_platform_impl(
+        15 => wire__crate__api__collections__delete_record_impl(port, ptr, rust_vec_len, data_len),
+        16 => wire__crate__api__pairing__discovery_secret_for_platform_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        16 => wire__crate__api__models__display_metadata_dto_default_impl(
+        17 => wire__crate__api__models__display_metadata_dto_default_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        17 => wire__crate__api__lifecycle__error_stream_impl(port, ptr, rust_vec_len, data_len),
-        18 => wire__crate__api__queries__execute_collection_query_impl(
+        18 => wire__crate__api__lifecycle__error_stream_impl(port, ptr, rust_vec_len, data_len),
+        19 => wire__crate__api__widgets__evaluate_widget_impl(port, ptr, rust_vec_len, data_len),
+        20 => wire__crate__api__widgets__evaluate_widgets_impl(port, ptr, rust_vec_len, data_len),
+        21 => wire__crate__api__queries__execute_collection_query_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        19 => wire__crate__api__queries__execute_query_definition_impl(
+        22 => wire__crate__api__queries__execute_query_definition_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        20 => wire__crate__api__collections__get_collection_schema_impl(
+        23 => wire__crate__api__collections__get_collection_schema_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        21 => wire__crate__api__collections__get_record_impl(port, ptr, rust_vec_len, data_len),
-        22 => wire__crate__api__lifecycle__init_app_impl(port, ptr, rust_vec_len, data_len),
-        23 => wire__crate__api__lifecycle__initialize_impl(port, ptr, rust_vec_len, data_len),
-        24 => wire__crate__api__lifecycle__initialize_android_networked_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        25 => wire__crate__api__lifecycle__initialize_desktop_networked_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
+        24 => wire__crate__api__collections__get_record_impl(port, ptr, rust_vec_len, data_len),
+        25 => wire__crate__api__widgets__get_widget_impl(port, ptr, rust_vec_len, data_len),
         26 => {
+            wire__crate__api__widgets__get_widget_descriptor_impl(port, ptr, rust_vec_len, data_len)
+        }
+        27 => wire__crate__api__lifecycle__init_app_impl(port, ptr, rust_vec_len, data_len),
+        28 => wire__crate__api__lifecycle__initialize_impl(port, ptr, rust_vec_len, data_len),
+        29 => wire__crate__api__lifecycle__initialize_android_networked_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        30 => wire__crate__api__lifecycle__initialize_desktop_networked_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        31 => {
             wire__crate__api__collections__list_collections_impl(port, ptr, rust_vec_len, data_len)
         }
-        27 => {
+        32 => {
             wire__crate__api__queries__list_computed_fields_impl(port, ptr, rust_vec_len, data_len)
         }
-        28 => wire__crate__api__queries__list_query_definitions_impl(
+        33 => wire__crate__api__queries__list_query_definitions_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        29 => wire__crate__api__collections__list_records_impl(port, ptr, rust_vec_len, data_len),
-        30 => wire__crate__api__pairing__pairing_candidates_impl(port, ptr, rust_vec_len, data_len),
-        31 => wire__crate__api__pairing__pairing_candidates_stream_impl(
+        34 => wire__crate__api__collections__list_records_impl(port, ptr, rust_vec_len, data_len),
+        35 => wire__crate__api__widgets__list_widget_descriptors_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        32 => wire__crate__api__pairing__pairing_state_impl(port, ptr, rust_vec_len, data_len),
-        33 => {
+        36 => wire__crate__api__widgets__list_widgets_impl(port, ptr, rust_vec_len, data_len),
+        37 => wire__crate__api__pairing__pairing_candidates_impl(port, ptr, rust_vec_len, data_len),
+        38 => wire__crate__api__pairing__pairing_candidates_stream_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        39 => wire__crate__api__pairing__pairing_state_impl(port, ptr, rust_vec_len, data_len),
+        40 => {
             wire__crate__api__pairing__pairing_state_stream_impl(port, ptr, rust_vec_len, data_len)
         }
-        34 => wire__crate__api__lifecycle__projection_state_impl(port, ptr, rust_vec_len, data_len),
-        35 => {
+        41 => wire__crate__api__lifecycle__projection_state_impl(port, ptr, rust_vec_len, data_len),
+        42 => {
             wire__crate__api__lifecycle__projection_stream_impl(port, ptr, rust_vec_len, data_len)
         }
-        36 => wire__crate__api__pairing__reject_pairing_impl(port, ptr, rust_vec_len, data_len),
-        37 => {
+        43 => wire__crate__api__pairing__reject_pairing_impl(port, ptr, rust_vec_len, data_len),
+        44 => {
             wire__crate__api__queries__remove_computed_field_impl(port, ptr, rust_vec_len, data_len)
         }
-        38 => wire__crate__api__collections__remove_enum_option_impl(
+        45 => wire__crate__api__collections__remove_enum_option_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        39 => wire__crate__api__collections__remove_field_impl(port, ptr, rust_vec_len, data_len),
-        40 => wire__crate__api__queries__remove_query_definition_impl(
+        46 => wire__crate__api__collections__remove_field_impl(port, ptr, rust_vec_len, data_len),
+        47 => wire__crate__api__queries__remove_query_definition_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        41 => {
+        48 => wire__crate__api__widgets__remove_widget_impl(port, ptr, rust_vec_len, data_len),
+        49 => {
             wire__crate__api__collections__rename_collection_impl(port, ptr, rust_vec_len, data_len)
         }
-        42 => {
+        50 => {
             wire__crate__api__pairing__rename_trusted_device_impl(port, ptr, rust_vec_len, data_len)
         }
-        43 => wire__crate__api__queries__reorder_computed_fields_impl(
+        51 => wire__crate__api__queries__reorder_computed_fields_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        44 => wire__crate__api__collections__reorder_fields_impl(port, ptr, rust_vec_len, data_len),
-        45 => wire__crate__api__queries__reorder_query_definitions_impl(
+        52 => wire__crate__api__collections__reorder_fields_impl(port, ptr, rust_vec_len, data_len),
+        53 => wire__crate__api__queries__reorder_query_definitions_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        46 => {
+        54 => wire__crate__api__widgets__reorder_widgets_impl(port, ptr, rust_vec_len, data_len),
+        55 => {
             wire__crate__api__pairing__revoke_trusted_device_impl(port, ptr, rust_vec_len, data_len)
         }
-        47 => wire__crate__api__lifecycle__set_foreground_impl(port, ptr, rust_vec_len, data_len),
-        48 => wire__crate__api__lifecycle__shutdown_impl(port, ptr, rust_vec_len, data_len),
-        49 => wire__crate__api__pairing__start_pairing_impl(port, ptr, rust_vec_len, data_len),
-        50 => wire__crate__api__pairing__stop_pairing_impl(port, ptr, rust_vec_len, data_len),
-        51 => wire__crate__api__pairing__sync_status_impl(port, ptr, rust_vec_len, data_len),
-        52 => wire__crate__api__pairing__sync_status_stream_impl(port, ptr, rust_vec_len, data_len),
-        53 => wire__crate__api__pairing__trusted_devices_impl(port, ptr, rust_vec_len, data_len),
-        54 => {
+        56 => wire__crate__api__lifecycle__set_foreground_impl(port, ptr, rust_vec_len, data_len),
+        57 => wire__crate__api__lifecycle__shutdown_impl(port, ptr, rust_vec_len, data_len),
+        58 => wire__crate__api__pairing__start_pairing_impl(port, ptr, rust_vec_len, data_len),
+        59 => wire__crate__api__pairing__stop_pairing_impl(port, ptr, rust_vec_len, data_len),
+        60 => wire__crate__api__pairing__sync_status_impl(port, ptr, rust_vec_len, data_len),
+        61 => wire__crate__api__pairing__sync_status_stream_impl(port, ptr, rust_vec_len, data_len),
+        62 => wire__crate__api__pairing__trusted_devices_impl(port, ptr, rust_vec_len, data_len),
+        63 => {
             wire__crate__api__queries__update_computed_field_impl(port, ptr, rust_vec_len, data_len)
         }
-        55 => wire__crate__api__collections__update_field_impl(port, ptr, rust_vec_len, data_len),
-        56 => wire__crate__api__queries__update_query_definition_impl(
+        64 => wire__crate__api__collections__update_field_impl(port, ptr, rust_vec_len, data_len),
+        65 => wire__crate__api__queries__update_query_definition_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        57 => wire__crate__api__collections__update_record_field_impl(
+        66 => wire__crate__api__collections__update_record_field_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        58 => wire__crate__api__collections__upsert_enum_option_impl(
+        67 => wire__crate__api__widgets__update_widget_impl(port, ptr, rust_vec_len, data_len),
+        68 => wire__crate__api__collections__upsert_enum_option_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        59 => wire__crate__api__queries__validate_collection_query_impl(
+        69 => wire__crate__api__queries__validate_collection_query_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        60 => wire__crate__api__models__validation_metadata_dto_default_impl(
+        70 => wire__crate__api__models__validation_metadata_dto_default_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
+        71 => wire__crate__api__widgets__widget_diagnostics_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -4736,6 +5549,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::models::DomainKindDto {
             Self::Records => 2.into_dart(),
             Self::ComputedFields => 3.into_dart(),
             Self::Queries => 4.into_dart(),
+            Self::Widgets => 5.into_dart(),
             _ => unreachable!(),
         }
     }
@@ -5294,6 +6108,29 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::models::QueryResultKindDto>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::models::QueryResultShapeDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Scalar => 0.into_dart(),
+            Self::Series => 1.into_dart(),
+            Self::CategorySeries => 2.into_dart(),
+            Self::RecordSet => 3.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::models::QueryResultShapeDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::models::QueryResultShapeDto>
+    for crate::api::models::QueryResultShapeDto
+{
+    fn into_into_dart(self) -> crate::api::models::QueryResultShapeDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::models::QueryShapeDto {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -5511,6 +6348,77 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::models::SortDirectionDto>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::models::StructuredEntryDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.key.into_into_dart().into_dart(),
+            self.value.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::models::StructuredEntryDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::models::StructuredEntryDto>
+    for crate::api::models::StructuredEntryDto
+{
+    fn into_into_dart(self) -> crate::api::models::StructuredEntryDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::models::StructuredValueDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.kind.into_into_dart().into_dart(),
+            self.boolean_value.into_into_dart().into_dart(),
+            self.integer_value.into_into_dart().into_dart(),
+            self.text_value.into_into_dart().into_dart(),
+            self.items.into_into_dart().into_dart(),
+            self.entries.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::models::StructuredValueDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::models::StructuredValueDto>
+    for crate::api::models::StructuredValueDto
+{
+    fn into_into_dart(self) -> crate::api::models::StructuredValueDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::models::StructuredValueKindDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Null => 0.into_dart(),
+            Self::Boolean => 1.into_dart(),
+            Self::Integer => 2.into_dart(),
+            Self::Text => 3.into_dart(),
+            Self::List => 4.into_dart(),
+            Self::Map => 5.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::models::StructuredValueKindDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::models::StructuredValueKindDto>
+    for crate::api::models::StructuredValueKindDto
+{
+    fn into_into_dart(self) -> crate::api::models::StructuredValueKindDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::models::SyncStatusDto {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         match self {
@@ -5679,6 +6587,203 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::models::WeekStartDto>
     for crate::api::models::WeekStartDto
 {
     fn into_into_dart(self) -> crate::api::models::WeekStartDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::models::WidgetConfigurationDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.version.into_into_dart().into_dart(),
+            self.body.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::models::WidgetConfigurationDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::models::WidgetConfigurationDto>
+    for crate::api::models::WidgetConfigurationDto
+{
+    fn into_into_dart(self) -> crate::api::models::WidgetConfigurationDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::models::WidgetDefinitionDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.id.into_into_dart().into_dart(),
+            self.collection_id.into_into_dart().into_dart(),
+            self.widget_type.into_into_dart().into_dart(),
+            self.query_id.into_into_dart().into_dart(),
+            self.title.into_into_dart().into_dart(),
+            self.configuration.into_into_dart().into_dart(),
+            self.layout.into_into_dart().into_dart(),
+            self.order.into_into_dart().into_dart(),
+            self.deleted.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::models::WidgetDefinitionDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::models::WidgetDefinitionDto>
+    for crate::api::models::WidgetDefinitionDto
+{
+    fn into_into_dart(self) -> crate::api::models::WidgetDefinitionDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::models::WidgetDescriptorDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.widget_type.into_into_dart().into_dart(),
+            self.label.into_into_dart().into_dart(),
+            self.accepted_shapes.into_into_dart().into_dart(),
+            self.configuration_version.into_into_dart().into_dart(),
+            self.supported.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::models::WidgetDescriptorDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::models::WidgetDescriptorDto>
+    for crate::api::models::WidgetDescriptorDto
+{
+    fn into_into_dart(self) -> crate::api::models::WidgetDescriptorDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::models::WidgetErrorKindDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Removed => 0.into_dart(),
+            Self::UnsupportedType => 1.into_dart(),
+            Self::UnsupportedConfigurationVersion => 2.into_dart(),
+            Self::InvalidConfiguration => 3.into_dart(),
+            Self::UnknownQuery => 4.into_dart(),
+            Self::InvalidQuery => 5.into_dart(),
+            Self::ShapeMismatch => 6.into_dart(),
+            Self::Overflow => 7.into_dart(),
+            Self::QueryFailed => 8.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::models::WidgetErrorKindDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::models::WidgetErrorKindDto>
+    for crate::api::models::WidgetErrorKindDto
+{
+    fn into_into_dart(self) -> crate::api::models::WidgetErrorKindDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::models::WidgetEvaluationDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.widget_id.into_into_dart().into_dart(),
+            self.widget_type.into_into_dart().into_dart(),
+            self.ready.into_into_dart().into_dart(),
+            self.result.into_into_dart().into_dart(),
+            self.error_kind.into_into_dart().into_dart(),
+            self.message.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::models::WidgetEvaluationDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::models::WidgetEvaluationDto>
+    for crate::api::models::WidgetEvaluationDto
+{
+    fn into_into_dart(self) -> crate::api::models::WidgetEvaluationDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::models::WidgetLayoutDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.version.into_into_dart().into_dart(),
+            self.size.into_into_dart().into_dart(),
+            self.hints.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::models::WidgetLayoutDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::models::WidgetLayoutDto>
+    for crate::api::models::WidgetLayoutDto
+{
+    fn into_into_dart(self) -> crate::api::models::WidgetLayoutDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::models::WidgetSizeDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Small => 0.into_dart(),
+            Self::Medium => 1.into_dart(),
+            Self::Large => 2.into_dart(),
+            Self::Full => 3.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::models::WidgetSizeDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::models::WidgetSizeDto>
+    for crate::api::models::WidgetSizeDto
+{
+    fn into_into_dart(self) -> crate::api::models::WidgetSizeDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::models::WidgetUpdateDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.id.into_into_dart().into_dart(),
+            self.collection_id.into_into_dart().into_dart(),
+            self.title.into_into_dart().into_dart(),
+            self.query_id.into_into_dart().into_dart(),
+            self.configuration.into_into_dart().into_dart(),
+            self.layout.into_into_dart().into_dart(),
+            self.order.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::models::WidgetUpdateDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::models::WidgetUpdateDto>
+    for crate::api::models::WidgetUpdateDto
+{
+    fn into_into_dart(self) -> crate::api::models::WidgetUpdateDto {
         self
     }
 }
@@ -5878,6 +6983,20 @@ impl SseEncode for crate::api::models::BootstrapKindDto {
     }
 }
 
+impl SseEncode for Box<crate::api::models::StructuredEntryDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <crate::api::models::StructuredEntryDto>::sse_encode(*self, serializer);
+    }
+}
+
+impl SseEncode for Box<crate::api::models::StructuredValueDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <crate::api::models::StructuredValueDto>::sse_encode(*self, serializer);
+    }
+}
+
 impl SseEncode for crate::api::models::BridgeError {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -6073,6 +7192,7 @@ impl SseEncode for crate::api::models::DomainKindDto {
                 crate::api::models::DomainKindDto::Records => 2,
                 crate::api::models::DomainKindDto::ComputedFields => 3,
                 crate::api::models::DomainKindDto::Queries => 4,
+                crate::api::models::DomainKindDto::Widgets => 5,
                 _ => {
                     unimplemented!("");
                 }
@@ -6287,6 +7407,26 @@ impl SseEncode for Vec<String> {
     }
 }
 
+impl SseEncode for Vec<Box<crate::api::models::StructuredEntryDto>> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <Box<crate::api::models::StructuredEntryDto>>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<Box<crate::api::models::StructuredValueDto>> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <Box<crate::api::models::StructuredValueDto>>::sse_encode(item, serializer);
+        }
+    }
+}
+
 impl SseEncode for Vec<crate::api::models::CategoryPointDto> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -6407,6 +7547,16 @@ impl SseEncode for Vec<crate::api::models::QueryDefinitionDto> {
     }
 }
 
+impl SseEncode for Vec<crate::api::models::QueryResultShapeDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::models::QueryResultShapeDto>::sse_encode(item, serializer);
+        }
+    }
+}
+
 impl SseEncode for Vec<crate::api::models::RecordDto> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -6473,6 +7623,36 @@ impl SseEncode for Vec<crate::api::models::TrustedDeviceDto> {
         <i32>::sse_encode(self.len() as _, serializer);
         for item in self {
             <crate::api::models::TrustedDeviceDto>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::api::models::WidgetDefinitionDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::models::WidgetDefinitionDto>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::api::models::WidgetDescriptorDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::models::WidgetDescriptorDto>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::api::models::WidgetEvaluationDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::models::WidgetEvaluationDto>::sse_encode(item, serializer);
         }
     }
 }
@@ -6643,6 +7823,16 @@ impl SseEncode for Option<crate::api::models::GroupingDto> {
     }
 }
 
+impl SseEncode for Option<crate::api::models::QueryResultDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::api::models::QueryResultDto>::sse_encode(value, serializer);
+        }
+    }
+}
+
 impl SseEncode for Option<crate::api::models::RecordDto> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -6699,6 +7889,46 @@ impl SseEncode for Option<crate::api::models::ValueTypeDto> {
         <bool>::sse_encode(self.is_some(), serializer);
         if let Some(value) = self {
             <crate::api::models::ValueTypeDto>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<crate::api::models::WidgetConfigurationDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::api::models::WidgetConfigurationDto>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<crate::api::models::WidgetDefinitionDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::api::models::WidgetDefinitionDto>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<crate::api::models::WidgetErrorKindDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::api::models::WidgetErrorKindDto>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<crate::api::models::WidgetLayoutDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::api::models::WidgetLayoutDto>::sse_encode(value, serializer);
         }
     }
 }
@@ -6853,6 +8083,24 @@ impl SseEncode for crate::api::models::QueryResultKindDto {
     }
 }
 
+impl SseEncode for crate::api::models::QueryResultShapeDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::api::models::QueryResultShapeDto::Scalar => 0,
+                crate::api::models::QueryResultShapeDto::Series => 1,
+                crate::api::models::QueryResultShapeDto::CategorySeries => 2,
+                crate::api::models::QueryResultShapeDto::RecordSet => 3,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
 impl SseEncode for crate::api::models::QueryShapeDto {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -6958,6 +8206,46 @@ impl SseEncode for crate::api::models::SortDirectionDto {
             match self {
                 crate::api::models::SortDirectionDto::Ascending => 0,
                 crate::api::models::SortDirectionDto::Descending => 1,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
+impl SseEncode for crate::api::models::StructuredEntryDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.key, serializer);
+        <Box<crate::api::models::StructuredValueDto>>::sse_encode(self.value, serializer);
+    }
+}
+
+impl SseEncode for crate::api::models::StructuredValueDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <crate::api::models::StructuredValueKindDto>::sse_encode(self.kind, serializer);
+        <Option<bool>>::sse_encode(self.boolean_value, serializer);
+        <Option<i64>>::sse_encode(self.integer_value, serializer);
+        <Option<String>>::sse_encode(self.text_value, serializer);
+        <Vec<Box<crate::api::models::StructuredValueDto>>>::sse_encode(self.items, serializer);
+        <Vec<Box<crate::api::models::StructuredEntryDto>>>::sse_encode(self.entries, serializer);
+    }
+}
+
+impl SseEncode for crate::api::models::StructuredValueKindDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::api::models::StructuredValueKindDto::Null => 0,
+                crate::api::models::StructuredValueKindDto::Boolean => 1,
+                crate::api::models::StructuredValueKindDto::Integer => 2,
+                crate::api::models::StructuredValueKindDto::Text => 3,
+                crate::api::models::StructuredValueKindDto::List => 4,
+                crate::api::models::StructuredValueKindDto::Map => 5,
                 _ => {
                     unimplemented!("");
                 }
@@ -7095,6 +8383,121 @@ impl SseEncode for crate::api::models::WeekStartDto {
             },
             serializer,
         );
+    }
+}
+
+impl SseEncode for crate::api::models::WidgetConfigurationDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i64>::sse_encode(self.version, serializer);
+        <crate::api::models::StructuredValueDto>::sse_encode(self.body, serializer);
+    }
+}
+
+impl SseEncode for crate::api::models::WidgetDefinitionDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.id, serializer);
+        <String>::sse_encode(self.collection_id, serializer);
+        <String>::sse_encode(self.widget_type, serializer);
+        <String>::sse_encode(self.query_id, serializer);
+        <String>::sse_encode(self.title, serializer);
+        <crate::api::models::WidgetConfigurationDto>::sse_encode(self.configuration, serializer);
+        <crate::api::models::WidgetLayoutDto>::sse_encode(self.layout, serializer);
+        <i64>::sse_encode(self.order, serializer);
+        <bool>::sse_encode(self.deleted, serializer);
+    }
+}
+
+impl SseEncode for crate::api::models::WidgetDescriptorDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.widget_type, serializer);
+        <String>::sse_encode(self.label, serializer);
+        <Vec<crate::api::models::QueryResultShapeDto>>::sse_encode(
+            self.accepted_shapes,
+            serializer,
+        );
+        <i64>::sse_encode(self.configuration_version, serializer);
+        <bool>::sse_encode(self.supported, serializer);
+    }
+}
+
+impl SseEncode for crate::api::models::WidgetErrorKindDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::api::models::WidgetErrorKindDto::Removed => 0,
+                crate::api::models::WidgetErrorKindDto::UnsupportedType => 1,
+                crate::api::models::WidgetErrorKindDto::UnsupportedConfigurationVersion => 2,
+                crate::api::models::WidgetErrorKindDto::InvalidConfiguration => 3,
+                crate::api::models::WidgetErrorKindDto::UnknownQuery => 4,
+                crate::api::models::WidgetErrorKindDto::InvalidQuery => 5,
+                crate::api::models::WidgetErrorKindDto::ShapeMismatch => 6,
+                crate::api::models::WidgetErrorKindDto::Overflow => 7,
+                crate::api::models::WidgetErrorKindDto::QueryFailed => 8,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
+impl SseEncode for crate::api::models::WidgetEvaluationDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.widget_id, serializer);
+        <String>::sse_encode(self.widget_type, serializer);
+        <bool>::sse_encode(self.ready, serializer);
+        <Option<crate::api::models::QueryResultDto>>::sse_encode(self.result, serializer);
+        <Option<crate::api::models::WidgetErrorKindDto>>::sse_encode(self.error_kind, serializer);
+        <Option<String>>::sse_encode(self.message, serializer);
+    }
+}
+
+impl SseEncode for crate::api::models::WidgetLayoutDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i64>::sse_encode(self.version, serializer);
+        <crate::api::models::WidgetSizeDto>::sse_encode(self.size, serializer);
+        <crate::api::models::StructuredValueDto>::sse_encode(self.hints, serializer);
+    }
+}
+
+impl SseEncode for crate::api::models::WidgetSizeDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::api::models::WidgetSizeDto::Small => 0,
+                crate::api::models::WidgetSizeDto::Medium => 1,
+                crate::api::models::WidgetSizeDto::Large => 2,
+                crate::api::models::WidgetSizeDto::Full => 3,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
+impl SseEncode for crate::api::models::WidgetUpdateDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.id, serializer);
+        <String>::sse_encode(self.collection_id, serializer);
+        <Option<String>>::sse_encode(self.title, serializer);
+        <Option<String>>::sse_encode(self.query_id, serializer);
+        <Option<crate::api::models::WidgetConfigurationDto>>::sse_encode(
+            self.configuration,
+            serializer,
+        );
+        <Option<crate::api::models::WidgetLayoutDto>>::sse_encode(self.layout, serializer);
+        <Option<i64>>::sse_encode(self.order, serializer);
     }
 }
 

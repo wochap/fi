@@ -408,6 +408,131 @@ pub enum DomainKindDto {
     Records,
     ComputedFields,
     Queries,
+    /// Widget definitions changed. Derived results are never synchronized, so this always means
+    /// "reread definitions and reevaluate visible widgets".
+    Widgets,
+}
+
+/// The result shape contract a widget declares it can render.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum QueryResultShapeDto {
+    Scalar,
+    Series,
+    CategorySeries,
+    RecordSet,
+}
+
+/// One entry of the local renderer/descriptor registry. `supported` is false for a synchronized
+/// widget type this build cannot render; its definition is still exposed unchanged.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WidgetDescriptorDto {
+    pub widget_type: String,
+    pub label: String,
+    pub accepted_shapes: Vec<QueryResultShapeDto>,
+    pub configuration_version: i64,
+    pub supported: bool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum StructuredValueKindDto {
+    Null,
+    Boolean,
+    Integer,
+    Text,
+    List,
+    Map,
+}
+
+/// A lossless generic presentation value. Signed integers never pass through a double, so exact
+/// scaled decimals and 64-bit identities stay intact across the bridge.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct StructuredValueDto {
+    pub kind: StructuredValueKindDto,
+    pub boolean_value: Option<bool>,
+    pub integer_value: Option<i64>,
+    pub text_value: Option<String>,
+    pub items: Vec<Box<StructuredValueDto>>,
+    pub entries: Vec<Box<StructuredEntryDto>>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct StructuredEntryDto {
+    pub key: String,
+    pub value: Box<StructuredValueDto>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum WidgetSizeDto {
+    Small,
+    Medium,
+    Large,
+    Full,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WidgetLayoutDto {
+    pub version: i64,
+    pub size: WidgetSizeDto,
+    pub hints: StructuredValueDto,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WidgetConfigurationDto {
+    pub version: i64,
+    pub body: StructuredValueDto,
+}
+
+/// A widget definition. `widget_type` is an open string, never a closed enum: an unrecognized
+/// value is preserved data, not an error.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WidgetDefinitionDto {
+    pub id: String,
+    pub collection_id: String,
+    pub widget_type: String,
+    pub query_id: String,
+    pub title: String,
+    pub configuration: WidgetConfigurationDto,
+    pub layout: WidgetLayoutDto,
+    pub order: i64,
+    pub deleted: bool,
+}
+
+/// A granular metadata update. Omitted fields are untouched in the authoritative document, so
+/// renaming an unknown widget cannot rewrite its opaque configuration.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WidgetUpdateDto {
+    pub id: String,
+    pub collection_id: String,
+    pub title: Option<String>,
+    pub query_id: Option<String>,
+    pub configuration: Option<WidgetConfigurationDto>,
+    pub layout: Option<WidgetLayoutDto>,
+    pub order: Option<i64>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum WidgetErrorKindDto {
+    Removed,
+    UnsupportedType,
+    UnsupportedConfigurationVersion,
+    InvalidConfiguration,
+    UnknownQuery,
+    InvalidQuery,
+    ShapeMismatch,
+    Overflow,
+    QueryFailed,
+}
+
+/// One widget's evaluation. A failure carries a typed kind and message instead of a result; it
+/// never fails the whole dashboard.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WidgetEvaluationDto {
+    pub widget_id: String,
+    pub widget_type: String,
+    pub ready: bool,
+    pub result: Option<QueryResultDto>,
+    pub error_kind: Option<WidgetErrorKindDto>,
+    pub message: Option<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -915,6 +1040,7 @@ impl From<DomainKind> for DomainKindDto {
             DomainKind::Records => Self::Records,
             DomainKind::ComputedFields => Self::ComputedFields,
             DomainKind::Queries => Self::Queries,
+            DomainKind::Widgets => Self::Widgets,
         }
     }
 }
