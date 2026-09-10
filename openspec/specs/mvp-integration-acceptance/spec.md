@@ -19,6 +19,13 @@ The end-to-end suite SHALL prove generic schema and record command projection, c
 - **WHEN** SQLite contains valid rows with heads older than the authoritative root
 - **THEN** startup replaces them with a complete current generic projection
 
+### Requirement: Widget projection recovery acceptance
+Deleting or invalidating `read-model.sqlite` SHALL rebuild widget and query definitions and reproduce widget evaluation results from Automerge.
+
+#### Scenario: Rebuild configured dashboard
+- **WHEN** a populated dashboard's read model is deleted and the application restarts
+- **THEN** widget definitions, order, configuration, and query results equal their pre-deletion state
+
 ### Requirement: Quinn convergence acceptance
 The end-to-end suite SHALL prove two application-core instances synchronize generic schemas and records through real Quinn streams, converge concurrent offline changes, and preserve trusted identity across endpoint changes.
 
@@ -84,6 +91,31 @@ The end-to-end suite SHALL prove a complete application restart preserves author
 #### Scenario: Both application cores restart
 - **WHEN** paired synchronized applications shut down and reopen from retained storage
 - **THEN** they retain identities, trust, schemas, records, resolved values, and can synchronize new changes
+
+### Requirement: Generic Headache dashboard acceptance
+The end-to-end suite SHALL prove a schema, computed/query definitions, widget definitions, and records created on different trusted devices synchronize and drive generic CRUD and dashboard results.
+
+#### Scenario: Headache schema and widgets cross devices
+- **WHEN** Device A creates the Headache schema with started_at, optional ended_at, intensity 1 through 10, optional notes, Average Intensity, and Intensity History and synchronizes
+- **THEN** Device B renders generic CRUD plus AggregateNumber and LineChart from the synchronized definitions without Headache-specific code
+
+#### Scenario: Headache record returns to creator
+- **WHEN** Device B adds a valid headache record and synchronizes
+- **THEN** Device A projects the record and updates both Headache widgets from SQLite-backed query evaluation
+
+### Requirement: Generic Money Movement dashboard acceptance
+The end-to-end suite SHALL prove signed FixedDecimal Money Movement records and Balance configuration synchronize while exact aggregation remains integer based.
+
+#### Scenario: Exact synchronized Balance
+- **WHEN** records contain scale-two representations `350000`, `-90000`, and `-2350`
+- **THEN** Balance returns internal representation `257650`, displays `2576.50`, and uses no binary floating-point authoritative aggregation
+
+### Requirement: Unsupported widget compatibility acceptance
+The end-to-end suite SHALL prove a device without a widget implementation preserves an unknown synchronized definition and continues operating the collection.
+
+#### Scenario: Unknown widget on older device
+- **WHEN** a device receives `com.example.future-widget`
+- **THEN** it displays an unsupported placeholder, preserves the definition through unrelated edits and resynchronization, and continues rendering supported widgets
 
 ### Requirement: Supported platform acceptance
 The project SHALL include Android foreground integration checks and a Linux desktop build/smoke check that does not rely on X11-specific application behavior.

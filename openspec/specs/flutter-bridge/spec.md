@@ -45,6 +45,17 @@ The bridge SHALL expose explicit generic collection, record, query-definition, c
 - **WHEN** Dart receives a definition version it cannot construct or edit
 - **THEN** the bridge preserves its structured identity and returns a typed unsupported-definition status rather than coercing it
 
+### Requirement: Widget bridge APIs
+The bridge SHALL expose typed add, update, remove, reorder, list, get, and evaluate widget APIs using canonical IDs, open string widget types, structured configuration, and typed query result DTOs without exposing Automerge, SQLite, or chart-library objects.
+
+#### Scenario: Evaluate widget
+- **WHEN** Dart requests data for a valid widget ID
+- **THEN** the bridge delegates to the Rust widget/query service and returns its exact typed result or per-widget typed error
+
+#### Scenario: Unknown widget round trip
+- **WHEN** Dart reads an unsupported widget and updates only supported metadata
+- **THEN** the bridge preserves the unknown type and structured configuration unchanged
+
 ### Requirement: Typed bridge errors
 Rust initialization, validation, persistence, projection, lifecycle, and bootstrap failures SHALL cross the bridge as stable typed error categories with safe user-facing messages and stable entity/field context where applicable.
 
@@ -62,6 +73,13 @@ The bridge SHALL expose streams for retained application/projection state and tr
 #### Scenario: Subscriber is recreated
 - **WHEN** a widget or isolate cancels and reopens a status stream
 - **THEN** it receives the latest retained state without requiring an application restart
+
+### Requirement: Widget event stream
+The bridge SHALL expose widget-specific data-change information sufficient for Flutter to refresh affected collection dashboards, with projection refresh remaining the recovery path after lag.
+
+#### Scenario: Remote widget arrives
+- **WHEN** a synchronized widget definition reaches the committed projection
+- **THEN** Dart receives an event identifying the affected collection or a conservative full-refresh scope
 
 ### Requirement: Reproducible generated bridge
 The project SHALL pin compatible Flutter/Dart and Rust FRB packages, commit generated bridge artifacts, and provide a command that verifies regeneration produces no unexpected changes.
