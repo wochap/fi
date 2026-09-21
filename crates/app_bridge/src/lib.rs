@@ -1,5 +1,6 @@
 pub mod api;
 mod frb_generated;
+mod log_sink;
 
 #[cfg(test)]
 mod tests {

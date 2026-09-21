@@ -318,9 +318,22 @@ impl PairingManager {
             .map_err(|_| PairingError::Transport("accept lock poisoned".into()))? =
             Some(tokio::spawn(async move {
                 if manager.state_is_active() {
-                    let Ok(connection) = manager.transport.accept().await else {
-                        return;
+                    let connection = match manager.transport.accept().await {
+                        Ok(connection) => connection,
+                        Err(error) => {
+                            tracing::warn!(
+                                event = "pairing_accept_error",
+                                error = %error,
+                                "pairing listener failed to accept"
+                            );
+                            return;
+                        }
                     };
+                    tracing::info!(
+                        event = "pairing_accept",
+                        remote = %connection.remote_address(),
+                        "accepted inbound pairing connection"
+                    );
                     match manager
                         .accept_handshake(connection, friendly_name.clone(), root_state.clone())
                         .await
@@ -434,6 +447,12 @@ impl PairingManager {
             candidate: candidate.clone(),
             deadline_ms,
         })?;
+        tracing::info!(
+            event = "pairing_dial",
+            peer_instance = %candidate.instance_id,
+            endpoint = %candidate.endpoint,
+            "dialing pairing candidate"
+        );
         let connection = self.transport.connect(candidate.endpoint).await?;
         let hello = make_hello(
             PairingRole::Initiator,
@@ -578,6 +597,7 @@ impl PairingManager {
     }
 
     async fn fail(&self, error: PairingError) {
+        tracing::warn!(event = "pairing_fail", error = %error, "pairing failed");
         let _ = self.apply(PairingInput::Fail(error));
         self.stop_transient().await;
     }

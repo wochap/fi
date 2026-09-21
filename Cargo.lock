@@ -120,12 +120,14 @@ dependencies = [
 name = "app_bridge"
 version = "0.1.0"
 dependencies = [
+ "android_log-sys",
  "app-core",
  "flutter_rust_bridge",
  "serde_json",
  "tempfile",
  "thiserror",
  "tokio",
+ "tracing",
  "tracing-subscriber",
 ]
 

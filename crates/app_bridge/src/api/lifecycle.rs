@@ -37,6 +37,7 @@ pub fn init_app() {
         .json()
         .with_target(false)
         .with_current_span(false)
+        .with_writer(crate::log_sink::make_writer)
         .try_init();
     flutter_rust_bridge::setup_default_user_utils();
 }
@@ -107,6 +108,9 @@ async fn initialize_networked(
         QuinnTransportConfig::default(),
     )
     .await
+    .inspect_err(|error| {
+        tracing::error!(event = "bootstrap_error", error = %error, "networked core failed to open")
+    })
     .map_err(BridgeError::from)?;
     let state = BootstrapDto::from_core(core.lifecycle_state());
     *slot = Some(core);
