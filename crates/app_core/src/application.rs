@@ -54,6 +54,15 @@ use crate::{
 /// fresh advertisement; matches the endpoint installed by `confirm_pairing`.
 const OBSERVED_ADDRESS_TTL_MS: u64 = 120_000;
 
+/// Result of [`AppCore::revoke_trusted_device`]. `revoked` reflects the durable
+/// record; `rotation_error` is set when the follow-up discovery-secret
+/// rotation failed after that record was committed.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RevocationOutcome {
+    pub revoked: bool,
+    pub rotation_error: Option<String>,
+}
+
 #[derive(Clone)]
 pub struct AppCoreConfig {
     pub command_capacity: usize,
@@ -775,59 +784,87 @@ impl AppCore {
             .rename(peer, name)
             .map_err(Into::into)
     }
-    pub async fn revoke_trusted_device(&self, peer: DeviceId, now_ms: u64) -> Result<bool> {
+    /// Revokes `peer` and then rotates the discovery secret.
+    ///
+    /// Revocation commits durably before rotation is attempted, so a rotation
+    /// failure is reported alongside the committed revocation rather than in
+    /// place of it. `rotation_error` is retriable via [`Self::rotate_discovery_secret`].
+    pub async fn revoke_trusted_device(
+        &self,
+        peer: DeviceId,
+        now_ms: u64,
+    ) -> Result<RevocationOutcome> {
         let pairing = self
             .pairing
             .as_ref()
             .ok_or_else(|| AppError::Storage("pairing requires networked mode".into()))?;
-        let changed = pairing.revoke(peer, now_ms)?;
-        if changed {
-            let _ = self.disconnect_peer(peer).await;
-            self.endpoints
-                .lock()
-                .map_err(|_| AppError::Storage("endpoint registry lock poisoned".into()))?
-                .remove(peer);
-            if let Some(connections) = self.connections.as_ref() {
-                connections.set_state(peer, PeerConnectionState::Disconnected);
-            }
-            let port = self
-                .network_addr()
-                .ok_or_else(|| AppError::Storage("networking is unavailable".into()))?
-                .port();
-            pairing
-                .rotate_discovery_secret(port, now_ms, 7 * 24 * 60 * 60 * 1_000)
-                .await?;
-            if let Some(network) = self.network.as_ref() {
-                for (recipient, frame) in pairing.rotation_update_frames()? {
-                    if recipient == peer {
-                        continue;
+        let revoked = pairing.revoke(peer, now_ms)?;
+        if !revoked {
+            return Ok(RevocationOutcome {
+                revoked,
+                rotation_error: None,
+            });
+        }
+        let _ = self.disconnect_peer(peer).await;
+        self.endpoints
+            .lock()
+            .map_err(|_| AppError::Storage("endpoint registry lock poisoned".into()))?
+            .remove(peer);
+        if let Some(connections) = self.connections.as_ref() {
+            connections.set_state(peer, PeerConnectionState::Disconnected);
+        }
+        let rotation_error = self
+            .rotate_discovery_secret(now_ms)
+            .await
+            .err()
+            .map(|error| error.to_string());
+        Ok(RevocationOutcome {
+            revoked,
+            rotation_error,
+        })
+    }
+
+    /// Advances the discovery-secret epoch, retains the previous secret for the
+    /// migration window, and distributes the new secret to every remaining
+    /// trusted device. Safe to call again after a failed attempt.
+    pub async fn rotate_discovery_secret(&self, now_ms: u64) -> Result<u64> {
+        let pairing = self
+            .pairing
+            .as_ref()
+            .ok_or_else(|| AppError::Storage("pairing requires networked mode".into()))?;
+        let port = self
+            .network_addr()
+            .ok_or_else(|| AppError::Storage("networking is unavailable".into()))?
+            .port();
+        let epoch = pairing
+            .rotate_discovery_secret(port, now_ms, 7 * 24 * 60 * 60 * 1_000)
+            .await?;
+        if let Some(network) = self.network.as_ref() {
+            for (recipient, frame) in pairing.rotation_update_frames()? {
+                match network.exchange_control(recipient, &frame).await {
+                    Ok(response) => {
+                        let _ = pairing.validate_rotation_ack(&response).await;
                     }
-                    match network.exchange_control(recipient, &frame).await {
-                        Ok(response) => {
+                    Err(_)
+                        if self.connections.as_ref().is_some_and(|connections| {
+                            !matches!(
+                                connections.states().get(&recipient),
+                                Some(PeerConnectionState::Failed(_))
+                            )
+                        }) =>
+                    {
+                        if let Some(connections) = self.connections.as_ref()
+                            && connections.connect_manual(recipient, now_ms).await.is_ok()
+                            && let Ok(response) = network.exchange_control(recipient, &frame).await
+                        {
                             let _ = pairing.validate_rotation_ack(&response).await;
                         }
-                        Err(_)
-                            if self.connections.as_ref().is_some_and(|connections| {
-                                !matches!(
-                                    connections.states().get(&recipient),
-                                    Some(PeerConnectionState::Failed(_))
-                                )
-                            }) =>
-                        {
-                            if let Some(connections) = self.connections.as_ref()
-                                && connections.connect_manual(recipient, now_ms).await.is_ok()
-                                && let Ok(response) =
-                                    network.exchange_control(recipient, &frame).await
-                            {
-                                let _ = pairing.validate_rotation_ack(&response).await;
-                            }
-                        }
-                        Err(_) => {}
                     }
+                    Err(_) => {}
                 }
             }
         }
-        Ok(changed)
+        Ok(epoch)
     }
 
     fn pairing_root_state(&self) -> RootState {

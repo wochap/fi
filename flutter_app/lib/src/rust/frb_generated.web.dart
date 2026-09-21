@@ -146,6 +146,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   GroupingDto dco_decode_box_autoadd_grouping_dto(dynamic raw);
 
   @protected
+  PairingFailureKindDto dco_decode_box_autoadd_pairing_failure_kind_dto(
+    dynamic raw,
+  );
+
+  @protected
   QueryDefinitionDto dco_decode_box_autoadd_query_definition_dto(dynamic raw);
 
   @protected
@@ -435,6 +440,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   GroupingDto? dco_decode_opt_box_autoadd_grouping_dto(dynamic raw);
 
   @protected
+  PairingFailureKindDto? dco_decode_opt_box_autoadd_pairing_failure_kind_dto(
+    dynamic raw,
+  );
+
+  @protected
   QueryResultDto? dco_decode_opt_box_autoadd_query_result_dto(dynamic raw);
 
   @protected
@@ -482,6 +492,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   PairingCandidateDto dco_decode_pairing_candidate_dto(dynamic raw);
 
   @protected
+  PairingFailureKindDto dco_decode_pairing_failure_kind_dto(dynamic raw);
+
+  @protected
   PairingKindDto dco_decode_pairing_kind_dto(dynamic raw);
 
   @protected
@@ -525,6 +538,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ResultRecordValueDto dco_decode_result_record_value_dto(dynamic raw);
+
+  @protected
+  RevocationOutcomeDto dco_decode_revocation_outcome_dto(dynamic raw);
 
   @protected
   RoundingPolicyDto dco_decode_rounding_policy_dto(dynamic raw);
@@ -757,6 +773,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   GroupingDto sse_decode_box_autoadd_grouping_dto(SseDeserializer deserializer);
+
+  @protected
+  PairingFailureKindDto sse_decode_box_autoadd_pairing_failure_kind_dto(
+    SseDeserializer deserializer,
+  );
 
   @protected
   QueryDefinitionDto sse_decode_box_autoadd_query_definition_dto(
@@ -1142,6 +1163,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  PairingFailureKindDto? sse_decode_opt_box_autoadd_pairing_failure_kind_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   QueryResultDto? sse_decode_opt_box_autoadd_query_result_dto(
     SseDeserializer deserializer,
   );
@@ -1201,6 +1227,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  PairingFailureKindDto sse_decode_pairing_failure_kind_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   PairingKindDto sse_decode_pairing_kind_dto(SseDeserializer deserializer);
 
   @protected
@@ -1256,6 +1287,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ResultRecordValueDto sse_decode_result_record_value_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  RevocationOutcomeDto sse_decode_revocation_outcome_dto(
     SseDeserializer deserializer,
   );
 
@@ -1540,6 +1576,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_box_autoadd_grouping_dto(
     GroupingDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_pairing_failure_kind_dto(
+    PairingFailureKindDto self,
     SseSerializer serializer,
   );
 
@@ -2012,6 +2054,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_opt_box_autoadd_pairing_failure_kind_dto(
+    PairingFailureKindDto? self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_opt_box_autoadd_query_result_dto(
     QueryResultDto? self,
     SseSerializer serializer,
@@ -2080,6 +2128,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_pairing_candidate_dto(
     PairingCandidateDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_pairing_failure_kind_dto(
+    PairingFailureKindDto self,
     SseSerializer serializer,
   );
 
@@ -2161,6 +2215,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_result_record_value_dto(
     ResultRecordValueDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_revocation_outcome_dto(
+    RevocationOutcomeDto self,
     SseSerializer serializer,
   );
 

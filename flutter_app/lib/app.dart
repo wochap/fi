@@ -4,6 +4,7 @@ import 'package:fi/bridge/collection_bridge.dart';
 import 'package:fi/controllers.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/collections_page.dart';
+import 'package:fi/pairing_card.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -29,6 +30,11 @@ class CollectionApp extends StatefulWidget {
 class _CollectionAppState extends State<CollectionApp>
     with WidgetsBindingObserver {
   late final BootstrapController controller;
+
+  /// Owned here, above the bootstrap switch, so an in-flight pairing
+  /// confirmation survives the needs-decision → joining → ready transition.
+  late final DevicesController devices;
+  bool _devicesStarted = false;
   static const _platform = MethodChannel('fi/platform');
 
   @override
@@ -40,6 +46,7 @@ class _CollectionAppState extends State<CollectionApp>
       initializeRust: widget.initializeRust,
       dataDirProvider: widget.dataDirProvider,
     );
+    devices = DevicesController(widget.bridge);
     unawaited(_start());
   }
 
@@ -47,6 +54,13 @@ class _CollectionAppState extends State<CollectionApp>
     await _setPlatformForeground(true);
     await controller.start();
     await _setForeground(true);
+    // Only after the core exists (bridge.initialize) and foreground is set, so
+    // every call in DevicesController.start() succeeds and the aggregate
+    // status reads Searching rather than Offline on a rootless device.
+    if (controller.fatalError == null && !_devicesStarted) {
+      _devicesStarted = true;
+      await devices.start();
+    }
   }
 
   @override
@@ -77,6 +91,7 @@ class _CollectionAppState extends State<CollectionApp>
 
   @override
   void dispose() {
+    devices.dispose();
     controller.dispose();
     WidgetsBinding.instance.removeObserver(this);
     unawaited(_setForeground(false));
@@ -111,7 +126,7 @@ class _CollectionAppState extends State<CollectionApp>
                 Text(message, textAlign: TextAlign.center),
                 const SizedBox(height: 12),
                 FilledButton(
-                  onPressed: controller.start,
+                  onPressed: () => unawaited(_start()),
                   child: const Text('Retry'),
                 ),
               ],
@@ -119,13 +134,15 @@ class _CollectionAppState extends State<CollectionApp>
           );
         }
         return switch (controller.state?.kind) {
-          BootstrapKindDto.ready => CollectionShell(bridge: widget.bridge),
+          BootstrapKindDto.ready => CollectionShell(
+            bridge: widget.bridge,
+            devices: devices,
+          ),
           BootstrapKindDto.needsDecision => OnboardingPage(
             controller: controller,
+            devices: devices,
           ),
-          BootstrapKindDto.joining => const _CenteredSurface(
-            child: Text('Waiting for this local dataset to become available.'),
-          ),
+          BootstrapKindDto.joining => JoiningSurface(devices: devices),
           BootstrapKindDto.creating => const _CenteredSurface(
             child: CircularProgressIndicator(),
           ),
@@ -150,61 +167,143 @@ class _CenteredSurface extends StatelessWidget {
   );
 }
 
-class OnboardingPage extends StatelessWidget {
-  const OnboardingPage({required this.controller, super.key});
-  final BootstrapController controller;
+/// Shown while a received root is being joined. Names the provisioning device
+/// when the pairing session that started the join is still known.
+class JoiningSurface extends StatelessWidget {
+  const JoiningSurface({required this.devices, super.key});
+  final DevicesController devices;
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    body: Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 520),
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'Your private collection space',
-                style: Theme.of(context).textTheme.headlineMedium,
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'Create a new local dataset to begin. Nothing is sent to a server.',
-              ),
-              const SizedBox(height: 24),
-              FilledButton.icon(
-                key: const Key('create-dataset'),
-                onPressed: controller.creating
-                    ? null
-                    : controller.createNewDataset,
-                icon: const Icon(Icons.add_circle_outline),
-                label: Text(
-                  controller.creating ? 'Creating…' : 'Create new dataset',
-                ),
-              ),
-              const SizedBox(height: 12),
-              const OutlinedButton(
-                onPressed: null,
-                child: Text('Join an existing dataset'),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Joining will be available after secure device pairing is implemented.',
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
-        ),
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: devices,
+    builder: (context, _) => _CenteredSurface(
+      key: const Key('joining-surface'),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const CircularProgressIndicator(),
+          const SizedBox(height: 16),
+          Text(switch (devices.peerName) {
+            final name? => 'Joining dataset from $name…',
+            null => 'Waiting for this local dataset to become available.',
+          }, textAlign: TextAlign.center),
+        ],
       ),
     ),
   );
 }
 
+class OnboardingPage extends StatefulWidget {
+  const OnboardingPage({
+    required this.controller,
+    required this.devices,
+    super.key,
+  });
+  final BootstrapController controller;
+  final DevicesController devices;
+
+  @override
+  State<OnboardingPage> createState() => _OnboardingPageState();
+}
+
+class _OnboardingPageState extends State<OnboardingPage> {
+  bool showPairing = false;
+
+  bool get _pairingActive => widget.devices.pairing.kind != PairingKindDto.idle;
+
+  Future<void> _create() async {
+    // Unconditional, not gated on the observed pairing state: the stream may
+    // not have delivered an open window yet. A window advertises the root state
+    // captured when it opened, so it must be closed before a root exists or a
+    // peer may provision against a state that no longer holds. Stopping from
+    // idle is a no-op in Rust.
+    await widget.devices.stopPairing();
+    await widget.controller.createNewDataset();
+  }
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: widget.devices,
+    builder: (context, _) {
+      final controller = widget.controller;
+      final createBlocked = controller.creating || _pairingActive;
+      return Scaffold(
+        body: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(32),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 520),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Your private collection space',
+                    style: Theme.of(context).textTheme.headlineMedium,
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Create a new local dataset, or join the dataset on one of '
+                    'your other devices. Nothing is sent to a server.',
+                  ),
+                  const SizedBox(height: 24),
+                  FilledButton.icon(
+                    key: const Key('create-dataset'),
+                    onPressed: createBlocked ? null : _create,
+                    icon: const Icon(Icons.add_circle_outline),
+                    label: Text(
+                      controller.creating ? 'Creating…' : 'Create new dataset',
+                    ),
+                  ),
+                  if (_pairingActive) ...[
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Creating is unavailable while pairing is active. '
+                      'Stop pairing to create a new dataset here.',
+                      key: Key('create-blocked-reason'),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    key: const Key('join-dataset'),
+                    onPressed: controller.creating
+                        ? null
+                        : () => setState(() => showPairing = !showPairing),
+                    icon: Icon(showPairing ? Icons.expand_less : Icons.link),
+                    label: const Text('Join an existing dataset'),
+                  ),
+                  if (showPairing) ...[
+                    const SizedBox(height: 16),
+                    const Text(
+                      'The other device must already have a dataset. Start '
+                      'pairing on both devices, then tap Connect on one device '
+                      'only.',
+                      key: Key('pairing-preconditions'),
+                    ),
+                    const SizedBox(height: 12),
+                    if (widget.devices.errorMessage case final error?)
+                      _ErrorBanner(error),
+                    PairingCard(controller: widget.devices),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    },
+  );
+}
+
 class CollectionShell extends StatefulWidget {
-  const CollectionShell({required this.bridge, super.key});
+  const CollectionShell({
+    required this.bridge,
+    required this.devices,
+    super.key,
+  });
   final CollectionBridge bridge;
+  final DevicesController devices;
 
   @override
   State<CollectionShell> createState() => _CollectionShellState();
@@ -212,22 +311,19 @@ class CollectionShell extends StatefulWidget {
 
 class _CollectionShellState extends State<CollectionShell> {
   late final CollectionsController controller;
-  late final DevicesController devices;
+  DevicesController get devices => widget.devices;
   int selected = 0;
 
   @override
   void initState() {
     super.initState();
     controller = CollectionsController(widget.bridge);
-    devices = DevicesController(widget.bridge);
     unawaited(controller.start());
-    unawaited(devices.start());
   }
 
   @override
   void dispose() {
     controller.dispose();
-    devices.dispose();
     super.dispose();
   }
 
@@ -334,7 +430,22 @@ class DevicesPage extends StatelessWidget {
       ),
       const SizedBox(height: 16),
       if (controller.errorMessage case final error?) _ErrorBanner(error),
-      _PairingCard(controller: controller),
+      if (controller.rotationError case final error?)
+        MaterialBanner(
+          key: const Key('rotation-error'),
+          content: Text(
+            'The device was revoked, but the discovery secret could not be '
+            'rotated: $error',
+          ),
+          actions: [
+            TextButton(
+              key: const Key('retry-rotation'),
+              onPressed: controller.busy ? null : controller.retryRotation,
+              child: const Text('Retry rotation'),
+            ),
+          ],
+        ),
+      PairingCard(controller: controller),
       const SizedBox(height: 24),
       Text('Trusted devices', style: Theme.of(context).textTheme.titleLarge),
       const SizedBox(height: 8),
@@ -433,114 +544,6 @@ class DevicesPage extends StatelessWidget {
     );
     if (confirmed == true) await controller.revoke(device);
   }
-}
-
-class _PairingCard extends StatelessWidget {
-  const _PairingCard({required this.controller});
-  final DevicesController controller;
-
-  @override
-  Widget build(BuildContext context) => Card(
-    child: Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text('Pair a device', style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 12),
-          ..._content(context),
-        ],
-      ),
-    ),
-  );
-
-  List<Widget> _content(
-    BuildContext context,
-  ) => switch (controller.pairing.kind) {
-    PairingKindDto.idle => [
-      const Text('Pairing is off. Start it only when both devices are nearby.'),
-      const SizedBox(height: 12),
-      FilledButton.icon(
-        key: const Key('start-pairing'),
-        onPressed: controller.busy ? null : controller.beginPairing,
-        icon: const Icon(Icons.link),
-        label: const Text('Start pairing'),
-      ),
-    ],
-    PairingKindDto.discoverable => [
-      Text(
-        'Searching for nearby devices · ${controller.remainingSeconds}s remaining',
-      ),
-      const LinearProgressIndicator(),
-      const SizedBox(height: 8),
-      if (controller.candidates.isEmpty)
-        const Text('No nearby pairing candidates yet.')
-      else
-        ...controller.candidates.map(
-          (candidate) => ListTile(
-            key: Key('candidate-${candidate.instanceId}'),
-            leading: const Icon(Icons.phone_android),
-            title: Text(candidate.endpoint),
-            subtitle: const Text('Nearby device'),
-            onTap: controller.busy
-                ? null
-                : () => controller.selectCandidate(candidate),
-          ),
-        ),
-      OutlinedButton(
-        onPressed: controller.busy ? null : controller.stopPairing,
-        child: const Text('Stop pairing'),
-      ),
-    ],
-    PairingKindDto.connecting => const [
-      LinearProgressIndicator(),
-      SizedBox(height: 8),
-      Text('Connecting securely…'),
-    ],
-    PairingKindDto.awaitingConfirmation => [
-      const Text('Confirm that this code matches on both devices:'),
-      const SizedBox(height: 8),
-      SelectableText(
-        controller.pairing.sas?.padLeft(6, '0') ?? '------',
-        key: const Key('pairing-sas'),
-        textAlign: TextAlign.center,
-        style: Theme.of(context).textTheme.displaySmall,
-      ),
-      const SizedBox(height: 12),
-      FilledButton(
-        onPressed: controller.busy ? null : controller.confirm,
-        child: const Text('Codes match'),
-      ),
-      TextButton(
-        onPressed: controller.busy ? null : controller.reject,
-        child: const Text('Codes do not match'),
-      ),
-    ],
-    PairingKindDto.committing => const [
-      LinearProgressIndicator(),
-      SizedBox(height: 8),
-      Text('Saving trust and synchronizing the dataset…'),
-    ],
-    PairingKindDto.trusted => [
-      const Icon(Icons.verified, color: Colors.green, size: 40),
-      const Text('Device paired successfully.', textAlign: TextAlign.center),
-      TextButton(
-        onPressed: controller.beginPairing,
-        child: const Text('Pair another device'),
-      ),
-    ],
-    PairingKindDto.failed => [
-      const Icon(Icons.error_outline, color: Colors.red, size: 40),
-      Text(
-        controller.pairing.message ?? 'Pairing did not complete.',
-        textAlign: TextAlign.center,
-      ),
-      TextButton(
-        onPressed: controller.beginPairing,
-        child: const Text('Try again'),
-      ),
-    ],
-  };
 }
 
 class _SyncChip extends StatelessWidget {

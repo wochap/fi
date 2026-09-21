@@ -347,6 +347,10 @@ final class DevicesController extends ChangeNotifier {
   List<TrustedDeviceDto> devices = const [];
   SyncStatusDto syncStatus = SyncStatusDto.offline;
   String? errorMessage;
+
+  /// Set when a revocation committed but the follow-up discovery-secret
+  /// rotation failed; cleared by a successful [retryRotation].
+  String? rotationError;
   bool busy = false;
   bool _disposed = false;
   Timer? _clock;
@@ -378,6 +382,17 @@ final class DevicesController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Friendly name of the peer in the current pairing session, resolved from
+  /// the trusted-device list; null when no peer is known yet.
+  String? get peerName {
+    final peerId = pairing.peerDeviceId;
+    if (peerId == null) return null;
+    for (final device in devices) {
+      if (device.deviceId == peerId) return device.friendlyName;
+    }
+    return null;
+  }
+
   int get remainingSeconds {
     final deadline = pairing.deadlineMs;
     if (deadline == null) return 0;
@@ -403,13 +418,21 @@ final class DevicesController extends ChangeNotifier {
   }
 
   Future<void> revoke(TrustedDeviceDto device) async {
-    await _run(
-      () => bridge.revokeTrustedDevice(
+    await _run(() async {
+      final outcome = await bridge.revokeTrustedDevice(
         device.deviceId,
         DateTime.now().millisecondsSinceEpoch,
-      ),
-    );
+      );
+      rotationError = outcome.rotationError;
+    });
     await refreshDevices();
+  }
+
+  Future<void> retryRotation() async {
+    await _run(() async {
+      await bridge.rotateDiscoverySecret(DateTime.now().millisecondsSinceEpoch);
+      rotationError = null;
+    });
   }
 
   Future<void> refreshDevices() async {
@@ -432,7 +455,8 @@ final class DevicesController extends ChangeNotifier {
       _setError(error);
     } finally {
       busy = false;
-      notifyListeners();
+      // The owner may have been torn down while `operation` was in flight.
+      if (!_disposed) notifyListeners();
     }
   }
 

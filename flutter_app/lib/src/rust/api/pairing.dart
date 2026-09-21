@@ -61,13 +61,18 @@ Future<bool> renameTrustedDevice({
   name: name,
 );
 
-Future<bool> revokeTrustedDevice({
+Future<RevocationOutcomeDto> revokeTrustedDevice({
   required String deviceId,
   required int nowMs,
 }) => RustLib.instance.api.crateApiPairingRevokeTrustedDevice(
   deviceId: deviceId,
   nowMs: nowMs,
 );
+
+/// Retries discovery-secret rotation after a revocation whose rotation stage
+/// failed. Returns the new epoch.
+Future<int> rotateDiscoverySecret({required int nowMs}) =>
+    RustLib.instance.api.crateApiPairingRotateDiscoverySecret(nowMs: nowMs);
 
 Stream<PairingStateDto> pairingStateStream() =>
     RustLib.instance.api.crateApiPairingPairingStateStream();

@@ -702,7 +702,7 @@ impl SqliteControlStore {
             .map_err(|error| storage_error("trusted_device_revoke", None, &self.path, error))?;
         let changed = transaction
             .execute(
-                "UPDATE trusted_devices SET trust_state='revoked' WHERE device_id=?1",
+                "UPDATE trusted_devices SET trust_state='revoked' WHERE device_id=?1 AND trust_state<>'revoked'",
                 [device.to_string()],
             )
             .map_err(|error| storage_error("trusted_device_revoke", None, &self.path, error))?;

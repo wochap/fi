@@ -135,4 +135,40 @@ void main() {
     expect(bridge.revokedDevices, isNotEmpty);
     expect(find.textContaining('Revoked'), findsOneWidget);
   });
+
+  testWidgets('a revocation whose rotation failed stays revoked and retries', (
+    tester,
+  ) async {
+    final bridge = FakeCollectionBridge()
+      ..nextRotationError = 'secure key store is unavailable'
+      ..devices.add(
+        const TrustedDeviceDto(
+          deviceId:
+              '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+          friendlyName: 'Tablet',
+          pairedAtMs: 1,
+          revoked: false,
+          connection: PeerConnectionKindDto.connected,
+        ),
+      );
+    await openDevices(tester, bridge);
+    await tester.tap(find.byType(PopupMenuButton<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Revoke / unpair'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Revoke'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Revoked'), findsOneWidget);
+    expect(find.byKey(const Key('rotation-error')), findsOneWidget);
+    expect(
+      find.textContaining('secure key store is unavailable'),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const Key('retry-rotation')));
+    await tester.pumpAndSettle();
+    expect(bridge.rotationRetries, 1);
+    expect(find.byKey(const Key('rotation-error')), findsNothing);
+    expect(find.textContaining('Revoked'), findsOneWidget);
+  });
 }

@@ -220,34 +220,70 @@ impl LinuxSecretServiceKeyStore {
     }
 }
 
+const DEVICE_SEED_KIND: &str = "ed25519-device-seed-v1";
+const DISCOVERY_SECRET_KIND: &str = "discovery-group-secret-v1";
+/// Retained previous-epoch discovery secret. The `epoch` attribute records the
+/// rotation that retired it so a load can be matched against the rotation journal.
+const PREVIOUS_DISCOVERY_SECRET_KIND: &str = "discovery-group-secret-previous-v1";
+const EPOCH_ATTRIBUTE: &str = "epoch";
+
+#[cfg(target_os = "linux")]
+mod linux_secret_service {
+    use std::collections::HashMap;
+
+    use secret_service::{Collection, EncryptionType, SecretService};
+
+    use super::SecureStoreError;
+
+    pub(super) fn map_error(error: secret_service::Error) -> SecureStoreError {
+        match error {
+            secret_service::Error::Locked | secret_service::Error::Prompt => {
+                SecureStoreError::Locked
+            }
+            secret_service::Error::Unavailable => SecureStoreError::Unavailable(
+                "no Secret Service provider is available in this desktop session".into(),
+            ),
+            other => SecureStoreError::Operation(other.to_string()),
+        }
+    }
+
+    pub(super) struct Session {
+        service: SecretService<'static>,
+    }
+
+    impl Session {
+        pub(super) async fn connect() -> Result<Self, SecureStoreError> {
+            let service = SecretService::connect(EncryptionType::Dh)
+                .await
+                .map_err(map_error)?;
+            Ok(Self { service })
+        }
+
+        pub(super) async fn unlocked_collection(&self) -> Result<Collection<'_>, SecureStoreError> {
+            let collection = self
+                .service
+                .get_default_collection()
+                .await
+                .map_err(map_error)?;
+            collection.ensure_unlocked().await.map_err(map_error)?;
+            Ok(collection)
+        }
+    }
+
+    pub(super) fn attributes<'a>(application: &'a str, kind: &'a str) -> HashMap<&'a str, &'a str> {
+        HashMap::from([("application", application), ("kind", kind)])
+    }
+}
+
 #[cfg(target_os = "linux")]
 #[async_trait]
 impl SecureKeyStore for LinuxSecretServiceKeyStore {
     async fn load_or_create_device_key(&self) -> Result<PrivateDeviceKey, SecureStoreError> {
-        use secret_service::{EncryptionType, SecretService};
-        use std::collections::HashMap;
+        use linux_secret_service::{Session, attributes, map_error};
 
-        fn map_error(error: secret_service::Error) -> SecureStoreError {
-            match error {
-                secret_service::Error::Locked | secret_service::Error::Prompt => {
-                    SecureStoreError::Locked
-                }
-                secret_service::Error::Unavailable => SecureStoreError::Unavailable(
-                    "no Secret Service provider is available in this desktop session".into(),
-                ),
-                other => SecureStoreError::Operation(other.to_string()),
-            }
-        }
-
-        let service = SecretService::connect(EncryptionType::Dh)
-            .await
-            .map_err(map_error)?;
-        let collection = service.get_default_collection().await.map_err(map_error)?;
-        collection.ensure_unlocked().await.map_err(map_error)?;
-        let attributes = HashMap::from([
-            ("application", self.application_id.as_str()),
-            ("kind", "ed25519-device-seed-v1"),
-        ]);
+        let session = Session::connect().await?;
+        let collection = session.unlocked_collection().await?;
+        let attributes = attributes(&self.application_id, DEVICE_SEED_KIND);
         let items = collection
             .search_items(attributes.clone())
             .await
@@ -274,29 +310,12 @@ impl SecureKeyStore for LinuxSecretServiceKeyStore {
     async fn load_discovery_group_secret(
         &self,
     ) -> Result<Option<DiscoveryGroupSecret>, SecureStoreError> {
-        use secret_service::{EncryptionType, SecretService};
-        use std::collections::HashMap;
+        use linux_secret_service::{Session, attributes, map_error};
 
-        let map_error = |error: secret_service::Error| match error {
-            secret_service::Error::Locked | secret_service::Error::Prompt => {
-                SecureStoreError::Locked
-            }
-            secret_service::Error::Unavailable => SecureStoreError::Unavailable(
-                "no Secret Service provider is available in this desktop session".into(),
-            ),
-            other => SecureStoreError::Operation(other.to_string()),
-        };
-        let service = SecretService::connect(EncryptionType::Dh)
-            .await
-            .map_err(map_error)?;
-        let collection = service.get_default_collection().await.map_err(map_error)?;
-        collection.ensure_unlocked().await.map_err(map_error)?;
-        let attributes = HashMap::from([
-            ("application", self.application_id.as_str()),
-            ("kind", "discovery-group-secret-v1"),
-        ]);
+        let session = Session::connect().await?;
+        let collection = session.unlocked_collection().await?;
         let items = collection
-            .search_items(attributes)
+            .search_items(attributes(&self.application_id, DISCOVERY_SECRET_KIND))
             .await
             .map_err(map_error)?;
         let Some(item) = items.first() else {
@@ -314,30 +333,82 @@ impl SecureKeyStore for LinuxSecretServiceKeyStore {
         &self,
         secret: &DiscoveryGroupSecret,
     ) -> Result<(), SecureStoreError> {
-        use secret_service::{EncryptionType, SecretService};
-        use std::collections::HashMap;
+        use linux_secret_service::{Session, attributes, map_error};
 
-        let map_error = |error: secret_service::Error| match error {
-            secret_service::Error::Locked | secret_service::Error::Prompt => {
-                SecureStoreError::Locked
-            }
-            secret_service::Error::Unavailable => SecureStoreError::Unavailable(
-                "no Secret Service provider is available in this desktop session".into(),
-            ),
-            other => SecureStoreError::Operation(other.to_string()),
-        };
-        let service = SecretService::connect(EncryptionType::Dh)
-            .await
-            .map_err(map_error)?;
-        let collection = service.get_default_collection().await.map_err(map_error)?;
-        collection.ensure_unlocked().await.map_err(map_error)?;
-        let attributes = HashMap::from([
-            ("application", self.application_id.as_str()),
-            ("kind", "discovery-group-secret-v1"),
-        ]);
+        let session = Session::connect().await?;
+        let collection = session.unlocked_collection().await?;
         collection
             .create_item(
                 "Fi discovery group",
+                attributes(&self.application_id, DISCOVERY_SECRET_KIND),
+                secret.expose(),
+                true,
+                "application/octet-stream",
+            )
+            .await
+            .map_err(map_error)?;
+        Ok(())
+    }
+
+    async fn load_previous_discovery_group_secret(
+        &self,
+    ) -> Result<Option<(u64, DiscoveryGroupSecret)>, SecureStoreError> {
+        use linux_secret_service::{Session, attributes, map_error};
+
+        let session = Session::connect().await?;
+        let collection = session.unlocked_collection().await?;
+        let items = collection
+            .search_items(attributes(
+                &self.application_id,
+                PREVIOUS_DISCOVERY_SECRET_KIND,
+            ))
+            .await
+            .map_err(map_error)?;
+        let Some(item) = items.first() else {
+            return Ok(None);
+        };
+        let epoch = item
+            .get_attributes()
+            .await
+            .map_err(map_error)?
+            .get(EPOCH_ATTRIBUTE)
+            .and_then(|value| value.parse::<u64>().ok())
+            .ok_or(SecureStoreError::MalformedKey)?;
+        let secret = Zeroizing::new(item.get_secret().await.map_err(map_error)?);
+        let bytes: [u8; 32] = secret
+            .as_slice()
+            .try_into()
+            .map_err(|_| SecureStoreError::MalformedKey)?;
+        Ok(Some((epoch, DiscoveryGroupSecret::from_bytes(bytes))))
+    }
+
+    async fn store_previous_discovery_group_secret(
+        &self,
+        epoch: u64,
+        secret: &DiscoveryGroupSecret,
+    ) -> Result<(), SecureStoreError> {
+        use linux_secret_service::{Session, attributes, map_error};
+
+        let session = Session::connect().await?;
+        let collection = session.unlocked_collection().await?;
+        // `replace` only matches on the full attribute set, so an item retained
+        // for an older epoch must be removed explicitly or it would accumulate.
+        let stale = collection
+            .search_items(attributes(
+                &self.application_id,
+                PREVIOUS_DISCOVERY_SECRET_KIND,
+            ))
+            .await
+            .map_err(map_error)?;
+        for item in stale {
+            item.delete().await.map_err(map_error)?;
+        }
+        let epoch = epoch.to_string();
+        let mut attributes = attributes(&self.application_id, PREVIOUS_DISCOVERY_SECRET_KIND);
+        attributes.insert(EPOCH_ATTRIBUTE, epoch.as_str());
+        collection
+            .create_item(
+                "Fi discovery group (previous epoch)",
                 attributes,
                 secret.expose(),
                 true,
@@ -345,6 +416,24 @@ impl SecureKeyStore for LinuxSecretServiceKeyStore {
             )
             .await
             .map_err(map_error)?;
+        Ok(())
+    }
+
+    async fn remove_previous_discovery_group_secret(&self) -> Result<(), SecureStoreError> {
+        use linux_secret_service::{Session, attributes, map_error};
+
+        let session = Session::connect().await?;
+        let collection = session.unlocked_collection().await?;
+        let items = collection
+            .search_items(attributes(
+                &self.application_id,
+                PREVIOUS_DISCOVERY_SECRET_KIND,
+            ))
+            .await
+            .map_err(map_error)?;
+        for item in items {
+            item.delete().await.map_err(map_error)?;
+        }
         Ok(())
     }
 }
@@ -368,6 +457,27 @@ impl SecureKeyStore for LinuxSecretServiceKeyStore {
         &self,
         _secret: &DiscoveryGroupSecret,
     ) -> Result<(), SecureStoreError> {
+        Err(SecureStoreError::Unavailable(
+            "Linux Secret Service is unavailable on this platform".into(),
+        ))
+    }
+    async fn load_previous_discovery_group_secret(
+        &self,
+    ) -> Result<Option<(u64, DiscoveryGroupSecret)>, SecureStoreError> {
+        Err(SecureStoreError::Unavailable(
+            "Linux Secret Service is unavailable on this platform".into(),
+        ))
+    }
+    async fn store_previous_discovery_group_secret(
+        &self,
+        _epoch: u64,
+        _secret: &DiscoveryGroupSecret,
+    ) -> Result<(), SecureStoreError> {
+        Err(SecureStoreError::Unavailable(
+            "Linux Secret Service is unavailable on this platform".into(),
+        ))
+    }
+    async fn remove_previous_discovery_group_secret(&self) -> Result<(), SecureStoreError> {
         Err(SecureStoreError::Unavailable(
             "Linux Secret Service is unavailable on this platform".into(),
         ))
@@ -485,6 +595,21 @@ impl SecureKeyStore for UnavailableSecureKeyStore {
         &self,
         _secret: &DiscoveryGroupSecret,
     ) -> Result<(), SecureStoreError> {
+        Err(self.0.clone())
+    }
+    async fn load_previous_discovery_group_secret(
+        &self,
+    ) -> Result<Option<(u64, DiscoveryGroupSecret)>, SecureStoreError> {
+        Err(self.0.clone())
+    }
+    async fn store_previous_discovery_group_secret(
+        &self,
+        _epoch: u64,
+        _secret: &DiscoveryGroupSecret,
+    ) -> Result<(), SecureStoreError> {
+        Err(self.0.clone())
+    }
+    async fn remove_previous_discovery_group_secret(&self) -> Result<(), SecureStoreError> {
         Err(self.0.clone())
     }
 }

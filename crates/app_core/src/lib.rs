@@ -26,7 +26,7 @@ pub mod values;
 pub mod widget_registry;
 pub mod widgets;
 
-pub use application::{AppCore, AppCoreConfig};
+pub use application::{AppCore, AppCoreConfig, RevocationOutcome};
 pub use control::{
     DiscoveryGroupMetadata, DiscoveryRotationJournal, DiscoveryRotationStage, LocalIdentityRecord,
     PairingJournalRecord, PairingJournalStage, PeerConnectionMetadata, PeerTrustRecord, TrustState,

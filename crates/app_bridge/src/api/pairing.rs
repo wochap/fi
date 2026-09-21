@@ -4,7 +4,8 @@ use crate::{
     api::{
         lifecycle::core,
         models::{
-            BridgeError, PairingCandidateDto, PairingStateDto, SyncStatusDto, TrustedDeviceDto,
+            BridgeError, PairingCandidateDto, PairingStateDto, RevocationOutcomeDto, SyncStatusDto,
+            TrustedDeviceDto,
         },
     },
     frb_generated::StreamSink,
@@ -150,7 +151,10 @@ pub async fn sync_status_stream(sink: StreamSink<SyncStatusDto>) -> Result<(), B
         .ok_or_else(|| BridgeError::lifecycle("Device networking is unavailable."))?;
     tokio::spawn(async move {
         loop {
-            let status = app_core::aggregate_sync_status(&receiver.borrow_and_update()).into();
+            // Same source as the one-shot `sync_status`, so the stream carries the
+            // Offline -> Searching upgrade for a foregrounded device with no peer.
+            receiver.mark_unchanged();
+            let status = core.sync_status().into();
             if sink.add(status).is_err() || receiver.changed().await.is_err() {
                 break;
             }
@@ -169,13 +173,30 @@ pub async fn rename_trusted_device(device_id: String, name: String) -> Result<bo
         .map_err(BridgeError::from)
 }
 
-pub async fn revoke_trusted_device(device_id: String, now_ms: u64) -> Result<bool, BridgeError> {
+pub async fn revoke_trusted_device(
+    device_id: String,
+    now_ms: u64,
+) -> Result<RevocationOutcomeDto, BridgeError> {
     let peer: DeviceId = device_id
         .parse()
         .map_err(|_| BridgeError::lifecycle("The device identifier is invalid."))?;
-    core()
+    let outcome = core()
         .await?
         .revoke_trusted_device(peer, now_ms)
+        .await
+        .map_err(BridgeError::from)?;
+    Ok(RevocationOutcomeDto {
+        revoked: outcome.revoked,
+        rotation_error: outcome.rotation_error,
+    })
+}
+
+/// Retries discovery-secret rotation after a revocation whose rotation stage
+/// failed. Returns the new epoch.
+pub async fn rotate_discovery_secret(now_ms: u64) -> Result<u64, BridgeError> {
+    core()
+        .await?
+        .rotate_discovery_secret(now_ms)
         .await
         .map_err(BridgeError::from)
 }

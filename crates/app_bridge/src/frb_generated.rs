@@ -38,7 +38,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 447762921;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1370578436;
 
 // Section: executor
 
@@ -2149,6 +2149,43 @@ fn wire__crate__api__pairing__revoke_trusted_device_impl(
         },
     )
 }
+fn wire__crate__api__pairing__rotate_discovery_secret_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "rotate_discovery_secret",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_now_ms = <u64>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, crate::api::models::BridgeError>(
+                    (move || async move {
+                        let output_ok =
+                            crate::api::pairing::rotate_discovery_secret(api_now_ms).await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
 fn wire__crate__api__lifecycle__set_foreground_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -4005,6 +4042,19 @@ impl SseDecode for Option<crate::api::models::GroupingDto> {
     }
 }
 
+impl SseDecode for Option<crate::api::models::PairingFailureKindDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<crate::api::models::PairingFailureKindDto>::sse_decode(
+                deserializer,
+            ));
+        } else {
+            return None;
+        }
+    }
+}
+
 impl SseDecode for Option<crate::api::models::QueryResultDto> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -4165,6 +4215,19 @@ impl SseDecode for crate::api::models::PairingCandidateDto {
     }
 }
 
+impl SseDecode for crate::api::models::PairingFailureKindDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::api::models::PairingFailureKindDto::BothRootless,
+            1 => crate::api::models::PairingFailureKindDto::RootMismatch,
+            2 => crate::api::models::PairingFailureKindDto::Other,
+            _ => unreachable!("Invalid variant for PairingFailureKindDto: {}", inner),
+        };
+    }
+}
+
 impl SseDecode for crate::api::models::PairingKindDto {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -4193,6 +4256,8 @@ impl SseDecode for crate::api::models::PairingStateDto {
         let mut var_localConfirmed = <bool>::sse_decode(deserializer);
         let mut var_remoteConfirmed = <bool>::sse_decode(deserializer);
         let mut var_message = <Option<String>>::sse_decode(deserializer);
+        let mut var_failure =
+            <Option<crate::api::models::PairingFailureKindDto>>::sse_decode(deserializer);
         return crate::api::models::PairingStateDto {
             kind: var_kind,
             session_id: var_sessionId,
@@ -4202,6 +4267,7 @@ impl SseDecode for crate::api::models::PairingStateDto {
             local_confirmed: var_localConfirmed,
             remote_confirmed: var_remoteConfirmed,
             message: var_message,
+            failure: var_failure,
         };
     }
 }
@@ -4422,6 +4488,18 @@ impl SseDecode for crate::api::models::ResultRecordValueDto {
         return crate::api::models::ResultRecordValueDto {
             field: var_field,
             value: var_value,
+        };
+    }
+}
+
+impl SseDecode for crate::api::models::RevocationOutcomeDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_revoked = <bool>::sse_decode(deserializer);
+        let mut var_rotationError = <Option<String>>::sse_decode(deserializer);
+        return crate::api::models::RevocationOutcomeDto {
+            revoked: var_revoked,
+            rotation_error: var_rotationError,
         };
     }
 }
@@ -4998,49 +5076,55 @@ fn pde_ffi_dispatcher_primary_impl(
         55 => {
             wire__crate__api__pairing__revoke_trusted_device_impl(port, ptr, rust_vec_len, data_len)
         }
-        56 => wire__crate__api__lifecycle__set_foreground_impl(port, ptr, rust_vec_len, data_len),
-        57 => wire__crate__api__lifecycle__shutdown_impl(port, ptr, rust_vec_len, data_len),
-        58 => wire__crate__api__pairing__start_pairing_impl(port, ptr, rust_vec_len, data_len),
-        59 => wire__crate__api__pairing__stop_pairing_impl(port, ptr, rust_vec_len, data_len),
-        60 => wire__crate__api__pairing__sync_status_impl(port, ptr, rust_vec_len, data_len),
-        61 => wire__crate__api__pairing__sync_status_stream_impl(port, ptr, rust_vec_len, data_len),
-        62 => wire__crate__api__pairing__trusted_devices_impl(port, ptr, rust_vec_len, data_len),
-        63 => {
+        56 => wire__crate__api__pairing__rotate_discovery_secret_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        57 => wire__crate__api__lifecycle__set_foreground_impl(port, ptr, rust_vec_len, data_len),
+        58 => wire__crate__api__lifecycle__shutdown_impl(port, ptr, rust_vec_len, data_len),
+        59 => wire__crate__api__pairing__start_pairing_impl(port, ptr, rust_vec_len, data_len),
+        60 => wire__crate__api__pairing__stop_pairing_impl(port, ptr, rust_vec_len, data_len),
+        61 => wire__crate__api__pairing__sync_status_impl(port, ptr, rust_vec_len, data_len),
+        62 => wire__crate__api__pairing__sync_status_stream_impl(port, ptr, rust_vec_len, data_len),
+        63 => wire__crate__api__pairing__trusted_devices_impl(port, ptr, rust_vec_len, data_len),
+        64 => {
             wire__crate__api__queries__update_computed_field_impl(port, ptr, rust_vec_len, data_len)
         }
-        64 => wire__crate__api__collections__update_field_impl(port, ptr, rust_vec_len, data_len),
-        65 => wire__crate__api__queries__update_query_definition_impl(
+        65 => wire__crate__api__collections__update_field_impl(port, ptr, rust_vec_len, data_len),
+        66 => wire__crate__api__queries__update_query_definition_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        66 => wire__crate__api__collections__update_record_field_impl(
+        67 => wire__crate__api__collections__update_record_field_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        67 => wire__crate__api__widgets__update_widget_impl(port, ptr, rust_vec_len, data_len),
-        68 => wire__crate__api__collections__upsert_enum_option_impl(
+        68 => wire__crate__api__widgets__update_widget_impl(port, ptr, rust_vec_len, data_len),
+        69 => wire__crate__api__collections__upsert_enum_option_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        69 => wire__crate__api__queries__validate_collection_query_impl(
+        70 => wire__crate__api__queries__validate_collection_query_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        70 => wire__crate__api__models__validation_metadata_dto_default_impl(
+        71 => wire__crate__api__models__validation_metadata_dto_default_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        71 => wire__crate__api__widgets__widget_diagnostics_impl(port, ptr, rust_vec_len, data_len),
+        72 => wire__crate__api__widgets__widget_diagnostics_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -5905,6 +5989,28 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::models::PairingCandidateDto>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::models::PairingFailureKindDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::BothRootless => 0.into_dart(),
+            Self::RootMismatch => 1.into_dart(),
+            Self::Other => 2.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::models::PairingFailureKindDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::models::PairingFailureKindDto>
+    for crate::api::models::PairingFailureKindDto
+{
+    fn into_into_dart(self) -> crate::api::models::PairingFailureKindDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::models::PairingKindDto {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         match self {
@@ -5942,6 +6048,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::models::PairingStateDto {
             self.local_confirmed.into_into_dart().into_dart(),
             self.remote_confirmed.into_into_dart().into_dart(),
             self.message.into_into_dart().into_dart(),
+            self.failure.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -6259,6 +6366,27 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::models::ResultRecordValueDto>
     for crate::api::models::ResultRecordValueDto
 {
     fn into_into_dart(self) -> crate::api::models::ResultRecordValueDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::models::RevocationOutcomeDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.revoked.into_into_dart().into_dart(),
+            self.rotation_error.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::models::RevocationOutcomeDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::models::RevocationOutcomeDto>
+    for crate::api::models::RevocationOutcomeDto
+{
+    fn into_into_dart(self) -> crate::api::models::RevocationOutcomeDto {
         self
     }
 }
@@ -7823,6 +7951,16 @@ impl SseEncode for Option<crate::api::models::GroupingDto> {
     }
 }
 
+impl SseEncode for Option<crate::api::models::PairingFailureKindDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::api::models::PairingFailureKindDto>::sse_encode(value, serializer);
+        }
+    }
+}
+
 impl SseEncode for Option<crate::api::models::QueryResultDto> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -7952,6 +8090,23 @@ impl SseEncode for crate::api::models::PairingCandidateDto {
     }
 }
 
+impl SseEncode for crate::api::models::PairingFailureKindDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::api::models::PairingFailureKindDto::BothRootless => 0,
+                crate::api::models::PairingFailureKindDto::RootMismatch => 1,
+                crate::api::models::PairingFailureKindDto::Other => 2,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
 impl SseEncode for crate::api::models::PairingKindDto {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -7984,6 +8139,7 @@ impl SseEncode for crate::api::models::PairingStateDto {
         <bool>::sse_encode(self.local_confirmed, serializer);
         <bool>::sse_encode(self.remote_confirmed, serializer);
         <Option<String>>::sse_encode(self.message, serializer);
+        <Option<crate::api::models::PairingFailureKindDto>>::sse_encode(self.failure, serializer);
     }
 }
 
@@ -8163,6 +8319,14 @@ impl SseEncode for crate::api::models::ResultRecordValueDto {
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <crate::api::models::FieldReferenceDto>::sse_encode(self.field, serializer);
         <crate::api::models::TypedValueDto>::sse_encode(self.value, serializer);
+    }
+}
+
+impl SseEncode for crate::api::models::RevocationOutcomeDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.revoked, serializer);
+        <Option<String>>::sse_encode(self.rotation_error, serializer);
     }
 }
 

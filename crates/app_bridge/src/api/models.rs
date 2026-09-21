@@ -579,6 +579,17 @@ pub enum PairingKindDto {
     Failed,
 }
 
+/// Why a pairing attempt failed, for failures the UI presents as guidance
+/// rather than as a transient error.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PairingFailureKindDto {
+    /// Neither device holds a root dataset, so neither can provision the other.
+    BothRootless,
+    /// Both devices hold different established roots, which cannot be merged.
+    RootMismatch,
+    Other,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PairingStateDto {
     pub kind: PairingKindDto,
@@ -589,6 +600,16 @@ pub struct PairingStateDto {
     pub local_confirmed: bool,
     pub remote_confirmed: bool,
     pub message: Option<String>,
+    pub failure: Option<PairingFailureKindDto>,
+}
+
+/// Outcome of revoking a trusted device. `revoked` mirrors the durable record;
+/// `rotation_error` is set when discovery-secret rotation failed after the
+/// revocation committed and can be retried with `rotate_discovery_secret`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RevocationOutcomeDto {
+    pub revoked: bool,
+    pub rotation_error: Option<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -641,6 +662,7 @@ impl From<app_core::PairingState> for PairingStateDto {
             local_confirmed: false,
             remote_confirmed: false,
             message: None,
+            failure: None,
         };
         match value {
             PairingState::Idle => {}
@@ -688,6 +710,11 @@ impl From<app_core::PairingState> for PairingStateDto {
             PairingState::Failed { error } => {
                 dto.kind = PairingKindDto::Failed;
                 dto.message = Some(error.to_string());
+                dto.failure = Some(match error {
+                    app_core::PairingError::BothRootless => PairingFailureKindDto::BothRootless,
+                    app_core::PairingError::RootMismatch => PairingFailureKindDto::RootMismatch,
+                    _ => PairingFailureKindDto::Other,
+                });
             }
         }
         dto

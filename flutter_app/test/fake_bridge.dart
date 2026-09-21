@@ -115,6 +115,7 @@ final class FakeCollectionBridge implements CollectionBridge {
 
   @override
   Future<BootstrapDto> createNewDataset() async {
+    pairingCalls.add('createNewDataset');
     bootstrap = const BootstrapDto(
       kind: BootstrapKindDto.ready,
       rootId: 'root',
@@ -709,8 +710,16 @@ final class FakeCollectionBridge implements CollectionBridge {
     pairingController.add(pairing);
   }
 
+  /// Order of pairing-relevant calls, for asserting create/pair sequencing.
+  final List<String> pairingCalls = [];
+
+  /// Runs while `confirmPairing` is awaiting, so a test can move bootstrap
+  /// state mid-call.
+  Future<void> Function()? confirmDelay;
+
   @override
   Future<void> stopPairing() async {
+    pairingCalls.add('stopPairing');
     pairing = const PairingStateDto(
       kind: PairingKindDto.idle,
       localConfirmed: false,
@@ -724,6 +733,7 @@ final class FakeCollectionBridge implements CollectionBridge {
   @override
   Future<void> confirmPairing(String sessionId) async {
     confirmedSessions.add(sessionId);
+    if (confirmDelay case final delay?) await delay();
   }
 
   @override
@@ -749,8 +759,15 @@ final class FakeCollectionBridge implements CollectionBridge {
     devicesController.add(List.of(devices));
   }
 
+  /// Rotation failure the next revocation reports after committing.
+  String? nextRotationError;
+  int rotationRetries = 0;
+
   @override
-  Future<void> revokeTrustedDevice(String deviceId, int nowMs) async {
+  Future<RevocationOutcomeDto> revokeTrustedDevice(
+    String deviceId,
+    int nowMs,
+  ) async {
     revokedDevices.add(deviceId);
     final index = devices.indexWhere((item) => item.deviceId == deviceId);
     final old = devices[index];
@@ -764,6 +781,16 @@ final class FakeCollectionBridge implements CollectionBridge {
       connection: PeerConnectionKindDto.offline,
     );
     devicesController.add(List.of(devices));
+    return RevocationOutcomeDto(
+      revoked: true,
+      rotationError: nextRotationError,
+    );
+  }
+
+  @override
+  Future<int> rotateDiscoverySecret(int nowMs) async {
+    rotationRetries += 1;
+    return rotationRetries;
   }
 
   @override

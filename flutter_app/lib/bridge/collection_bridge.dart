@@ -24,7 +24,8 @@ abstract interface class CollectionBridge {
   Future<void> rejectPairing(String? sessionId);
   Future<List<TrustedDeviceDto>> trustedDevices();
   Future<void> renameTrustedDevice(String deviceId, String name);
-  Future<void> revokeTrustedDevice(String deviceId, int nowMs);
+  Future<RevocationOutcomeDto> revokeTrustedDevice(String deviceId, int nowMs);
+  Future<int> rotateDiscoverySecret(int nowMs);
   Future<SyncStatusDto> syncStatus();
   Stream<PairingStateDto> pairingStateEvents();
   Stream<List<PairingCandidateDto>> pairingCandidateEvents();
@@ -168,9 +169,23 @@ final class RustCollectionBridge implements CollectionBridge {
   Future<void> renameTrustedDevice(String deviceId, String name) =>
       pairing.renameTrustedDevice(deviceId: deviceId, name: name);
   @override
-  Future<void> revokeTrustedDevice(String deviceId, int nowMs) async {
-    await pairing.revokeTrustedDevice(deviceId: deviceId, nowMs: nowMs);
+  Future<RevocationOutcomeDto> revokeTrustedDevice(
+    String deviceId,
+    int nowMs,
+  ) async {
+    final outcome = await pairing.revokeTrustedDevice(
+      deviceId: deviceId,
+      nowMs: nowMs,
+    );
+    if (outcome.rotationError == null) await _persistAndroidSecret();
+    return outcome;
+  }
+
+  @override
+  Future<int> rotateDiscoverySecret(int nowMs) async {
+    final epoch = await pairing.rotateDiscoverySecret(nowMs: nowMs);
     await _persistAndroidSecret();
+    return epoch;
   }
 
   Future<void> _persistAndroidSecret() async {

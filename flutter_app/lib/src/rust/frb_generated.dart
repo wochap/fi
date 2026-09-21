@@ -71,7 +71,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => 447762921;
+  int get rustContentHash => -1370578436;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -283,10 +283,12 @@ abstract class RustLibApi extends BaseApi {
     required List<String> ids,
   });
 
-  Future<bool> crateApiPairingRevokeTrustedDevice({
+  Future<RevocationOutcomeDto> crateApiPairingRevokeTrustedDevice({
     required String deviceId,
     required int nowMs,
   });
+
+  Future<int> crateApiPairingRotateDiscoverySecret({required int nowMs});
 
   Future<void> crateApiLifecycleSetForeground({required bool foreground});
 
@@ -2112,7 +2114,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  Future<bool> crateApiPairingRevokeTrustedDevice({
+  Future<RevocationOutcomeDto> crateApiPairingRevokeTrustedDevice({
     required String deviceId,
     required int nowMs,
   }) {
@@ -2130,7 +2132,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           );
         },
         codec: SseCodec(
-          decodeSuccessData: sse_decode_bool,
+          decodeSuccessData: sse_decode_revocation_outcome_dto,
           decodeErrorData: sse_decode_bridge_error,
         ),
         constMeta: kCrateApiPairingRevokeTrustedDeviceConstMeta,
@@ -2147,6 +2149,37 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<int> crateApiPairingRotateDiscoverySecret({required int nowMs}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_CastedPrimitive_u_64(nowMs, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 56,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_CastedPrimitive_u_64,
+          decodeErrorData: sse_decode_bridge_error,
+        ),
+        constMeta: kCrateApiPairingRotateDiscoverySecretConstMeta,
+        argValues: [nowMs],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiPairingRotateDiscoverySecretConstMeta =>
+      const TaskConstMeta(
+        debugName: "rotate_discovery_secret",
+        argNames: ["nowMs"],
+      );
+
+  @override
   Future<void> crateApiLifecycleSetForeground({required bool foreground}) {
     return handler.executeNormal(
       NormalTask(
@@ -2156,7 +2189,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 56,
+            funcId: 57,
             port: port_,
           );
         },
@@ -2186,7 +2219,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 57,
+            funcId: 58,
             port: port_,
           );
         },
@@ -2214,7 +2247,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 58,
+            funcId: 59,
             port: port_,
           );
         },
@@ -2241,7 +2274,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 59,
+            funcId: 60,
             port: port_,
           );
         },
@@ -2268,7 +2301,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 60,
+            funcId: 61,
             port: port_,
           );
         },
@@ -2298,7 +2331,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             pdeCallFfi(
               generalizedFrbRustBinding,
               serializer,
-              funcId: 61,
+              funcId: 62,
               port: port_,
             );
           },
@@ -2327,7 +2360,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 62,
+            funcId: 63,
             port: port_,
           );
         },
@@ -2360,7 +2393,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 63,
+            funcId: 64,
             port: port_,
           );
         },
@@ -2395,7 +2428,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 64,
+            funcId: 65,
             port: port_,
           );
         },
@@ -2428,7 +2461,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 65,
+            funcId: 66,
             port: port_,
           );
         },
@@ -2467,7 +2500,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 66,
+            funcId: 67,
             port: port_,
           );
         },
@@ -2498,7 +2531,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 67,
+            funcId: 68,
             port: port_,
           );
         },
@@ -2532,7 +2565,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 68,
+            funcId: 69,
             port: port_,
           );
         },
@@ -2565,7 +2598,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 69,
+            funcId: 70,
             port: port_,
           );
         },
@@ -2595,7 +2628,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 70,
+            funcId: 71,
             port: port_,
           );
         },
@@ -2628,7 +2661,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 71,
+            funcId: 72,
             port: port_,
           );
         },
@@ -2886,6 +2919,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   GroupingDto dco_decode_box_autoadd_grouping_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_grouping_dto(raw);
+  }
+
+  @protected
+  PairingFailureKindDto dco_decode_box_autoadd_pairing_failure_kind_dto(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_pairing_failure_kind_dto(raw);
   }
 
   @protected
@@ -3634,6 +3675,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  PairingFailureKindDto? dco_decode_opt_box_autoadd_pairing_failure_kind_dto(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null
+        ? null
+        : dco_decode_box_autoadd_pairing_failure_kind_dto(raw);
+  }
+
+  @protected
   QueryResultDto? dco_decode_opt_box_autoadd_query_result_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_box_autoadd_query_result_dto(raw);
@@ -3733,6 +3784,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  PairingFailureKindDto dco_decode_pairing_failure_kind_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return PairingFailureKindDto.values[raw as int];
+  }
+
+  @protected
   PairingKindDto dco_decode_pairing_kind_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return PairingKindDto.values[raw as int];
@@ -3742,8 +3799,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   PairingStateDto dco_decode_pairing_state_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 8)
-      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
+    if (arr.length != 9)
+      throw Exception('unexpected arr length: expect 9 but see ${arr.length}');
     return PairingStateDto(
       kind: dco_decode_pairing_kind_dto(arr[0]),
       sessionId: dco_decode_opt_String(arr[1]),
@@ -3753,6 +3810,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       localConfirmed: dco_decode_bool(arr[5]),
       remoteConfirmed: dco_decode_bool(arr[6]),
       message: dco_decode_opt_String(arr[7]),
+      failure: dco_decode_opt_box_autoadd_pairing_failure_kind_dto(arr[8]),
     );
   }
 
@@ -3900,6 +3958,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     return ResultRecordValueDto(
       field: dco_decode_field_reference_dto(arr[0]),
       value: dco_decode_typed_value_dto(arr[1]),
+    );
+  }
+
+  @protected
+  RevocationOutcomeDto dco_decode_revocation_outcome_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return RevocationOutcomeDto(
+      revoked: dco_decode_bool(arr[0]),
+      rotationError: dco_decode_opt_String(arr[1]),
     );
   }
 
@@ -4458,6 +4528,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_grouping_dto(deserializer));
+  }
+
+  @protected
+  PairingFailureKindDto sse_decode_box_autoadd_pairing_failure_kind_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_pairing_failure_kind_dto(deserializer));
   }
 
   @protected
@@ -5516,6 +5594,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  PairingFailureKindDto? sse_decode_opt_box_autoadd_pairing_failure_kind_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_pairing_failure_kind_dto(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
   QueryResultDto? sse_decode_opt_box_autoadd_query_result_dto(
     SseDeserializer deserializer,
   ) {
@@ -5681,6 +5772,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  PairingFailureKindDto sse_decode_pairing_failure_kind_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return PairingFailureKindDto.values[inner];
+  }
+
+  @protected
   PairingKindDto sse_decode_pairing_kind_dto(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var inner = sse_decode_i_32(deserializer);
@@ -5698,6 +5798,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_localConfirmed = sse_decode_bool(deserializer);
     var var_remoteConfirmed = sse_decode_bool(deserializer);
     var var_message = sse_decode_opt_String(deserializer);
+    var var_failure = sse_decode_opt_box_autoadd_pairing_failure_kind_dto(
+      deserializer,
+    );
     return PairingStateDto(
       kind: var_kind,
       sessionId: var_sessionId,
@@ -5707,6 +5810,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       localConfirmed: var_localConfirmed,
       remoteConfirmed: var_remoteConfirmed,
       message: var_message,
+      failure: var_failure,
     );
   }
 
@@ -5884,6 +5988,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_field = sse_decode_field_reference_dto(deserializer);
     var var_value = sse_decode_typed_value_dto(deserializer);
     return ResultRecordValueDto(field: var_field, value: var_value);
+  }
+
+  @protected
+  RevocationOutcomeDto sse_decode_revocation_outcome_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_revoked = sse_decode_bool(deserializer);
+    var var_rotationError = sse_decode_opt_String(deserializer);
+    return RevocationOutcomeDto(
+      revoked: var_revoked,
+      rotationError: var_rotationError,
+    );
   }
 
   @protected
@@ -6559,6 +6676,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_grouping_dto(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_pairing_failure_kind_dto(
+    PairingFailureKindDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_pairing_failure_kind_dto(self, serializer);
   }
 
   @protected
@@ -7521,6 +7647,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_opt_box_autoadd_pairing_failure_kind_dto(
+    PairingFailureKindDto? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_pairing_failure_kind_dto(self, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_opt_box_autoadd_query_result_dto(
     QueryResultDto? self,
     SseSerializer serializer,
@@ -7682,6 +7821,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_pairing_failure_kind_dto(
+    PairingFailureKindDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
   void sse_encode_pairing_kind_dto(
     PairingKindDto self,
     SseSerializer serializer,
@@ -7704,6 +7852,10 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_bool(self.localConfirmed, serializer);
     sse_encode_bool(self.remoteConfirmed, serializer);
     sse_encode_opt_String(self.message, serializer);
+    sse_encode_opt_box_autoadd_pairing_failure_kind_dto(
+      self.failure,
+      serializer,
+    );
   }
 
   @protected
@@ -7844,6 +7996,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_field_reference_dto(self.field, serializer);
     sse_encode_typed_value_dto(self.value, serializer);
+  }
+
+  @protected
+  void sse_encode_revocation_outcome_dto(
+    RevocationOutcomeDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_bool(self.revoked, serializer);
+    sse_encode_opt_String(self.rotationError, serializer);
   }
 
   @protected
