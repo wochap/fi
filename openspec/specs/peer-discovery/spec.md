@@ -27,14 +27,18 @@ Generic `_myapp-pair._udp.local` advertising and browsing SHALL run only after e
 - **THEN** advertising, browsing, candidates, and uncommitted pairing sessions are cleaned up automatically
 
 ### Requirement: Minimal pairing advertisement
-Pairing advertisements SHALL contain only a random pairing instance ID, QUIC port, and protocol version under a random service instance name, and MUST NOT contain permanent DeviceId, public key, friendly/user name, root/document ID, or finance data.
+Pairing advertisements SHALL contain only a random pairing instance ID, QUIC port, and protocol version under a random service instance name, and MUST NOT contain permanent DeviceId, public key, friendly/user name, root/document ID, or finance data. The addresses a pairing advertisement carries SHALL be limited to those a remote peer on the same local network can reach, and SHALL NOT include loopback addresses or addresses belonging to host-local container, virtualization, or tunnel bridge interfaces.
 
 #### Scenario: Pairing record is inspected
 - **WHEN** another LAN host observes the complete DNS-SD pairing record
 - **THEN** it learns only the ephemeral instance ID, port, version, and normal network-layer metadata
 
+#### Scenario: Pairing record from a multi-homed host
+- **WHEN** a host with a routable LAN interface, a loopback interface, and a container bridge interface publishes a pairing advertisement
+- **THEN** the record carries the routable LAN address and omits the loopback and container-bridge addresses while still revealing no permanent identity
+
 ### Requirement: Group-scoped opaque normal discovery
-Normal discovery SHALL derive its service selector and per-device routing token from a high-entropy discovery secret and epoch, SHALL advertise no raw DeviceId or friendly name, and SHALL dial only tokens mapped to locally trusted devices.
+Normal discovery SHALL derive its service selector and per-device routing token from a high-entropy discovery secret and epoch, SHALL advertise no raw DeviceId or friendly name, and SHALL dial only tokens mapped to locally trusted devices. Endpoints resolved from group-scoped records SHALL be addresses the resolving device can actually reach, and one trusted device SHALL resolve to at most one usable endpoint for a given epoch.
 
 #### Scenario: Same discovery group
 - **WHEN** two trusted devices possess the same current secret and epoch
@@ -47,6 +51,10 @@ Normal discovery SHALL derive its service selector and per-device routing token 
 #### Scenario: Unmatched group token
 - **WHEN** a device observes an opaque token that maps to no locally trusted DeviceId
 - **THEN** it ignores the endpoint and does not attempt normal Repo synchronization
+
+#### Scenario: Trusted device publishes several addresses
+- **WHEN** a trusted device's group-scoped record resolves to a routable address together with a loopback or container-bridge address
+- **THEN** the resolving device records one usable endpoint for that device and does not dial the unreachable address
 
 ### Requirement: Discovery establishes endpoints only
 Every endpoint learned through pairing or normal discovery SHALL remain unauthenticated until the corresponding QUIC identity checks complete.

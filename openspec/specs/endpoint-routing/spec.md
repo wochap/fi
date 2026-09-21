@@ -23,7 +23,7 @@ The application SHALL maintain zero or more expiring `NetworkEndpoint` values pe
 - **THEN** the Repo receives only the peer's authenticated `PeerId` and complete frames
 
 ### Requirement: Pure endpoint selection policy
-Endpoint ranking SHALL be deterministic and side-effect-free, prefer eligible LAN endpoints over future Tailscale endpoints, and account for expiry, recent success, and bounded failure backoff within a source.
+Endpoint ranking SHALL be deterministic and side-effect-free, prefer eligible LAN endpoints over future Tailscale endpoints, and account for expiry, recent success, and bounded failure backoff within a source. Eligibility SHALL additionally require that the endpoint address be one the peer can be reached on; loopback addresses and addresses belonging to host-local container, virtualization, or tunnel bridge interfaces learned from a remote peer's advertisement SHALL NOT be eligible, and ranking SHALL NOT promote an ineligible address above an eligible one.
 
 #### Scenario: LAN and Tailscale endpoints exist
 - **WHEN** both sources contain eligible routes for one device
@@ -32,6 +32,14 @@ Endpoint ranking SHALL be deterministic and side-effect-free, prefer eligible LA
 #### Scenario: Preferred endpoint fails
 - **WHEN** connection to the selected endpoint fails
 - **THEN** the connection manager records bounded backoff and can attempt the next eligible endpoint without changing Repo state
+
+#### Scenario: Ineligible address outranks eligible address
+- **WHEN** a remote peer's advertisement yields both a host-local address and a routable address, and the host-local address would otherwise rank first
+- **THEN** selection returns the routable address and never returns the host-local one
+
+#### Scenario: Only ineligible addresses exist
+- **WHEN** every address learned for a peer is loopback or host-local virtual
+- **THEN** selection returns no endpoint rather than dialing an address that cannot reach the peer
 
 ### Requirement: Deterministic normal dialing
 When both trusted devices can initiate a normal connection, connection orchestration SHALL use a deterministic DeviceId-based preferred initiator and SHALL still resolve simultaneous sessions safely.

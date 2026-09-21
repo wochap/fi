@@ -127,3 +127,37 @@ The project SHALL include Android foreground integration checks and a Linux desk
 #### Scenario: Linux Wayland smoke
 - **WHEN** the Flutter Linux application runs in a Wayland-capable test environment
 - **THEN** its collection, schema, record, pairing, and device screens initialize without application-level X11 APIs
+
+### Requirement: Multi-homed discovery acceptance
+The end-to-end suite SHALL prove that discovery selects peer-routable addresses on a multi-homed host. Assertions SHALL be made on the resolved address values, not solely on whether pairing completed, because a single-host run cannot distinguish correct address selection from loopback succeeding by accident.
+
+#### Scenario: Single-host address resolution harness
+- **WHEN** two discovery instances with separate data directories run on one multi-homed host, one registering and one browsing
+- **THEN** the harness records every resolved address and fails if the address selected for the peer is a loopback or host-local virtual address
+
+#### Scenario: One device resolves once
+- **WHEN** a registering host publishes more than one address for a single pairing instance
+- **THEN** the browsing host resolves one candidate for that instance rather than one candidate per address
+
+#### Scenario: Two-machine pairing confirmation
+- **WHEN** two separate machines pair over real mDNS and QUIC on the same local network
+- **THEN** the joining device discovers, dials, and completes pairing using an address reachable across machines, and any host firewall configuration required to achieve this is recorded
+
+#### Scenario: In-memory transport is not evidence
+- **WHEN** discovery address selection is assessed
+- **THEN** results from suites running over an in-memory transport are not admitted as evidence for or against real mDNS and QUIC behaviour
+
+### Requirement: Local multi-instance isolation acceptance
+The project SHALL support running more than one application instance on a single host against separate datasets, so that multi-device behaviour can be exercised locally. The override that enables this SHALL NOT be reachable in a release build.
+
+#### Scenario: Two instances on one host
+- **WHEN** two application instances start on one host with distinct data directories
+- **THEN** each opens its own dataset and neither adopts the other's already-initialized core
+
+#### Scenario: Default location is unchanged
+- **WHEN** no override is supplied
+- **THEN** the application uses the platform application-support directory exactly as before
+
+#### Scenario: Release build ignores the override
+- **WHEN** a release build starts with the override present in its environment
+- **THEN** the override has no effect and the platform application-support directory is used
