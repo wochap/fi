@@ -32,8 +32,8 @@ use std::{
 use app_core::{
     AppCore, AppCoreConfig, DeviceId, DiscoveredEndpoint, DiscoveryEvent, DiscoveryGroupSecret,
     DiscoveryProvider, DiscoveryScope, InMemorySecureKeyStore, MdnsDiscovery, PairingCandidate,
-    PrivateDeviceKey, QuinnTransportConfig, group_routing_token, group_service_selector,
-    match_group_endpoint,
+    PrivateDeviceKey, QuinnTransportConfig, discovery::AddressPolicy, group_routing_token,
+    group_service_selector, match_group_endpoint,
 };
 
 /// How the harness judges an address, independently of production code.
@@ -520,15 +520,15 @@ async fn stage1_inbound_multicast_reaches_our_own_socket() {
     // here would mask the address-selection evidence this harness exists for.
 }
 
-/// Task 2.2: record `is_lan_address` admission at runtime rather than by reading
-/// `discovery.rs:690-697`. The predicate is private, so it is probed through
-/// `match_group_endpoint`, which is its only caller.
+/// Task 2.2 / 5.1: group-path admission at runtime, probed through
+/// `match_group_endpoint` with the production policy for a `0.0.0.0` bind.
 ///
-/// This pins **current** behaviour. Task 5.1 must update it once advertisement and
-/// acceptance are constrained, because the spec requires loopback and host-local
-/// virtual addresses to become ineligible.
+/// Stage 1 recorded all three admitted. After the fix a loopback address from a
+/// remote record is rejected; `10.88.0.1` is still admitted here because an address
+/// alone cannot distinguish a bridge from a real `10.x` LAN — that address is kept
+/// off the wire by the advertisement filter instead.
 #[test]
-fn records_current_is_lan_address_admission() {
+fn group_path_rejects_loopback_from_remote_records() {
     let secret = DiscoveryGroupSecret::from_bytes([3; 32]);
     let device = DeviceId::from_public_key(
         PrivateDeviceKey::from_seed(&[4; 32])
@@ -545,6 +545,7 @@ fn records_current_is_lan_address_admission() {
         ("wlan0", "192.168.0.104", Classification::Routable),
         ("podman0", "10.88.0.1", Classification::VirtualBridge),
     ];
+    let policy = AddressPolicy::default();
     let mut admitted = Vec::new();
     for (interface, ip, expected_class) in probes {
         let address: IpAddr = ip.parse().unwrap();
@@ -567,13 +568,14 @@ fn records_current_is_lan_address_admission() {
             ]),
             expires_at_ms: 1_000,
         };
-        let result = match_group_endpoint(&endpoint, &secret, [device]).is_some();
-        println!("is_lan_address {interface:<8} {ip:<16} admitted={result}");
+        let result = match_group_endpoint(&endpoint, &secret, &policy, [device]).is_some();
+        println!("admits_peer_address {interface:<8} {ip:<16} admitted={result}");
         admitted.push((interface, result));
     }
-    assert_eq!(admitted.len(), 3);
-    // Recorded, not asserted: all three are admitted today, which is the defect
-    // this change exists to measure. Values are transcribed into notes.md.
+    assert_eq!(
+        admitted,
+        vec![("lo", false), ("wlan0", true), ("podman0", true)]
+    );
 }
 
 /// Task 2.4: determine whether `mdns-sd` exposes interface pinning or address

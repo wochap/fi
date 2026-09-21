@@ -22,8 +22,12 @@ pub(crate) struct LogcatWriter {
 impl LogcatWriter {
     fn flush_line(&mut self, line: &[u8]) {
         use std::ffi::CString;
-        let Ok(tag) = CString::new("fi_rust") else { return };
-        let Ok(message) = CString::new(line) else { return };
+        let Ok(tag) = CString::new("fi_rust") else {
+            return;
+        };
+        let Ok(message) = CString::new(line) else {
+            return;
+        };
         // SAFETY: both pointers are valid NUL-terminated C strings for the call.
         unsafe {
             android_log_sys::__android_log_write(

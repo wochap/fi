@@ -3,7 +3,7 @@
 use std::{
     collections::{BTreeMap, HashMap},
     fmt,
-    net::{IpAddr, SocketAddr},
+    net::{IpAddr, Ipv4Addr, SocketAddr},
     sync::{Arc, Mutex},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -156,6 +156,161 @@ pub enum DiscoveryError {
     InvalidRecord(&'static str),
     #[error("discovery provider failed: {0}")]
     Provider(String),
+    #[error("no peer-routable address to advertise")]
+    NoRoutableAddress,
+}
+
+/// Interface-name prefixes that denote a host-local bridge or tunnel rather than a
+/// LAN segment a remote peer can reach. Matched case-insensitively as prefixes.
+const HOST_LOCAL_INTERFACE_MARKERS: &[&str] = &[
+    "podman",
+    "docker",
+    "br-",
+    "veth",
+    "virbr",
+    "cni",
+    "flannel",
+    "kube",
+    "lxc",
+    "lxd",
+    "vmnet",
+    "vnet",
+    "tailscale",
+    "ts0",
+    "tun",
+    "tap",
+    "wg",
+    "zt",
+    "dummy",
+    "bridge",
+    "nerdctl",
+    "containerd",
+];
+
+/// Whether an interface name denotes loopback or a host-local virtual bridge.
+#[must_use]
+pub fn is_host_local_interface(name: &str) -> bool {
+    let lowered = name.to_ascii_lowercase();
+    lowered == "lo"
+        || lowered.starts_with("lo:")
+        || HOST_LOCAL_INTERFACE_MARKERS
+            .iter()
+            .any(|marker| lowered.starts_with(marker))
+}
+
+/// Decides which addresses are worth advertising and which peer addresses are
+/// worth dialing, given where the local transport is bound.
+///
+/// Bound to an unspecified or LAN address, loopback peers are not dialable across
+/// machines and are rejected. Bound to loopback (single-host tests), only loopback
+/// peers are reachable. The address family follows the bind address: an IPv4-only
+/// socket cannot dial IPv6, and an IPv6 link-local address cannot be dialed at all
+/// because `SocketAddr` carries no scope id.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AddressPolicy {
+    local_bind: IpAddr,
+}
+
+impl Default for AddressPolicy {
+    fn default() -> Self {
+        Self::for_bind(IpAddr::V4(Ipv4Addr::UNSPECIFIED))
+    }
+}
+
+impl AddressPolicy {
+    #[must_use]
+    pub const fn for_bind(local_bind: IpAddr) -> Self {
+        Self { local_bind }
+    }
+
+    #[must_use]
+    pub const fn local_bind(&self) -> IpAddr {
+        self.local_bind
+    }
+
+    /// Receive side: may a peer at `address` be dialed from the local socket?
+    #[must_use]
+    pub fn admits_peer_address(&self, address: IpAddr) -> bool {
+        if self.local_bind.is_ipv4() && address.is_ipv6() {
+            return false;
+        }
+        if self.local_bind.is_loopback() {
+            return address.is_loopback();
+        }
+        match address {
+            IpAddr::V4(value) => {
+                !value.is_unspecified()
+                    && !value.is_broadcast()
+                    && !value.is_multicast()
+                    && !value.is_loopback()
+                    && (value.is_private() || value.is_link_local())
+            }
+            IpAddr::V6(value) => {
+                !value.is_unspecified()
+                    && !value.is_multicast()
+                    && !value.is_loopback()
+                    && value.is_unique_local()
+            }
+        }
+    }
+
+    /// Advertise side: should `address` on interface `name` be published?
+    #[must_use]
+    pub fn advertises_interface(&self, name: &str, address: IpAddr, point_to_point: bool) -> bool {
+        !point_to_point
+            && self.admits_peer_address(address)
+            && (address.is_loopback() || !is_host_local_interface(name))
+    }
+
+    /// Deterministic preference among admitted addresses; lower ranks first.
+    #[must_use]
+    pub fn rank(address: IpAddr) -> u8 {
+        match address {
+            IpAddr::V4(value) if value.is_private() => 0,
+            IpAddr::V4(value) if value.is_link_local() => 1,
+            IpAddr::V6(value) if value.is_unique_local() => 2,
+            value if value.is_loopback() => 3,
+            _ => 4,
+        }
+    }
+
+    /// The endpoint to dial among several admitted addresses of one peer,
+    /// independent of the order they were observed in.
+    #[must_use]
+    pub fn select(addresses: impl IntoIterator<Item = SocketAddr>) -> Option<SocketAddr> {
+        addresses
+            .into_iter()
+            .min_by_key(|address| (Self::rank(address.ip()), *address))
+    }
+
+    /// Addresses this host would advertise right now, from the kernel's view.
+    #[must_use]
+    pub fn local_advertisable_addresses(&self) -> Vec<IpAddr> {
+        self.advertisable_addresses(
+            if_addrs::get_if_addrs()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|interface| {
+                    let address = interface.ip();
+                    (interface.name, address, interface.is_p2p)
+                }),
+        )
+    }
+
+    /// Which of `(name, address, point_to_point)` this policy would advertise.
+    #[must_use]
+    pub fn advertisable_addresses(
+        &self,
+        interfaces: impl IntoIterator<Item = (String, IpAddr, bool)>,
+    ) -> Vec<IpAddr> {
+        interfaces
+            .into_iter()
+            .filter(|(name, address, point_to_point)| {
+                self.advertises_interface(name, *address, *point_to_point)
+            })
+            .map(|(_, address, _)| address)
+            .collect()
+    }
 }
 
 #[async_trait]
@@ -209,6 +364,7 @@ struct MdnsActive {
 /// query implementation if a platform daemon is stricter.
 pub struct MdnsDiscovery {
     daemon: mdns_sd::ServiceDaemon,
+    policy: AddressPolicy,
     active: Mutex<HashMap<DiscoveryScope, MdnsActive>>,
     events: broadcast::Sender<DiscoveryEvent>,
 }
@@ -220,15 +376,26 @@ impl fmt::Debug for MdnsDiscovery {
 }
 
 impl MdnsDiscovery {
+    /// Advertises as if the transport were bound to `0.0.0.0`; see [`AddressPolicy`].
     pub fn new() -> Result<Self, DiscoveryError> {
+        Self::with_policy(AddressPolicy::default())
+    }
+
+    pub fn with_policy(policy: AddressPolicy) -> Result<Self, DiscoveryError> {
         let daemon = mdns_sd::ServiceDaemon::new()
             .map_err(|error| DiscoveryError::Provider(error.to_string()))?;
         let (events, _) = broadcast::channel(128);
         Ok(Self {
             daemon,
+            policy,
             active: Mutex::new(HashMap::new()),
             events,
         })
+    }
+
+    #[must_use]
+    pub const fn policy(&self) -> AddressPolicy {
+        self.policy
     }
 
     fn service_type(scope: &DiscoveryScope) -> &str {
@@ -258,7 +425,7 @@ impl DiscoveryProvider for MdnsDiscovery {
             .iter()
             .map(|(key, value)| (key.as_str(), value.as_str()))
             .collect();
-        let info = mdns_sd::ServiceInfo::new(
+        let mut info = mdns_sd::ServiceInfo::new(
             &service_type,
             &advertisement.instance_name,
             &hostname,
@@ -268,6 +435,35 @@ impl DiscoveryProvider for MdnsDiscovery {
         )
         .map_err(|error| DiscoveryError::Provider(error.to_string()))?
         .enable_addr_auto();
+        // Only peer-routable interfaces feed the auto-detected address set, now and
+        // on every IP re-check the daemon performs.
+        let policy = self.policy;
+        info.set_interfaces(vec![mdns_sd::IfKind::Predicate(mdns_sd::IfPredicate::new(
+            move |interface| {
+                policy.advertises_interface(&interface.name, interface.ip(), interface.is_p2p())
+            },
+        ))]);
+        let advertisable = policy.local_advertisable_addresses();
+        if advertisable.is_empty() {
+            tracing::warn!(
+                event = "discovery_no_routable_address",
+                scope = ?advertisement.scope,
+                "no peer-routable address to advertise; device is undiscoverable until one appears"
+            );
+            // Pairing is user-initiated: surface it. Group discovery runs for the
+            // process lifetime and picks addresses up when they appear.
+            if advertisement.scope == DiscoveryScope::Pairing {
+                return Err(DiscoveryError::NoRoutableAddress);
+            }
+        } else {
+            tracing::info!(
+                event = "discovery_advertise",
+                scope = ?advertisement.scope,
+                addresses = ?advertisable,
+                port = advertisement.port,
+                "advertising peer-routable addresses"
+            );
+        }
         let fullname = info.get_fullname().to_owned();
         let receiver = self
             .daemon
@@ -666,9 +862,10 @@ pub fn group_routing_token(secret: &DiscoveryGroupSecret, epoch: u64, device: De
 pub fn match_group_endpoint(
     endpoint: &DiscoveredEndpoint,
     secret: &DiscoveryGroupSecret,
+    policy: &AddressPolicy,
     trusted: impl IntoIterator<Item = DeviceId>,
 ) -> Option<(DeviceId, SocketAddr, u64)> {
-    if !is_lan_address(endpoint.address.ip()) || endpoint.expires_at_ms == 0 {
+    if !policy.admits_peer_address(endpoint.address.ip()) || endpoint.expires_at_ms == 0 {
         return None;
     }
     let DiscoveryScope::Group { epoch, selector } = &endpoint.scope else {
@@ -685,15 +882,6 @@ pub fn match_group_endpoint(
             endpoint.expires_at_ms,
         ))
     })
-}
-
-fn is_lan_address(address: IpAddr) -> bool {
-    match address {
-        IpAddr::V4(value) => value.is_private() || value.is_link_local() || value.is_loopback(),
-        IpAddr::V6(value) => {
-            value.is_unique_local() || value.is_unicast_link_local() || value.is_loopback()
-        }
-    }
 }
 
 #[cfg(test)]
@@ -747,7 +935,7 @@ mod tests {
                 selector: group_service_selector(&a, 1),
             },
             instance_name: "opaque".into(),
-            address: "127.0.0.1:42".parse().unwrap(),
+            address: "192.168.1.20:42".parse().unwrap(),
             properties: BTreeMap::from([
                 ("v".into(), "1".into()),
                 ("e".into(), "1".into()),
@@ -755,12 +943,30 @@ mod tests {
             ]),
             expires_at_ms: 10,
         };
-        assert!(match_group_endpoint(&endpoint, &a, []).is_none());
+        let policy = AddressPolicy::default();
+        assert!(match_group_endpoint(&endpoint, &a, &policy, []).is_none());
         assert_eq!(
-            match_group_endpoint(&endpoint, &a, [device]).unwrap().0,
+            match_group_endpoint(&endpoint, &a, &policy, [device])
+                .unwrap()
+                .0,
             device
         );
-        assert!(match_group_endpoint(&endpoint, &b, [device]).is_none());
+        assert!(match_group_endpoint(&endpoint, &b, &policy, [device]).is_none());
+        // A remote peer advertising loopback is never dialable across machines.
+        let loopback = DiscoveredEndpoint {
+            address: "127.0.0.1:42".parse().unwrap(),
+            ..endpoint.clone()
+        };
+        assert!(match_group_endpoint(&loopback, &a, &policy, [device]).is_none());
+        assert!(
+            match_group_endpoint(
+                &loopback,
+                &a,
+                &AddressPolicy::for_bind("127.0.0.1".parse().unwrap()),
+                [device]
+            )
+            .is_some()
+        );
         let service_type = group_service_selector(&a, 1);
         let route = group_routing_token(&a, 1, device);
         assert!(
@@ -774,6 +980,103 @@ mod tests {
             )
             .is_ok()
         );
+    }
+
+    #[test]
+    fn address_policy_admits_only_peer_routable_addresses() {
+        let policy = AddressPolicy::default();
+        let admitted = |ip: &str| policy.admits_peer_address(ip.parse().unwrap());
+        assert!(admitted("192.168.0.104"));
+        assert!(
+            admitted("10.88.0.1"),
+            "address alone cannot tell a bridge from a LAN"
+        );
+        assert!(admitted("169.254.10.2"));
+        assert!(!admitted("127.0.0.1"));
+        assert!(!admitted("0.0.0.0"));
+        assert!(!admitted("224.0.0.251"));
+        assert!(!admitted("8.8.8.8"));
+        // IPv4-only bind: no IPv6 at all.
+        assert!(!admitted("fdaa:bbcc:ddee::1"));
+        assert!(!admitted("fe80::1"));
+        let dual = AddressPolicy::for_bind("::".parse().unwrap());
+        assert!(dual.admits_peer_address("fdaa:bbcc:ddee::1".parse().unwrap()));
+        assert!(
+            !dual.admits_peer_address("fe80::1".parse().unwrap()),
+            "link-local needs a scope id that SocketAddr cannot carry"
+        );
+        assert!(!dual.admits_peer_address("::1".parse().unwrap()));
+        assert!(dual.admits_peer_address("192.168.0.104".parse().unwrap()));
+        let loopback = AddressPolicy::for_bind("127.0.0.1".parse().unwrap());
+        assert!(loopback.admits_peer_address("127.0.0.1".parse().unwrap()));
+        assert!(!loopback.admits_peer_address("192.168.0.104".parse().unwrap()));
+    }
+
+    #[test]
+    fn address_policy_advertises_routable_interfaces_only() {
+        let policy = AddressPolicy::default();
+        let advertises = |name: &str, ip: &str, p2p: bool| {
+            policy.advertises_interface(name, ip.parse().unwrap(), p2p)
+        };
+        assert!(advertises("wlan0", "192.168.0.104", false));
+        assert!(advertises("eth0", "10.0.0.5", false));
+        assert!(!advertises("lo", "127.0.0.1", false));
+        assert!(!advertises("podman0", "10.88.0.1", false));
+        assert!(!advertises("docker0", "172.17.0.1", false));
+        assert!(!advertises("br-1a2b3c", "172.18.0.1", false));
+        assert!(!advertises("virbr0", "192.168.122.1", false));
+        assert!(!advertises("tailscale0", "100.64.0.1", false));
+        assert!(!advertises("wg0", "10.200.0.2", false));
+        assert!(!advertises("tun0", "10.8.0.2", true));
+        assert!(!advertises("wlan0", "2800:200:f580::1", false));
+        assert!(!advertises("wlan0", "fe80::1", false));
+        let loopback = AddressPolicy::for_bind("127.0.0.1".parse().unwrap());
+        assert!(loopback.advertises_interface("lo", "127.0.0.1".parse().unwrap(), false));
+        assert!(!loopback.advertises_interface("wlan0", "192.168.0.104".parse().unwrap(), false));
+    }
+
+    #[test]
+    fn host_without_routable_interface_advertises_no_substitute() {
+        let policy = AddressPolicy::default();
+        let host = |names: &[(&str, &str)]| {
+            names
+                .iter()
+                .map(|(name, ip)| ((*name).to_owned(), ip.parse::<IpAddr>().unwrap(), false))
+                .collect::<Vec<_>>()
+        };
+        // The development host: loopback, Wi-Fi and a container bridge.
+        assert_eq!(
+            policy.advertisable_addresses(host(&[
+                ("lo", "127.0.0.1"),
+                ("wlan0", "192.168.0.104"),
+                ("podman0", "10.88.0.1"),
+            ])),
+            vec!["192.168.0.104".parse::<IpAddr>().unwrap()]
+        );
+        // Wi-Fi gone: nothing host-local is advertised in its place.
+        assert!(
+            policy
+                .advertisable_addresses(host(&[("lo", "127.0.0.1"), ("podman0", "10.88.0.1")]))
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn address_selection_is_deterministic_and_routability_ranked() {
+        let a: SocketAddr = "192.168.0.104:1".parse().unwrap();
+        let b: SocketAddr = "169.254.3.4:1".parse().unwrap();
+        let c: SocketAddr = "10.88.0.1:1".parse().unwrap();
+        assert_eq!(
+            AddressPolicy::select([b, c, a]),
+            Some(c),
+            "numeric order within a rank"
+        );
+        assert_eq!(AddressPolicy::select([c, a, b]), Some(c));
+        assert_eq!(AddressPolicy::select([b, a]), Some(a));
+        assert_eq!(AddressPolicy::select([a, b]), Some(a));
+        assert_eq!(AddressPolicy::select([]), None);
+        let ula: SocketAddr = "[fdaa::1]:1".parse().unwrap();
+        assert_eq!(AddressPolicy::select([ula, b]), Some(b));
     }
 
     #[tokio::test]

@@ -50,6 +50,10 @@ use crate::{
     widgets::{WidgetDefinition, WidgetId, WidgetUpdate},
 };
 
+/// How long an address observed on a live session stays dialable without a
+/// fresh advertisement; matches the endpoint installed by `confirm_pairing`.
+const OBSERVED_ADDRESS_TTL_MS: u64 = 120_000;
+
 #[derive(Clone)]
 pub struct AppCoreConfig {
     pub command_capacity: usize,
@@ -173,9 +177,14 @@ impl AppCore {
         config: AppCoreConfig,
         network_config: QuinnTransportConfig,
     ) -> Result<Self> {
-        let discovery = Arc::new(crate::discovery::MdnsDiscovery::new().map_err(|error| {
-            AppError::Pairing(crate::pairing::PairingError::Transport(error.to_string()))
-        })?);
+        let discovery = Arc::new(
+            crate::discovery::MdnsDiscovery::with_policy(
+                crate::discovery::AddressPolicy::for_bind(bind.ip()),
+            )
+            .map_err(|error| {
+                AppError::Pairing(crate::pairing::PairingError::Transport(error.to_string()))
+            })?,
+        );
         Self::open_networked_with_discovery(
             data_dir,
             key_store,
@@ -218,7 +227,9 @@ impl AppCore {
             control_store.clone(),
             network_config,
         )?;
-        let endpoints = Arc::new(Mutex::new(EndpointRegistry::default()));
+        let endpoints = Arc::new(Mutex::new(EndpointRegistry::new(
+            crate::discovery::AddressPolicy::for_bind(bind.ip()),
+        )));
         let connections = Arc::new(
             ConnectionManager::new(identity.id(), network.clone(), endpoints.clone(), 4)
                 .map_err(|message| AppError::Storage(message.into()))?,
@@ -321,6 +332,7 @@ impl AppCore {
             network_components.connections.clone(),
             network_components.network.clone(),
         ) {
+            spawn_observed_address_bridge(network.clone(), network_components.endpoints.clone());
             spawn_discovery_bridge(
                 pairing,
                 network_components.endpoints.clone(),
@@ -1471,10 +1483,11 @@ fn spawn_discovery_bridge(
             } = event;
             let now = current_time_ms();
             if let Ok(mut endpoints) = endpoints.lock() {
-                endpoints.replace_source(
+                // Accumulate: a peer with several routable addresses keeps them
+                // all for ranking, instead of the last resolved one winning.
+                endpoints.upsert(
                     peer,
-                    crate::routing::EndpointSource::Lan,
-                    [NetworkEndpoint {
+                    NetworkEndpoint {
                         address,
                         source: crate::routing::EndpointSource::Lan,
                         observed_at_ms: now,
@@ -1483,7 +1496,7 @@ fn spawn_discovery_bridge(
                         last_success_ms: None,
                         failures: 0,
                         retry_after_ms: None,
-                    }],
+                    },
                 );
             }
             if let Ok(frames) = pairing.rotation_update_frames()
@@ -1492,6 +1505,47 @@ fn spawn_discovery_bridge(
                 && let Ok(response) = network.exchange_control(peer, &frame).await
             {
                 let _ = pairing.validate_rotation_ack(&response).await;
+            }
+        }
+    });
+}
+
+/// Records the address each authenticated session was actually reached on, so the
+/// demonstrated-reachable address ranks ahead of whatever was advertised.
+fn spawn_observed_address_bridge(
+    network: Arc<QuinnTransport>,
+    endpoints: Arc<Mutex<EndpointRegistry>>,
+) {
+    let mut observed = network.subscribe_observed_addresses();
+    tokio::spawn(async move {
+        loop {
+            let event = match observed.recv().await {
+                Ok(event) => event,
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+            };
+            let now = current_time_ms();
+            tracing::info!(
+                event = "peer_address_observed",
+                device_id = %event.device,
+                address = %event.address,
+                direction = ?event.direction,
+                "recorded observed peer address"
+            );
+            if let Ok(mut endpoints) = endpoints.lock() {
+                endpoints.upsert(
+                    event.device,
+                    NetworkEndpoint {
+                        address: event.address,
+                        source: crate::routing::EndpointSource::Lan,
+                        observed_at_ms: now,
+                        expires_at_ms: now.saturating_add(OBSERVED_ADDRESS_TTL_MS),
+                        interface_scope: None,
+                        last_success_ms: Some(now),
+                        failures: 0,
+                        retry_after_ms: None,
+                    },
+                );
             }
         }
     });

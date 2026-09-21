@@ -10,7 +10,7 @@ use std::{
 use async_trait::async_trait;
 use tokio::sync::{Semaphore, watch};
 
-use crate::identity::DeviceId;
+use crate::{discovery::AddressPolicy, identity::DeviceId};
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum EndpointSource {
@@ -50,12 +50,25 @@ impl NetworkEndpoint {
     }
 }
 
+/// Known endpoints per device, filtered by what the local socket can reach.
 #[derive(Debug, Default)]
 pub struct EndpointRegistry {
+    policy: AddressPolicy,
     endpoints: BTreeMap<DeviceId, Vec<NetworkEndpoint>>,
 }
 
 impl EndpointRegistry {
+    #[must_use]
+    pub fn new(policy: AddressPolicy) -> Self {
+        Self {
+            policy,
+            endpoints: BTreeMap::new(),
+        }
+    }
+    #[must_use]
+    pub const fn policy(&self) -> AddressPolicy {
+        self.policy
+    }
     pub fn remove(&mut self, device: DeviceId) {
         self.endpoints.remove(&device);
     }
@@ -74,13 +87,35 @@ impl EndpointRegistry {
         );
     }
 
+    /// Adds or refreshes one endpoint, keeping success/failure history for an
+    /// address already known, and drops expired siblings from the same source.
+    pub fn upsert(&mut self, device: DeviceId, endpoint: NetworkEndpoint) {
+        let current = self.endpoints.entry(device).or_default();
+        let now = endpoint.observed_at_ms;
+        current
+            .retain(|existing| existing.source != endpoint.source || existing.expires_at_ms > now);
+        if let Some(existing) = current.iter_mut().find(|existing| {
+            existing.address == endpoint.address && existing.source == endpoint.source
+        }) {
+            existing.observed_at_ms = endpoint.observed_at_ms;
+            existing.expires_at_ms = existing.expires_at_ms.max(endpoint.expires_at_ms);
+            existing.interface_scope = endpoint.interface_scope.or(existing.interface_scope);
+            if endpoint.last_success_ms > existing.last_success_ms {
+                existing.record_success(endpoint.last_success_ms.unwrap_or(now));
+            }
+        } else {
+            current.push(endpoint);
+        }
+    }
+
     #[must_use]
     pub fn ranked(&self, device: DeviceId, now_ms: u64) -> Vec<NetworkEndpoint> {
-        rank_endpoints(
+        rank_endpoints_with_policy(
             self.endpoints
                 .get(&device)
                 .map(Vec::as_slice)
                 .unwrap_or_default(),
+            &self.policy,
             now_ms,
         )
     }
@@ -97,11 +132,26 @@ impl EndpointRegistry {
     }
 }
 
+/// Ranks with the default policy (transport bound to `0.0.0.0`).
 #[must_use]
 pub fn rank_endpoints(endpoints: &[NetworkEndpoint], now_ms: u64) -> Vec<NetworkEndpoint> {
+    rank_endpoints_with_policy(endpoints, &AddressPolicy::default(), now_ms)
+}
+
+/// Deterministic, side-effect-free ranking. An address the local socket cannot
+/// reach is never returned, so it can never outrank a reachable one and an
+/// all-unreachable set yields no endpoint.
+#[must_use]
+pub fn rank_endpoints_with_policy(
+    endpoints: &[NetworkEndpoint],
+    policy: &AddressPolicy,
+    now_ms: u64,
+) -> Vec<NetworkEndpoint> {
     let mut ranked: Vec<_> = endpoints
         .iter()
-        .filter(|endpoint| endpoint.is_eligible(now_ms))
+        .filter(|endpoint| {
+            endpoint.is_eligible(now_ms) && policy.admits_peer_address(endpoint.address.ip())
+        })
         .cloned()
         .collect();
     ranked.sort_by_key(|endpoint| {
@@ -109,6 +159,7 @@ pub fn rank_endpoints(endpoints: &[NetworkEndpoint], now_ms: u64) -> Vec<Network
             endpoint.source,
             Reverse(endpoint.last_success_ms.unwrap_or(0)),
             endpoint.failures,
+            AddressPolicy::rank(endpoint.address.ip()),
             Reverse(endpoint.observed_at_ms),
             endpoint.address,
             endpoint.interface_scope,
@@ -383,7 +434,7 @@ mod tests {
 
     fn endpoint(source: EndpointSource, port: u16) -> NetworkEndpoint {
         NetworkEndpoint {
-            address: ([127, 0, 0, 1], port).into(),
+            address: ([10, 0, 0, 1], port).into(),
             source,
             observed_at_ms: 5,
             expires_at_ms: 100,
@@ -410,6 +461,75 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![1, 2, 3]
         );
+    }
+
+    #[test]
+    fn unreachable_addresses_never_rank_and_all_unreachable_yields_none() {
+        let mut loopback = endpoint(EndpointSource::Lan, 1);
+        loopback.address = ([127, 0, 0, 1], 1).into();
+        loopback.last_success_ms = Some(9);
+        let mut ipv6 = endpoint(EndpointSource::Lan, 2);
+        ipv6.address = "[fdaa::1]:2".parse().unwrap();
+        let routable = endpoint(EndpointSource::Lan, 3);
+        let ranked = rank_endpoints(&[loopback.clone(), ipv6.clone(), routable], 10);
+        assert_eq!(
+            ranked
+                .iter()
+                .map(|item| item.address.port())
+                .collect::<Vec<_>>(),
+            vec![3],
+            "a recently successful loopback must not outrank the routable address"
+        );
+        assert!(rank_endpoints(&[loopback.clone(), ipv6], 10).is_empty());
+        // The same loopback endpoint is reachable when the local socket is on loopback.
+        let policy = AddressPolicy::for_bind([127, 0, 0, 1].into());
+        assert_eq!(
+            rank_endpoints_with_policy(&[loopback], &policy, 10).len(),
+            1
+        );
+    }
+
+    #[test]
+    fn registry_upsert_accumulates_addresses_and_keeps_history() {
+        let device = DeviceId::from_public_key(&[3; 32]);
+        let mut registry = EndpointRegistry::default();
+        let first = endpoint(EndpointSource::Lan, 1);
+        let mut second = endpoint(EndpointSource::Lan, 2);
+        second.address = ([192, 168, 0, 7], 2).into();
+        registry.upsert(device, first.clone());
+        registry.upsert(device, second.clone());
+        assert_eq!(
+            registry.ranked(device, 10).len(),
+            2,
+            "upsert must not replace"
+        );
+        registry
+            .endpoint_mut(device, second.address)
+            .unwrap()
+            .record_failure(10, 10, 100);
+        let mut refreshed = second.clone();
+        refreshed.observed_at_ms = 11;
+        refreshed.expires_at_ms = 200;
+        registry.upsert(device, refreshed);
+        let kept = registry.endpoint_mut(device, second.address).unwrap();
+        assert_eq!(kept.failures, 1, "history survives a refresh");
+        assert_eq!(kept.expires_at_ms, 200);
+        // An observed successful connection ranks first on the next dial.
+        let mut observed = endpoint(EndpointSource::Lan, 1);
+        observed.address = ([192, 168, 0, 7], 2).into();
+        observed.observed_at_ms = 12;
+        observed.last_success_ms = Some(12);
+        registry.upsert(device, observed);
+        let ranked = registry.ranked(device, 12);
+        assert_eq!(ranked[0].address, ([192, 168, 0, 7], 2).into());
+        assert_eq!(ranked[0].failures, 0);
+        // Expired siblings from the same source are dropped on the next upsert.
+        let mut late = endpoint(EndpointSource::Lan, 9);
+        late.address = ([192, 168, 0, 9], 9).into();
+        late.observed_at_ms = 150;
+        late.expires_at_ms = 300;
+        registry.upsert(device, late);
+        assert_eq!(registry.ranked(device, 150).len(), 2);
     }
 
     #[test]

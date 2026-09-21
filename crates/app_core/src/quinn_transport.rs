@@ -30,7 +30,7 @@ use rustls::{
 };
 use tokio::{
     io::{AsyncRead, AsyncReadExt},
-    sync::{mpsc, oneshot},
+    sync::{broadcast, mpsc, oneshot},
     task::JoinHandle,
 };
 use x509_parser::prelude::{FromDer, X509Certificate};
@@ -407,6 +407,18 @@ struct Session {
     writer: mpsc::Sender<Bytes>,
 }
 
+/// The remote address of an authenticated session, as the socket observed it.
+///
+/// An inbound peer's source address is, by construction, one it can be reached on
+/// over the interface the packet arrived through — which its advertisement cannot
+/// promise.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ObservedPeerAddress {
+    pub device: DeviceId,
+    pub address: SocketAddr,
+    pub direction: ConnectionDirection,
+}
+
 pub(crate) struct ControlRequest {
     pub peer: DeviceId,
     pub frame: Vec<u8>,
@@ -424,6 +436,7 @@ pub struct QuinnTransport {
     events_rx: Mutex<Option<mpsc::Receiver<NetworkEvent>>>,
     control_tx: mpsc::Sender<ControlRequest>,
     control_rx: Mutex<Option<mpsc::Receiver<ControlRequest>>>,
+    observed_tx: broadcast::Sender<ObservedPeerAddress>,
     sessions: Mutex<HashMap<PeerId, Session>>,
     generation: AtomicU64,
     closed: AtomicBool,
@@ -485,6 +498,7 @@ impl QuinnTransport {
             .map_err(|error| QuinnTransportError::Configuration(error.to_string()))?;
         let (events_tx, events_rx) = mpsc::channel(config.event_capacity);
         let (control_tx, control_rx) = mpsc::channel(config.event_capacity);
+        let (observed_tx, _) = broadcast::channel(config.event_capacity);
         let transport = Arc::new_cyclic(|self_weak| Self {
             self_weak: self_weak.clone(),
             endpoint,
@@ -496,6 +510,7 @@ impl QuinnTransport {
             events_rx: Mutex::new(Some(events_rx)),
             control_tx,
             control_rx: Mutex::new(Some(control_rx)),
+            observed_tx,
             sessions: Mutex::new(HashMap::new()),
             generation: AtomicU64::new(0),
             closed: AtomicBool::new(false),
@@ -515,6 +530,12 @@ impl QuinnTransport {
 
     pub(crate) fn take_control_requests(&self) -> Option<mpsc::Receiver<ControlRequest>> {
         self.control_rx.lock().ok()?.take()
+    }
+
+    /// Remote addresses of sessions as they authenticate, in either direction.
+    #[must_use]
+    pub fn subscribe_observed_addresses(&self) -> broadcast::Receiver<ObservedPeerAddress> {
+        self.observed_tx.subscribe()
     }
 
     pub async fn exchange_control(
@@ -713,6 +734,11 @@ impl QuinnTransport {
                 .send(NetworkEvent::PeerDisconnected(peer.clone()))
                 .await;
         }
+        let _ = self.observed_tx.send(ObservedPeerAddress {
+            device: authenticated.device,
+            address: authenticated.connection.remote_address(),
+            direction: authenticated.direction,
+        });
         self.events_tx
             .send(NetworkEvent::PeerConnected(peer.clone()))
             .await

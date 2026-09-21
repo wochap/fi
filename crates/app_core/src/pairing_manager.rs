@@ -22,9 +22,9 @@ use crate::{
         TrustedDeviceRecord,
     },
     discovery::{
-        DEFAULT_RECORD_TTL_MS, DiscoveryAdvertisement, DiscoveryEvent, DiscoveryGroupSecret,
-        DiscoveryProvider, DiscoveryScope, PairingInstanceId, group_routing_token,
-        group_service_selector, match_group_endpoint,
+        AddressPolicy, DEFAULT_RECORD_TTL_MS, DiscoveryAdvertisement, DiscoveryEvent,
+        DiscoveryGroupSecret, DiscoveryProvider, DiscoveryScope, PairingInstanceId,
+        group_routing_token, group_service_selector, match_group_endpoint,
     },
     discovery_control::{
         DISCOVERY_UPDATE_SIZE, DiscoverySecretAck, DiscoverySecretUpdate, authorize_peer,
@@ -80,6 +80,117 @@ struct DiscoveryGroupState {
 
 const DISCOVERY_ROTATION_RETENTION_MS: u64 = 7 * 24 * 60 * 60 * 1_000;
 
+/// Every live address resolved for one pairing instance, with per-address expiry.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+struct CandidateAddresses {
+    /// Monotonic order of first observation; higher is newer.
+    first_seen: u64,
+    /// Service instance names that resolved to this instance (expiry is by name).
+    names: std::collections::BTreeSet<String>,
+    addresses: BTreeMap<std::net::SocketAddr, u64>,
+}
+
+/// Pairing candidates keyed on the per-window instance id, with a deterministic
+/// choice among each instance's addresses and endpoint-keyed collapse across
+/// instances.
+///
+/// One physical device produces a new instance id every time it re-arms pairing,
+/// while its previous advertisement lingers in browser caches until TTL or
+/// goodbye. Both resolve to the same `ip:port`, because the QUIC socket outlives
+/// the window. The newer instance therefore owns the endpoint and the older one
+/// loses it, so the device shows as one row.
+#[derive(Debug, Default)]
+struct CandidateTable {
+    policy: AddressPolicy,
+    by_instance: BTreeMap<PairingInstanceId, CandidateAddresses>,
+    by_name: HashMap<String, PairingInstanceId>,
+    sequence: u64,
+}
+
+impl CandidateTable {
+    fn new(policy: AddressPolicy) -> Self {
+        Self {
+            policy,
+            ..Self::default()
+        }
+    }
+
+    /// Records one resolved address. Returns `false` when the address is not
+    /// dialable from the local socket and was ignored.
+    fn upsert(
+        &mut self,
+        instance: PairingInstanceId,
+        instance_name: String,
+        address: std::net::SocketAddr,
+        expires_at_ms: u64,
+    ) -> bool {
+        if !self.policy.admits_peer_address(address.ip()) {
+            return false;
+        }
+        self.sequence += 1;
+        let sequence = self.sequence;
+        let entry = self
+            .by_instance
+            .entry(instance)
+            .or_insert_with(|| CandidateAddresses {
+                first_seen: sequence,
+                ..CandidateAddresses::default()
+            });
+        entry.addresses.insert(address, expires_at_ms);
+        entry.names.insert(instance_name.clone());
+        self.by_name.insert(instance_name, instance);
+        // The newest instance that resolved to this endpoint owns it. Older ones
+        // lose it, and a stale re-resolution of an older one does not steal it back.
+        let owner = self
+            .by_instance
+            .iter()
+            .filter(|(_, record)| record.addresses.contains_key(&address))
+            .max_by_key(|(_, record)| record.first_seen)
+            .map(|(other, _)| *other);
+        for (other, record) in &mut self.by_instance {
+            if Some(*other) != owner {
+                record.addresses.remove(&address);
+            }
+        }
+        true
+    }
+
+    fn expire_name(&mut self, instance_name: &str) {
+        if let Some(instance) = self.by_name.remove(instance_name)
+            && let Some(record) = self.by_instance.get_mut(&instance)
+        {
+            record.names.remove(instance_name);
+            if record.names.is_empty() {
+                self.by_instance.remove(&instance);
+            }
+        }
+    }
+
+    /// Drops expired addresses and instances with nothing left to dial.
+    fn prune(&mut self, now_ms: u64) {
+        self.by_instance.retain(|_, record| {
+            record.addresses.retain(|_, expires| *expires > now_ms);
+            !record.addresses.is_empty()
+        });
+        let live: std::collections::HashSet<_> = self.by_instance.keys().copied().collect();
+        self.by_name.retain(|_, instance| live.contains(instance));
+    }
+
+    fn candidates(&self) -> Vec<PairingCandidate> {
+        self.by_instance
+            .iter()
+            .filter_map(|(instance, record)| {
+                let endpoint = AddressPolicy::select(record.addresses.keys().copied())?;
+                Some(PairingCandidate {
+                    instance_id: *instance,
+                    endpoint,
+                    expires_at_ms: record.addresses.values().copied().max().unwrap_or(0),
+                })
+            })
+            .collect()
+    }
+}
+
 pub struct PairingManager {
     identity: Arc<DeviceIdentity>,
     keys: Arc<dyn SecureKeyStore>,
@@ -91,6 +202,7 @@ pub struct PairingManager {
     events: broadcast::Sender<PairingEvent>,
     normal_events: broadcast::Sender<NormalDiscoveryEvent>,
     group_tx: watch::Sender<Option<DiscoveryGroupState>>,
+    address_policy: AddressPolicy,
     normal_scope: Mutex<Option<DiscoveryScope>>,
     normal_port: Mutex<Option<u16>>,
     migration_scope: Mutex<Option<DiscoveryScope>>,
@@ -118,6 +230,7 @@ impl PairingManager {
         bind_ip: IpAddr,
     ) -> Result<Arc<Self>, PairingError> {
         let transport = Arc::new(PairingTransport::bind((bind_ip, 0).into(), &identity)?);
+        let address_policy = AddressPolicy::for_bind(bind_ip);
         let (state_tx, _) = watch::channel(PairingState::Idle);
         let (candidates_tx, _) = watch::channel(Vec::new());
         let (events, _) = broadcast::channel(128);
@@ -129,8 +242,7 @@ impl PairingManager {
         let control_for_discovery = control.clone();
         let normal_events_for_discovery = normal_events.clone();
         let discovery_task = tokio::spawn(async move {
-            let mut by_instance = BTreeMap::new();
-            let mut names = HashMap::new();
+            let mut table = CandidateTable::new(address_policy);
             while let Ok(event) = discovered.recv().await {
                 match event {
                     DiscoveryEvent::Upsert(endpoint)
@@ -150,23 +262,25 @@ impl PairingManager {
                         if own == Some(instance) {
                             continue;
                         }
-                        by_instance.insert(
+                        if !table.upsert(
                             instance,
-                            PairingCandidate {
-                                instance_id: instance,
-                                endpoint: endpoint.address,
-                                expires_at_ms: endpoint.expires_at_ms,
-                            },
-                        );
-                        names.insert(endpoint.instance_name, instance);
+                            endpoint.instance_name,
+                            endpoint.address,
+                            endpoint.expires_at_ms,
+                        ) {
+                            tracing::debug!(
+                                event = "pairing_candidate_rejected",
+                                peer_instance = %instance,
+                                endpoint = %endpoint.address,
+                                "resolved address is not dialable from the local socket"
+                            );
+                        }
                     }
                     DiscoveryEvent::Expired {
                         scope: DiscoveryScope::Pairing,
                         instance_name,
                     } => {
-                        if let Some(instance) = names.remove(&instance_name) {
-                            by_instance.remove(&instance);
-                        }
+                        table.expire_name(&instance_name);
                     }
                     DiscoveryEvent::Upsert(endpoint) => {
                         let Some(group) = group_rx.borrow().clone() else {
@@ -179,17 +293,22 @@ impl PairingManager {
                             .filter(|record| record.state == TrustState::Trusted)
                             .map(|record| record.device_id);
                         let trusted: Vec<_> = trusted.collect();
-                        let matched =
-                            match_group_endpoint(&endpoint, &group.active, trusted.iter().copied())
-                                .or_else(|| {
-                                    group.previous.as_ref().and_then(|(secret, _)| {
-                                        match_group_endpoint(
-                                            &endpoint,
-                                            secret,
-                                            trusted.iter().copied(),
-                                        )
-                                    })
-                                });
+                        let matched = match_group_endpoint(
+                            &endpoint,
+                            &group.active,
+                            &address_policy,
+                            trusted.iter().copied(),
+                        )
+                        .or_else(|| {
+                            group.previous.as_ref().and_then(|(secret, _)| {
+                                match_group_endpoint(
+                                    &endpoint,
+                                    secret,
+                                    &address_policy,
+                                    trusted.iter().copied(),
+                                )
+                            })
+                        });
                         if let Some((peer, address, expires_at_ms)) = matched {
                             let _ =
                                 normal_events_for_discovery.send(NormalDiscoveryEvent::Upsert {
@@ -201,9 +320,8 @@ impl PairingManager {
                     }
                     _ => {}
                 }
-                let now = now_ms();
-                by_instance.retain(|_, candidate| candidate.expires_at_ms > now);
-                candidates.send_replace(by_instance.values().cloned().collect());
+                table.prune(now_ms());
+                candidates.send_replace(table.candidates());
             }
         });
         Ok(Arc::new(Self {
@@ -217,6 +335,7 @@ impl PairingManager {
             events,
             normal_events,
             group_tx,
+            address_policy,
             normal_scope: Mutex::new(None),
             normal_port: Mutex::new(None),
             migration_scope: Mutex::new(None),
@@ -256,6 +375,11 @@ impl PairingManager {
     #[must_use]
     pub fn subscribe_normal_discovery(&self) -> broadcast::Receiver<NormalDiscoveryEvent> {
         self.normal_events.subscribe()
+    }
+    /// Which peer addresses this manager will dial, derived from its bind address.
+    #[must_use]
+    pub const fn address_policy(&self) -> AddressPolicy {
+        self.address_policy
     }
     pub fn local_addr(&self) -> Result<std::net::SocketAddr, PairingError> {
         self.transport.local_addr()
@@ -1392,6 +1516,96 @@ mod tests {
         discovery::{FakeDiscoveryProvider, ManualClock},
         identity::{InMemorySecureKeyStore, PrivateDeviceKey},
     };
+
+    fn instance(byte: u8) -> PairingInstanceId {
+        PairingInstanceId::from_bytes([byte; 16])
+    }
+
+    #[test]
+    fn candidate_choice_is_deterministic_regardless_of_resolution_order() {
+        let routable: std::net::SocketAddr = "192.168.0.104:36402".parse().unwrap();
+        let bridge: std::net::SocketAddr = "10.88.0.1:36402".parse().unwrap();
+        let loopback: std::net::SocketAddr = "127.0.0.1:36402".parse().unwrap();
+        let mut forward = CandidateTable::new(AddressPolicy::default());
+        let mut reverse = CandidateTable::new(AddressPolicy::default());
+        for address in [routable, loopback, bridge] {
+            forward.upsert(instance(1), "adv".into(), address, 1_000);
+        }
+        for address in [bridge, loopback, routable] {
+            reverse.upsert(instance(1), "adv".into(), address, 1_000);
+        }
+        assert_eq!(forward.candidates(), reverse.candidates());
+        let candidates = forward.candidates();
+        assert_eq!(candidates.len(), 1, "one instance, one row");
+        assert_ne!(
+            candidates[0].endpoint, loopback,
+            "loopback is never dialable"
+        );
+        // Both remaining addresses are private; the choice is numeric and stable,
+        // never "whichever resolved last" — Stage 1 observed `10.88.0.1` winning
+        // by arrival, which the advertisement filter now keeps off the wire.
+        assert_eq!(candidates[0].endpoint, bridge);
+        let mut only_routable = CandidateTable::new(AddressPolicy::default());
+        only_routable.upsert(instance(1), "adv".into(), loopback, 1_000);
+        assert!(only_routable.candidates().is_empty());
+        only_routable.upsert(instance(1), "adv".into(), routable, 1_000);
+        assert_eq!(only_routable.candidates()[0].endpoint, routable);
+    }
+
+    #[test]
+    fn re_armed_device_shows_once_and_stale_instance_cannot_steal_endpoint() {
+        let endpoint: std::net::SocketAddr = "192.168.0.22:34729".parse().unwrap();
+        let mut table = CandidateTable::new(AddressPolicy::default());
+        table.upsert(instance(1), "window-1".into(), endpoint, 1_000);
+        table.upsert(instance(2), "window-2".into(), endpoint, 1_000);
+        let candidates = table.candidates();
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].instance_id, instance(2));
+        // A cache refresh of the stale record does not bring the old row back.
+        table.upsert(instance(1), "window-1".into(), endpoint, 2_000);
+        let candidates = table.candidates();
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].instance_id, instance(2));
+        // Distinct devices (distinct endpoints) are never collapsed.
+        table.upsert(
+            instance(3),
+            "other".into(),
+            "192.168.0.50:4000".parse().unwrap(),
+            1_000,
+        );
+        assert_eq!(table.candidates().len(), 2);
+        // Two instances on one host differ by port and stay separate.
+        table.upsert(
+            instance(4),
+            "same-host".into(),
+            "192.168.0.50:4001".parse().unwrap(),
+            1_000,
+        );
+        assert_eq!(table.candidates().len(), 3);
+    }
+
+    #[test]
+    fn addresses_expire_individually_and_names_expire_instances() {
+        let a: std::net::SocketAddr = "192.168.0.104:1".parse().unwrap();
+        let b: std::net::SocketAddr = "192.168.1.9:1".parse().unwrap();
+        let mut table = CandidateTable::new(AddressPolicy::default());
+        table.upsert(instance(1), "adv".into(), a, 100);
+        table.upsert(instance(1), "adv".into(), b, 200);
+        table.prune(150);
+        assert_eq!(
+            table.candidates()[0].endpoint,
+            b,
+            "expired address stops resolving"
+        );
+        table.prune(250);
+        assert!(table.candidates().is_empty());
+        table.upsert(instance(1), "adv".into(), a, 1_000);
+        table.expire_name("adv");
+        assert!(
+            table.candidates().is_empty(),
+            "goodbye removes the instance"
+        );
+    }
 
     async fn manager(
         seed: u8,

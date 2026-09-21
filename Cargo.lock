@@ -95,6 +95,7 @@ dependencies = [
  "hex",
  "hkdf",
  "hmac",
+ "if-addrs",
  "mdns-sd",
  "quinn",
  "rand_core 0.6.4",

@@ -19,6 +19,7 @@ hex.workspace = true
 hkdf.workspace = true
 hmac.workspace = true
 mdns-sd.workspace = true
+if-addrs.workspace = true
 quinn.workspace = true
 rand_core.workspace = true
 rcgen.workspace = true

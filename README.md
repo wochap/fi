@@ -89,6 +89,50 @@ For Linux Wayland and Android development, release builds, artifact locations,
 signing, and local installation, follow the
 [Flutter application guide](flutter_app/README.md).
 
+## Linux firewall and OpenSnitch
+
+Devices find each other over mDNS (UDP 5353) and pair/sync over QUIC on an
+ephemeral UDP port chosen at each start. Two things on a Linux desktop block
+that, and both were measured, not guessed.
+
+**1. Inbound QUIC is dropped by the host firewall.** The NixOS firewall accepts
+mDNS (avahi adds UDP 5353) and replies to dials this host starts, but drops a
+dial *from* another device because the listen port is ephemeral. While pairing,
+allow UDP from your LAN subnet (adjust `192.168.0.0/24`):
+
+```sh
+sudo iptables -I nixos-fw 1 -s 192.168.0.0/24 -p udp -j nixos-fw-accept
+```
+
+Remove it afterwards (it is also lost on reboot):
+
+```sh
+sudo iptables -D nixos-fw -s 192.168.0.0/24 -p udp -j nixos-fw-accept
+```
+
+Permanent alternative in `configuration.nix`, same scope:
+
+```nix
+networking.firewall.extraCommands = ''
+  iptables -A nixos-fw -s 192.168.0.0/24 -p udp -j nixos-fw-accept
+'';
+```
+
+**2. OpenSnitch holds the first QUIC packet.** The app's first packet to a new
+peer — its reply to an inbound dial included — is a new outbound flow. OpenSnitch
+queues it for a prompt and, unanswered, denies after 30 s, which is exactly the
+pairing timeout. Either answer the prompt with a permanent *allow* for the `fi`
+process, or stop the daemon while pairing:
+
+```sh
+sudo systemctl stop opensnitchd     # before
+sudo systemctl start opensnitchd    # after
+```
+
+Check both from another LAN host: `ping` in both directions must succeed, and on
+Android the phone's default route must be Wi-Fi (`adb shell ip route get <desktop-ip>`
+must name `wlan0`); if it names a cellular interface, turn mobile data off.
+
 ## Checks
 
 ```sh
