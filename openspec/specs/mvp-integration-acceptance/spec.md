@@ -161,3 +161,38 @@ The project SHALL support running more than one application instance on a single
 #### Scenario: Release build ignores the override
 - **WHEN** a release build starts with the override present in its environment
 - **THEN** the override has no effect and the platform application-support directory is used
+
+### Requirement: Onboarding join reachability acceptance
+The widget-level suite SHALL prove that a rootless installation can reach and complete the join flow
+through its onboarding entry point alone, without creating a local dataset and without any
+out-of-band action.
+
+#### Scenario: Join is reachable from a fresh installation
+- **WHEN** the application starts on a device with no local dataset
+- **THEN** the onboarding surface offers a pairing entry point that is actionable, and reaching it does
+  not require creating a dataset first
+
+#### Scenario: Joining surface names the provisioner
+- **WHEN** a rootless device confirms the SAS and the bootstrap state advances to joining
+- **THEN** the rendered joining surface names the provisioning device and the pairing controller that
+  drove the confirmation is still alive
+
+#### Scenario: Create is blocked during pairing
+- **WHEN** pairing mode is active on the onboarding surface
+- **THEN** creating a dataset is unavailable with the reason stated, and stopping pairing makes it
+  available again
+
+### Requirement: Desktop revocation rotation acceptance
+The suite SHALL prove that revoking a trusted device completes discovery-secret rotation on the
+shipping desktop keystore path, and that a rotation failure does not leave the revocation unreported
+or half-applied.
+
+#### Scenario: Rotation completes on the desktop keystore
+- **WHEN** a trusted device is revoked using the shipping desktop keystore implementation
+- **THEN** the epoch advances, the previous secret is retained for the bounded migration window, and
+  remaining trusted devices receive the new secret
+
+#### Scenario: Rotation failure is reported distinctly
+- **WHEN** retention is unavailable and rotation therefore fails after revocation committed
+- **THEN** the device is still reported and presented as revoked, and the rotation failure is surfaced
+  as a separate retriable condition

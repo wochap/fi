@@ -43,3 +43,22 @@ Completed pairing SHALL close its pairing protocol connection and establish Repo
 #### Scenario: Pairing commit succeeds
 - **WHEN** both sides finish durable pairing commit
 - **THEN** no pairing stream is reused for Repo frames and a subsequent `myapp-sync/1` session passes the normal trust gate
+
+### Requirement: A root is not created while a pairing window is open
+A device in the needs-decision state SHALL NOT create a local root while a pairing window is open.
+Because the root state advertised in a pairing handshake is captured when the window opens, creating a
+root mid-window would cause a peer to provision against a root state that no longer holds and would
+leave the two devices holding different established roots. Any active pairing window SHALL be closed
+before a root creation is issued.
+
+#### Scenario: Creation is requested during an open pairing window
+- **WHEN** a needs-decision device has an open pairing window and the user requests creation of a local
+  dataset
+- **THEN** the pairing window is closed before the root is created, and no handshake in progress
+  advertises the superseded root state
+
+#### Scenario: Provisioning is rejected against a superseded root state
+- **WHEN** a device that has created a root receives provisioning data from a peer that elected itself
+  provisioner from a stale needs-decision advertisement
+- **THEN** the provisioning is rejected, no partial trust or partial root adoption is persisted, and
+  the device retains the root it created

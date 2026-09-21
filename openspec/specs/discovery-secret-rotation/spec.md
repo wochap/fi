@@ -50,3 +50,42 @@ Devices SHALL accept only authenticated discovery-secret updates whose epoch is 
 #### Scenario: Older update is replayed
 - **WHEN** a valid control message for an older epoch arrives
 - **THEN** it is ignored without changing the active secret or advertisement
+
+### Requirement: Previous-epoch retention works on every shipping keystore
+Every `SecureKeyStore` implementation shipped on a supported platform SHALL retain, load, and remove
+the previous-epoch discovery secret. An implementation that cannot retain SHALL report that failure
+rather than inheriting a default that silently degrades rotation. Rotation behaviour SHALL NOT depend
+on which platform keystore is in use, and conformance SHALL be demonstrated against the shipping
+desktop keystore and not only against an in-memory test double.
+
+#### Scenario: Revocation rotates on the shipping desktop keystore
+- **WHEN** a device is revoked on a platform whose keystore is the shipping desktop implementation
+- **THEN** the previous secret is retained for the bounded migration window, the epoch advances, and
+  the new secret is distributed to remaining trusted devices
+
+#### Scenario: Retention is genuinely unavailable
+- **WHEN** the platform keystore cannot store retained secret material, including when the secret
+  service is absent, unreachable, or locked
+- **THEN** rotation reports that failure explicitly and no caller mistakes it for a completed rotation
+
+#### Scenario: Retention does not outlive its bound
+- **WHEN** the configured previous-epoch retention window expires
+- **THEN** the retained secret material is removed through the same keystore that stored it
+
+### Requirement: Rotation failure does not undo or obscure revocation
+Revocation SHALL complete and be reported as completed independently of whether the subsequent
+discovery-secret rotation succeeds. The mandated ordering — local authorization removed and later
+normal synchronization rejected before rotation is attempted — SHALL be preserved. When rotation
+fails, the durable revocation SHALL remain in effect, the failure SHALL be surfaced separately as a
+retriable condition, and distribution of the new secret to remaining devices SHALL be attempted again
+on retry rather than being silently skipped.
+
+#### Scenario: Rotation fails after revocation committed
+- **WHEN** revocation has durably committed and the subsequent rotation fails
+- **THEN** the caller is told the device is revoked, the revoked device remains unauthorized and
+  disconnected, and the rotation failure is reported as a distinct retriable condition
+
+#### Scenario: Rotation is retried
+- **WHEN** a previously failed rotation is retried after the underlying keystore failure is resolved
+- **THEN** the epoch advances, the previous secret is retained, and remaining trusted devices receive
+  the new secret over authenticated control channels

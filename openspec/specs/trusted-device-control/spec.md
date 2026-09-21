@@ -46,3 +46,19 @@ Pairing one device SHALL NOT automatically trust other devices merely because th
 #### Scenario: Third device shares group secret
 - **WHEN** it is discovered but its public key has never been paired locally
 - **THEN** it remains unknown and cannot enter the local Repo transport
+
+### Requirement: Durable record state and reported outcome agree
+A mutation of a trusted-device record SHALL report an outcome that agrees with the state durably
+persisted for that record. An operation that commits a record change and then fails in a later stage
+SHALL NOT report overall failure in a way that implies the committed change did not occur, and SHALL
+identify which stage failed.
+
+#### Scenario: Revocation commits but a later stage fails
+- **WHEN** a device record is durably set to revoked and a subsequent stage of the same operation fails
+- **THEN** the reported outcome states that the device is revoked and identifies the failed stage,
+  rather than reporting an unqualified failure
+
+#### Scenario: Revocation is queried after a partial failure
+- **WHEN** the trusted-device list is queried after a revocation whose later stage failed
+- **THEN** the device is presented as revoked, consistent with its durable record, and is not
+  presented as trusted or merely hidden
