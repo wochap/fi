@@ -27,6 +27,10 @@ pub mod widget_registry;
 pub mod widgets;
 
 pub use application::{AppCore, AppCoreConfig, RevocationOutcome, reset_dataset};
+pub use automerge_repo::{
+    QuarantineReason, RecoveryOutcome, RecoveryReason, RecoveryRecord,
+    error::BootstrapError as RepositoryBootstrapError,
+};
 pub use control::{
     DiscoveryGroupMetadata, DiscoveryRotationJournal, DiscoveryRotationStage, LocalIdentityRecord,
     PairingJournalRecord, PairingJournalStage, PeerConnectionMetadata, PeerTrustRecord,

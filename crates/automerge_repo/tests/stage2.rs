@@ -5,8 +5,8 @@ use automerge::{
     transaction::{CommitOptions, Transactable},
 };
 use automerge_repo::{
-    BootstrapRecord, BootstrapStatus, DocumentId, Error, FilesystemStorage, Repo, RepoConfig,
-    error::BootstrapError,
+    BootstrapRecord, BootstrapStatus, DocumentId, Error, FilesystemStorage, QuarantineReason,
+    RecoveryOutcome, RecoveryReason, Repo, RepoConfig,
     storage::{ControlStore, StorageAdapter},
     testing::{MemoryStore, MemoryTransport},
 };
@@ -147,7 +147,7 @@ async fn flush_aggregates_document_and_barrier_failures() {
 }
 
 #[tokio::test]
-async fn creating_recovery_is_idempotent_and_orphans_are_rejected() {
+async fn creating_recovery_is_idempotent_and_orphans_are_quarantined() {
     let documents = MemoryStore::default();
     let control = MemoryStore::default();
     let root = DocumentId::new();
@@ -176,16 +176,28 @@ async fn creating_recovery_is_idempotent_and_orphans_are_rejected() {
         .await
         .unwrap();
     let (transport, _) = MemoryTransport::pair("orphan", "peer", 8);
-    assert!(matches!(
-        Repo::open(
-            Arc::new(orphan_docs),
-            Arc::new(MemoryStore::default()),
-            transport,
-            RepoConfig::default()
-        )
-        .await,
-        Err(Error::Bootstrap(BootstrapError::OrphanedDocuments { .. }))
-    ));
+    let orphan_control = MemoryStore::default();
+    let repo = Repo::open(
+        Arc::new(orphan_docs.clone()),
+        Arc::new(orphan_control.clone()),
+        transport,
+        RepoConfig::default(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(repo.bootstrap_status(), BootstrapStatus::NeedsDecision);
+    assert_eq!(orphan_control.record(), None);
+    assert!(orphan_docs.documents().is_empty());
+    let quarantine = orphan_docs.quarantine();
+    assert_eq!(quarantine.len(), 1);
+    assert_eq!(quarantine[0].0, orphan);
+    assert_eq!(quarantine[0].1, QuarantineReason::Orphaned);
+    assert_eq!(quarantine[0].2, doc.save());
+    let recovery = repo.recovery().unwrap();
+    assert_eq!(recovery.reason, RecoveryReason::OrphanedDocuments);
+    assert_eq!(recovery.documents, vec![orphan]);
+    assert_eq!(recovery.outcome, RecoveryOutcome::Quarantined);
+    repo.shutdown().await.unwrap();
 }
 
 #[tokio::test]
@@ -354,7 +366,7 @@ async fn failed_removal_evicts_and_can_be_reopened_then_retried() {
 }
 
 #[tokio::test]
-async fn joining_recovery_preserves_empty_history_and_ready_requires_root() {
+async fn joining_recovery_preserves_empty_history_and_ready_demotes_to_joining() {
     let root = DocumentId::new();
     let control = MemoryStore::default();
     ControlStore::store(&control, BootstrapRecord::Joining { root })
@@ -384,16 +396,25 @@ async fn joining_recovery_preserves_empty_history_and_ready_requires_root() {
         .await
         .unwrap();
     let (transport, _) = MemoryTransport::pair("ready", "peer", 8);
-    assert!(matches!(
-        Repo::open(
-            Arc::new(MemoryStore::default()),
-            Arc::new(ready_control),
-            transport,
-            RepoConfig::default()
-        )
-        .await,
-        Err(Error::Bootstrap(BootstrapError::Inconsistent { .. }))
-    ));
+    let repo = Repo::open(
+        Arc::new(MemoryStore::default()),
+        Arc::new(ready_control.clone()),
+        transport,
+        RepoConfig::default(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(repo.bootstrap_status(), BootstrapStatus::Joining { root });
+    assert_eq!(
+        ready_control.record(),
+        Some(BootstrapRecord::Joining { root })
+    );
+    assert_eq!(ready_control.recovery_attempts(root), 1);
+    let recovery = repo.recovery().unwrap();
+    assert_eq!(recovery.reason, RecoveryReason::RootSnapshotMissing);
+    assert_eq!(recovery.documents, vec![root]);
+    assert_eq!(recovery.outcome, RecoveryOutcome::Recovering);
+    repo.shutdown().await.unwrap();
 }
 
 #[tokio::test]
@@ -405,17 +426,16 @@ async fn filesystem_rejects_malformed_names_and_preserves_corrupt_control() {
     let error = StorageAdapter::list(&storage).await.unwrap_err();
     assert!(error.to_string().contains("NOT-A-UUID.automerge"));
     std::fs::remove_file(malformed).unwrap();
+    // Corrupt bytes are listed, not rejected: classification belongs to
+    // `Repo::open`, which quarantines only the recorded root.
     let corrupt_id = DocumentId::new();
     let corrupt_path = directory
         .path()
         .join(format!("automerge/{corrupt_id}.automerge"));
     std::fs::write(&corrupt_path, b"not automerge").unwrap();
-    assert!(
-        StorageAdapter::list(&storage)
-            .await
-            .unwrap_err()
-            .to_string()
-            .contains(&corrupt_id.to_string())
+    assert_eq!(
+        StorageAdapter::list(&storage).await.unwrap(),
+        vec![corrupt_id]
     );
     std::fs::remove_file(corrupt_path).unwrap();
 

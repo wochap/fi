@@ -8,13 +8,41 @@ Each application data directory contains:
 automerge/documents/   authoritative Automerge snapshots
 control.sqlite         bootstrap, public trust/device records, pairing and rotation journals
 read-model.sqlite      disposable query projection
+quarantine/            snapshots set aside by bootstrap recovery (created on first use)
 ```
 
-Deleting `read-model.sqlite`, presenting a stale checkpoint, or leaving a
-corrupt projection causes a complete rebuild from the authoritative root before
-commands are enabled. A restart retains the root, schemas and records, identity,
-trusted/revoked devices, and discovery epoch. Secret bytes are stored only in
-Linux Secret Service or Android Keystore-wrapped private app storage.
+Authoritative stores are `automerge/documents`, `control.sqlite`, and the
+platform secure key store. `read-model.sqlite` is disposable: deleting it,
+presenting a stale checkpoint, or leaving a corrupt projection causes a complete
+rebuild from the authoritative root before commands are enabled. A restart
+retains the root, schemas and records, identity, trusted/revoked devices, and
+discovery epoch. Secret bytes are stored only in Linux Secret Service or Android
+Keystore-wrapped private app storage.
+
+### Partial-state recovery
+
+Opening classifies every inconsistency between the authoritative stores as
+recoverable or fatal. A state is recoverable only when the recorded root ID is
+still known and another trusted device can re-supply its content; recovery
+never mints a new root, never falls back to onboarding while a root is known,
+and never deletes bytes.
+
+| Condition | Outcome |
+| --- | --- |
+| `Ready` record, root snapshot missing | Demoted to `Joining` for the same root; re-synchronized from a trusted device with no pairing ceremony. |
+| `Ready`/`Joining` record, root snapshot unreadable | Bytes moved to `quarantine/<root>.corrupt-root.automerge`, then as above. |
+| Snapshots present, no bootstrap record | Moved to `quarantine/<id>.orphaned.automerge`; app opens in onboarding. Joining a dataset whose root matches a quarantined snapshot adopts it offline. |
+| `control.sqlite` unreadable | Fatal, but snapshots are moved to `quarantine/<id>.control-store-unreadable.automerge` first. |
+| `Creating`/`Joining` record beside foreign documents, malformed record, non-root snapshot unreadable | Fatal, no mutation. Reset resolves the first two. |
+
+While recovering, the UI reports "Recovering your dataset from your other
+devices". If no device able to supply the root is reachable for
+`recovery_no_peer_after` (30 s), it reports that another device is required and
+keeps waiting; a device appearing later completes recovery. Each demotion of a
+root counts against `recovery_attempt_limit` (3, durable in `control.sqlite`);
+beyond it, opening fails with a reset-resolvable error naming the root.
+Quarantined files are never pruned automatically. An outstanding deliberate
+reset always takes precedence over recovery.
 
 The authoritative root format is versioned. This alpha release intentionally
 does not migrate the former finance-v1 root: opening an unsupported root returns

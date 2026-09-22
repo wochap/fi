@@ -59,10 +59,12 @@ pub enum BootstrapError {
         local: DocumentId,
         remote: DocumentId,
     },
-    #[error("documents exist without a bootstrap record: {documents:?}")]
-    OrphanedDocuments { documents: Vec<DocumentId> },
     #[error("bootstrap record for root {root} is inconsistent: {message}")]
     Inconsistent { root: DocumentId, message: String },
+    #[error(
+        "recovery of root {root} failed {attempts} time(s) and will not be retried; quarantined snapshots are retained"
+    )]
+    RecoveryExhausted { root: DocumentId, attempts: u32 },
     #[error("bootstrap {operation} failed for root {root}: {message}")]
     Operation {
         operation: &'static str,

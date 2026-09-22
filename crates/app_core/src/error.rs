@@ -72,10 +72,10 @@ pub enum AppError {
 impl AppError {
     /// Whether a deliberate dataset reset would resolve this error. True only
     /// for conditions that describe the local dataset itself (an unsupported
-    /// application schema, a bootstrap record without its root, snapshots
-    /// without a record). Keystore, network, and I/O failures are transient
-    /// and stay unclassified so a retry is offered instead of a destructive
-    /// action.
+    /// application schema, a genuinely inconsistent bootstrap record, a root
+    /// whose recovery has been exhausted). Keystore, network, and I/O failures
+    /// are transient and stay unclassified so a retry is offered instead of a
+    /// destructive action.
     #[must_use]
     pub fn is_reset_resolvable(&self) -> bool {
         use automerge_repo::error::BootstrapError as RepoBootstrapError;
@@ -84,7 +84,7 @@ impl AppError {
             Self::Domain(DomainError::UnsupportedSchema(_))
                 | Self::RepositoryBootstrap(
                     RepoBootstrapError::Inconsistent { .. }
-                        | RepoBootstrapError::OrphanedDocuments { .. }
+                        | RepoBootstrapError::RecoveryExhausted { .. }
                 )
         )
     }

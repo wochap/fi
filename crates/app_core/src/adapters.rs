@@ -10,12 +10,13 @@ use std::{
 };
 
 use async_trait::async_trait;
-use automerge::Automerge;
 use automerge_repo::{
-    BootstrapRecord, DocumentId, PeerId,
+    BootstrapRecord, DocumentId, PeerId, QuarantineEntry, QuarantineReason,
     error::{NetworkError, StorageError},
     network::{NetworkEvent, NetworkTransport},
-    storage::{ControlStore, StorageAdapter},
+    storage::{
+        ControlStore, StorageAdapter, list_quarantine, quarantine_file, quarantine_key_path,
+    },
 };
 use bytes::Bytes;
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
@@ -64,16 +65,19 @@ fn ensure_private_dir(path: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
-/// Private complete-snapshot adapter rooted exactly at `automerge/documents`.
+/// Private complete-snapshot adapter rooted exactly at `automerge/documents`,
+/// with quarantine at the sibling `quarantine` directory. The quarantine
+/// directory is created lazily on first use.
 #[derive(Clone, Debug)]
 pub(crate) struct FileDocumentStore {
     directory: Arc<PathBuf>,
+    quarantine: Arc<PathBuf>,
     closed: Arc<AtomicBool>,
     nonce: Arc<AtomicU64>,
 }
 
 impl FileDocumentStore {
-    pub async fn open(directory: PathBuf) -> Result<Self, StorageError> {
+    pub async fn open(directory: PathBuf, quarantine: PathBuf) -> Result<Self, StorageError> {
         let path = directory.clone();
         blocking("open", None, path.clone(), move || {
             ensure_private_dir(&path)
@@ -81,6 +85,7 @@ impl FileDocumentStore {
         .await?;
         Ok(Self {
             directory: Arc::new(directory),
+            quarantine: Arc::new(quarantine),
             closed: Arc::new(AtomicBool::new(false)),
             nonce: Arc::new(AtomicU64::new(0)),
         })
@@ -134,9 +139,6 @@ impl StorageAdapter for FileDocumentStore {
                         "noncanonical snapshot filename",
                     ));
                 }
-                let bytes = fs::read(entry.path())?;
-                Automerge::load(&bytes)
-                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
                 ids.push(id);
             }
             ids.sort();
@@ -200,6 +202,63 @@ impl StorageAdapter for FileDocumentStore {
             Some(id),
             path.clone(),
             move || match fs::remove_file(path) {
+                Ok(()) => Ok(()),
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+                Err(e) => Err(e),
+            },
+        )
+        .await
+    }
+
+    async fn quarantine(
+        &self,
+        id: DocumentId,
+        reason: QuarantineReason,
+    ) -> Result<Option<PathBuf>, StorageError> {
+        self.ensure_open("quarantine", Some(id))?;
+        let source = self.path(id);
+        let directory = self.quarantine.as_ref().clone();
+        blocking("quarantine", Some(id), source.clone(), move || {
+            quarantine_file(&source, &directory, id, reason)
+        })
+        .await
+    }
+
+    async fn quarantined(&self) -> Result<Vec<QuarantineEntry>, StorageError> {
+        self.ensure_open("quarantine_list", None)?;
+        let directory = self.quarantine.as_ref().clone();
+        blocking("quarantine_list", None, directory.clone(), move || {
+            list_quarantine(&directory)
+        })
+        .await
+    }
+
+    async fn load_quarantined(&self, key: &str) -> Result<Option<Vec<u8>>, StorageError> {
+        self.ensure_open("quarantine_load", None)?;
+        let path = quarantine_key_path(&self.quarantine, key)
+            .map_err(|e| storage_error("quarantine_load", None, &self.quarantine, e))?;
+        blocking(
+            "quarantine_load",
+            None,
+            path.clone(),
+            move || match fs::read(&path) {
+                Ok(bytes) => Ok(Some(bytes)),
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+                Err(e) => Err(e),
+            },
+        )
+        .await
+    }
+
+    async fn discard_quarantined(&self, key: &str) -> Result<(), StorageError> {
+        self.ensure_open("quarantine_discard", None)?;
+        let path = quarantine_key_path(&self.quarantine, key)
+            .map_err(|e| storage_error("quarantine_discard", None, &self.quarantine, e))?;
+        blocking(
+            "quarantine_discard",
+            None,
+            path.clone(),
+            move || match fs::remove_file(&path) {
                 Ok(()) => Ok(()),
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
                 Err(e) => Err(e),
@@ -300,6 +359,9 @@ impl SqliteControlStore {
                 singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
                 version INTEGER NOT NULL CHECK(version = 1),
                 requested_at_ms INTEGER NOT NULL CHECK(requested_at_ms >= 0)
+             ) STRICT;
+             CREATE TABLE IF NOT EXISTS recovery_attempts (
+                root TEXT PRIMARY KEY, attempts INTEGER NOT NULL CHECK(attempts >= 0)
              ) STRICT;",
         )
             .map_err(|e| storage_error("control_open", None, &path, e))?;
@@ -1027,7 +1089,8 @@ impl SqliteControlStore {
                  DELETE FROM pairing_journal;
                  DELETE FROM discovery_group;
                  DELETE FROM discovery_rotation;
-                 DELETE FROM reset_intent;",
+                 DELETE FROM reset_intent;
+                 DELETE FROM recovery_attempts;",
             )
             .map_err(|error| storage_error("reset_complete", None, &self.path, error))?;
         transaction
@@ -1234,6 +1297,74 @@ impl ControlStore for SqliteControlStore {
         self.closed.store(true, Ordering::Release);
         Ok(())
     }
+
+    async fn recovery_attempts(&self, root: DocumentId) -> Result<u32, StorageError> {
+        self.ensure_open("control_recovery_load")?;
+        let connection = self.connection.lock().map_err(|_| {
+            storage_error(
+                "control_recovery_load",
+                None,
+                &self.path,
+                "connection lock poisoned",
+            )
+        })?;
+        let attempts: Option<i64> = connection
+            .query_row(
+                "SELECT attempts FROM recovery_attempts WHERE root = ?1",
+                params![root.to_string()],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|e| storage_error("control_recovery_load", Some(root), &self.path, e))?;
+        Ok(attempts.unwrap_or(0).try_into().map_err(|_| {
+            storage_error(
+                "control_recovery_load",
+                Some(root),
+                &self.path,
+                "malformed recovery counter",
+            )
+        })?)
+    }
+
+    async fn record_recovery_attempt(&self, root: DocumentId) -> Result<u32, StorageError> {
+        self.ensure_open("control_recovery_store")?;
+        let mut connection = self.connection.lock().map_err(|_| {
+            storage_error(
+                "control_recovery_store",
+                None,
+                &self.path,
+                "connection lock poisoned",
+            )
+        })?;
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|e| storage_error("control_recovery_store", Some(root), &self.path, e))?;
+        transaction
+            .execute(
+                "INSERT INTO recovery_attempts(root, attempts) VALUES(?1, 1)
+                 ON CONFLICT(root) DO UPDATE SET attempts = attempts + 1",
+                params![root.to_string()],
+            )
+            .map_err(|e| storage_error("control_recovery_store", Some(root), &self.path, e))?;
+        let attempts: i64 = transaction
+            .query_row(
+                "SELECT attempts FROM recovery_attempts WHERE root = ?1",
+                params![root.to_string()],
+                |row| row.get(0),
+            )
+            .map_err(|e| storage_error("control_recovery_store", Some(root), &self.path, e))?;
+        transaction
+            .commit()
+            .map_err(|e| storage_error("control_recovery_store", Some(root), &self.path, e))?;
+        attempts.try_into().map_err(|_| {
+            storage_error(
+                "control_recovery_store",
+                Some(root),
+                &self.path,
+                "malformed recovery counter",
+            )
+        })
+    }
 }
 
 /// Transport with no peers, used by the standalone local application core.
@@ -1272,6 +1403,7 @@ impl NetworkTransport for LocalTransport {
 mod tests {
     use super::*;
     use crate::identity::PrivateDeviceKey;
+    use automerge::Automerge;
 
     #[test]
     fn sqlite_control_stores_only_public_identity_and_typed_trust() {
@@ -1540,9 +1672,12 @@ mod tests {
     #[tokio::test]
     async fn document_snapshots_are_complete_and_restartable() {
         let directory = tempfile::tempdir().unwrap();
-        let store = FileDocumentStore::open(directory.path().join("documents"))
-            .await
-            .unwrap();
+        let store = FileDocumentStore::open(
+            directory.path().join("documents"),
+            directory.path().join("quarantine"),
+        )
+        .await
+        .unwrap();
         let id = DocumentId::new();
         let mut document = Automerge::new();
         document.empty_commit(automerge::transaction::CommitOptions::default());
@@ -1553,5 +1688,74 @@ mod tests {
         let bytes = StorageAdapter::load(&store, id).await.unwrap().unwrap();
         assert!(Automerge::load(&bytes).is_ok());
         assert_eq!(StorageAdapter::list(&store).await.unwrap(), vec![id]);
+
+        // Quarantine is a move into the sibling directory, created lazily.
+        assert!(!directory.path().join("quarantine").exists());
+        let location = store
+            .quarantine(id, QuarantineReason::Orphaned)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            location,
+            directory
+                .path()
+                .join(format!("quarantine/{id}.orphaned.automerge"))
+        );
+        assert!(StorageAdapter::list(&store).await.unwrap().is_empty());
+        let entries = store.quarantined().await.unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].document, id);
+        assert_eq!(
+            store.load_quarantined(&entries[0].key).await.unwrap(),
+            Some(document.save())
+        );
+        assert!(
+            store
+                .load_quarantined("../documents/x.automerge")
+                .await
+                .is_err()
+        );
+        store.discard_quarantined(&entries[0].key).await.unwrap();
+        assert!(store.quarantined().await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn recovery_attempts_are_durable_and_cleared_by_reset() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("control.sqlite");
+        let store = SqliteControlStore::open(path.clone()).unwrap();
+        let root = DocumentId::new();
+        assert_eq!(
+            ControlStore::recovery_attempts(&store, root).await.unwrap(),
+            0
+        );
+        assert_eq!(
+            ControlStore::record_recovery_attempt(&store, root)
+                .await
+                .unwrap(),
+            1
+        );
+        assert_eq!(
+            ControlStore::record_recovery_attempt(&store, root)
+                .await
+                .unwrap(),
+            2
+        );
+        drop(store);
+        let reopened = SqliteControlStore::open(path).unwrap();
+        assert_eq!(
+            ControlStore::recovery_attempts(&reopened, root)
+                .await
+                .unwrap(),
+            2
+        );
+        reopened.complete_reset().unwrap();
+        assert_eq!(
+            ControlStore::recovery_attempts(&reopened, root)
+                .await
+                .unwrap(),
+            0
+        );
     }
 }

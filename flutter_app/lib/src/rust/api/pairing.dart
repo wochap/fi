@@ -7,7 +7,7 @@ import '../frb_generated.dart';
 import 'models.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `decode_16`, `encode_16`, `nibble`
+// These functions are ignored because they are not marked as `pub`: `decode_16`, `encode_16`, `forward_connection_states`, `nibble`
 
 Future<String> startPairing({required int durationMs}) =>
     RustLib.instance.api.crateApiPairingStartPairing(durationMs: durationMs);

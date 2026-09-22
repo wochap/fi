@@ -2999,9 +2999,11 @@ impl SseDecode for crate::api::models::BootstrapDto {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut var_kind = <crate::api::models::BootstrapKindDto>::sse_decode(deserializer);
         let mut var_rootId = <Option<String>>::sse_decode(deserializer);
+        let mut var_recovery = <Option<crate::api::models::RecoveryDto>>::sse_decode(deserializer);
         return crate::api::models::BootstrapDto {
             kind: var_kind,
             root_id: var_rootId,
+            recovery: var_recovery,
         };
     }
 }
@@ -4116,6 +4118,17 @@ impl SseDecode for Option<crate::api::models::RecordDto> {
     }
 }
 
+impl SseDecode for Option<crate::api::models::RecoveryDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<crate::api::models::RecoveryDto>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
+    }
+}
+
 impl SseDecode for Option<crate::api::models::RoundingPolicyDto> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -4500,6 +4513,55 @@ impl SseDecode for crate::api::models::RecordValueDto {
         return crate::api::models::RecordValueDto {
             field_id: var_fieldId,
             value: var_value,
+        };
+    }
+}
+
+impl SseDecode for crate::api::models::RecoveryDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_reason = <crate::api::models::RecoveryReasonDto>::sse_decode(deserializer);
+        let mut var_outcome = <crate::api::models::RecoveryOutcomeDto>::sse_decode(deserializer);
+        let mut var_rootId = <Option<String>>::sse_decode(deserializer);
+        let mut var_documentIds = <Vec<String>>::sse_decode(deserializer);
+        let mut var_quarantinePaths = <Vec<String>>::sse_decode(deserializer);
+        let mut var_message = <Option<String>>::sse_decode(deserializer);
+        return crate::api::models::RecoveryDto {
+            reason: var_reason,
+            outcome: var_outcome,
+            root_id: var_rootId,
+            document_ids: var_documentIds,
+            quarantine_paths: var_quarantinePaths,
+            message: var_message,
+        };
+    }
+}
+
+impl SseDecode for crate::api::models::RecoveryOutcomeDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::api::models::RecoveryOutcomeDto::Recovering,
+            1 => crate::api::models::RecoveryOutcomeDto::Recovered,
+            2 => crate::api::models::RecoveryOutcomeDto::NoPeerAvailable,
+            3 => crate::api::models::RecoveryOutcomeDto::Quarantined,
+            4 => crate::api::models::RecoveryOutcomeDto::Adopted,
+            5 => crate::api::models::RecoveryOutcomeDto::Fatal,
+            _ => unreachable!("Invalid variant for RecoveryOutcomeDto: {}", inner),
+        };
+    }
+}
+
+impl SseDecode for crate::api::models::RecoveryReasonDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::api::models::RecoveryReasonDto::RootSnapshotMissing,
+            1 => crate::api::models::RecoveryReasonDto::RootSnapshotCorrupt,
+            2 => crate::api::models::RecoveryReasonDto::OrphanedDocuments,
+            _ => unreachable!("Invalid variant for RecoveryReasonDto: {}", inner),
         };
     }
 }
@@ -5277,6 +5339,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::models::BootstrapDto {
         [
             self.kind.into_into_dart().into_dart(),
             self.root_id.into_into_dart().into_dart(),
+            self.recovery.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -6367,6 +6430,78 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::models::RecordValueDto>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::models::RecoveryDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.reason.into_into_dart().into_dart(),
+            self.outcome.into_into_dart().into_dart(),
+            self.root_id.into_into_dart().into_dart(),
+            self.document_ids.into_into_dart().into_dart(),
+            self.quarantine_paths.into_into_dart().into_dart(),
+            self.message.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::models::RecoveryDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::models::RecoveryDto>
+    for crate::api::models::RecoveryDto
+{
+    fn into_into_dart(self) -> crate::api::models::RecoveryDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::models::RecoveryOutcomeDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Recovering => 0.into_dart(),
+            Self::Recovered => 1.into_dart(),
+            Self::NoPeerAvailable => 2.into_dart(),
+            Self::Quarantined => 3.into_dart(),
+            Self::Adopted => 4.into_dart(),
+            Self::Fatal => 5.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::models::RecoveryOutcomeDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::models::RecoveryOutcomeDto>
+    for crate::api::models::RecoveryOutcomeDto
+{
+    fn into_into_dart(self) -> crate::api::models::RecoveryOutcomeDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::models::RecoveryReasonDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::RootSnapshotMissing => 0.into_dart(),
+            Self::RootSnapshotCorrupt => 1.into_dart(),
+            Self::OrphanedDocuments => 2.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::models::RecoveryReasonDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::models::RecoveryReasonDto>
+    for crate::api::models::RecoveryReasonDto
+{
+    fn into_into_dart(self) -> crate::api::models::RecoveryReasonDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::models::ResultRecordDto {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -7127,6 +7262,7 @@ impl SseEncode for crate::api::models::BootstrapDto {
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <crate::api::models::BootstrapKindDto>::sse_encode(self.kind, serializer);
         <Option<String>>::sse_encode(self.root_id, serializer);
+        <Option<crate::api::models::RecoveryDto>>::sse_encode(self.recovery, serializer);
     }
 }
 
@@ -8021,6 +8157,16 @@ impl SseEncode for Option<crate::api::models::RecordDto> {
     }
 }
 
+impl SseEncode for Option<crate::api::models::RecoveryDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::api::models::RecoveryDto>::sse_encode(value, serializer);
+        }
+    }
+}
+
 impl SseEncode for Option<crate::api::models::RoundingPolicyDto> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -8343,6 +8489,55 @@ impl SseEncode for crate::api::models::RecordValueDto {
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <String>::sse_encode(self.field_id, serializer);
         <crate::api::models::FieldValueDto>::sse_encode(self.value, serializer);
+    }
+}
+
+impl SseEncode for crate::api::models::RecoveryDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <crate::api::models::RecoveryReasonDto>::sse_encode(self.reason, serializer);
+        <crate::api::models::RecoveryOutcomeDto>::sse_encode(self.outcome, serializer);
+        <Option<String>>::sse_encode(self.root_id, serializer);
+        <Vec<String>>::sse_encode(self.document_ids, serializer);
+        <Vec<String>>::sse_encode(self.quarantine_paths, serializer);
+        <Option<String>>::sse_encode(self.message, serializer);
+    }
+}
+
+impl SseEncode for crate::api::models::RecoveryOutcomeDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::api::models::RecoveryOutcomeDto::Recovering => 0,
+                crate::api::models::RecoveryOutcomeDto::Recovered => 1,
+                crate::api::models::RecoveryOutcomeDto::NoPeerAvailable => 2,
+                crate::api::models::RecoveryOutcomeDto::Quarantined => 3,
+                crate::api::models::RecoveryOutcomeDto::Adopted => 4,
+                crate::api::models::RecoveryOutcomeDto::Fatal => 5,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
+impl SseEncode for crate::api::models::RecoveryReasonDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::api::models::RecoveryReasonDto::RootSnapshotMissing => 0,
+                crate::api::models::RecoveryReasonDto::RootSnapshotCorrupt => 1,
+                crate::api::models::RecoveryReasonDto::OrphanedDocuments => 2,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
     }
 }
 

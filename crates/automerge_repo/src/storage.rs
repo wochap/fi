@@ -1,7 +1,7 @@
 //! Complete-snapshot and bootstrap-control persistence ports and filesystem adapter.
 use std::{
     fs::{self, File, OpenOptions},
-    io::{Read, Write},
+    io::Write,
     path::{Path, PathBuf},
     sync::{
         Arc,
@@ -10,20 +10,38 @@ use std::{
 };
 
 use async_trait::async_trait;
-use automerge::Automerge;
 
-use crate::{BootstrapRecord, DocumentId, error::StorageError};
+use crate::{
+    BootstrapRecord, DocumentId,
+    error::StorageError,
+    recovery::{QuarantineEntry, QuarantineReason},
+};
 
 #[async_trait]
 /// Atomic complete-snapshot storage. `store` installs bytes atomically; `flush`
 /// is the explicit crash-durability barrier for preceding operations.
 pub trait StorageAdapter: Send + Sync + 'static {
+    /// Lists stored snapshot IDs without validating their contents; strict
+    /// validation and classification happen in `Repo::open`.
     async fn list(&self) -> Result<Vec<DocumentId>, StorageError>;
     async fn load(&self, id: DocumentId) -> Result<Option<Vec<u8>>, StorageError>;
     async fn store(&self, id: DocumentId, snapshot: Vec<u8>) -> Result<(), StorageError>;
     async fn remove(&self, id: DocumentId) -> Result<(), StorageError>;
     async fn flush(&self) -> Result<(), StorageError>;
     async fn close(&self) -> Result<(), StorageError>;
+    /// Moves (never copies or deletes) one stored snapshot into quarantine,
+    /// keeping the document ID and reason determinable. Returns the location
+    /// when the adapter has one, or `Ok(None)` when no snapshot was present,
+    /// which makes re-entry after an interrupted quarantine idempotent.
+    async fn quarantine(
+        &self,
+        id: DocumentId,
+        reason: QuarantineReason,
+    ) -> Result<Option<PathBuf>, StorageError>;
+    /// Lists quarantined snapshots in deterministic order.
+    async fn quarantined(&self) -> Result<Vec<QuarantineEntry>, StorageError>;
+    async fn load_quarantined(&self, key: &str) -> Result<Option<Vec<u8>>, StorageError>;
+    async fn discard_quarantined(&self, key: &str) -> Result<(), StorageError>;
 }
 
 #[async_trait]
@@ -34,14 +52,22 @@ pub trait ControlStore: Send + Sync + 'static {
     async fn store(&self, record: BootstrapRecord) -> Result<(), StorageError>;
     async fn flush(&self) -> Result<(), StorageError>;
     async fn close(&self) -> Result<(), StorageError>;
+    /// Durable count of root-snapshot recoveries started for `root`. It is
+    /// never reset by a successful recovery, so a store that keeps losing the
+    /// same root escalates instead of looping.
+    async fn recovery_attempts(&self, root: DocumentId) -> Result<u32, StorageError>;
+    /// Increments and returns the durable recovery count for `root`.
+    async fn record_recovery_attempt(&self, root: DocumentId) -> Result<u32, StorageError>;
 }
 
 /// Crash-safe filesystem implementation of both repository persistence ports.
 ///
 /// Documents live in `automerge/<uuid>.automerge`; bootstrap state lives in
-/// `control/bootstrap-v1.bin`. Files not ending in `.automerge` are unrelated
-/// and ignored, except recognizable `.tmp-<hex>` sibling files left by an
-/// interrupted adapter write, which are removed during listing.
+/// `control/bootstrap-v1.bin`; quarantined snapshots live in
+/// `quarantine/<uuid>.<reason>[.<n>].automerge`. Files not ending in
+/// `.automerge` are unrelated and ignored, except recognizable `.tmp-<hex>`
+/// sibling files left by an interrupted adapter write, which are removed
+/// during listing.
 #[derive(Clone, Debug)]
 pub struct FilesystemStorage {
     root: Arc<PathBuf>,
@@ -84,6 +110,16 @@ impl FilesystemStorage {
 
     fn control_path(&self) -> PathBuf {
         self.root.join("control").join("bootstrap-v1.bin")
+    }
+
+    fn quarantine_dir(&self) -> PathBuf {
+        self.root.join("quarantine")
+    }
+
+    fn recovery_attempts_path(&self, root: DocumentId) -> PathBuf {
+        self.root
+            .join("control")
+            .join(format!("recovery-{root}.txt"))
     }
 
     fn ensure_open(
@@ -280,14 +316,6 @@ impl StorageAdapter for FilesystemStorage {
                         format!("noncanonical snapshot filename: {}", entry.path().display()),
                     ));
                 }
-                let mut bytes = Vec::new();
-                File::open(entry.path())?.read_to_end(&mut bytes)?;
-                Automerge::load(&bytes).map_err(|error| {
-                    std::io::Error::new(
-                        std::io::ErrorKind::InvalidData,
-                        format!("corrupt snapshot {}: {error}", entry.path().display()),
-                    )
-                })?;
                 ids.push(id);
             }
             ids.sort();
@@ -325,6 +353,66 @@ impl StorageAdapter for FilesystemStorage {
             Some(id),
             Some(path.clone()),
             move || match fs::remove_file(path) {
+                Ok(()) => Ok(()),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+                Err(error) => Err(error),
+            },
+        )
+        .await
+    }
+
+    async fn quarantine(
+        &self,
+        id: DocumentId,
+        reason: QuarantineReason,
+    ) -> Result<Option<PathBuf>, StorageError> {
+        self.ensure_open("quarantine", Some(id))?;
+        let source = self.document_path(id);
+        let directory = self.quarantine_dir();
+        blocking("quarantine", Some(id), Some(source.clone()), move || {
+            quarantine_file(&source, &directory, id, reason)
+        })
+        .await
+    }
+
+    async fn quarantined(&self) -> Result<Vec<QuarantineEntry>, StorageError> {
+        self.ensure_open("quarantine_list", None)?;
+        let directory = self.quarantine_dir();
+        blocking(
+            "quarantine_list",
+            None,
+            Some(directory.clone()),
+            move || list_quarantine(&directory),
+        )
+        .await
+    }
+
+    async fn load_quarantined(&self, key: &str) -> Result<Option<Vec<u8>>, StorageError> {
+        self.ensure_open("quarantine_load", None)?;
+        let path = quarantine_key_path(&self.quarantine_dir(), key)
+            .map_err(|error| StorageError::new("quarantine_load", None, error.to_string()))?;
+        blocking(
+            "quarantine_load",
+            None,
+            Some(path.clone()),
+            move || match fs::read(&path) {
+                Ok(bytes) => Ok(Some(bytes)),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+                Err(error) => Err(error),
+            },
+        )
+        .await
+    }
+
+    async fn discard_quarantined(&self, key: &str) -> Result<(), StorageError> {
+        self.ensure_open("quarantine_discard", None)?;
+        let path = quarantine_key_path(&self.quarantine_dir(), key)
+            .map_err(|error| StorageError::new("quarantine_discard", None, error.to_string()))?;
+        blocking(
+            "quarantine_discard",
+            None,
+            Some(path.clone()),
+            move || match fs::remove_file(&path) {
                 Ok(()) => Ok(()),
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
                 Err(error) => Err(error),
@@ -397,6 +485,136 @@ impl ControlStore for FilesystemStorage {
         self.control_closed.store(true, Ordering::Release);
         Ok(())
     }
+
+    async fn recovery_attempts(&self, root: DocumentId) -> Result<u32, StorageError> {
+        self.ensure_open("control_recovery_load", Some(root))?;
+        let path = self.recovery_attempts_path(root);
+        blocking(
+            "control_recovery_load",
+            Some(root),
+            Some(path.clone()),
+            move || read_recovery_attempts(&path),
+        )
+        .await
+    }
+
+    async fn record_recovery_attempt(&self, root: DocumentId) -> Result<u32, StorageError> {
+        self.ensure_open("control_recovery_store", Some(root))?;
+        let path = self.recovery_attempts_path(root);
+        let nonce = self.nonce.fetch_add(1, Ordering::Relaxed);
+        blocking(
+            "control_recovery_store",
+            Some(root),
+            Some(path.clone()),
+            move || {
+                let next = read_recovery_attempts(&path)?.saturating_add(1);
+                atomic_replace(&path, next.to_string().as_bytes(), nonce)?;
+                Ok(next)
+            },
+        )
+        .await
+    }
+}
+
+fn read_recovery_attempts(path: &Path) -> std::io::Result<u32> {
+    match fs::read_to_string(path) {
+        Ok(text) => text.trim().parse().map_err(|_| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("malformed recovery counter {}", path.display()),
+            )
+        }),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(0),
+        Err(error) => Err(error),
+    }
+}
+
+/// Quarantine file names are `<uuid>.<reason>[.<n>].automerge`; the key is the
+/// file name. Only names inside `directory` are ever resolved.
+pub fn quarantine_key_path(directory: &Path, key: &str) -> std::io::Result<PathBuf> {
+    if parse_quarantine_name(key).is_none() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("malformed quarantine key {key}"),
+        ));
+    }
+    Ok(directory.join(key))
+}
+
+fn parse_quarantine_name(name: &str) -> Option<(DocumentId, QuarantineReason)> {
+    let stem = name.strip_suffix(".automerge")?;
+    let mut parts = stem.split('.');
+    let id: DocumentId = parts.next()?.parse().ok()?;
+    let reason = QuarantineReason::parse(parts.next()?)?;
+    if let Some(counter) = parts.next()
+        && (counter.is_empty() || !counter.bytes().all(|byte| byte.is_ascii_digit()))
+    {
+        return None;
+    }
+    if parts.next().is_some() {
+        return None;
+    }
+    Some((id, reason))
+}
+
+/// Moves `source` into `directory` under a unique quarantine name. A rename
+/// within the application directory is atomic, so an interruption leaves the
+/// bytes at exactly one of the two locations.
+pub fn quarantine_file(
+    source: &Path,
+    directory: &Path,
+    id: DocumentId,
+    reason: QuarantineReason,
+) -> std::io::Result<Option<PathBuf>> {
+    if !source.exists() {
+        return Ok(None);
+    }
+    ensure_directory(directory)?;
+    let mut counter = 0_u32;
+    let destination = loop {
+        let name = if counter == 0 {
+            format!("{id}.{reason}.automerge")
+        } else {
+            format!("{id}.{reason}.{counter}.automerge")
+        };
+        let candidate = directory.join(name);
+        if !candidate.exists() {
+            break candidate;
+        }
+        counter += 1;
+    };
+    fs::rename(source, &destination)?;
+    File::open(directory)?.sync_all()?;
+    if let Some(parent) = source.parent() {
+        File::open(parent)?.sync_all()?;
+    }
+    Ok(Some(destination))
+}
+
+/// Lists `directory` as quarantine entries, ignoring unrelated files. A
+/// missing directory is an empty quarantine.
+pub fn list_quarantine(directory: &Path) -> std::io::Result<Vec<QuarantineEntry>> {
+    let mut entries = Vec::new();
+    let read = match fs::read_dir(directory) {
+        Ok(read) => read,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(entries),
+        Err(error) => return Err(error),
+    };
+    for entry in read {
+        let entry = entry?;
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let Some((document, reason)) = parse_quarantine_name(&name) else {
+            continue;
+        };
+        entries.push(QuarantineEntry {
+            key: name,
+            document,
+            reason,
+            location: Some(entry.path()),
+        });
+    }
+    entries.sort_by(|a, b| (a.document, a.reason, &a.key).cmp(&(b.document, b.reason, &b.key)));
+    Ok(entries)
 }
 
 #[cfg(test)]

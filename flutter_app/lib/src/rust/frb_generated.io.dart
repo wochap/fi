@@ -158,6 +158,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   RecordDto dco_decode_box_autoadd_record_dto(dynamic raw);
 
   @protected
+  RecoveryDto dco_decode_box_autoadd_recovery_dto(dynamic raw);
+
+  @protected
   RoundingPolicyDto dco_decode_box_autoadd_rounding_policy_dto(dynamic raw);
 
   @protected
@@ -449,6 +452,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   RecordDto? dco_decode_opt_box_autoadd_record_dto(dynamic raw);
 
   @protected
+  RecoveryDto? dco_decode_opt_box_autoadd_recovery_dto(dynamic raw);
+
+  @protected
   RoundingPolicyDto? dco_decode_opt_box_autoadd_rounding_policy_dto(
     dynamic raw,
   );
@@ -530,6 +536,15 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   RecordValueDto dco_decode_record_value_dto(dynamic raw);
+
+  @protected
+  RecoveryDto dco_decode_recovery_dto(dynamic raw);
+
+  @protected
+  RecoveryOutcomeDto dco_decode_recovery_outcome_dto(dynamic raw);
+
+  @protected
+  RecoveryReasonDto dco_decode_recovery_reason_dto(dynamic raw);
 
   @protected
   ResultRecordDto dco_decode_result_record_dto(dynamic raw);
@@ -789,6 +804,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   RecordDto sse_decode_box_autoadd_record_dto(SseDeserializer deserializer);
+
+  @protected
+  RecoveryDto sse_decode_box_autoadd_recovery_dto(SseDeserializer deserializer);
 
   @protected
   RoundingPolicyDto sse_decode_box_autoadd_rounding_policy_dto(
@@ -1176,6 +1194,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  RecoveryDto? sse_decode_opt_box_autoadd_recovery_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   RoundingPolicyDto? sse_decode_opt_box_autoadd_rounding_policy_dto(
     SseDeserializer deserializer,
   );
@@ -1279,6 +1302,19 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   RecordValueDto sse_decode_record_value_dto(SseDeserializer deserializer);
+
+  @protected
+  RecoveryDto sse_decode_recovery_dto(SseDeserializer deserializer);
+
+  @protected
+  RecoveryOutcomeDto sse_decode_recovery_outcome_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  RecoveryReasonDto sse_decode_recovery_reason_dto(
+    SseDeserializer deserializer,
+  );
 
   @protected
   ResultRecordDto sse_decode_result_record_dto(SseDeserializer deserializer);
@@ -1598,6 +1634,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_box_autoadd_record_dto(
     RecordDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_recovery_dto(
+    RecoveryDto self,
     SseSerializer serializer,
   );
 
@@ -2070,6 +2112,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_opt_box_autoadd_recovery_dto(
+    RecoveryDto? self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_opt_box_autoadd_rounding_policy_dto(
     RoundingPolicyDto? self,
     SseSerializer serializer,
@@ -2201,6 +2249,21 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_record_value_dto(
     RecordValueDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_recovery_dto(RecoveryDto self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_recovery_outcome_dto(
+    RecoveryOutcomeDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_recovery_reason_dto(
+    RecoveryReasonDto self,
     SseSerializer serializer,
   );
 

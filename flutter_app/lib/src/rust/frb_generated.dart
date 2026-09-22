@@ -2839,11 +2839,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   BootstrapDto dco_decode_bootstrap_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 2)
-      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
     return BootstrapDto(
       kind: dco_decode_bootstrap_kind_dto(arr[0]),
       rootId: dco_decode_opt_String(arr[1]),
+      recovery: dco_decode_opt_box_autoadd_recovery_dto(arr[2]),
     );
   }
 
@@ -2974,6 +2975,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   RecordDto dco_decode_box_autoadd_record_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_record_dto(raw);
+  }
+
+  @protected
+  RecoveryDto dco_decode_box_autoadd_recovery_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_recovery_dto(raw);
   }
 
   @protected
@@ -3727,6 +3734,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  RecoveryDto? dco_decode_opt_box_autoadd_recovery_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_recovery_dto(raw);
+  }
+
+  @protected
   RoundingPolicyDto? dco_decode_opt_box_autoadd_rounding_policy_dto(
     dynamic raw,
   ) {
@@ -3965,6 +3978,34 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       fieldId: dco_decode_String(arr[0]),
       value: dco_decode_field_value_dto(arr[1]),
     );
+  }
+
+  @protected
+  RecoveryDto dco_decode_recovery_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 6)
+      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
+    return RecoveryDto(
+      reason: dco_decode_recovery_reason_dto(arr[0]),
+      outcome: dco_decode_recovery_outcome_dto(arr[1]),
+      rootId: dco_decode_opt_String(arr[2]),
+      documentIds: dco_decode_list_String(arr[3]),
+      quarantinePaths: dco_decode_list_String(arr[4]),
+      message: dco_decode_opt_String(arr[5]),
+    );
+  }
+
+  @protected
+  RecoveryOutcomeDto dco_decode_recovery_outcome_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return RecoveryOutcomeDto.values[raw as int];
+  }
+
+  @protected
+  RecoveryReasonDto dco_decode_recovery_reason_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return RecoveryReasonDto.values[raw as int];
   }
 
   @protected
@@ -4431,7 +4472,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_kind = sse_decode_bootstrap_kind_dto(deserializer);
     var var_rootId = sse_decode_opt_String(deserializer);
-    return BootstrapDto(kind: var_kind, rootId: var_rootId);
+    var var_recovery = sse_decode_opt_box_autoadd_recovery_dto(deserializer);
+    return BootstrapDto(
+      kind: var_kind,
+      rootId: var_rootId,
+      recovery: var_recovery,
+    );
   }
 
   @protected
@@ -4588,6 +4634,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   RecordDto sse_decode_box_autoadd_record_dto(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_record_dto(deserializer));
+  }
+
+  @protected
+  RecoveryDto sse_decode_box_autoadd_recovery_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_recovery_dto(deserializer));
   }
 
   @protected
@@ -5669,6 +5723,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  RecoveryDto? sse_decode_opt_box_autoadd_recovery_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_recovery_dto(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
   RoundingPolicyDto? sse_decode_opt_box_autoadd_rounding_policy_dto(
     SseDeserializer deserializer,
   ) {
@@ -6006,6 +6073,43 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_fieldId = sse_decode_String(deserializer);
     var var_value = sse_decode_field_value_dto(deserializer);
     return RecordValueDto(fieldId: var_fieldId, value: var_value);
+  }
+
+  @protected
+  RecoveryDto sse_decode_recovery_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_reason = sse_decode_recovery_reason_dto(deserializer);
+    var var_outcome = sse_decode_recovery_outcome_dto(deserializer);
+    var var_rootId = sse_decode_opt_String(deserializer);
+    var var_documentIds = sse_decode_list_String(deserializer);
+    var var_quarantinePaths = sse_decode_list_String(deserializer);
+    var var_message = sse_decode_opt_String(deserializer);
+    return RecoveryDto(
+      reason: var_reason,
+      outcome: var_outcome,
+      rootId: var_rootId,
+      documentIds: var_documentIds,
+      quarantinePaths: var_quarantinePaths,
+      message: var_message,
+    );
+  }
+
+  @protected
+  RecoveryOutcomeDto sse_decode_recovery_outcome_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return RecoveryOutcomeDto.values[inner];
+  }
+
+  @protected
+  RecoveryReasonDto sse_decode_recovery_reason_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return RecoveryReasonDto.values[inner];
   }
 
   @protected
@@ -6571,6 +6675,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_bootstrap_kind_dto(self.kind, serializer);
     sse_encode_opt_String(self.rootId, serializer);
+    sse_encode_opt_box_autoadd_recovery_dto(self.recovery, serializer);
   }
 
   @protected
@@ -6748,6 +6853,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_record_dto(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_recovery_dto(
+    RecoveryDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_recovery_dto(self, serializer);
   }
 
   @protected
@@ -7723,6 +7837,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_opt_box_autoadd_recovery_dto(
+    RecoveryDto? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_recovery_dto(self, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_opt_box_autoadd_rounding_policy_dto(
     RoundingPolicyDto? self,
     SseSerializer serializer,
@@ -8013,6 +8140,35 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.fieldId, serializer);
     sse_encode_field_value_dto(self.value, serializer);
+  }
+
+  @protected
+  void sse_encode_recovery_dto(RecoveryDto self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_recovery_reason_dto(self.reason, serializer);
+    sse_encode_recovery_outcome_dto(self.outcome, serializer);
+    sse_encode_opt_String(self.rootId, serializer);
+    sse_encode_list_String(self.documentIds, serializer);
+    sse_encode_list_String(self.quarantinePaths, serializer);
+    sse_encode_opt_String(self.message, serializer);
+  }
+
+  @protected
+  void sse_encode_recovery_outcome_dto(
+    RecoveryOutcomeDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_recovery_reason_dto(
+    RecoveryReasonDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
   }
 
   @protected

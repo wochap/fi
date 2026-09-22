@@ -1,11 +1,12 @@
 use std::{net::SocketAddr, path::PathBuf, sync::Arc, sync::OnceLock};
 
 use app_core::{
-    AppCore, AppCoreConfig, DiscoveryGroupSecret, DomainKind, InMemorySecureKeyStore,
-    LinuxSecretServiceKeyStore, QuinnTransportConfig, SecureKeyStore,
+    AppCore, AppCoreConfig, ApplicationState, DiscoveryGroupSecret, DomainKind,
+    InMemorySecureKeyStore, LinuxSecretServiceKeyStore, QuinnTransportConfig, RecoveryRecord,
+    SecureKeyStore,
 };
 use flutter_rust_bridge::frb;
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock, watch};
 
 use crate::{
     api::models::{
@@ -95,7 +96,7 @@ async fn initialize_with(data_dir: String, mode: OpenMode) -> Result<BootstrapDt
     }
     let mut slot = process_slot().write().await;
     if let Some(core) = slot.core.as_ref() {
-        return Ok(BootstrapDto::from_core(core.lifecycle_state()));
+        return Ok(BootstrapDto::from_app(core));
     }
     let target = OpenTarget {
         data_dir: PathBuf::from(data_dir),
@@ -103,7 +104,7 @@ async fn initialize_with(data_dir: String, mode: OpenMode) -> Result<BootstrapDt
     };
     slot.target = Some(target.clone());
     let core = open_core(&target).await?;
-    let state = BootstrapDto::from_core(core.lifecycle_state());
+    let state = BootstrapDto::from_app(&core);
     slot.core = Some(core);
     Ok(state)
 }
@@ -163,13 +164,13 @@ pub async fn reset_dataset() -> Result<BootstrapDto, BridgeError> {
         .await
         .map_err(BridgeError::from)?;
     let core = open_core(&target).await?;
-    let state = BootstrapDto::from_core(core.lifecycle_state());
+    let state = BootstrapDto::from_app(&core);
     slot.core = Some(core);
     Ok(state)
 }
 
 pub async fn bootstrap_state() -> Result<BootstrapDto, BridgeError> {
-    Ok(BootstrapDto::from_core(core().await?.lifecycle_state()))
+    Ok(BootstrapDto::from_app(&core().await?))
 }
 
 pub async fn projection_state() -> Result<ProjectionDto, BridgeError> {
@@ -192,22 +193,32 @@ pub async fn set_foreground(foreground: bool) -> Result<(), BridgeError> {
         .map_err(BridgeError::from)
 }
 
+/// Streams bootstrap state, re-emitting whenever either the lifecycle or the
+/// recovery outcome changes so recovery progress is never silent.
 pub async fn bootstrap_stream(sink: StreamSink<BootstrapDto>) -> Result<(), BridgeError> {
-    let mut receiver = core().await?.subscribe_lifecycle();
+    let app = core().await?;
+    let mut lifecycle = app.subscribe_lifecycle();
+    let mut recovery = app.subscribe_recovery();
     tokio::spawn(async move {
-        if sink
-            .add(BootstrapDto::from_core(receiver.borrow().clone()))
-            .is_err()
-        {
+        let current = |lifecycle: &watch::Receiver<ApplicationState>,
+                       recovery: &watch::Receiver<Option<RecoveryRecord>>| {
+            BootstrapDto::from_core(lifecycle.borrow().clone(), recovery.borrow().clone())
+        };
+        if sink.add(current(&lifecycle, &recovery)).is_err() {
             return;
         }
-        while receiver.changed().await.is_ok() {
-            if sink
-                .add(BootstrapDto::from_core(
-                    receiver.borrow_and_update().clone(),
-                ))
-                .is_err()
-            {
+        loop {
+            tokio::select! {
+                changed = lifecycle.changed() => {
+                    if changed.is_err() { break; }
+                    lifecycle.borrow_and_update();
+                }
+                changed = recovery.changed() => {
+                    if changed.is_err() { break; }
+                    recovery.borrow_and_update();
+                }
+            }
+            if sink.add(current(&lifecycle, &recovery)).is_err() {
                 break;
             }
         }
@@ -285,7 +296,10 @@ pub async fn error_stream(sink: StreamSink<BridgeErrorEventDto>) -> Result<(), B
 mod tests {
     use std::time::Duration;
 
-    use crate::api::{collections, models::BootstrapKindDto};
+    use crate::api::{
+        collections,
+        models::{BootstrapKindDto, RecoveryOutcomeDto, RecoveryReasonDto},
+    };
 
     use super::{core, initialize, reset_dataset, shutdown};
 
@@ -366,12 +380,42 @@ mod tests {
             app_core::ApplicationState::NeedsDecision
         );
 
-        // Bootstrap record without its root snapshot: initialization fails
-        // with a reset-resolvable error and reset still works without a live
-        // core.
-        collections::create_new_dataset().await.unwrap();
+        // Bootstrap record without its root snapshot: initialization now
+        // succeeds in a recovering Joining state that names the root, and a
+        // reset from there still lands in NeedsDecision.
+        let ready = collections::create_new_dataset().await.unwrap();
         shutdown().await.unwrap();
         std::fs::remove_dir_all(directory.path().join("automerge/documents")).unwrap();
+        let recovering = initialize(data_dir.clone()).await.unwrap();
+        assert_eq!(recovering.kind, BootstrapKindDto::Joining);
+        assert_eq!(recovering.root_id, ready.root_id);
+        let recovery = recovering.recovery.expect("recovery is observable");
+        assert_eq!(recovery.reason, RecoveryReasonDto::RootSnapshotMissing);
+        assert_eq!(recovery.outcome, RecoveryOutcomeDto::Recovering);
+        assert_eq!(recovery.root_id, ready.root_id);
+        let after = reset_dataset().await.unwrap();
+        assert_eq!(after.kind, BootstrapKindDto::NeedsDecision);
+        assert_eq!(after.recovery, None);
+
+        // Genuinely inconsistent state (a Creating record beside a foreign
+        // document): initialization fails with a reset-resolvable error and
+        // reset still works without a live core.
+        let ready = collections::create_new_dataset().await.unwrap();
+        shutdown().await.unwrap();
+        let root: automerge_repo::DocumentId = ready.root_id.unwrap().parse().unwrap();
+        let documents = directory.path().join("automerge/documents");
+        std::fs::copy(
+            documents.join(format!("{root}.automerge")),
+            documents.join(format!("{}.automerge", automerge_repo::DocumentId::new())),
+        )
+        .unwrap();
+        automerge_repo::storage::ControlStore::store(
+            &app_core::adapters::SqliteControlStore::open(directory.path().join("control.sqlite"))
+                .unwrap(),
+            automerge_repo::BootstrapRecord::Creating { root },
+        )
+        .await
+        .unwrap();
 
         let error = initialize(data_dir.clone()).await.unwrap_err();
         assert!(error.reset_resolvable, "{error:?}");

@@ -13,7 +13,7 @@ use crate::api::{
 pub async fn create_new_dataset() -> Result<BootstrapDto, BridgeError> {
     let app = core().await?;
     app.create_new_dataset().await.map_err(BridgeError::from)?;
-    Ok(BootstrapDto::from_core(app.lifecycle_state()))
+    Ok(BootstrapDto::from_app(&app))
 }
 pub async fn create_collection(name: String, description: String) -> Result<String, BridgeError> {
     core()

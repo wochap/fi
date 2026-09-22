@@ -11,7 +11,8 @@ use std::{
 
 use automerge_repo::{
     BootstrapStatus, DocHandle, DocumentId, DocumentStatus, PeerId, PeerSyncProgress,
-    PeerSyncState, Repo, RepoConfig, network::NetworkTransport,
+    PeerSyncState, QuarantineReason, RecoveryRecord, Repo, RepoConfig, network::NetworkTransport,
+    storage::quarantine_file,
 };
 use rand_core::{OsRng, RngCore};
 use tokio::sync::{broadcast, mpsc, oneshot, watch};
@@ -121,6 +122,7 @@ struct NetworkComponents {
 pub struct AppCore {
     commands: mpsc::Sender<OwnerCommand>,
     lifecycle: watch::Receiver<ApplicationState>,
+    recovery: watch::Receiver<Option<RecoveryRecord>>,
     projection: watch::Receiver<ProjectionState>,
     data_events: broadcast::Sender<DataChanged>,
     error_events: broadcast::Sender<ErrorEvent>,
@@ -217,7 +219,7 @@ impl AppCore {
         tokio::fs::create_dir_all(&data_dir)
             .await
             .map_err(|error| AppError::Storage(error.to_string()))?;
-        let control_store = Arc::new(SqliteControlStore::open(data_dir.join("control.sqlite"))?);
+        let control_store = Arc::new(open_control_store(&data_dir).await?);
         resume_reset_if_outstanding(&data_dir, &control_store, Some(key_store.as_ref())).await?;
         let identity = Arc::new(DeviceIdentity::load_or_create(key_store.as_ref()).await?);
         let created_at_ms = SystemTime::now()
@@ -286,7 +288,7 @@ impl AppCore {
         tokio::fs::create_dir_all(&data_dir)
             .await
             .map_err(|e| AppError::Storage(e.to_string()))?;
-        let control_store = Arc::new(SqliteControlStore::open(data_dir.join("control.sqlite"))?);
+        let control_store = Arc::new(open_control_store(&data_dir).await?);
         resume_reset_if_outstanding(&data_dir, &control_store, None).await?;
         Self::open_with_components(
             data_dir,
@@ -324,8 +326,9 @@ impl AppCore {
             }
         };
         let mut clock = HybridLogicalClock::new(node_id, config.wall_time.clone());
-        let document_store =
-            Arc::new(FileDocumentStore::open(data_dir.join("automerge/documents")).await?);
+        let document_store = Arc::new(
+            FileDocumentStore::open(documents_dir(&data_dir), quarantine_dir(&data_dir)).await?,
+        );
         let read_model = ReadModel::open_disposable(data_dir.join("read-model.sqlite"))?;
         let repo = Repo::open(
             document_store,
@@ -335,6 +338,17 @@ impl AppCore {
         )
         .await?;
         let peer_sync = repo.subscribe_peer_sync();
+        let recovery = repo.subscribe_recovery();
+        if let Some(record) = recovery.borrow().as_ref() {
+            info!(
+                event = "bootstrap_recovery",
+                reason = ?record.reason,
+                outcome = ?record.outcome,
+                documents = ?record.documents,
+                quarantine = ?record.quarantine,
+                "bootstrap recovery observed at open"
+            );
+        }
         if let Some(manager) = network_components.connections.clone() {
             spawn_sync_bridge(peer_sync.clone(), manager);
         }
@@ -369,6 +383,12 @@ impl AppCore {
         let (commands, command_rx) = mpsc::channel(config.command_capacity);
 
         let mut root = None;
+        if let ApplicationState::Joining { root: root_id } = initial {
+            // A join (or a root recovery, which is a join for a known root)
+            // resumed across a restart: hold the placeholder so the owner can
+            // promote it to Ready once peers supply the root.
+            root = Some(repo.open_document(root_id).await?);
+        }
         if let ApplicationState::Ready { root: root_id } = initial {
             let handle = repo.open_document(root_id).await?;
             if let Some(stamp) = handle
@@ -412,6 +432,7 @@ impl AppCore {
         Ok(Self {
             commands,
             lifecycle,
+            recovery,
             projection: projection_rx,
             data_events,
             error_events,
@@ -438,6 +459,17 @@ impl AppCore {
     #[must_use]
     pub fn subscribe_lifecycle(&self) -> watch::Receiver<ApplicationState> {
         self.lifecycle.clone()
+    }
+    /// The bootstrap recovery performed by this open, if any, with its latest
+    /// outcome. Layered on the lifecycle state rather than a separate kind: a
+    /// recovering core is `Joining` for its recorded root.
+    #[must_use]
+    pub fn recovery_state(&self) -> Option<RecoveryRecord> {
+        self.recovery.borrow().clone()
+    }
+    #[must_use]
+    pub fn subscribe_recovery(&self) -> watch::Receiver<Option<RecoveryRecord>> {
+        self.recovery.clone()
     }
     #[must_use]
     pub fn subscribe_projection(&self) -> watch::Receiver<ProjectionState> {
@@ -1932,6 +1964,78 @@ fn command_name(command: &GenericCommand) -> &'static str {
     }
 }
 
+fn documents_dir(data_dir: &Path) -> PathBuf {
+    data_dir.join("automerge/documents")
+}
+
+fn quarantine_dir(data_dir: &Path) -> PathBuf {
+    data_dir.join("quarantine")
+}
+
+/// Opens `control.sqlite`. When it cannot be opened, the root ID is unknowable
+/// and the failure is fatal, but any Automerge snapshots present are moved to
+/// quarantine first so they are preserved rather than lost.
+async fn open_control_store(data_dir: &Path) -> Result<SqliteControlStore> {
+    match SqliteControlStore::open(data_dir.join("control.sqlite")) {
+        Ok(store) => Ok(store),
+        Err(error) => {
+            let quarantined =
+                quarantine_all_documents(data_dir, QuarantineReason::ControlStoreUnreadable).await;
+            match quarantined {
+                Ok(paths) if !paths.is_empty() => {
+                    tracing::warn!(
+                        event = "bootstrap_recovery",
+                        reason = "control-store-unreadable",
+                        quarantine = ?paths,
+                        "control store is unreadable; snapshots were quarantined"
+                    );
+                }
+                Ok(_) => {}
+                Err(quarantine_error) => {
+                    error!(event = "bootstrap_recovery", error = %quarantine_error, "quarantine failed");
+                }
+            }
+            Err(error.into())
+        }
+    }
+}
+
+/// Moves every snapshot in `automerge/documents` to `quarantine`, returning
+/// the new locations. Touches nothing outside the application directory.
+async fn quarantine_all_documents(
+    data_dir: &Path,
+    reason: QuarantineReason,
+) -> Result<Vec<PathBuf>> {
+    let documents = documents_dir(data_dir);
+    let quarantine = quarantine_dir(data_dir);
+    tokio::task::spawn_blocking(move || -> std::io::Result<Vec<PathBuf>> {
+        let mut moved = Vec::new();
+        let entries = match std::fs::read_dir(&documents) {
+            Ok(entries) => entries,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(moved),
+            Err(error) => return Err(error),
+        };
+        for entry in entries {
+            let entry = entry?;
+            let name = entry.file_name().to_string_lossy().into_owned();
+            let Some(stem) = name.strip_suffix(".automerge") else {
+                continue;
+            };
+            let Ok(id) = stem.parse::<DocumentId>() else {
+                continue;
+            };
+            if let Some(path) = quarantine_file(&entry.path(), &quarantine, id, reason)? {
+                moved.push(path);
+            }
+        }
+        moved.sort();
+        Ok(moved)
+    })
+    .await
+    .map_err(|error| AppError::Storage(error.to_string()))?
+    .map_err(|error| AppError::Storage(error.to_string()))
+}
+
 /// Deliberately abandons this installation's local copy of its root and
 /// returns the directory to a `NeedsDecision` state, keeping the device
 /// identity. Runs against a closed data directory: no `AppCore` may be live
@@ -1991,7 +2095,7 @@ async fn run_reset_steps(
             .await
             .map_err(IdentityError::from)?;
     }
-    remove_dir_if_present(&data_dir.join("automerge/documents")).await?;
+    remove_dir_if_present(&documents_dir(data_dir)).await?;
     for name in [
         "read-model.sqlite",
         "read-model.sqlite-wal",

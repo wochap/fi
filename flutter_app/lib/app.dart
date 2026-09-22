@@ -86,6 +86,20 @@ class _CollectionAppState extends State<CollectionApp>
     if (confirmed) await _resetDataset();
   }
 
+  /// Deliberate escape from a recovery that no other device can complete.
+  /// Never automatic: the user confirms abandoning the recorded root.
+  Future<void> _confirmResetFromRecovery(BuildContext context) async {
+    final confirmed = await ResetDatasetDialog.show(
+      context,
+      lead:
+          'Recovery needs one of your other devices. Resetting instead '
+          'abandons the dataset recorded on this device; if you own no other '
+          'device holding it, the set-aside copy is kept on disk but this app '
+          'cannot read it.',
+    );
+    if (confirmed) await _resetDataset();
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     unawaited(_setForeground(state == AppLifecycleState.resumed));
@@ -175,7 +189,13 @@ class _CollectionAppState extends State<CollectionApp>
             devices: devices,
             onResetDataset: _resetDataset,
           ),
-          BootstrapKindDto.joining => JoiningSurface(devices: devices),
+          BootstrapKindDto.joining => switch (controller.state?.recovery) {
+            final recovery? when recovery.isActive => RecoverySurface(
+              recovery: recovery,
+              onResetDataset: () => _confirmResetFromRecovery(context),
+            ),
+            _ => JoiningSurface(devices: devices),
+          },
           BootstrapKindDto.creating => const _CenteredSurface(
             child: CircularProgressIndicator(),
           ),
@@ -199,6 +219,97 @@ class _CenteredSurface extends StatelessWidget {
     ),
   );
 }
+
+extension RecoveryDtoState on RecoveryDto {
+  /// Whether the dataset is still being recovered (or waiting for a device
+  /// that can supply it), as opposed to a completed or decided recovery.
+  bool get isActive =>
+      outcome == RecoveryOutcomeDto.recovering ||
+      outcome == RecoveryOutcomeDto.noPeerAvailable;
+}
+
+/// Shown instead of an indeterminate spinner or a fatal error while a lost
+/// or corrupt root snapshot is being recovered from the user's other devices.
+/// States plainly when another device is required, and never offers to
+/// create a new dataset as a fallback: that would split from the recorded
+/// root and never merge again.
+class RecoverySurface extends StatelessWidget {
+  const RecoverySurface({
+    required this.recovery,
+    required this.onResetDataset,
+    super.key,
+  });
+  final RecoveryDto recovery;
+  final Future<void> Function() onResetDataset;
+
+  @override
+  Widget build(BuildContext context) {
+    final root = recovery.rootId;
+    final rootLabel = root == null ? '' : ' (${_shortRootId(root)})';
+    return switch (recovery.outcome) {
+      RecoveryOutcomeDto.noPeerAvailable => _CenteredSurface(
+        key: const Key('recovery-no-peer'),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.devices_other, size: 48),
+              const SizedBox(height: 12),
+              Text(
+                'Recovery needs another device',
+                style: Theme.of(context).textTheme.titleLarge,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'This device lost its local copy of your dataset$rootLabel. '
+                'None of your other devices is reachable right now. Bring '
+                'one of them online and recovery continues automatically; '
+                'no pairing is needed.',
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              OutlinedButton(
+                key: const Key('recovery-reset-dataset'),
+                onPressed: () => unawaited(onResetDataset()),
+                child: const Text("Reset this device's data instead"),
+              ),
+            ],
+          ),
+        ),
+      ),
+      _ => _CenteredSurface(
+        key: const Key('recovery-recovering'),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(height: 16),
+            Text(
+              'Recovering your dataset from your other devices$rootLabel…',
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              switch (recovery.reason) {
+                RecoveryReasonDto.rootSnapshotCorrupt =>
+                  'The local copy could not be read and was set aside. '
+                      'Nothing was deleted.',
+                _ => 'The local copy was missing. Nothing was deleted.',
+              },
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ),
+      ),
+    };
+  }
+}
+
+String _shortRootId(String id) =>
+    id.length <= 8 ? id : '${id.substring(0, 8)}…';
 
 /// Shown while a received root is being joined. Names the provisioning device
 /// when the pairing session that started the join is still known.
@@ -281,6 +392,21 @@ class _OnboardingPageState extends State<OnboardingPage> {
                     'Create a new local dataset, or join the dataset on one of '
                     'your other devices. Nothing is sent to a server.',
                   ),
+                  if (controller.state?.recovery case final recovery?
+                      when recovery.outcome ==
+                          RecoveryOutcomeDto.quarantined) ...[
+                    const SizedBox(height: 16),
+                    const MaterialBanner(
+                      key: Key('recovery-quarantined'),
+                      content: Text(
+                        'Data found on this device was set aside because its '
+                        'dataset record was missing. Nothing was deleted: '
+                        'joining the same dataset from another device '
+                        'restores it.',
+                      ),
+                      actions: [SizedBox.shrink()],
+                    ),
+                  ],
                   const SizedBox(height: 24),
                   FilledButton.icon(
                     key: const Key('create-dataset'),

@@ -2,6 +2,7 @@
 
 use std::{
     collections::{BTreeMap, HashSet, VecDeque},
+    path::PathBuf,
     sync::{Arc, Mutex},
 };
 
@@ -13,12 +14,15 @@ use crate::{
     BootstrapRecord, DocumentId, PeerId,
     error::{NetworkError, StorageError},
     network::{NetworkEvent, NetworkTransport},
+    recovery::{QuarantineEntry, QuarantineReason},
     storage::{ControlStore, StorageAdapter},
 };
 
 #[derive(Default)]
 struct StoreState {
     documents: BTreeMap<DocumentId, Vec<u8>>,
+    quarantine: BTreeMap<String, (DocumentId, QuarantineReason, Vec<u8>)>,
+    recovery_attempts: BTreeMap<DocumentId, u32>,
     record: Option<BootstrapRecord>,
     failures: HashSet<&'static str>,
     failure_counts: BTreeMap<&'static str, usize>,
@@ -45,6 +49,45 @@ impl MemoryStore {
     #[must_use]
     pub fn record(&self) -> Option<BootstrapRecord> {
         self.state.lock().unwrap().record.clone()
+    }
+    /// Reopens a store closed by a repository shutdown, simulating a restart
+    /// over the same durable bytes.
+    pub fn reopen(&self) {
+        let mut state = self.state.lock().unwrap();
+        state.documents_closed = false;
+        state.control_closed = false;
+    }
+    /// Removes the bootstrap record, simulating a lost control row.
+    pub fn clear_record(&self) {
+        self.state.lock().unwrap().record = None;
+    }
+    /// Quarantined snapshots as `(document, reason, bytes)` in key order.
+    #[must_use]
+    pub fn quarantine(&self) -> Vec<(DocumentId, QuarantineReason, Vec<u8>)> {
+        self.state
+            .lock()
+            .unwrap()
+            .quarantine
+            .values()
+            .cloned()
+            .collect()
+    }
+    #[must_use]
+    pub fn recovery_attempts(&self, root: DocumentId) -> u32 {
+        self.state
+            .lock()
+            .unwrap()
+            .recovery_attempts
+            .get(&root)
+            .copied()
+            .unwrap_or(0)
+    }
+    pub fn set_recovery_attempts(&self, root: DocumentId, attempts: u32) {
+        self.state
+            .lock()
+            .unwrap()
+            .recovery_attempts
+            .insert(root, attempts);
     }
     #[must_use]
     pub fn operations(&self) -> Vec<String> {
@@ -222,6 +265,62 @@ impl StorageAdapter for MemoryStore {
         self.state.lock().unwrap().documents_closed = true;
         Ok(())
     }
+    async fn quarantine(
+        &self,
+        id: DocumentId,
+        reason: QuarantineReason,
+    ) -> Result<Option<PathBuf>, StorageError> {
+        self.before("quarantine", Some(id)).await?;
+        let mut state = self.state.lock().unwrap();
+        let Some(bytes) = state.documents.remove(&id) else {
+            return Ok(None);
+        };
+        let mut counter = 0;
+        let key = loop {
+            let key = if counter == 0 {
+                format!("{id}.{reason}.automerge")
+            } else {
+                format!("{id}.{reason}.{counter}.automerge")
+            };
+            if !state.quarantine.contains_key(&key) {
+                break key;
+            }
+            counter += 1;
+        };
+        state.quarantine.insert(key.clone(), (id, reason, bytes));
+        Ok(Some(PathBuf::from("quarantine").join(key)))
+    }
+    async fn quarantined(&self) -> Result<Vec<QuarantineEntry>, StorageError> {
+        self.before("quarantine_list", None).await?;
+        Ok(self
+            .state
+            .lock()
+            .unwrap()
+            .quarantine
+            .iter()
+            .map(|(key, (document, reason, _))| QuarantineEntry {
+                key: key.clone(),
+                document: *document,
+                reason: *reason,
+                location: Some(PathBuf::from("quarantine").join(key)),
+            })
+            .collect())
+    }
+    async fn load_quarantined(&self, key: &str) -> Result<Option<Vec<u8>>, StorageError> {
+        self.before("quarantine_load", None).await?;
+        Ok(self
+            .state
+            .lock()
+            .unwrap()
+            .quarantine
+            .get(key)
+            .map(|(_, _, bytes)| bytes.clone()))
+    }
+    async fn discard_quarantined(&self, key: &str) -> Result<(), StorageError> {
+        self.before("quarantine_discard", None).await?;
+        self.state.lock().unwrap().quarantine.remove(key);
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -242,6 +341,17 @@ impl ControlStore for MemoryStore {
         self.before("control_close", None).await?;
         self.state.lock().unwrap().control_closed = true;
         Ok(())
+    }
+    async fn recovery_attempts(&self, root: DocumentId) -> Result<u32, StorageError> {
+        self.before("control_recovery_load", Some(root)).await?;
+        Ok(self.recovery_attempts(root))
+    }
+    async fn record_recovery_attempt(&self, root: DocumentId) -> Result<u32, StorageError> {
+        self.before("control_recovery_store", Some(root)).await?;
+        let mut state = self.state.lock().unwrap();
+        let count = state.recovery_attempts.entry(root).or_insert(0);
+        *count += 1;
+        Ok(*count)
     }
 }
 

@@ -2,6 +2,7 @@
 
 use std::{
     collections::{BTreeSet, HashMap},
+    path::PathBuf,
     sync::Arc,
     time::Duration,
 };
@@ -21,6 +22,9 @@ use crate::{
     lifecycle::{CaptureGate, Lifecycle},
     network::{NetworkEvent, NetworkTransport},
     protocol::{BootstrapMode, Codec, Message},
+    recovery::{
+        BootstrapCondition, QuarantineReason, RecoveryOutcome, RecoveryReason, RecoveryRecord,
+    },
     storage::{ControlStore, StorageAdapter},
     sync::{PeerSyncProgress, PeerSyncState, RelationshipSyncState},
 };
@@ -43,6 +47,13 @@ pub struct RepoConfig {
     pub persistence_retry_max: Duration,
     /// Capacity of each authenticated peer's private writer queue.
     pub peer_writer_capacity: usize,
+    /// Root-snapshot recoveries permitted per root before opening fails with
+    /// `BootstrapError::RecoveryExhausted`.
+    pub recovery_attempt_limit: u32,
+    /// How long recovery waits without any peer able to supply the recorded
+    /// root before reporting `RecoveryOutcome::NoPeerAvailable`. The wait
+    /// restarts whenever such a peer appears and later disappears.
+    pub recovery_no_peer_after: Duration,
 }
 impl Default for RepoConfig {
     fn default() -> Self {
@@ -55,6 +66,8 @@ impl Default for RepoConfig {
             persistence_retry_min: Duration::from_millis(100),
             persistence_retry_max: Duration::from_secs(5),
             peer_writer_capacity: 64,
+            recovery_attempt_limit: 3,
+            recovery_no_peer_after: Duration::from_secs(30),
         }
     }
 }
@@ -79,6 +92,11 @@ impl RepoConfig {
         if self.persistence_retry_min > self.persistence_retry_max {
             return Err(Error::Config(
                 "persistence_retry_min must not exceed persistence_retry_max".into(),
+            ));
+        }
+        if self.recovery_attempt_limit == 0 {
+            return Err(Error::Config(
+                "recovery_attempt_limit must be greater than zero".into(),
             ));
         }
         Ok(())
@@ -106,6 +124,8 @@ enum Command {
     Flush(oneshot::Sender<Result<()>>),
     Remove(DocumentId, oneshot::Sender<Result<()>>),
     Shutdown(oneshot::Sender<Result<()>>),
+    /// Internal: the no-peer wait for the given timer generation elapsed.
+    RecoveryTimeout(u64),
 }
 
 /// Cloneable handle to the single repository coordinator.
@@ -115,6 +135,7 @@ pub struct Repo {
     bootstrap: watch::Receiver<BootstrapStatus>,
     offers: watch::Receiver<Vec<BootstrapOffer>>,
     peer_sync: watch::Receiver<HashMap<PeerId, PeerSyncProgress>>,
+    recovery: watch::Receiver<Option<RecoveryRecord>>,
     errors: broadcast::Sender<Error>,
     lifecycle: Lifecycle,
 }
@@ -128,8 +149,10 @@ impl std::fmt::Debug for Repo {
 }
 
 impl Repo {
-    /// Opens stored documents strictly and starts the coordinator and network
-    /// event reader. The transport event receiver is consumed exactly once.
+    /// Opens stored documents strictly, classifies every inconsistency as
+    /// recoverable or fatal, and starts the coordinator and network event
+    /// reader. The transport event receiver is consumed exactly once, and only
+    /// after validation and recovery have succeeded.
     pub async fn open(
         storage: Arc<dyn StorageAdapter>,
         control: Arc<dyn ControlStore>,
@@ -137,34 +160,82 @@ impl Repo {
         config: RepoConfig,
     ) -> Result<Self> {
         config.validate()?;
-        let ids = storage.list().await?;
+        let mut ids = storage.list().await?;
         let mut record = control.load().await?;
+        let mut recovery: Option<RecoveryRecord> = None;
         if record.is_none() && !ids.is_empty() {
-            return Err(BootstrapError::OrphanedDocuments { documents: ids }.into());
+            // Root-ness and trust are unrecoverable locally, but the bytes are
+            // worth keeping: quarantine them and require a decision. No root
+            // is inferred and no control state is written.
+            let mut quarantine = Vec::new();
+            for id in &ids {
+                if let Some(location) = storage.quarantine(*id, QuarantineReason::Orphaned).await? {
+                    quarantine.push(location);
+                }
+            }
+            storage.flush().await?;
+            recovery = Some(RecoveryRecord {
+                reason: RecoveryReason::OrphanedDocuments,
+                documents: std::mem::take(&mut ids),
+                quarantine,
+                outcome: RecoveryOutcome::Quarantined,
+            });
         }
         // Validate every listed object before taking the network receiver. This
         // prevents corrupt or inconsistent local state from consuming events.
+        // Only the recorded root under a Ready or Joining record is
+        // recoverable; its bytes are quarantined and it is treated as absent.
         let mut documents = HashMap::new();
+        let mut corrupt_root: Option<Vec<PathBuf>> = None;
         for id in &ids {
             let bytes = storage.load(*id).await?.ok_or_else(|| {
                 StorageError::new("load", Some(*id), "listed snapshot disappeared")
             })?;
-            let doc = Automerge::load(&bytes).map_err(|error| Error::Automerge {
-                document: *id,
-                message: error.to_string(),
-            })?;
-            documents.insert(*id, doc);
+            match Automerge::load(&bytes) {
+                Ok(doc) => {
+                    documents.insert(*id, doc);
+                }
+                Err(error) => {
+                    let condition = BootstrapCondition::for_load_failure(record.as_ref(), *id);
+                    if !condition.is_recoverable() {
+                        return Err(Error::Automerge {
+                            document: *id,
+                            message: error.to_string(),
+                        });
+                    }
+                    let location = storage
+                        .quarantine(*id, QuarantineReason::CorruptRoot)
+                        .await?;
+                    storage.flush().await?;
+                    corrupt_root = Some(location.into_iter().collect());
+                }
+            }
         }
         if let Some(current) = record.clone() {
             let root = current.root();
             match current {
                 BootstrapRecord::Ready { .. } => {
-                    if !documents.contains_key(&root) {
-                        return Err(BootstrapError::Inconsistent {
-                            root,
-                            message: "Ready root snapshot is missing".into(),
-                        }
-                        .into());
+                    if let std::collections::hash_map::Entry::Vacant(placeholder) =
+                        documents.entry(root)
+                    {
+                        // The root ID, identity, and trust are all intact, so
+                        // peers can re-supply the content: demote to Joining
+                        // for the same root. Never NeedsDecision, never a new
+                        // root.
+                        let reason = if corrupt_root.is_some() {
+                            RecoveryReason::RootSnapshotCorrupt
+                        } else {
+                            RecoveryReason::RootSnapshotMissing
+                        };
+                        begin_root_recovery(control.as_ref(), &config, root).await?;
+                        record = Some(BootstrapRecord::Joining { root });
+                        placeholder.insert(Automerge::new());
+                        recovery = Some(RecoveryRecord {
+                            reason,
+                            documents: vec![root],
+                            quarantine: corrupt_root.take().unwrap_or_default(),
+                            outcome: RecoveryOutcome::Recovering,
+                        });
                     }
                 }
                 BootstrapRecord::Creating { .. } => {
@@ -211,6 +282,25 @@ impl Repo {
                         record = Some(BootstrapRecord::Ready { root });
                     } else {
                         documents.entry(root).or_insert_with(Automerge::new);
+                        if let Some(quarantine) = corrupt_root.take() {
+                            begin_root_recovery(control.as_ref(), &config, root).await?;
+                            recovery = Some(RecoveryRecord {
+                                reason: RecoveryReason::RootSnapshotCorrupt,
+                                documents: vec![root],
+                                quarantine,
+                                outcome: RecoveryOutcome::Recovering,
+                            });
+                        } else if control.recovery_attempts(root).await? > 0 {
+                            // A recovery begun on an earlier launch is still
+                            // Joining; keep reporting it rather than
+                            // presenting a plain join.
+                            recovery = Some(RecoveryRecord {
+                                reason: RecoveryReason::RootSnapshotMissing,
+                                documents: vec![root],
+                                quarantine: Vec::new(),
+                                outcome: RecoveryOutcome::Recovering,
+                            });
+                        }
                     }
                 }
             }
@@ -224,6 +314,7 @@ impl Repo {
         let (bootstrap_tx, bootstrap) = watch::channel(initial.clone());
         let (offers_tx, offers) = watch::channel(Vec::new());
         let (peer_sync_tx, peer_sync) = watch::channel(HashMap::new());
+        let (recovery_tx, recovery) = watch::channel(recovery);
         let (errors, _) = broadcast::channel(config.error_capacity.max(1));
         let (actor_tx, actor_rx) = mpsc::channel(config.coordinator_capacity.max(1));
         let mut actors = HashMap::new();
@@ -251,7 +342,7 @@ impl Repo {
         }
         let events = transport.take_events()?;
         let (tx, commands) = mpsc::channel(config.coordinator_capacity.max(1));
-        let coordinator = Coordinator {
+        let mut coordinator = Coordinator {
             storage,
             control,
             transport,
@@ -261,19 +352,24 @@ impl Repo {
             status_tx: bootstrap_tx,
             offers_tx,
             peer_sync_tx,
+            recovery_tx,
+            recovery_timer: RecoveryTimer::default(),
             relationships: HashMap::new(),
             errors: errors.clone(),
             actor_tx,
+            commands: tx.clone(),
             lifecycle: lifecycle.clone(),
             capture_gate,
             control_dirty: false,
         };
+        coordinator.refresh_recovery();
         tokio::spawn(coordinator.run(commands, events, actor_rx));
         Ok(Self {
             tx,
             bootstrap,
             offers,
             peer_sync,
+            recovery,
             errors,
             lifecycle,
         })
@@ -303,6 +399,16 @@ impl Repo {
     /// Returns the latest retained synchronization snapshot.
     pub fn peer_sync_progress(&self) -> HashMap<PeerId, PeerSyncProgress> {
         self.peer_sync.borrow().clone()
+    }
+    #[must_use]
+    /// Returns the recovery performed by this open, if any, with its latest outcome.
+    pub fn recovery(&self) -> Option<RecoveryRecord> {
+        self.recovery.borrow().clone()
+    }
+    #[must_use]
+    /// Watches recovery outcome transitions.
+    pub fn subscribe_recovery(&self) -> watch::Receiver<Option<RecoveryRecord>> {
+        self.recovery.clone()
     }
     #[must_use]
     /// Subscribes to typed asynchronous persistence, network, and protocol errors.
@@ -392,6 +498,31 @@ async fn request<T>(tx: &mpsc::Sender<Command>, command: impl MakeCommand<T>) ->
         .map_err(|_| LifecycleError::RepositoryClosed)?
 }
 
+/// Counts one recovery attempt for `root` and demotes its record to Joining,
+/// or fails once the bound is exceeded. Quarantine has already completed by
+/// the time this runs, so a crash at any point leaves the bytes findable.
+async fn begin_root_recovery(
+    control: &dyn ControlStore,
+    config: &RepoConfig,
+    root: DocumentId,
+) -> Result<()> {
+    let attempts = control.recovery_attempts(root).await?;
+    if attempts >= config.recovery_attempt_limit {
+        return Err(BootstrapError::RecoveryExhausted { root, attempts }.into());
+    }
+    control.record_recovery_attempt(root).await?;
+    control.store(BootstrapRecord::Joining { root }).await?;
+    control.flush().await?;
+    Ok(())
+}
+
+/// Generation-tagged no-peer wait. A stale generation's timeout is ignored.
+#[derive(Default)]
+struct RecoveryTimer {
+    generation: u64,
+    armed: bool,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Eligibility {
     None,
@@ -415,9 +546,12 @@ struct Coordinator {
     status_tx: watch::Sender<BootstrapStatus>,
     offers_tx: watch::Sender<Vec<BootstrapOffer>>,
     peer_sync_tx: watch::Sender<HashMap<PeerId, PeerSyncProgress>>,
+    recovery_tx: watch::Sender<Option<RecoveryRecord>>,
+    recovery_timer: RecoveryTimer,
     relationships: HashMap<(PeerId, DocumentId), RelationshipSyncState>,
     errors: broadcast::Sender<Error>,
     actor_tx: mpsc::Sender<ActorOutput>,
+    commands: mpsc::Sender<Command>,
     lifecycle: Lifecycle,
     capture_gate: CaptureGate,
     control_dirty: bool,
@@ -443,9 +577,16 @@ impl Coordinator {
                         break;
                     }
                     if self.handle_command(command).await { break; }
+                    self.refresh_recovery();
                 },
-                Some(event) = events.recv(), if self.lifecycle.ensure_open().is_ok() => self.handle_network(event).await,
-                Some(output) = actor_output.recv() => self.handle_actor_output(output).await,
+                Some(event) = events.recv(), if self.lifecycle.ensure_open().is_ok() => {
+                    self.handle_network(event).await;
+                    self.refresh_recovery();
+                }
+                Some(output) = actor_output.recv() => {
+                    self.handle_actor_output(output).await;
+                    self.refresh_recovery();
+                }
                 else => break,
             }
         }
@@ -510,8 +651,78 @@ impl Coordinator {
                 let _ = reply.send(result);
                 return true;
             }
+            Command::RecoveryTimeout(generation) => self.recovery_timeout(generation),
         }
         false
+    }
+
+    /// Reconciles the recovery outcome with the current peer set. A peer able
+    /// to supply the recovering root keeps the outcome at `Recovering` and
+    /// cancels the no-peer wait; with no such peer, the wait is (re)armed and
+    /// its expiry reports `NoPeerAvailable`. Both outcomes stay `Joining` for
+    /// the same root.
+    fn refresh_recovery(&mut self) {
+        let Some(record) = self.recovery_tx.borrow().clone() else {
+            return;
+        };
+        if !record.is_active() {
+            return;
+        }
+        let Some(root) = record.root() else {
+            return;
+        };
+        if !matches!(self.status(), Joining { root: current } if current == root) {
+            return;
+        }
+        if self.root_supplier_connected(root) {
+            self.recovery_timer.armed = false;
+            self.recovery_timer.generation += 1;
+            if record.outcome != RecoveryOutcome::Recovering {
+                self.set_recovery_outcome(RecoveryOutcome::Recovering);
+            }
+        } else if record.outcome == RecoveryOutcome::Recovering && !self.recovery_timer.armed {
+            self.recovery_timer.generation += 1;
+            self.recovery_timer.armed = true;
+            let generation = self.recovery_timer.generation;
+            let delay = self.config.recovery_no_peer_after;
+            let commands = self.commands.clone();
+            tokio::spawn(async move {
+                tokio::time::sleep(delay).await;
+                let _ = commands.send(Command::RecoveryTimeout(generation)).await;
+            });
+        }
+    }
+    fn recovery_timeout(&mut self, generation: u64) {
+        if generation != self.recovery_timer.generation || !self.recovery_timer.armed {
+            return;
+        }
+        self.recovery_timer.armed = false;
+        let Some(record) = self.recovery_tx.borrow().clone() else {
+            return;
+        };
+        if record.outcome != RecoveryOutcome::Recovering {
+            return;
+        }
+        if let Some(root) = record.root()
+            && matches!(self.status(), Joining { root: current } if current == root)
+            && !self.root_supplier_connected(root)
+        {
+            self.set_recovery_outcome(RecoveryOutcome::NoPeerAvailable);
+        }
+    }
+    fn root_supplier_connected(&self, root: DocumentId) -> bool {
+        self.peers.values().any(|peer| match peer.eligibility {
+            Eligibility::Full => true,
+            Eligibility::RootOnly(candidate) => candidate == root,
+            Eligibility::None => false,
+        })
+    }
+    fn set_recovery_outcome(&self, outcome: RecoveryOutcome) {
+        self.recovery_tx.send_modify(|record| {
+            if let Some(record) = record {
+                record.outcome = outcome;
+            }
+        });
     }
 
     async fn open_document(&mut self, id: DocumentId) -> Result<DocHandle> {
@@ -566,6 +777,7 @@ impl Coordinator {
         if self.status() != NeedsDecision {
             return Err(BootstrapError::DecisionAlreadyMade.into());
         }
+        let adopted = self.quarantined_root(root).await?;
         self.control
             .store(BootstrapRecord::Joining { root })
             .await?;
@@ -573,13 +785,59 @@ impl Coordinator {
         self.control.flush().await?;
         self.control_dirty = false;
         self.status_tx.send_replace(Joining { root });
+        self.offers_tx.send_replace(Vec::new());
+        if let Some((key, doc)) = adopted {
+            // A quarantined document with exactly this ID that loads strictly
+            // is adopted instead of waiting for peer synchronization: its
+            // history is preserved and merges with the group under CRDT rules.
+            self.storage.store(root, doc.save()).await?;
+            self.storage.flush().await?;
+            self.storage.discard_quarantined(&key).await?;
+            self.control.store(BootstrapRecord::Ready { root }).await?;
+            self.control_dirty = true;
+            self.control.flush().await?;
+            self.control_dirty = false;
+            let actor = self.spawn(root, doc, DocumentStatus::Ready);
+            let handle = actor.handle.clone();
+            self.actors.insert(root, actor);
+            self.status_tx.send_replace(Ready { root });
+            self.recovery_tx.send_modify(|record| {
+                if let Some(record) = record
+                    && record.reason == RecoveryReason::OrphanedDocuments
+                {
+                    record.outcome = RecoveryOutcome::Adopted;
+                }
+            });
+            self.broadcast_bootstrap().await;
+            self.reconsider_all().await;
+            return Ok(handle);
+        }
         let actor = self.spawn(root, Automerge::new(), DocumentStatus::Loading);
         let handle = actor.handle.clone();
         self.actors.insert(root, actor);
-        self.offers_tx.send_replace(Vec::new());
         self.broadcast_bootstrap().await;
         self.reconsider_all().await;
         Ok(handle)
+    }
+
+    /// Finds a quarantined document whose ID exactly matches `root` and whose
+    /// bytes load strictly with non-empty history. Anything else leaves the
+    /// quarantine untouched and falls through to normal synchronization.
+    async fn quarantined_root(&self, root: DocumentId) -> Result<Option<(String, Automerge)>> {
+        for entry in self.storage.quarantined().await? {
+            if entry.document != root {
+                continue;
+            }
+            let Some(bytes) = self.storage.load_quarantined(&entry.key).await? else {
+                continue;
+            };
+            if let Ok(doc) = Automerge::load(&bytes)
+                && !doc.get_heads().is_empty()
+            {
+                return Ok(Some((entry.key, doc)));
+            }
+        }
+        Ok(None)
     }
 
     async fn create(&mut self, initialize: Option<InitJob>) -> Result<DocHandle> {
@@ -1082,6 +1340,14 @@ impl Coordinator {
             self.control_dirty = false;
             actor.mark_ready().await;
             self.status_tx.send_replace(Ready { root: id });
+            if self
+                .recovery_tx
+                .borrow()
+                .as_ref()
+                .is_some_and(|record| record.is_active() && record.root() == Some(id))
+            {
+                self.set_recovery_outcome(RecoveryOutcome::Recovered);
+            }
             self.broadcast_bootstrap().await;
             self.reconsider_all().await;
         } else {

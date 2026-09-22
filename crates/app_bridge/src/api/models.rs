@@ -1,5 +1,6 @@
 use app_core::{
-    AppError, ApplicationState, DataChanged, DomainError, DomainKind, ErrorEvent, ProjectionState,
+    AppCore, AppError, ApplicationState, DataChanged, DomainError, DomainKind, ErrorEvent,
+    ProjectionState, RecoveryOutcome, RecoveryReason, RecoveryRecord, RepositoryBootstrapError,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -12,10 +13,42 @@ pub enum BootstrapKindDto {
     Closed,
 }
 
+/// Bootstrap state plus the recovery, if any, layered on it. A recovering
+/// core is `Joining` for its recorded root; `recovery` is what distinguishes
+/// that from a plain join, and it is never silent.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct BootstrapDto {
     pub kind: BootstrapKindDto,
     pub root_id: Option<String>,
+    pub recovery: Option<RecoveryDto>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RecoveryReasonDto {
+    RootSnapshotMissing,
+    RootSnapshotCorrupt,
+    OrphanedDocuments,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RecoveryOutcomeDto {
+    Recovering,
+    Recovered,
+    NoPeerAvailable,
+    Quarantined,
+    Adopted,
+    Fatal,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RecoveryDto {
+    pub reason: RecoveryReasonDto,
+    pub outcome: RecoveryOutcomeDto,
+    /// The recorded root being recovered, when the reason concerns a root.
+    pub root_id: Option<String>,
+    pub document_ids: Vec<String>,
+    pub quarantine_paths: Vec<String>,
+    pub message: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -560,10 +593,10 @@ pub struct BridgeError {
     pub field: Option<String>,
     pub message: String,
     /// True when a deliberate dataset reset would resolve this error (an
-    /// unsupported application schema, a bootstrap record without its root,
-    /// snapshots without a record). Keystore, network, and I/O failures are
-    /// never marked, so the shell offers a retry rather than a destructive
-    /// action for them.
+    /// unsupported application schema, a genuinely inconsistent bootstrap
+    /// record, a root whose recovery was exhausted). Keystore, network, and
+    /// I/O failures are never marked, so the shell offers a retry rather than
+    /// a destructive action for them.
     pub reset_resolvable: bool,
 }
 
@@ -788,23 +821,67 @@ fn hex_id(value: [u8; 16]) -> String {
 }
 
 impl BootstrapDto {
-    pub(crate) fn from_core(value: ApplicationState) -> Self {
+    pub(crate) fn from_app(app: &AppCore) -> Self {
+        Self::from_core(app.lifecycle_state(), app.recovery_state())
+    }
+
+    pub(crate) fn from_core(value: ApplicationState, recovery: Option<RecoveryRecord>) -> Self {
+        let recovery = recovery.map(RecoveryDto::from_core);
         match value {
-            ApplicationState::NeedsDecision => Self::new(BootstrapKindDto::NeedsDecision, None),
-            ApplicationState::Creating => Self::new(BootstrapKindDto::Creating, None),
+            ApplicationState::NeedsDecision => {
+                Self::new(BootstrapKindDto::NeedsDecision, None, recovery)
+            }
+            ApplicationState::Creating => Self::new(BootstrapKindDto::Creating, None, recovery),
             ApplicationState::Joining { root } => {
-                Self::new(BootstrapKindDto::Joining, Some(root.to_string()))
+                Self::new(BootstrapKindDto::Joining, Some(root.to_string()), recovery)
             }
             ApplicationState::Ready { root } => {
-                Self::new(BootstrapKindDto::Ready, Some(root.to_string()))
+                Self::new(BootstrapKindDto::Ready, Some(root.to_string()), recovery)
             }
-            ApplicationState::ShuttingDown => Self::new(BootstrapKindDto::ShuttingDown, None),
-            ApplicationState::Closed => Self::new(BootstrapKindDto::Closed, None),
+            ApplicationState::ShuttingDown => {
+                Self::new(BootstrapKindDto::ShuttingDown, None, recovery)
+            }
+            ApplicationState::Closed => Self::new(BootstrapKindDto::Closed, None, recovery),
         }
     }
 
-    fn new(kind: BootstrapKindDto, root_id: Option<String>) -> Self {
-        Self { kind, root_id }
+    fn new(kind: BootstrapKindDto, root_id: Option<String>, recovery: Option<RecoveryDto>) -> Self {
+        Self {
+            kind,
+            root_id,
+            recovery,
+        }
+    }
+}
+
+impl RecoveryDto {
+    pub(crate) fn from_core(value: RecoveryRecord) -> Self {
+        let (outcome, message) = match &value.outcome {
+            RecoveryOutcome::Recovering => (RecoveryOutcomeDto::Recovering, None),
+            RecoveryOutcome::Recovered => (RecoveryOutcomeDto::Recovered, None),
+            RecoveryOutcome::NoPeerAvailable => (RecoveryOutcomeDto::NoPeerAvailable, None),
+            RecoveryOutcome::Quarantined => (RecoveryOutcomeDto::Quarantined, None),
+            RecoveryOutcome::Adopted => (RecoveryOutcomeDto::Adopted, None),
+            RecoveryOutcome::Fatal { message } => {
+                (RecoveryOutcomeDto::Fatal, Some(message.clone()))
+            }
+        };
+        Self {
+            reason: match value.reason {
+                RecoveryReason::RootSnapshotMissing => RecoveryReasonDto::RootSnapshotMissing,
+                RecoveryReason::RootSnapshotCorrupt => RecoveryReasonDto::RootSnapshotCorrupt,
+                RecoveryReason::OrphanedDocuments => RecoveryReasonDto::OrphanedDocuments,
+            },
+            outcome,
+            root_id: value.root().map(|root| root.to_string()),
+            document_ids: value.documents.iter().map(ToString::to_string).collect(),
+            quarantine_paths: value
+                .quarantine
+                .iter()
+                .map(|path| path.display().to_string())
+                .collect(),
+            message,
+        }
     }
 }
 
@@ -1129,6 +1206,12 @@ impl From<AppError> for BridgeError {
                 BridgeErrorKind::Projection,
                 "The local read model could not be refreshed.",
             ),
+            AppError::RepositoryBootstrap(RepositoryBootstrapError::RecoveryExhausted {
+                ..
+            }) => Self::safe(
+                BridgeErrorKind::Bootstrap,
+                "Recovering this device's dataset from your other devices failed repeatedly, so it will not be retried.",
+            ),
             AppError::RepositoryBootstrap(_) if reset_resolvable => Self::safe(
                 BridgeErrorKind::Bootstrap,
                 "This device's local data is incomplete and cannot be opened.",
@@ -1183,9 +1266,83 @@ impl BridgeError {
 
 #[cfg(test)]
 mod tests {
-    use app_core::{AppError, DomainError};
+    use app_core::{
+        AppError, ApplicationState, DomainError, RecoveryOutcome, RecoveryReason, RecoveryRecord,
+    };
 
-    use super::{BridgeError, BridgeErrorKind};
+    use super::{
+        BootstrapDto, BootstrapKindDto, BridgeError, BridgeErrorKind, RecoveryOutcomeDto,
+        RecoveryReasonDto,
+    };
+
+    #[test]
+    fn recovery_is_never_silent_and_every_outcome_is_distinguishable() {
+        let root = automerge_repo::DocumentId::new();
+        let record = |outcome| RecoveryRecord {
+            reason: RecoveryReason::RootSnapshotCorrupt,
+            documents: vec![root],
+            quarantine: vec![std::path::PathBuf::from("/data/quarantine/x.automerge")],
+            outcome,
+        };
+        let outcomes = [
+            (RecoveryOutcome::Recovering, RecoveryOutcomeDto::Recovering),
+            (RecoveryOutcome::Recovered, RecoveryOutcomeDto::Recovered),
+            (
+                RecoveryOutcome::NoPeerAvailable,
+                RecoveryOutcomeDto::NoPeerAvailable,
+            ),
+            (
+                RecoveryOutcome::Quarantined,
+                RecoveryOutcomeDto::Quarantined,
+            ),
+            (RecoveryOutcome::Adopted, RecoveryOutcomeDto::Adopted),
+            (
+                RecoveryOutcome::Fatal {
+                    message: "gave up".into(),
+                },
+                RecoveryOutcomeDto::Fatal,
+            ),
+        ];
+        let mut seen = std::collections::BTreeSet::new();
+        for (outcome, expected) in outcomes {
+            let dto = BootstrapDto::from_core(
+                ApplicationState::Joining { root },
+                Some(record(outcome.clone())),
+            );
+            assert_eq!(dto.kind, BootstrapKindDto::Joining);
+            let recovery = dto.recovery.expect("recovery is surfaced");
+            assert_eq!(recovery.outcome, expected);
+            assert_eq!(recovery.reason, RecoveryReasonDto::RootSnapshotCorrupt);
+            assert_eq!(recovery.root_id.as_deref(), Some(root.to_string().as_str()));
+            assert_eq!(recovery.document_ids, vec![root.to_string()]);
+            assert_eq!(
+                recovery.quarantine_paths,
+                vec!["/data/quarantine/x.automerge"]
+            );
+            assert_eq!(
+                recovery.message.as_deref(),
+                matches!(outcome, RecoveryOutcome::Fatal { .. }).then_some("gave up")
+            );
+            assert!(seen.insert(format!("{expected:?}")));
+        }
+        assert_eq!(
+            BootstrapDto::from_core(ApplicationState::Joining { root }, None).recovery,
+            None
+        );
+        let orphan = BootstrapDto::from_core(
+            ApplicationState::NeedsDecision,
+            Some(RecoveryRecord {
+                reason: RecoveryReason::OrphanedDocuments,
+                documents: vec![root],
+                quarantine: vec![],
+                outcome: RecoveryOutcome::Quarantined,
+            }),
+        )
+        .recovery
+        .unwrap();
+        assert_eq!(orphan.reason, RecoveryReasonDto::OrphanedDocuments);
+        assert_eq!(orphan.root_id, None);
+    }
 
     #[test]
     fn maps_validation_and_hides_infrastructure_failures() {
@@ -1211,10 +1368,15 @@ mod tests {
         assert!(schema.reset_resolvable);
         assert_eq!(schema.kind, BridgeErrorKind::Bootstrap);
 
-        let orphaned = BridgeError::from(AppError::from(automerge_repo::Error::Bootstrap(
-            automerge_repo::error::BootstrapError::OrphanedDocuments { documents: vec![] },
+        let exhausted = BridgeError::from(AppError::from(automerge_repo::Error::Bootstrap(
+            automerge_repo::error::BootstrapError::RecoveryExhausted {
+                root: automerge_repo::DocumentId::new(),
+                attempts: 3,
+            },
         )));
-        assert!(orphaned.reset_resolvable);
+        assert!(exhausted.reset_resolvable);
+        assert_eq!(exhausted.kind, BridgeErrorKind::Bootstrap);
+        assert!(exhausted.message.contains("failed repeatedly"));
 
         let locked = BridgeError::from(AppError::Identity(app_core::IdentityError::SecureStore(
             app_core::SecureStoreError::Locked,

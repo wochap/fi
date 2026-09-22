@@ -19,6 +19,7 @@ use app_core::{
 };
 use async_trait::async_trait;
 use automerge::{Automerge, ROOT, ReadDoc, transaction::Transactable};
+use automerge_repo::storage::ControlStore;
 
 fn now_ms() -> u64 {
     SystemTime::now()
@@ -213,6 +214,7 @@ async fn reset_from_ready_keeps_identity_and_drops_root_scoped_state() {
 
 /// Which destructive steps completed before the simulated crash.
 #[derive(Clone, Copy, Debug)]
+#[allow(clippy::enum_variant_names)]
 enum Interrupted {
     AfterIntent,
     AfterSecrets,
@@ -371,29 +373,81 @@ async fn schema_cliff_is_reset_resolvable_and_reset_lands_in_needs_decision() {
 }
 
 #[tokio::test]
-async fn inconsistent_and_orphaned_stores_are_reset_resolvable_but_io_is_not() {
-    // Ready record with its snapshot gone, no intent: Inconsistent.
+async fn inconsistent_and_exhausted_stores_are_reset_resolvable_but_io_is_not() {
+    // Ready record with its snapshot gone, no intent: recovered as Joining for
+    // the same root rather than failing; reset still lands in NeedsDecision.
     let dir = tempfile::tempdir().unwrap();
     let core = AppCore::open(dir.path()).await.unwrap();
-    core.create_new_dataset().await.unwrap();
+    let root = core.create_new_dataset().await.unwrap();
     core.shutdown().await.unwrap();
     std::fs::remove_dir_all(documents_dir(dir.path())).unwrap();
-    let error = AppCore::open(dir.path()).await.unwrap_err();
-    assert!(error.is_reset_resolvable(), "{error}");
+    let recovering = AppCore::open(dir.path()).await.unwrap();
+    assert_eq!(
+        recovering.lifecycle_state(),
+        ApplicationState::Joining { root }
+    );
+    recovering.shutdown().await.unwrap();
     reset_dataset(dir.path(), None).await.unwrap();
     assert_eq!(
         AppCore::open(dir.path()).await.unwrap().lifecycle_state(),
         ApplicationState::NeedsDecision
     );
 
-    // Snapshot with no record, no intent: OrphanedDocuments.
+    // Genuinely inconsistent: a Creating record with a foreign document.
     let dir = tempfile::tempdir().unwrap();
     let core = AppCore::open(dir.path()).await.unwrap();
-    core.create_new_dataset().await.unwrap();
+    let root = core.create_new_dataset().await.unwrap();
     core.shutdown().await.unwrap();
-    control(dir.path()).complete_reset().unwrap();
+    let path = documents_dir(dir.path()).join(format!("{root}.automerge"));
+    let bytes = std::fs::read(&path).unwrap();
+    std::fs::write(
+        documents_dir(dir.path()).join(format!("{}.automerge", automerge_repo::DocumentId::new())),
+        bytes,
+    )
+    .unwrap();
+    ControlStore::store(
+        &control(dir.path()),
+        automerge_repo::BootstrapRecord::Creating { root },
+    )
+    .await
+    .unwrap();
     let error = AppCore::open(dir.path()).await.unwrap_err();
     assert!(error.is_reset_resolvable(), "{error}");
+
+    // Recovery exhausted for a root that keeps losing its snapshot.
+    let dir = tempfile::tempdir().unwrap();
+    let config = AppCoreConfig {
+        repo: automerge_repo::RepoConfig {
+            recovery_attempt_limit: 1,
+            ..automerge_repo::RepoConfig::default()
+        },
+        ..AppCoreConfig::default()
+    };
+    let core = AppCore::open_with_config(dir.path(), config.clone())
+        .await
+        .unwrap();
+    let root = core.create_new_dataset().await.unwrap();
+    core.shutdown().await.unwrap();
+    std::fs::remove_dir_all(documents_dir(dir.path())).unwrap();
+    let recovering = AppCore::open_with_config(dir.path(), config.clone())
+        .await
+        .unwrap();
+    recovering.shutdown().await.unwrap();
+    ControlStore::store(
+        &control(dir.path()),
+        automerge_repo::BootstrapRecord::Ready { root },
+    )
+    .await
+    .unwrap();
+    let error = AppCore::open_with_config(dir.path(), config)
+        .await
+        .unwrap_err();
+    assert!(error.is_reset_resolvable(), "{error}");
+    reset_dataset(dir.path(), None).await.unwrap();
+    assert_eq!(
+        AppCore::open(dir.path()).await.unwrap().lifecycle_state(),
+        ApplicationState::NeedsDecision
+    );
 
     // Keystore unavailable: not resolvable.
     let dir = tempfile::tempdir().unwrap();

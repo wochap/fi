@@ -48,6 +48,8 @@ Future<void> shutdown() => RustLib.instance.api.crateApiLifecycleShutdown();
 Future<void> setForeground({required bool foreground}) =>
     RustLib.instance.api.crateApiLifecycleSetForeground(foreground: foreground);
 
+/// Streams bootstrap state, re-emitting whenever either the lifecycle or the
+/// recovery outcome changes so recovery progress is never silent.
 Stream<BootstrapDto> bootstrapStream() =>
     RustLib.instance.api.crateApiLifecycleBootstrapStream();
 
