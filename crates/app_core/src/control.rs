@@ -106,6 +106,10 @@ pub struct PairingJournalRecord {
     pub peer_device_id: DeviceId,
     pub stage: PairingJournalStage,
     pub joining_root: Option<String>,
+    /// Set when the commit for this session failed. The stage stays at the
+    /// last step that succeeded, so a non-`Complete` stage with a reason is an
+    /// incomplete session that a later authenticated connection can resume.
+    pub failure_reason: Option<String>,
     pub updated_at_ms: u64,
 }
 

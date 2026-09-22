@@ -57,7 +57,12 @@ class PairingCard extends StatelessWidget {
       ),
       const LinearProgressIndicator(),
       const SizedBox(height: 8),
-      if (controller.candidates.isEmpty)
+      if (controller.allCandidatesAlreadyPaired)
+        const Text(
+          'The devices found here are already paired with this one.',
+          key: Key('candidates-already-paired'),
+        )
+      else if (controller.candidates.isEmpty)
         const Text('No nearby pairing candidates yet.')
       else ...[
         Row(
@@ -166,6 +171,22 @@ class PairingCard extends StatelessWidget {
           TextButton(
             onPressed: controller.beginPairing,
             child: const Text('Pair a different device'),
+          ),
+        ],
+        PairingFailureKindDto.secureStoreLocked => [
+          const Icon(Icons.lock_outline, size: 40),
+          const Text(
+            'Your login keyring is locked, so this device could not save the '
+            'pairing. Unlock the keyring, then retry — the other device may '
+            'already show this one as paired.',
+            key: Key('pairing-secure-store-locked'),
+            textAlign: TextAlign.center,
+          ),
+          FilledButton.icon(
+            key: const Key('pairing-retry-after-unlock'),
+            onPressed: controller.busy ? null : controller.retryAfterUnlock,
+            icon: const Icon(Icons.refresh),
+            label: const Text('Retry'),
           ),
         ],
         PairingFailureKindDto.other || null => [

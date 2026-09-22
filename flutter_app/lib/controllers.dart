@@ -21,6 +21,18 @@ final class BootstrapController extends ChangeNotifier {
   /// schema, incomplete local store). False for transient failures such as a
   /// locked keystore, where retry is the right affordance.
   bool fatalResetResolvable = false;
+
+  /// Whether [fatalError] is the desktop secure key store being locked, which
+  /// the user fixes by unlocking the keyring and retrying in place.
+  bool fatalSecureStoreLocked = false;
+
+  /// Set when the core opened but peer networking could not start because the
+  /// secure store was locked or unavailable. Local data stays usable.
+  NetworkingDeferredDto? networkingDeferred;
+
+  /// Why the last networking retry failed, if it did.
+  String? networkingRetryError;
+  bool retryingNetworking = false;
   bool loading = true;
   bool creating = false;
   bool resetting = false;
@@ -33,6 +45,7 @@ final class BootstrapController extends ChangeNotifier {
     try {
       await initializeRust();
       state = await bridge.initialize(await dataDirProvider());
+      await _refreshNetworkingDeferred();
       await _listen();
     } catch (error) {
       _setFatal(error);
@@ -82,11 +95,45 @@ final class BootstrapController extends ChangeNotifier {
   void _setFatal(Object error) {
     fatalError = bridgeMessage(error);
     fatalResetResolvable = error is BridgeError && error.resetResolvable;
+    fatalSecureStoreLocked =
+        error is BridgeError && error.kind == BridgeErrorKind.secureStoreLocked;
   }
 
   void _clearFatal() {
     fatalError = null;
     fatalResetResolvable = false;
+    fatalSecureStoreLocked = false;
+  }
+
+  Future<void> _refreshNetworkingDeferred() async {
+    try {
+      networkingDeferred = await bridge.networkingDeferred();
+    } catch (_) {
+      // A core that cannot answer at all is already reported as a fatal error.
+      networkingDeferred = null;
+    }
+  }
+
+  /// Re-runs the networking startup the secure store blocked. On success the
+  /// locked-keyring condition clears without restarting the application; on
+  /// failure the reason is kept so the explanation stays on screen.
+  Future<void> retryNetworking() async {
+    retryingNetworking = true;
+    networkingRetryError = null;
+    notifyListeners();
+    try {
+      await bridge.retryNetworking();
+      networkingDeferred = null;
+      _clearFatal();
+      state = await bridge.bootstrapState();
+      await _listen();
+    } catch (error) {
+      networkingRetryError = bridgeMessage(error);
+      await _refreshNetworkingDeferred();
+    } finally {
+      retryingNetworking = false;
+      notifyListeners();
+    }
   }
 
   Future<void> createNewDataset() async {
@@ -468,8 +515,12 @@ final class DevicesController extends ChangeNotifier {
     kind: PairingKindDto.idle,
     localConfirmed: false,
     remoteConfirmed: false,
+    alreadyPaired: false,
   );
-  List<PairingCandidateDto> candidates = const [];
+
+  /// Every candidate Rust reports, including ones that resolve to devices
+  /// already paired with. [candidates] is the selectable subset.
+  List<PairingCandidateDto> discoveredCandidates = const [];
   List<TrustedDeviceDto> devices = const [];
   SyncStatusDto syncStatus = SyncStatusDto.offline;
   String? errorMessage;
@@ -490,7 +541,7 @@ final class DevicesController extends ChangeNotifier {
   Future<void> start() async {
     _subscribe(bridge.pairingStateEvents, _setPairing);
     _subscribe(bridge.pairingCandidateEvents, (value) {
-      candidates = value;
+      discoveredCandidates = value;
       notifyListeners();
     });
     _subscribe(bridge.connectionStateEvents, (value) {
@@ -569,8 +620,9 @@ final class DevicesController extends ChangeNotifier {
       kind: PairingKindDto.idle,
       localConfirmed: false,
       remoteConfirmed: false,
+      alreadyPaired: false,
     );
-    candidates = const [];
+    discoveredCandidates = const [];
     devices = const [];
     syncStatus = SyncStatusDto.offline;
     errorMessage = null;
@@ -578,6 +630,25 @@ final class DevicesController extends ChangeNotifier {
     busy = false;
     await start();
   }
+
+  /// Candidates the user can select. A candidate Rust reports as already
+  /// paired is a device we are already trusted with, so offering it would only
+  /// re-run a commit the user does not need.
+  List<PairingCandidateDto> get candidates => discoveredCandidates
+      .where((candidate) => !candidate.alreadyPaired)
+      .toList(growable: false);
+
+  /// True when every discovered candidate was filtered out, which the list
+  /// explains rather than showing an empty search.
+  bool get allCandidatesAlreadyPaired =>
+      discoveredCandidates.isNotEmpty && candidates.isEmpty;
+
+  /// Re-runs the networking startup a locked secure store blocked, then
+  /// reopens the pairing window so the user continues where they left off.
+  Future<void> retryAfterUnlock() => _run(() async {
+    await bridge.retryNetworking();
+    await bridge.startPairing(120000);
+  });
 
   /// Friendly name of the peer in the current pairing session, resolved from
   /// the trusted-device list; null when no peer is known yet.

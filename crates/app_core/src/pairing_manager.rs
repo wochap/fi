@@ -399,7 +399,7 @@ impl PairingManager {
         self.keys
             .load_discovery_group_secret()
             .await
-            .map_err(|error| PairingError::Transport(error.to_string()))
+            .map_err(PairingError::from)
     }
     #[must_use]
     pub fn subscribe_normal_discovery(&self) -> broadcast::Receiver<NormalDiscoveryEvent> {
@@ -795,7 +795,7 @@ impl PairingManager {
         self.candidates_tx.send_replace(Vec::new());
     }
 
-    async fn fail(&self, error: PairingError) {
+    pub(crate) async fn fail(&self, error: PairingError) {
         tracing::warn!(event = "pairing_fail", error = %error, "pairing failed");
         let _ = self.apply(PairingInput::Fail(error));
         self.stop_transient().await;
@@ -808,22 +808,40 @@ impl PairingManager {
         if !ready {
             return Err(PairingError::InvalidTransition);
         }
-        if let Some(secret) = self
+        let existing = self
             .keys
             .load_discovery_group_secret()
             .await
-            .map_err(|error| PairingError::Transport(error.to_string()))?
-        {
-            let metadata = self
-                .control
-                .discovery_metadata()
-                .map_err(|error| PairingError::Transport(error.to_string()))?
-                .ok_or(PairingError::Malformed("secret metadata missing"))?;
+            .map_err(PairingError::from)?;
+        let metadata = self
+            .control
+            .discovery_metadata()
+            .map_err(|error| PairingError::Transport(error.to_string()))?;
+        if let (Some(secret), Some(metadata)) = (&existing, metadata) {
             self.group_tx.send_replace(Some(DiscoveryGroupState {
                 active: secret.clone(),
                 previous: None,
             }));
-            return Ok((secret, metadata));
+            return Ok((secret.clone(), metadata));
+        }
+        if existing.is_some() {
+            // Same orphan as `start_normal_discovery` reports: the key store is
+            // host-scoped while the epoch row is dataset-scoped, so a fresh or
+            // manually-cleared data directory meets a secret left by another
+            // dataset on this host. We are not in that group, and provisioning
+            // under its selector would collide with it, so the orphan (and any
+            // retained previous-epoch secret) is replaced by a new group.
+            tracing::warn!(
+                event = "discovery_secret_orphaned",
+                "discovery secret present without group metadata; replacing it with a new group"
+            );
+            self.keys
+                .remove_previous_discovery_group_secret()
+                .await
+                .map_err(PairingError::from)?;
+            self.control
+                .clear_discovery_rotation()
+                .map_err(|error| PairingError::Transport(error.to_string()))?;
         }
         let mut bytes = [0; 32];
         OsRng.fill_bytes(&mut bytes);
@@ -831,7 +849,7 @@ impl PairingManager {
         self.keys
             .store_discovery_group_secret(&secret)
             .await
-            .map_err(|error| PairingError::Transport(error.to_string()))?;
+            .map_err(PairingError::from)?;
         let metadata = DiscoveryGroupMetadata {
             epoch: 1,
             updated_at_ms: now_ms(),
@@ -868,12 +886,12 @@ impl PairingManager {
                 .keys
                 .load_discovery_group_secret()
                 .await
-                .map_err(|error| PairingError::Transport(error.to_string()))?
+                .map_err(PairingError::from)?
                 .ok_or(PairingError::Malformed("discovery secret missing"))?;
             self.keys
                 .store_previous_discovery_group_secret(current.epoch, &previous)
                 .await
-                .map_err(|error| PairingError::Transport(error.to_string()))?;
+                .map_err(PairingError::from)?;
             self.control
                 .store_discovery_rotation(DiscoveryRotationJournal {
                     previous_epoch: current.epoch,
@@ -894,7 +912,7 @@ impl PairingManager {
         self.keys
             .store_discovery_group_secret(secret)
             .await
-            .map_err(|error| PairingError::Transport(error.to_string()))?;
+            .map_err(PairingError::from)?;
         self.control
             .store_discovery_metadata(metadata)
             .map_err(|error| PairingError::Transport(error.to_string()))?;
@@ -922,7 +940,7 @@ impl PairingManager {
             .keys
             .load_discovery_group_secret()
             .await
-            .map_err(|error| PairingError::Transport(error.to_string()))?
+            .map_err(PairingError::from)?
         else {
             return Ok(false);
         };
@@ -1002,14 +1020,14 @@ impl PairingManager {
             self.keys
                 .load_previous_discovery_group_secret()
                 .await
-                .map_err(|error| PairingError::Transport(error.to_string()))?
+                .map_err(PairingError::from)?
                 .filter(|(epoch, _)| *epoch == journal.previous_epoch)
                 .map(|(epoch, secret)| (secret, epoch))
         } else {
             self.keys
                 .remove_previous_discovery_group_secret()
                 .await
-                .map_err(|error| PairingError::Transport(error.to_string()))?;
+                .map_err(PairingError::from)?;
             self.control
                 .clear_discovery_rotation()
                 .map_err(|error| PairingError::Transport(error.to_string()))?;
@@ -1069,7 +1087,7 @@ impl PairingManager {
             .keys
             .load_discovery_group_secret()
             .await
-            .map_err(|error| PairingError::Transport(error.to_string()))?
+            .map_err(PairingError::from)?
             .ok_or(PairingError::Malformed("discovery secret missing"))?;
         let current = self
             .control
@@ -1083,7 +1101,7 @@ impl PairingManager {
         self.keys
             .store_previous_discovery_group_secret(current.epoch, &previous)
             .await
-            .map_err(|error| PairingError::Transport(error.to_string()))?;
+            .map_err(PairingError::from)?;
         let journal = DiscoveryRotationJournal {
             previous_epoch: current.epoch,
             target_epoch,
@@ -1100,7 +1118,7 @@ impl PairingManager {
         self.keys
             .store_discovery_group_secret(&next)
             .await
-            .map_err(|error| PairingError::Transport(error.to_string()))?;
+            .map_err(PairingError::from)?;
         self.control
             .store_discovery_metadata(DiscoveryGroupMetadata {
                 epoch: target_epoch,
@@ -1159,7 +1177,7 @@ impl PairingManager {
             .keys
             .load_discovery_group_secret()
             .await
-            .map_err(|error| PairingError::Transport(error.to_string()))?
+            .map_err(PairingError::from)?
             .ok_or(PairingError::Malformed("discovery secret missing"))?;
         let update = match decode_update(frame, &current_secret) {
             Ok(update) => update,
@@ -1168,7 +1186,7 @@ impl PairingManager {
                     .keys
                     .load_previous_discovery_group_secret()
                     .await
-                    .map_err(|error| PairingError::Transport(error.to_string()))?
+                    .map_err(PairingError::from)?
                     .ok_or(PairingError::Authentication)?;
                 decode_update(frame, &previous).map_err(|_| PairingError::Authentication)?
             }
@@ -1212,7 +1230,7 @@ impl PairingManager {
             .keys
             .load_discovery_group_secret()
             .await
-            .map_err(|error| PairingError::Transport(error.to_string()))?
+            .map_err(PairingError::from)?
             .ok_or(PairingError::Malformed("discovery secret missing"))?;
         let ack = decode_ack(frame, &secret).map_err(|_| PairingError::Authentication)?;
         let epoch = self
@@ -1239,9 +1257,118 @@ impl PairingManager {
                 peer_device_id: plan.peer_device_id,
                 stage,
                 joining_root,
+                failure_reason: None,
                 updated_at_ms: now_ms(),
             })
             .map_err(|error| PairingError::Transport(error.to_string()))
+    }
+
+    /// Records why the commit for this session failed. The stage is left at the
+    /// last durable step, so the entry reads as an incomplete session with a
+    /// reason rather than as a rolled-back one; the trust record, if any, is
+    /// deliberately kept because the peer may legitimately hold trust for us.
+    pub fn journal_failure(
+        &self,
+        plan: &PairingCommitPlan,
+        reason: &str,
+    ) -> Result<(), PairingError> {
+        self.control
+            .record_pairing_journal_failure(plan.session_id.0, reason, now_ms())
+            .map(|_| ())
+            .map_err(|error| PairingError::Transport(error.to_string()))
+    }
+
+    /// Finishes a commit that stored trust but never reached `Complete`,
+    /// because the local side failed after the peer had already succeeded.
+    /// Runs on the next authenticated connection with that peer, so the two
+    /// devices stop disagreeing without needing a fresh pairing window.
+    ///
+    /// Only resumes entries whose trust is already durable: an earlier failure
+    /// left nothing to reconcile and still needs a real pairing window.
+    pub fn resume_incomplete_commit(&self, peer: DeviceId, now: u64) -> Result<bool, PairingError> {
+        let Some(record) = self
+            .control
+            .incomplete_pairing_journal_for_peer(peer)
+            .map_err(|error| PairingError::Transport(error.to_string()))?
+        else {
+            return Ok(false);
+        };
+        if !matches!(
+            record.stage,
+            PairingJournalStage::TrustStored
+                | PairingJournalStage::RootJoining
+                | PairingJournalStage::AwaitingAcknowledgement
+        ) {
+            return Ok(false);
+        }
+        // A session still in flight is not an interrupted one. Its own commit
+        // will complete or fail it, and completing the journal here would both
+        // race that commit and hide a real failure from a later resume.
+        if self
+            .sessions
+            .lock()
+            .is_ok_and(|sessions| sessions.contains_key(&PairingSessionId(record.session_id)))
+        {
+            return Ok(false);
+        }
+        let trusted = self
+            .control
+            .trusted_device(peer)
+            .map_err(|error| PairingError::Transport(error.to_string()))?
+            .is_some_and(|record| record.state == TrustState::Trusted);
+        if !trusted {
+            return Ok(false);
+        }
+        self.control
+            .store_pairing_journal(&PairingJournalRecord {
+                session_id: record.session_id,
+                peer_device_id: peer,
+                stage: PairingJournalStage::Complete,
+                joining_root: record.joining_root,
+                failure_reason: None,
+                updated_at_ms: now,
+            })
+            .map_err(|error| PairingError::Transport(error.to_string()))?;
+        tracing::info!(
+            event = "pairing_commit_resumed",
+            peer = %peer,
+            "resumed an unacknowledged pairing commit"
+        );
+        Ok(true)
+    }
+
+    /// Whether `peer` is already a trusted, non-revoked device.
+    pub fn is_trusted(&self, peer: DeviceId) -> Result<bool, PairingError> {
+        Ok(self
+            .control
+            .trusted_device(peer)
+            .map_err(|error| PairingError::Transport(error.to_string()))?
+            .is_some_and(|record| record.state == TrustState::Trusted))
+    }
+
+    /// IP addresses at which trusted, non-revoked devices are known to be
+    /// reachable. Pairing beacons are anonymous by design, so this is what a
+    /// candidate list matches against to suppress already-paired devices.
+    pub fn trusted_device_addresses(&self) -> Result<Vec<std::net::IpAddr>, PairingError> {
+        let devices = self
+            .control
+            .trusted_devices()
+            .map_err(|error| PairingError::Transport(error.to_string()))?;
+        let mut addresses = Vec::new();
+        for device in devices {
+            if device.state != TrustState::Trusted {
+                continue;
+            }
+            if let Some(metadata) = self
+                .control
+                .peer_connection(device.device_id)
+                .map_err(|error| PairingError::Transport(error.to_string()))?
+                && let Some(endpoint) = metadata.endpoint
+            {
+                addresses.push(endpoint.ip());
+            }
+        }
+        Ok(addresses)
     }
 
     pub fn establish_trust(
@@ -1251,11 +1378,17 @@ impl PairingManager {
         now: u64,
     ) -> Result<TrustedDeviceRecord, PairingError> {
         let device_id = DeviceId::from_public_key(peer_key.as_bytes());
+        // An already-trusted peer updates its record; re-pairing must not look
+        // like a first pairing, and must not leave a second row behind.
+        let existing = self
+            .control
+            .trusted_device(device_id)
+            .map_err(|error| PairingError::Transport(error.to_string()))?;
         let record = TrustedDeviceRecord {
             device_id,
             public_key: peer_key,
             friendly_name: name,
-            paired_at_ms: now,
+            paired_at_ms: existing.map_or(now, |record| record.paired_at_ms),
             last_seen_ms: Some(now),
             last_sync_ms: None,
             state: TrustState::Trusted,
@@ -1280,10 +1413,12 @@ impl PairingManager {
         plan: &PairingCommitPlan,
         now: u64,
     ) -> Result<TrustedDeviceRecord, PairingError> {
+        let already_paired = self.is_trusted(plan.peer_device_id)?;
         let record = self.establish_trust(plan.peer_public_key, plan.peer_name.clone(), now)?;
         self.apply(PairingInput::CommitComplete {
             session_id: plan.session_id,
             peer: plan.peer_device_id,
+            already_paired,
         })?;
         if let Ok(mut sessions) = self.sessions.lock()
             && let Some(session) = sessions.remove(&plan.session_id)
@@ -1364,15 +1499,18 @@ impl PairingManager {
     ) -> Result<(), PairingError> {
         let session = self.session(plan.session_id)?;
         let mac = sign_commit_ack(&session.keys, plan.session_id);
-        session
-            .stream
-            .lock()
-            .await
+        let mut stream = session.stream.lock().await;
+        stream
             .send(&PairingMessage::CommitAck {
                 session_id: plan.session_id,
                 mac,
             })
-            .await
+            .await?;
+        // The caller closes the connection immediately after this returns, and
+        // the provisioner is blocked waiting for exactly this message, so the
+        // acknowledgement has to be on the wire and acknowledged before the
+        // close can discard it.
+        stream.finish_and_flush().await
     }
 
     pub fn trusted_devices(&self) -> Result<Vec<TrustedDeviceRecord>, PairingError> {
@@ -1716,6 +1854,248 @@ mod tests {
             table.candidates().is_empty(),
             "goodbye removes the instance"
         );
+    }
+
+    /// The key store is host-scoped, the epoch row is dataset-scoped: a reset
+    /// or hand-cleared data directory meets a secret left by another dataset on
+    /// the same host. Provisioning must not fail on that orphan.
+    #[tokio::test]
+    async fn an_orphaned_secret_is_replaced_rather_than_failing_the_commit() {
+        let directory = tempfile::tempdir().unwrap();
+        let keys = Arc::new(InMemorySecureKeyStore::seeded([75; 32]));
+        // A secret left behind by a dataset this control store knows nothing of.
+        let orphan = DiscoveryGroupSecret::from_bytes([9; 32]);
+        keys.store_discovery_group_secret(&orphan).await.unwrap();
+        let identity = Arc::new(DeviceIdentity::load_or_create(keys.as_ref()).await.unwrap());
+        let control =
+            Arc::new(SqliteControlStore::open(directory.path().join("control.sqlite")).unwrap());
+        let discovery = Arc::new(FakeDiscoveryProvider::new(Arc::new(ManualClock::new(0))));
+        let manager = PairingManager::new(
+            identity,
+            keys.clone(),
+            control,
+            discovery,
+            "127.0.0.1".parse().unwrap(),
+        )
+        .unwrap();
+
+        let (secret, metadata) = manager.ensure_discovery_secret(true).await.unwrap();
+        assert_eq!(metadata.epoch, 1);
+        assert_ne!(
+            secret, orphan,
+            "the other dataset's group must not be joined by accident"
+        );
+        assert_eq!(
+            keys.load_discovery_group_secret().await.unwrap(),
+            Some(secret.clone())
+        );
+
+        // Now that the epoch row exists, the secret is stable across calls.
+        let (again, metadata_again) = manager.ensure_discovery_secret(true).await.unwrap();
+        assert_eq!(again, secret);
+        assert_eq!(metadata_again.epoch, metadata.epoch);
+    }
+
+    /// Pairing beacons carry no identity, so an already-paired device is
+    /// recognised by the address it answers on, not by who it says it is.
+    #[tokio::test]
+    async fn trusted_device_addresses_cover_known_endpoints_only() {
+        let (manager, _discovery, _directory) = manager(73).await;
+        let peer_key = PrivateDeviceKey::generate().public_key();
+        let peer = DeviceId::from_public_key(peer_key.as_bytes());
+        manager
+            .establish_trust(peer_key, "laptop".into(), 1_000)
+            .unwrap();
+        assert!(
+            manager.trusted_device_addresses().unwrap().is_empty(),
+            "a trusted device with no known endpoint suppresses nothing"
+        );
+
+        manager
+            .control
+            .store_peer_connection(&crate::control::PeerConnectionMetadata {
+                device_id: peer,
+                state: crate::routing::PeerConnectionState::Connected,
+                endpoint: Some("192.168.0.22:34729".parse().unwrap()),
+                updated_at_ms: 1_000,
+            })
+            .unwrap();
+        let addresses = manager.trusted_device_addresses().unwrap();
+        assert_eq!(addresses, vec!["192.168.0.22".parse::<IpAddr>().unwrap()]);
+        assert!(manager.is_trusted(peer).unwrap());
+
+        // A revoked device stops suppressing its own address.
+        manager.revoke(peer, 2_000).unwrap();
+        assert!(manager.trusted_device_addresses().unwrap().is_empty());
+        assert!(!manager.is_trusted(peer).unwrap());
+    }
+
+    /// Re-pairing an already-trusted peer updates its record; it must not
+    /// insert a second one or reset when the pairing began.
+    #[tokio::test]
+    async fn re_establishing_trust_updates_the_existing_record() {
+        let (manager, _discovery, _directory) = manager(74).await;
+        let peer_key = PrivateDeviceKey::generate().public_key();
+        let peer = DeviceId::from_public_key(peer_key.as_bytes());
+        manager
+            .establish_trust(peer_key, "laptop".into(), 1_000)
+            .unwrap();
+        manager
+            .establish_trust(peer_key, "laptop renamed".into(), 5_000)
+            .unwrap();
+        let trusted = manager.trusted_devices().unwrap();
+        assert_eq!(trusted.len(), 1);
+        assert_eq!(trusted[0].device_id, peer);
+        assert_eq!(trusted[0].friendly_name, "laptop renamed");
+        assert_eq!(
+            trusted[0].paired_at_ms, 1_000,
+            "the original pairing time survives a re-pair"
+        );
+    }
+
+    /// The peer finished its commit and reported success; this side stored
+    /// trust, journalled `AwaitingAcknowledgement`, and then failed. The entry
+    /// must stay resumable and must not fork the trust record.
+    #[tokio::test]
+    async fn a_failed_commit_stays_resumable_without_duplicating_trust() {
+        let (manager, _discovery, _directory) = manager(71).await;
+        let peer_key = PrivateDeviceKey::generate().public_key();
+        let peer = DeviceId::from_public_key(peer_key.as_bytes());
+        let session = [7; 16];
+
+        manager
+            .establish_trust(peer_key, "phone".into(), 1_000)
+            .unwrap();
+        manager
+            .control
+            .store_pairing_journal(&PairingJournalRecord {
+                session_id: session,
+                peer_device_id: peer,
+                stage: PairingJournalStage::AwaitingAcknowledgement,
+                joining_root: None,
+                failure_reason: None,
+                updated_at_ms: 1_000,
+            })
+            .unwrap();
+        manager
+            .control
+            .record_pairing_journal_failure(session, "secure key store is locked", 1_100)
+            .unwrap();
+
+        let recorded = manager.control.pairing_journal(session).unwrap().unwrap();
+        assert_eq!(recorded.stage, PairingJournalStage::AwaitingAcknowledgement);
+        assert_eq!(
+            recorded.failure_reason.as_deref(),
+            Some("secure key store is locked"),
+            "the session is incomplete with its reason, not rolled back"
+        );
+        assert_eq!(
+            manager.trusted_devices().unwrap().len(),
+            1,
+            "trust is kept: the peer legitimately holds trust for us"
+        );
+
+        // The next authenticated connection finishes it, with no second record
+        // and no contradictory outcome.
+        assert!(manager.resume_incomplete_commit(peer, 2_000).unwrap());
+        let resumed = manager.control.pairing_journal(session).unwrap().unwrap();
+        assert_eq!(resumed.stage, PairingJournalStage::Complete);
+        assert_eq!(resumed.failure_reason, None);
+        let trusted = manager.trusted_devices().unwrap();
+        assert_eq!(trusted.len(), 1);
+        assert_eq!(trusted[0].device_id, peer);
+        assert_eq!(trusted[0].state, TrustState::Trusted);
+
+        // Idempotent: a later reconnection finds nothing left to resume.
+        assert!(!manager.resume_incomplete_commit(peer, 3_000).unwrap());
+    }
+
+    /// The sync channel comes up mid-commit, so the reconnect hook meets a
+    /// session that is still running. Completing its journal there would race
+    /// the commit and mask a failure it has not reached yet.
+    #[tokio::test]
+    async fn a_live_session_is_never_resumed_from_under_its_own_commit() {
+        let (a, _, _a_dir) = manager(76).await;
+        let (b, _, _b_dir) = manager(77).await;
+        let root = automerge_repo::DocumentId::new();
+        let window = Duration::from_secs(5);
+        a.set_root_state(RootState::Ready(root));
+        let a_instance = a.start(window, "A".into()).await.unwrap();
+        b.set_root_state(RootState::Ready(root));
+        let b_instance = b.start(window, "B".into()).await.unwrap();
+        let candidate = PairingCandidate {
+            instance_id: b_instance,
+            endpoint: b.transport.local_addr().unwrap(),
+            expires_at_ms: now_ms() + 5_000,
+        };
+        let a_session = a.connect(candidate, "A".into(), window).await.unwrap();
+        let b_session = loop {
+            if let PairingState::AwaitingConfirmation { session_id, .. } = b.state() {
+                break session_id;
+            }
+            tokio::task::yield_now().await;
+        };
+        assert_eq!(a_session, pairing_session_id(a_instance, b_instance));
+        let (a_plan, b_plan) = tokio::join!(a.confirm(a_session), b.confirm(b_session));
+        let a_plan = a_plan.unwrap();
+        b_plan.unwrap();
+        let peer = a_plan.peer_device_id;
+
+        // Mid-commit: trust and the journal are already durable, and the peer
+        // has just come up on the sync channel.
+        a.establish_trust(a_plan.peer_public_key, "B".into(), 1_000)
+            .unwrap();
+        a.journal(&a_plan, PairingJournalStage::AwaitingAcknowledgement, None)
+            .unwrap();
+        assert!(
+            !a.resume_incomplete_commit(peer, 2_000).unwrap(),
+            "the running commit owns this session"
+        );
+        assert_eq!(
+            a.control
+                .pairing_journal(a_session.0)
+                .unwrap()
+                .unwrap()
+                .stage,
+            PairingJournalStage::AwaitingAcknowledgement,
+            "the journal is left for the commit to finish"
+        );
+
+        // Once the session is gone, an entry it never completed is resumable.
+        a.finish_trust(&a_plan, 10).unwrap();
+        a.journal(&a_plan, PairingJournalStage::AwaitingAcknowledgement, None)
+            .unwrap();
+        assert!(a.resume_incomplete_commit(peer, 3_000).unwrap());
+        assert_eq!(
+            a.control
+                .pairing_journal(a_session.0)
+                .unwrap()
+                .unwrap()
+                .stage,
+            PairingJournalStage::Complete
+        );
+    }
+
+    /// A failure before trust was stored has nothing to reconcile, so it must
+    /// not be silently "completed" on the next connection.
+    #[tokio::test]
+    async fn an_early_failure_is_not_resumable() {
+        let (manager, _discovery, _directory) = manager(72).await;
+        let peer_key = PrivateDeviceKey::generate().public_key();
+        let peer = DeviceId::from_public_key(peer_key.as_bytes());
+        manager
+            .control
+            .store_pairing_journal(&PairingJournalRecord {
+                session_id: [8; 16],
+                peer_device_id: peer,
+                stage: PairingJournalStage::Confirmed,
+                joining_root: None,
+                failure_reason: Some("secure key store is locked".into()),
+                updated_at_ms: 1_000,
+            })
+            .unwrap();
+        assert!(!manager.resume_incomplete_commit(peer, 2_000).unwrap());
+        assert!(manager.trusted_devices().unwrap().is_empty());
     }
 
     async fn manager(

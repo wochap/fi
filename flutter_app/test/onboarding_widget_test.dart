@@ -38,6 +38,7 @@ PairingStateDto pairingState(
   remoteConfirmed: false,
   message: message,
   failure: failure,
+  alreadyPaired: false,
 );
 
 const peerId =
@@ -115,6 +116,7 @@ void main() {
       instanceId: List.filled(16, '02').join(),
       endpoint: '192.0.2.7:4400',
       expiresAtMs: DateTime.now().millisecondsSinceEpoch + 10000,
+      alreadyPaired: false,
     );
     bridge.candidateController.add([candidate]);
     await tester.pump();

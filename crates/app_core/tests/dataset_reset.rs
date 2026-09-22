@@ -449,15 +449,25 @@ async fn inconsistent_and_exhausted_stores_are_reset_resolvable_but_io_is_not() 
         ApplicationState::NeedsDecision
     );
 
-    // Keystore unavailable: not resolvable.
+    // Keystore unavailable: the open degrades to local-only rather than
+    // failing, and the reason it reports is not reset-resolvable either.
     let dir = tempfile::tempdir().unwrap();
-    let error = open_networked(
+    let core = open_networked(
         dir.path(),
         Arc::new(app_core::UnavailableSecureKeyStore(
             SecureStoreError::Unavailable("no session bus".into()),
         )),
     )
     .await
-    .unwrap_err();
+    .unwrap();
+    let deferred = core
+        .networking_deferred()
+        .expect("an unavailable store defers networking");
+    assert!(matches!(
+        deferred,
+        app_core::NetworkingDeferredReason::SecureStoreUnavailable(_)
+    ));
+    let error = deferred.to_app_error();
     assert!(!error.is_reset_resolvable(), "{error}");
+    core.shutdown().await.unwrap();
 }

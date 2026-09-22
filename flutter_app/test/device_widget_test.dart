@@ -25,6 +25,7 @@ PairingStateDto pairingState(
   String? session,
   String? sas,
   String? message,
+  PairingFailureKindDto? failure,
 }) => PairingStateDto(
   kind: kind,
   sessionId: session,
@@ -32,6 +33,8 @@ PairingStateDto pairingState(
   localConfirmed: false,
   remoteConfirmed: false,
   message: message,
+  failure: failure,
+  alreadyPaired: false,
 );
 
 Future<void> openDevices(
@@ -62,6 +65,7 @@ void main() {
       instanceId: List.filled(16, '01').join(),
       endpoint: '192.0.2.1:4400',
       expiresAtMs: DateTime.now().millisecondsSinceEpoch + 10000,
+      alreadyPaired: false,
     );
     bridge.candidateController.add([candidate]);
     await tester.pump();
@@ -211,4 +215,79 @@ void main() {
       expect(find.text('Searching'), findsNothing);
     },
   );
+
+  testWidgets('a locked keystore replaces the committing spinner with retry', (
+    tester,
+  ) async {
+    final bridge = FakeCollectionBridge();
+    await openDevices(tester, bridge);
+    await tester.tap(find.byKey(const Key('start-pairing')));
+    await tester.pump();
+    bridge.pairingController.add(
+      pairingState(PairingKindDto.committing, session: 'session'),
+    );
+    await tester.pump();
+    expect(
+      find.text('Saving trust and synchronizing the dataset\u2026'),
+      findsOneWidget,
+    );
+
+    bridge.pairingController.add(
+      pairingState(
+        PairingKindDto.failed,
+        failure: PairingFailureKindDto.secureStoreLocked,
+        message: 'secure key store is locked',
+      ),
+    );
+    await tester.pump();
+    // The spinner is gone at once, and the copy names the keyring, never an
+    // expiry.
+    expect(
+      find.text('Saving trust and synchronizing the dataset\u2026'),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const Key('pairing-secure-store-locked')),
+      findsOneWidget,
+    );
+    expect(find.textContaining('expired'), findsNothing);
+
+    await tester.tap(find.byKey(const Key('pairing-retry-after-unlock')));
+    await tester.pump();
+    expect(bridge.retryNetworkingCalls, 1);
+    expect(bridge.pairingCalls, contains('retryNetworking'));
+  });
+
+  testWidgets('already paired candidates are hidden and explained', (
+    tester,
+  ) async {
+    final bridge = FakeCollectionBridge();
+    await openDevices(tester, bridge);
+    await tester.tap(find.byKey(const Key('start-pairing')));
+    await tester.pump();
+
+    final paired = PairingCandidateDto(
+      instanceId: List.filled(16, '03').join(),
+      endpoint: '192.0.2.9:4400',
+      expiresAtMs: DateTime.now().millisecondsSinceEpoch + 10000,
+      alreadyPaired: true,
+    );
+    bridge.candidateController.add([paired]);
+    await tester.pump();
+    expect(find.text('192.0.2.9:4400'), findsNothing);
+    expect(find.byKey(const Key('candidates-already-paired')), findsOneWidget);
+    expect(find.text('No nearby pairing candidates yet.'), findsNothing);
+
+    final fresh = PairingCandidateDto(
+      instanceId: List.filled(16, '04').join(),
+      endpoint: '192.0.2.10:4400',
+      expiresAtMs: DateTime.now().millisecondsSinceEpoch + 10000,
+      alreadyPaired: false,
+    );
+    bridge.candidateController.add([paired, fresh]);
+    await tester.pump();
+    expect(find.text('192.0.2.10:4400'), findsOneWidget);
+    expect(find.text('192.0.2.9:4400'), findsNothing);
+    expect(find.byKey(const Key('candidates-already-paired')), findsNothing);
+  });
 }

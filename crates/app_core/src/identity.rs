@@ -1,6 +1,13 @@
 //! Permanent installation identity and secure-key storage boundaries.
 
-use std::{fmt, str::FromStr, sync::Mutex};
+use std::{
+    fmt,
+    str::FromStr,
+    sync::{
+        Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
+};
 
 use async_trait::async_trait;
 use ed25519_dalek::{SigningKey, VerifyingKey};
@@ -235,10 +242,16 @@ const EPOCH_ATTRIBUTE: &str = "epoch";
 #[cfg(target_os = "linux")]
 mod linux_secret_service {
     use std::collections::HashMap;
+    use std::time::Duration;
 
     use secret_service::{Collection, EncryptionType, SecretService};
 
     use super::SecureStoreError;
+
+    /// An unlock drives the desktop's own prompt, which waits on the user. Bound
+    /// it so an unanswered dialog reports a locked store instead of hanging the
+    /// caller (and, during pairing, silently consuming the session deadline).
+    const UNLOCK_TIMEOUT: Duration = Duration::from_secs(30);
 
     pub(super) fn map_error(error: secret_service::Error) -> SecureStoreError {
         match error {
@@ -264,13 +277,26 @@ mod linux_secret_service {
             Ok(Self { service })
         }
 
+        /// `Collection::ensure_unlocked` only reports the current state; it never
+        /// asks the service to unlock. Request the unlock ourselves so a merely
+        /// locked keyring resolves through the desktop's prompt, and report
+        /// `Locked` only when it is still locked afterwards.
         pub(super) async fn unlocked_collection(&self) -> Result<Collection<'_>, SecureStoreError> {
             let collection = self
                 .service
                 .get_default_collection()
                 .await
                 .map_err(map_error)?;
-            collection.ensure_unlocked().await.map_err(map_error)?;
+            if collection.is_locked().await.map_err(map_error)? {
+                match tokio::time::timeout(UNLOCK_TIMEOUT, collection.unlock()).await {
+                    Ok(Ok(())) => {}
+                    Ok(Err(error)) => return Err(map_error(error)),
+                    Err(_elapsed) => return Err(SecureStoreError::Locked),
+                }
+                if collection.is_locked().await.map_err(map_error)? {
+                    return Err(SecureStoreError::Locked);
+                }
+            }
             Ok(collection)
         }
     }
@@ -609,6 +635,101 @@ impl SecureKeyStore for InMemorySecureKeyStore {
     }
 }
 
+/// Test adapter whose lock state can be flipped at runtime, so a test can open
+/// against a locked store and then "unlock the keyring" before retrying.
+#[derive(Debug)]
+pub struct LockableSecureKeyStore {
+    inner: InMemorySecureKeyStore,
+    locked: AtomicBool,
+    /// When false the device key stays readable while locked, which is the
+    /// shape of a store that only guards the discovery-group secret.
+    locks_device_key: bool,
+}
+
+impl LockableSecureKeyStore {
+    #[must_use]
+    pub const fn locked(seed: [u8; 32], locks_device_key: bool) -> Self {
+        Self {
+            inner: InMemorySecureKeyStore::seeded(seed),
+            locked: AtomicBool::new(true),
+            locks_device_key,
+        }
+    }
+
+    #[must_use]
+    pub const fn unlocked(seed: [u8; 32], locks_device_key: bool) -> Self {
+        Self {
+            inner: InMemorySecureKeyStore::seeded(seed),
+            locked: AtomicBool::new(false),
+            locks_device_key,
+        }
+    }
+
+    pub fn unlock(&self) {
+        self.locked.store(false, Ordering::Release);
+    }
+
+    /// Simulates the keyring re-locking while the application is running.
+    pub fn lock(&self) {
+        self.locked.store(true, Ordering::Release);
+    }
+
+    fn guard(&self) -> Result<(), SecureStoreError> {
+        if self.locked.load(Ordering::Acquire) {
+            Err(SecureStoreError::Locked)
+        } else {
+            Ok(())
+        }
+    }
+}
+
+#[async_trait]
+impl SecureKeyStore for LockableSecureKeyStore {
+    async fn load_or_create_device_key(&self) -> Result<PrivateDeviceKey, SecureStoreError> {
+        if self.locks_device_key {
+            self.guard()?;
+        }
+        self.inner.load_or_create_device_key().await
+    }
+    async fn load_discovery_group_secret(
+        &self,
+    ) -> Result<Option<DiscoveryGroupSecret>, SecureStoreError> {
+        self.guard()?;
+        self.inner.load_discovery_group_secret().await
+    }
+    async fn store_discovery_group_secret(
+        &self,
+        secret: &DiscoveryGroupSecret,
+    ) -> Result<(), SecureStoreError> {
+        self.guard()?;
+        self.inner.store_discovery_group_secret(secret).await
+    }
+    async fn remove_discovery_group_secret(&self) -> Result<(), SecureStoreError> {
+        self.guard()?;
+        self.inner.remove_discovery_group_secret().await
+    }
+    async fn load_previous_discovery_group_secret(
+        &self,
+    ) -> Result<Option<(u64, DiscoveryGroupSecret)>, SecureStoreError> {
+        self.guard()?;
+        self.inner.load_previous_discovery_group_secret().await
+    }
+    async fn store_previous_discovery_group_secret(
+        &self,
+        epoch: u64,
+        secret: &DiscoveryGroupSecret,
+    ) -> Result<(), SecureStoreError> {
+        self.guard()?;
+        self.inner
+            .store_previous_discovery_group_secret(epoch, secret)
+            .await
+    }
+    async fn remove_previous_discovery_group_secret(&self) -> Result<(), SecureStoreError> {
+        self.guard()?;
+        self.inner.remove_previous_discovery_group_secret().await
+    }
+}
+
 /// Adapter useful for deterministic failure and lifecycle tests.
 #[derive(Clone, Debug)]
 pub struct UnavailableSecureKeyStore(pub SecureStoreError);
@@ -708,6 +829,30 @@ mod tests {
                 .parse::<DeviceId>()
                 .is_err()
         );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn secret_service_errors_keep_locked_distinct_from_unavailable() {
+        use super::linux_secret_service::map_error;
+
+        assert_eq!(
+            map_error(secret_service::Error::Locked),
+            SecureStoreError::Locked
+        );
+        // A dismissed prompt is, from the user's side, still a locked store.
+        assert_eq!(
+            map_error(secret_service::Error::Prompt),
+            SecureStoreError::Locked
+        );
+        assert!(matches!(
+            map_error(secret_service::Error::Unavailable),
+            SecureStoreError::Unavailable(_)
+        ));
+        assert!(matches!(
+            map_error(secret_service::Error::NoResult),
+            SecureStoreError::Operation(_)
+        ));
     }
 
     #[tokio::test]

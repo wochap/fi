@@ -26,7 +26,9 @@ pub mod values;
 pub mod widget_registry;
 pub mod widgets;
 
-pub use application::{AppCore, AppCoreConfig, RevocationOutcome, reset_dataset};
+pub use application::{
+    AppCore, AppCoreConfig, NetworkingDeferredReason, RevocationOutcome, reset_dataset,
+};
 pub use automerge_repo::{
     QuarantineReason, RecoveryOutcome, RecoveryReason, RecoveryRecord,
     error::BootstrapError as RepositoryBootstrapError,
@@ -58,7 +60,8 @@ pub use generic::{
 pub use hlc::{HlcError, HlcNodeId, HlcStamp, HybridLogicalClock, SystemWallTime, WallTime};
 pub use identity::{
     DeviceId, DeviceIdentity, IdentityError, InMemorySecureKeyStore, LinuxSecretServiceKeyStore,
-    PrivateDeviceKey, PublicDeviceKey, SecureKeyStore, SecureStoreError, UnavailableSecureKeyStore,
+    LockableSecureKeyStore, PrivateDeviceKey, PublicDeviceKey, SecureKeyStore, SecureStoreError,
+    UnavailableSecureKeyStore,
 };
 pub use pairing::{
     PAIRING_ALPN, PairingCandidate, PairingDecision, PairingDecisionKind, PairingError,

@@ -256,6 +256,25 @@ impl PairingStream {
             .finish()
             .map_err(|error| PairingError::Transport(error.to_string()))
     }
+
+    /// Finishes the send side and waits until the peer has acknowledged every
+    /// byte written to it.
+    ///
+    /// [`Self::send`] only buffers into the connection, and closing a QUIC
+    /// connection discards whatever is still in flight. The last message of a
+    /// pairing conversation is therefore sent with this, so the sender does not
+    /// close the connection out from under a message the peer is waiting for.
+    pub async fn finish_and_flush(&mut self) -> Result<(), PairingError> {
+        self.finish()?;
+        match self.send.stopped().await {
+            // The peer read and acknowledged everything.
+            Ok(None) => Ok(()),
+            Ok(Some(code)) => Err(PairingError::Transport(format!(
+                "peer reset the pairing stream with code {code}"
+            ))),
+            Err(error) => Err(PairingError::Transport(error.to_string())),
+        }
+    }
 }
 
 pub struct PairingTransport {

@@ -144,6 +144,7 @@ void main() {
         localConfirmed: false,
         remoteConfirmed: false,
         failure: PairingFailureKindDto.rootMismatch,
+        alreadyPaired: false,
       ),
     );
     await pumpUntilFound(

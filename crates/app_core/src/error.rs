@@ -88,6 +88,21 @@ impl AppError {
                 )
         )
     }
+
+    /// Whether this failure is the desktop secure key store being locked. The
+    /// user-facing fix is to unlock the keyring and retry, so this stays
+    /// recoverable through every layer instead of collapsing into a generic
+    /// networking-initialization failure.
+    #[must_use]
+    pub fn is_secure_store_locked(&self) -> bool {
+        use crate::identity::{IdentityError, SecureStoreError};
+        use crate::pairing::PairingError;
+        matches!(
+            self,
+            Self::Identity(IdentityError::SecureStore(SecureStoreError::Locked))
+                | Self::Pairing(PairingError::SecureStoreLocked)
+        )
+    }
 }
 
 impl From<automerge_repo::Error> for AppError {

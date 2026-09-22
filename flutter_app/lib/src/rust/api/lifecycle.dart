@@ -37,6 +37,19 @@ Future<BootstrapDto> initializeAndroidNetworked({
 Future<BootstrapDto> resetDataset() =>
     RustLib.instance.api.crateApiLifecycleResetDataset();
 
+/// Why peer networking is not running, when a networked open met a locked or
+/// unavailable secure store. `None` means networking is not deferred.
+Future<NetworkingDeferredDto?> networkingDeferred() =>
+    RustLib.instance.api.crateApiLifecycleNetworkingDeferred();
+
+/// Retries the networking startup deferred by a locked or unavailable secure
+/// store and reports whether peer networking is now active. Idempotent: with
+/// nothing deferred it succeeds without restarting discovery. A deferral that
+/// happened before the device key could be read is retried by reopening the
+/// core with the same target, since there is no network stack to restart.
+Future<bool> retryNetworking() =>
+    RustLib.instance.api.crateApiLifecycleRetryNetworking();
+
 Future<BootstrapDto> bootstrapState() =>
     RustLib.instance.api.crateApiLifecycleBootstrapState();
 

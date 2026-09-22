@@ -34,11 +34,12 @@ pub async fn pairing_state() -> Result<PairingStateDto, BridgeError> {
 }
 
 pub async fn pairing_candidates() -> Result<Vec<PairingCandidateDto>, BridgeError> {
-    Ok(core()
-        .await?
+    let app = core().await?;
+    let trusted = app.trusted_device_addresses().into_iter().collect();
+    Ok(app
         .pairing_candidates()
         .into_iter()
-        .map(Into::into)
+        .map(|candidate| PairingCandidateDto::from_core(candidate, &trusted))
         .collect())
 }
 
@@ -259,13 +260,24 @@ pub async fn pairing_candidates_stream(
         .await?
         .subscribe_pairing_candidates()
         .ok_or_else(|| BridgeError::lifecycle("Pairing is unavailable."))?;
+    let app = core().await?;
     tokio::spawn(async move {
-        let map = |values: Vec<PairingCandidate>| values.into_iter().map(Into::into).collect();
-        if sink.add(map(receiver.borrow().clone())).is_err() {
+        // Recomputed per emission: revoking a device must stop suppressing it.
+        let map = |values: Vec<PairingCandidate>, app: &app_core::AppCore| {
+            let trusted = app.trusted_device_addresses().into_iter().collect();
+            values
+                .into_iter()
+                .map(|candidate| PairingCandidateDto::from_core(candidate, &trusted))
+                .collect::<Vec<_>>()
+        };
+        if sink.add(map(receiver.borrow().clone(), &app)).is_err() {
             return;
         }
         while receiver.changed().await.is_ok() {
-            if sink.add(map(receiver.borrow_and_update().clone())).is_err() {
+            if sink
+                .add(map(receiver.borrow_and_update().clone(), &app))
+                .is_err()
+            {
                 break;
             }
         }

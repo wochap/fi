@@ -67,6 +67,7 @@ final class FakeCollectionBridge implements CollectionBridge {
     kind: PairingKindDto.idle,
     localConfirmed: false,
     remoteConfirmed: false,
+    alreadyPaired: false,
   );
   SyncStatusDto status = SyncStatusDto.offline;
   Object? nextError;
@@ -134,9 +135,34 @@ final class FakeCollectionBridge implements CollectionBridge {
       kind: PairingKindDto.idle,
       localConfirmed: false,
       remoteConfirmed: false,
+      alreadyPaired: false,
     );
     bootstrapController.add(bootstrap);
     return bootstrap;
+  }
+
+  /// Why peer networking is deferred, as the fake core reports it. Tests set
+  /// it to simulate a locked keyring and clear it to simulate an unlock.
+  NetworkingDeferredDto? deferredNetworking;
+
+  /// Error the next [retryNetworking] throws, for the still-locked case.
+  Object? nextRetryNetworkingError;
+  int retryNetworkingCalls = 0;
+
+  @override
+  Future<BootstrapDto> bootstrapState() async => bootstrap;
+  @override
+  Future<NetworkingDeferredDto?> networkingDeferred() async =>
+      deferredNetworking;
+  @override
+  Future<bool> retryNetworking() async {
+    retryNetworkingCalls++;
+    pairingCalls.add('retryNetworking');
+    final error = nextRetryNetworkingError;
+    nextRetryNetworkingError = null;
+    if (error != null) throw error;
+    deferredNetworking = null;
+    return true;
   }
 
   @override
@@ -762,6 +788,7 @@ final class FakeCollectionBridge implements CollectionBridge {
       deadlineMs: DateTime.now().millisecondsSinceEpoch + durationMs,
       localConfirmed: false,
       remoteConfirmed: false,
+      alreadyPaired: false,
     );
     pairingController.add(pairing);
   }
@@ -780,6 +807,7 @@ final class FakeCollectionBridge implements CollectionBridge {
       kind: PairingKindDto.idle,
       localConfirmed: false,
       remoteConfirmed: false,
+      alreadyPaired: false,
     );
     pairingController.add(pairing);
   }

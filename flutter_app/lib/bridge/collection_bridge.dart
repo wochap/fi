@@ -14,6 +14,7 @@ abstract interface class CollectionBridge {
   /// Deliberate local dataset reset; see `lifecycle.resetDataset`. Returns the
   /// post-reset bootstrap state, normally `needsDecision`.
   Future<BootstrapDto> resetDataset();
+  Future<BootstrapDto> bootstrapState();
   Future<ProjectionDto> projectionState();
   Stream<BootstrapDto> bootstrapEvents();
   Stream<ProjectionDto> projectionEvents();
@@ -21,6 +22,14 @@ abstract interface class CollectionBridge {
   Stream<BridgeErrorEventDto> errorEvents();
   Future<void> shutdown();
   Future<void> setForeground(bool foreground);
+
+  /// Why peer networking is not running, when a networked open met a locked or
+  /// unavailable secure store. Null when networking is not deferred.
+  Future<NetworkingDeferredDto?> networkingDeferred();
+
+  /// Retries the deferred networking startup and reports whether peer
+  /// networking is now active. Idempotent.
+  Future<bool> retryNetworking();
   Future<void> startPairing(int durationMs);
   Future<void> stopPairing();
   Future<void> connectPairingCandidate(PairingCandidateDto candidate);
@@ -155,6 +164,8 @@ final class RustCollectionBridge implements CollectionBridge {
   }
 
   @override
+  Future<BootstrapDto> bootstrapState() => lifecycle.bootstrapState();
+  @override
   Future<ProjectionDto> projectionState() => lifecycle.projectionState();
   @override
   Stream<BootstrapDto> bootstrapEvents() => lifecycle.bootstrapStream();
@@ -169,6 +180,11 @@ final class RustCollectionBridge implements CollectionBridge {
   @override
   Future<void> setForeground(bool foreground) =>
       lifecycle.setForeground(foreground: foreground);
+  @override
+  Future<NetworkingDeferredDto?> networkingDeferred() =>
+      lifecycle.networkingDeferred();
+  @override
+  Future<bool> retryNetworking() => lifecycle.retryNetworking();
   @override
   Future<void> startPairing(int durationMs) async =>
       pairing.startPairing(durationMs: durationMs);

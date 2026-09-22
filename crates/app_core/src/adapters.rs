@@ -298,6 +298,11 @@ impl std::fmt::Debug for SqliteControlStore {
     }
 }
 
+/// One pairing-journal row as SQLite returns it: the key column (session id or
+/// peer id, depending on the query), stage, joining root, failure reason and
+/// timestamp.
+type PairingJournalRow<Key> = (Key, String, Option<String>, Option<String>, i64);
+
 impl SqliteControlStore {
     pub fn open(path: PathBuf) -> Result<Self, StorageError> {
         if let Some(parent) = path.parent() {
@@ -339,7 +344,8 @@ impl SqliteControlStore {
              CREATE TABLE IF NOT EXISTS pairing_journal (
                 session_id BLOB PRIMARY KEY CHECK(length(session_id) = 16),
                 peer_device_id TEXT NOT NULL, stage TEXT NOT NULL,
-                joining_root TEXT, updated_at_ms INTEGER NOT NULL CHECK(updated_at_ms >= 0)
+                joining_root TEXT, failure_reason TEXT,
+                updated_at_ms INTEGER NOT NULL CHECK(updated_at_ms >= 0)
              ) STRICT;
              CREATE TABLE IF NOT EXISTS discovery_group (
                 singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
@@ -812,10 +818,97 @@ impl SqliteControlStore {
             ));
         }
         connection.execute(
-                "INSERT INTO pairing_journal(session_id,peer_device_id,stage,joining_root,updated_at_ms) VALUES(?1,?2,?3,?4,?5)
-                 ON CONFLICT(session_id) DO UPDATE SET stage=excluded.stage,joining_root=COALESCE(pairing_journal.joining_root,excluded.joining_root),updated_at_ms=excluded.updated_at_ms",
-                params![record.session_id.as_slice(),record.peer_device_id.to_string(),record.stage.as_str(),record.joining_root,updated],
+                "INSERT INTO pairing_journal(session_id,peer_device_id,stage,joining_root,failure_reason,updated_at_ms) VALUES(?1,?2,?3,?4,?5,?6)
+                 ON CONFLICT(session_id) DO UPDATE SET stage=excluded.stage,joining_root=COALESCE(pairing_journal.joining_root,excluded.joining_root),failure_reason=excluded.failure_reason,updated_at_ms=excluded.updated_at_ms",
+                params![record.session_id.as_slice(),record.peer_device_id.to_string(),record.stage.as_str(),record.joining_root,record.failure_reason,updated],
             ).map(|_| ()).map_err(|error| storage_error("pairing_journal_store", None, &self.path, error))
+    }
+
+    /// Records why the commit for `session_id` failed without moving the stage
+    /// back: the stage is what already succeeded durably, the reason is why the
+    /// session never reached `Complete`.
+    pub fn record_pairing_journal_failure(
+        &self,
+        session_id: [u8; 16],
+        reason: &str,
+        updated_at_ms: u64,
+    ) -> Result<bool, StorageError> {
+        self.ensure_open("pairing_journal_fail")?;
+        let updated = checked_timestamp(updated_at_ms, "pairing_journal_fail", &self.path)?;
+        let changed = self
+            .connection
+            .lock()
+            .map_err(|_| {
+                storage_error(
+                    "pairing_journal_fail",
+                    None,
+                    &self.path,
+                    "connection lock poisoned",
+                )
+            })?
+            .execute(
+                "UPDATE pairing_journal SET failure_reason=?2,updated_at_ms=?3 WHERE session_id=?1",
+                params![session_id.as_slice(), reason, updated],
+            )
+            .map_err(|error| storage_error("pairing_journal_fail", None, &self.path, error))?;
+        Ok(changed == 1)
+    }
+
+    /// The most recently touched incomplete journal entry for `peer`, if any.
+    pub fn incomplete_pairing_journal_for_peer(
+        &self,
+        peer: DeviceId,
+    ) -> Result<Option<PairingJournalRecord>, StorageError> {
+        self.ensure_open("pairing_journal_peer")?;
+        let row: Option<PairingJournalRow<Vec<u8>>> = self
+            .connection
+            .lock()
+            .map_err(|_| {
+                storage_error(
+                    "pairing_journal_peer",
+                    None,
+                    &self.path,
+                    "connection lock poisoned",
+                )
+            })?
+            .query_row(
+                "SELECT session_id,stage,joining_root,failure_reason,updated_at_ms FROM pairing_journal
+                 WHERE peer_device_id=?1 AND stage<>'complete' ORDER BY updated_at_ms DESC LIMIT 1",
+                [peer.to_string()],
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                    ))
+                },
+            )
+            .optional()
+            .map_err(|error| storage_error("pairing_journal_peer", None, &self.path, error))?;
+        row.map(
+            |(session_id, stage, joining_root, failure_reason, updated)| {
+                Ok(PairingJournalRecord {
+                    session_id: session_id.try_into().map_err(|_| {
+                        storage_error(
+                            "pairing_journal_peer",
+                            None,
+                            &self.path,
+                            "malformed session id",
+                        )
+                    })?,
+                    peer_device_id: peer,
+                    stage: PairingJournalStage::parse(&stage).ok_or_else(|| {
+                        storage_error("pairing_journal_peer", None, &self.path, "malformed stage")
+                    })?,
+                    joining_root,
+                    failure_reason,
+                    updated_at_ms: decode_timestamp(updated, "pairing_journal_peer", &self.path)?,
+                })
+            },
+        )
+        .transpose()
     }
 
     pub fn pairing_journal(
@@ -823,10 +916,10 @@ impl SqliteControlStore {
         session_id: [u8; 16],
     ) -> Result<Option<PairingJournalRecord>, StorageError> {
         self.ensure_open("pairing_journal_load")?;
-        let row: Option<(String,String,Option<String>,i64)> = self.connection.lock().map_err(|_| storage_error("pairing_journal_load", None, &self.path, "connection lock poisoned"))?
-            .query_row("SELECT peer_device_id,stage,joining_root,updated_at_ms FROM pairing_journal WHERE session_id=?1", [session_id.as_slice()], |row| Ok((row.get(0)?,row.get(1)?,row.get(2)?,row.get(3)?)))
+        let row: Option<PairingJournalRow<String>> = self.connection.lock().map_err(|_| storage_error("pairing_journal_load", None, &self.path, "connection lock poisoned"))?
+            .query_row("SELECT peer_device_id,stage,joining_root,failure_reason,updated_at_ms FROM pairing_journal WHERE session_id=?1", [session_id.as_slice()], |row| Ok((row.get(0)?,row.get(1)?,row.get(2)?,row.get(3)?,row.get(4)?)))
             .optional().map_err(|error| storage_error("pairing_journal_load", None, &self.path, error))?;
-        row.map(|(peer, stage, joining_root, updated)| {
+        row.map(|(peer, stage, joining_root, failure_reason, updated)| {
             Ok(PairingJournalRecord {
                 session_id,
                 peer_device_id: peer.parse().map_err(|_| {
@@ -841,6 +934,7 @@ impl SqliteControlStore {
                     storage_error("pairing_journal_load", None, &self.path, "malformed stage")
                 })?,
                 joining_root,
+                failure_reason,
                 updated_at_ms: decode_timestamp(updated, "pairing_journal_load", &self.path)?,
             })
         })
@@ -1471,6 +1565,7 @@ mod tests {
                     peer_device_id: device,
                     stage: PairingJournalStage::RootJoining,
                     joining_root: Some(DocumentId::new().to_string()),
+                    failure_reason: None,
                     updated_at_ms: 13,
                 })
                 .unwrap();
@@ -1492,6 +1587,7 @@ mod tests {
                         peer_device_id: device,
                         stage,
                         joining_root: Some(recovery_root.clone()),
+                        failure_reason: None,
                         updated_at_ms: 20 + index as u64,
                     })
                     .unwrap();
@@ -1503,6 +1599,7 @@ mod tests {
                         peer_device_id: device,
                         stage: PairingJournalStage::Complete,
                         joining_root: Some(DocumentId::new().to_string()),
+                        failure_reason: None,
                         updated_at_ms: 30,
                     })
                     .is_err()
@@ -1587,6 +1684,7 @@ mod tests {
                     peer_device_id: device,
                     stage: PairingJournalStage::Complete,
                     joining_root: None,
+                    failure_reason: None,
                     updated_at_ms: 4,
                 })
                 .unwrap();

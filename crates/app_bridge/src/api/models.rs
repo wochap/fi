@@ -1,6 +1,7 @@
 use app_core::{
     AppCore, AppError, ApplicationState, DataChanged, DomainError, DomainKind, ErrorEvent,
-    ProjectionState, RecoveryOutcome, RecoveryReason, RecoveryRecord, RepositoryBootstrapError,
+    NetworkingDeferredReason, ProjectionState, RecoveryOutcome, RecoveryReason, RecoveryRecord,
+    RepositoryBootstrapError,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -578,6 +579,10 @@ pub struct DataChangedDto {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BridgeErrorKind {
     Initialization,
+    /// The desktop secure key store exists but is locked. Distinct from
+    /// `Initialization` so Flutter can name the keyring and offer an
+    /// unlock-and-retry path instead of a generic failure message.
+    SecureStoreLocked,
     Validation,
     Bootstrap,
     Persistence,
@@ -598,6 +603,37 @@ pub struct BridgeError {
     /// I/O failures are never marked, so the shell offers a retry rather than
     /// a destructive action for them.
     pub reset_resolvable: bool,
+}
+
+/// Why peer networking is not running on a core that was opened in networked
+/// mode. Absent when networking is running normally.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NetworkingDeferredDto {
+    pub kind: NetworkingDeferredKindDto,
+    pub message: String,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum NetworkingDeferredKindDto {
+    SecureStoreLocked,
+    SecureStoreUnavailable,
+}
+
+impl NetworkingDeferredDto {
+    #[must_use]
+    pub(crate) fn from_core(reason: &NetworkingDeferredReason) -> Self {
+        match reason {
+            NetworkingDeferredReason::SecureStoreLocked => Self {
+                kind: NetworkingDeferredKindDto::SecureStoreLocked,
+                message: "Your login keyring is locked, so secure device networking cannot start. Unlock the keyring and retry."
+                    .into(),
+            },
+            NetworkingDeferredReason::SecureStoreUnavailable(_) => Self {
+                kind: NetworkingDeferredKindDto::SecureStoreUnavailable,
+                message: "Secure device networking could not be initialized.".into(),
+            },
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -626,6 +662,9 @@ pub enum PairingFailureKindDto {
     BothRootless,
     /// Both devices hold different established roots, which cannot be merged.
     RootMismatch,
+    /// The commit failed because this device's secure key store is locked.
+    /// Recoverable: unlock the keyring and retry, never an expiry.
+    SecureStoreLocked,
     Other,
 }
 
@@ -640,6 +679,9 @@ pub struct PairingStateDto {
     pub remote_confirmed: bool,
     pub message: Option<String>,
     pub failure: Option<PairingFailureKindDto>,
+    /// True on a `Trusted` outcome whose peer was already a trusted device, so
+    /// the UI can say "already paired" rather than announcing a new pairing.
+    pub already_paired: bool,
 }
 
 /// Outcome of revoking a trusted device. `revoked` mirrors the durable record;
@@ -656,6 +698,10 @@ pub struct PairingCandidateDto {
     pub instance_id: String,
     pub endpoint: String,
     pub expires_at_ms: u64,
+    /// True when this candidate's address is a known endpoint of a trusted,
+    /// non-revoked device. Pairing beacons are anonymous, so this is an
+    /// endpoint match, not an identity.
+    pub already_paired: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -702,6 +748,7 @@ impl From<app_core::PairingState> for PairingStateDto {
             remote_confirmed: false,
             message: None,
             failure: None,
+            already_paired: false,
         };
         match value {
             PairingState::Idle => {}
@@ -742,9 +789,13 @@ impl From<app_core::PairingState> for PairingStateDto {
                 dto.peer_device_id = Some(peer.to_string());
                 dto.deadline_ms = Some(deadline_ms);
             }
-            PairingState::Trusted { peer } => {
+            PairingState::Trusted {
+                peer,
+                already_paired,
+            } => {
                 dto.kind = PairingKindDto::Trusted;
                 dto.peer_device_id = Some(peer.to_string());
+                dto.already_paired = already_paired;
             }
             PairingState::Failed { error } => {
                 dto.kind = PairingKindDto::Failed;
@@ -752,6 +803,9 @@ impl From<app_core::PairingState> for PairingStateDto {
                 dto.failure = Some(match error {
                     app_core::PairingError::BothRootless => PairingFailureKindDto::BothRootless,
                     app_core::PairingError::RootMismatch => PairingFailureKindDto::RootMismatch,
+                    app_core::PairingError::SecureStoreLocked => {
+                        PairingFailureKindDto::SecureStoreLocked
+                    }
                     _ => PairingFailureKindDto::Other,
                 });
             }
@@ -760,12 +814,17 @@ impl From<app_core::PairingState> for PairingStateDto {
     }
 }
 
-impl From<app_core::PairingCandidate> for PairingCandidateDto {
-    fn from(value: app_core::PairingCandidate) -> Self {
+impl PairingCandidateDto {
+    pub(crate) fn from_core(
+        value: app_core::PairingCandidate,
+        trusted_addresses: &std::collections::HashSet<std::net::IpAddr>,
+    ) -> Self {
         Self {
             instance_id: value.instance_id.to_string(),
             endpoint: value.endpoint.to_string(),
             expires_at_ms: value.expires_at_ms,
+            // IP only: the pairing port differs from the sync port.
+            already_paired: trusted_addresses.contains(&value.endpoint.ip()),
         }
     }
 }
@@ -1182,55 +1241,67 @@ impl From<ErrorEvent> for BridgeErrorEventDto {
 impl From<AppError> for BridgeError {
     fn from(value: AppError) -> Self {
         let reset_resolvable = value.is_reset_resolvable();
-        let mut error = match value {
-            AppError::Domain(DomainError::Invalid { field, message }) => Self {
-                kind: BridgeErrorKind::Validation,
-                field: Some(field.into()),
-                message,
-                reset_resolvable: false,
-            },
-            AppError::Domain(DomainError::NotFound { kind, .. }) => Self::safe(
-                BridgeErrorKind::Validation,
-                format!("The selected {kind} no longer exists."),
-            ),
-            AppError::Domain(DomainError::UnsupportedSchema(_)) => Self::safe(
-                BridgeErrorKind::Bootstrap,
-                "This device's local data was created by an incompatible application version.",
-            ),
-            AppError::Domain(_) => Self::safe(
-                BridgeErrorKind::Internal,
-                "The local collection data is not supported by this application version.",
-            ),
-            AppError::Bootstrap(error) => Self::safe(BridgeErrorKind::Bootstrap, error.to_string()),
-            AppError::Projection(_) => Self::safe(
-                BridgeErrorKind::Projection,
-                "The local read model could not be refreshed.",
-            ),
-            AppError::RepositoryBootstrap(RepositoryBootstrapError::RecoveryExhausted {
-                ..
-            }) => Self::safe(
-                BridgeErrorKind::Bootstrap,
-                "Recovering this device's dataset from your other devices failed repeatedly, so it will not be retried.",
-            ),
-            AppError::RepositoryBootstrap(_) if reset_resolvable => Self::safe(
-                BridgeErrorKind::Bootstrap,
-                "This device's local data is incomplete and cannot be opened.",
-            ),
-            AppError::RepositoryBootstrap(_) | AppError::Repository(_) | AppError::Storage(_) => {
-                Self::safe(
+        let secure_store_locked = value.is_secure_store_locked();
+        let mut error = if secure_store_locked {
+            Self::safe(
+                BridgeErrorKind::SecureStoreLocked,
+                "Your login keyring is locked, so secure device networking cannot start. Unlock the keyring and retry.",
+            )
+        } else {
+            match value {
+                AppError::Domain(DomainError::Invalid { field, message }) => Self {
+                    kind: BridgeErrorKind::Validation,
+                    field: Some(field.into()),
+                    message,
+                    reset_resolvable: false,
+                },
+                AppError::Domain(DomainError::NotFound { kind, .. }) => Self::safe(
+                    BridgeErrorKind::Validation,
+                    format!("The selected {kind} no longer exists."),
+                ),
+                AppError::Domain(DomainError::UnsupportedSchema(_)) => Self::safe(
+                    BridgeErrorKind::Bootstrap,
+                    "This device's local data was created by an incompatible application version.",
+                ),
+                AppError::Domain(_) => Self::safe(
+                    BridgeErrorKind::Internal,
+                    "The local collection data is not supported by this application version.",
+                ),
+                AppError::Bootstrap(error) => {
+                    Self::safe(BridgeErrorKind::Bootstrap, error.to_string())
+                }
+                AppError::Projection(_) => Self::safe(
+                    BridgeErrorKind::Projection,
+                    "The local read model could not be refreshed.",
+                ),
+                AppError::RepositoryBootstrap(RepositoryBootstrapError::RecoveryExhausted {
+                    ..
+                }) => Self::safe(
+                    BridgeErrorKind::Bootstrap,
+                    "Recovering this device's dataset from your other devices failed repeatedly, so it will not be retried.",
+                ),
+                AppError::RepositoryBootstrap(_) if reset_resolvable => Self::safe(
+                    BridgeErrorKind::Bootstrap,
+                    "This device's local data is incomplete and cannot be opened.",
+                ),
+                AppError::RepositoryBootstrap(_)
+                | AppError::Repository(_)
+                | AppError::Storage(_) => Self::safe(
                     BridgeErrorKind::Persistence,
                     "Local data could not be saved or loaded.",
-                )
+                ),
+                AppError::Identity(_) | AppError::Network(_) | AppError::Pairing(_) => Self::safe(
+                    BridgeErrorKind::Initialization,
+                    "Secure device networking could not be initialized.",
+                ),
+                AppError::Clock(error) => {
+                    Self::safe(BridgeErrorKind::Validation, error.to_string())
+                }
+                AppError::OwnerStopped => Self::safe(
+                    BridgeErrorKind::Lifecycle,
+                    "The local collection service is not running.",
+                ),
             }
-            AppError::Identity(_) | AppError::Network(_) | AppError::Pairing(_) => Self::safe(
-                BridgeErrorKind::Initialization,
-                "Secure device networking could not be initialized.",
-            ),
-            AppError::Clock(error) => Self::safe(BridgeErrorKind::Validation, error.to_string()),
-            AppError::OwnerStopped => Self::safe(
-                BridgeErrorKind::Lifecycle,
-                "The local collection service is not running.",
-            ),
         };
         error.reset_resolvable = reset_resolvable;
         error
@@ -1267,13 +1338,70 @@ impl BridgeError {
 #[cfg(test)]
 mod tests {
     use app_core::{
-        AppError, ApplicationState, DomainError, RecoveryOutcome, RecoveryReason, RecoveryRecord,
+        AppError, ApplicationState, DomainError, IdentityError, PairingError, RecoveryOutcome,
+        RecoveryReason, RecoveryRecord, SecureStoreError,
     };
 
     use super::{
         BootstrapDto, BootstrapKindDto, BridgeError, BridgeErrorKind, RecoveryOutcomeDto,
         RecoveryReasonDto,
     };
+
+    #[test]
+    fn candidates_at_a_trusted_address_are_flagged_as_already_paired() {
+        use app_core::{PairingCandidate, PairingInstanceId};
+
+        let trusted: std::collections::HashSet<std::net::IpAddr> =
+            ["192.168.0.22".parse().unwrap()].into_iter().collect();
+        let candidate = |address: &str| PairingCandidate {
+            instance_id: PairingInstanceId::from_bytes([1; 16]),
+            endpoint: address.parse().unwrap(),
+            expires_at_ms: 1_000,
+        };
+        // The pairing port differs from the sync port, so the match is IP-only.
+        assert!(
+            super::PairingCandidateDto::from_core(candidate("192.168.0.22:34729"), &trusted)
+                .already_paired
+        );
+        assert!(
+            !super::PairingCandidateDto::from_core(candidate("192.168.0.50:34729"), &trusted)
+                .already_paired
+        );
+        // With nothing trusted, nothing is suppressed.
+        assert!(
+            !super::PairingCandidateDto::from_core(
+                candidate("192.168.0.22:34729"),
+                &std::collections::HashSet::new()
+            )
+            .already_paired
+        );
+    }
+
+    #[test]
+    fn a_locked_store_is_distinguishable_from_a_generic_initialization_failure() {
+        let locked_identity: BridgeError =
+            AppError::Identity(IdentityError::SecureStore(SecureStoreError::Locked)).into();
+        assert_eq!(locked_identity.kind, BridgeErrorKind::SecureStoreLocked);
+        assert!(locked_identity.message.contains("keyring"));
+        assert!(locked_identity.message.contains("Unlock"));
+        assert!(!locked_identity.reset_resolvable);
+
+        let locked_pairing: BridgeError = AppError::Pairing(PairingError::SecureStoreLocked).into();
+        assert_eq!(locked_pairing.kind, BridgeErrorKind::SecureStoreLocked);
+
+        // Unavailable is a different condition with a different remedy, so it
+        // keeps the generic initialization kind.
+        let unavailable: BridgeError = AppError::Identity(IdentityError::SecureStore(
+            SecureStoreError::Unavailable("no session bus".into()),
+        ))
+        .into();
+        assert_eq!(unavailable.kind, BridgeErrorKind::Initialization);
+        let unavailable_pairing: BridgeError = AppError::Pairing(
+            PairingError::SecureStoreUnavailable("no session bus".into()),
+        )
+        .into();
+        assert_eq!(unavailable_pairing.kind, BridgeErrorKind::Initialization);
+    }
 
     #[test]
     fn recovery_is_never_silent_and_every_outcome_is_distinguishable() {

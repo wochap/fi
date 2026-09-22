@@ -146,6 +146,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   GroupingDto dco_decode_box_autoadd_grouping_dto(dynamic raw);
 
   @protected
+  NetworkingDeferredDto dco_decode_box_autoadd_networking_deferred_dto(
+    dynamic raw,
+  );
+
+  @protected
   PairingFailureKindDto dco_decode_box_autoadd_pairing_failure_kind_dto(
     dynamic raw,
   );
@@ -381,6 +386,14 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<WidgetEvaluationDto> dco_decode_list_widget_evaluation_dto(dynamic raw);
 
   @protected
+  NetworkingDeferredDto dco_decode_networking_deferred_dto(dynamic raw);
+
+  @protected
+  NetworkingDeferredKindDto dco_decode_networking_deferred_kind_dto(
+    dynamic raw,
+  );
+
+  @protected
   NullOrderDto dco_decode_null_order_dto(dynamic raw);
 
   @protected
@@ -441,6 +454,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   GroupingDto? dco_decode_opt_box_autoadd_grouping_dto(dynamic raw);
+
+  @protected
+  NetworkingDeferredDto? dco_decode_opt_box_autoadd_networking_deferred_dto(
+    dynamic raw,
+  );
 
   @protected
   PairingFailureKindDto? dco_decode_opt_box_autoadd_pairing_failure_kind_dto(
@@ -790,6 +808,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   GroupingDto sse_decode_box_autoadd_grouping_dto(SseDeserializer deserializer);
 
   @protected
+  NetworkingDeferredDto sse_decode_box_autoadd_networking_deferred_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   PairingFailureKindDto sse_decode_box_autoadd_pairing_failure_kind_dto(
     SseDeserializer deserializer,
   );
@@ -1111,6 +1134,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  NetworkingDeferredDto sse_decode_networking_deferred_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  NetworkingDeferredKindDto sse_decode_networking_deferred_kind_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   NullOrderDto sse_decode_null_order_dto(SseDeserializer deserializer);
 
   @protected
@@ -1177,6 +1210,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   GroupingDto? sse_decode_opt_box_autoadd_grouping_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  NetworkingDeferredDto? sse_decode_opt_box_autoadd_networking_deferred_dto(
     SseDeserializer deserializer,
   );
 
@@ -1616,6 +1654,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_box_autoadd_networking_deferred_dto(
+    NetworkingDeferredDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_box_autoadd_pairing_failure_kind_dto(
     PairingFailureKindDto self,
     SseSerializer serializer,
@@ -2015,6 +2059,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_networking_deferred_dto(
+    NetworkingDeferredDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_networking_deferred_kind_dto(
+    NetworkingDeferredKindDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_null_order_dto(NullOrderDto self, SseSerializer serializer);
 
   @protected
@@ -2092,6 +2148,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_opt_box_autoadd_grouping_dto(
     GroupingDto? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_networking_deferred_dto(
+    NetworkingDeferredDto? self,
     SseSerializer serializer,
   );
 

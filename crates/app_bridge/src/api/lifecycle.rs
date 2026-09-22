@@ -11,7 +11,7 @@ use tokio::sync::{RwLock, watch};
 use crate::{
     api::models::{
         BootstrapDto, BridgeError, BridgeErrorEventDto, DataChangedDto, DomainKindDto,
-        ProjectionDto,
+        NetworkingDeferredDto, ProjectionDto,
     },
     frb_generated::StreamSink,
 };
@@ -167,6 +167,44 @@ pub async fn reset_dataset() -> Result<BootstrapDto, BridgeError> {
     let state = BootstrapDto::from_app(&core);
     slot.core = Some(core);
     Ok(state)
+}
+
+/// Why peer networking is not running, when a networked open met a locked or
+/// unavailable secure store. `None` means networking is not deferred.
+pub async fn networking_deferred() -> Result<Option<NetworkingDeferredDto>, BridgeError> {
+    Ok(core()
+        .await?
+        .networking_deferred()
+        .as_ref()
+        .map(NetworkingDeferredDto::from_core))
+}
+
+/// Retries the networking startup deferred by a locked or unavailable secure
+/// store and reports whether peer networking is now active. Idempotent: with
+/// nothing deferred it succeeds without restarting discovery. A deferral that
+/// happened before the device key could be read is retried by reopening the
+/// core with the same target, since there is no network stack to restart.
+pub async fn retry_networking() -> Result<bool, BridgeError> {
+    let mut slot = process_slot().write().await;
+    let live = slot.core.clone().ok_or_else(|| {
+        BridgeError::lifecycle("The local collection service is not initialized.")
+    })?;
+    if !live.networking_requires_reopen() {
+        return live.retry_networking().await.map_err(BridgeError::from);
+    }
+    let target = slot.target.clone().ok_or_else(|| {
+        BridgeError::lifecycle("The local collection service was never initialized.")
+    })?;
+    if let Some(core) = slot.core.take() {
+        core.shutdown().await.map_err(BridgeError::from)?;
+    }
+    let reopened = open_core(&target).await?;
+    let deferred = reopened.networking_deferred();
+    slot.core = Some(reopened);
+    match deferred {
+        Some(reason) => Err(BridgeError::from(reason.to_app_error())),
+        None => Ok(true),
+    }
 }
 
 pub async fn bootstrap_state() -> Result<BootstrapDto, BridgeError> {

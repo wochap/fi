@@ -225,6 +225,7 @@ pub enum PairingState {
     },
     Trusted {
         peer: DeviceId,
+        already_paired: bool,
     },
     Failed {
         error: PairingError,
@@ -262,6 +263,9 @@ pub enum PairingInput {
     CommitComplete {
         session_id: PairingSessionId,
         peer: DeviceId,
+        /// The peer already held a trust record before this commit, so the
+        /// session updated it rather than establishing a new pairing.
+        already_paired: bool,
     },
     Reject {
         session_id: Option<PairingSessionId>,
@@ -280,13 +284,21 @@ pub enum PairingInput {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum PairingEvent {
-    Started { deadline_ms: u64 },
+    Started {
+        deadline_ms: u64,
+    },
     CandidateSelected(PairingSessionId),
     CandidateReleased(PairingSessionId),
     SasReady(SasCode),
-    ConfirmationChanged { local: bool, remote: bool },
+    ConfirmationChanged {
+        local: bool,
+        remote: bool,
+    },
     CommitReady(PairingSessionId),
-    Trusted(DeviceId),
+    Trusted {
+        peer: DeviceId,
+        already_paired: bool,
+    },
     Stopped,
     Failed(PairingError),
 }
@@ -323,6 +335,24 @@ pub enum PairingError {
     Rejected,
     #[error("pairing transport failed: {0}")]
     Transport(String),
+    /// The secure key store exists but is locked. Kept distinct from
+    /// `SecureStoreUnavailable` all the way to the UI so the user can be told
+    /// to unlock the keyring and retry rather than shown a generic failure.
+    #[error("secure key store is locked")]
+    SecureStoreLocked,
+    #[error("secure key store is unavailable: {0}")]
+    SecureStoreUnavailable(String),
+}
+
+impl From<crate::identity::SecureStoreError> for PairingError {
+    fn from(error: crate::identity::SecureStoreError) -> Self {
+        use crate::identity::SecureStoreError as E;
+        match error {
+            E::Locked => Self::SecureStoreLocked,
+            E::Unavailable(message) => Self::SecureStoreUnavailable(message),
+            other => Self::Transport(other.to_string()),
+        }
+    }
 }
 
 pub fn reduce_pairing(
@@ -481,8 +511,21 @@ pub fn reduce_pairing(
             S::Committing {
                 session_id: active, ..
             },
-            I::CommitComplete { session_id, peer },
-        ) if *active == session_id => Ok((S::Trusted { peer }, PairingEvent::Trusted(peer))),
+            I::CommitComplete {
+                session_id,
+                peer,
+                already_paired,
+            },
+        ) if *active == session_id => Ok((
+            S::Trusted {
+                peer,
+                already_paired,
+            },
+            PairingEvent::Trusted {
+                peer,
+                already_paired,
+            },
+        )),
         (_, I::Stop) => Ok((S::Idle, PairingEvent::Stopped)),
         (_, I::Reject { .. }) => Ok((
             S::Failed {

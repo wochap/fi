@@ -16,7 +16,7 @@ use automerge_repo::{
 };
 use rand_core::{OsRng, RngCore};
 use tokio::sync::{broadcast, mpsc, oneshot, watch};
-use tracing::{error, info, instrument};
+use tracing::{error, info, instrument, warn};
 
 use crate::{
     LocalIdentityRecord, ResetIntent,
@@ -115,6 +115,61 @@ struct NetworkComponents {
     endpoints: Arc<Mutex<EndpointRegistry>>,
     connections: Option<Arc<ConnectionManager>>,
     pairing: Option<Arc<PairingManager>>,
+    /// Set when the core was asked for networked mode but the secure store
+    /// could not be read. The core still opens; networking waits for a retry.
+    deferred: Option<NetworkingDeferral>,
+}
+
+/// Why peer networking is not running on a core that was opened in networked
+/// mode. Typed so the UI can name the keyring instead of showing a generic
+/// initialization failure.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum NetworkingDeferredReason {
+    SecureStoreLocked,
+    SecureStoreUnavailable(String),
+}
+
+impl NetworkingDeferredReason {
+    /// Classifies an open-time failure as deferrable. Only a locked or
+    /// unavailable secure store is: every other failure is still fatal to the
+    /// open, because a retry could not resolve it.
+    fn from_app_error(error: &AppError) -> Option<Self> {
+        use crate::identity::SecureStoreError;
+        use crate::pairing::PairingError;
+        match error {
+            AppError::Identity(IdentityError::SecureStore(SecureStoreError::Locked))
+            | AppError::Pairing(PairingError::SecureStoreLocked) => Some(Self::SecureStoreLocked),
+            AppError::Identity(IdentityError::SecureStore(SecureStoreError::Unavailable(
+                message,
+            )))
+            | AppError::Pairing(PairingError::SecureStoreUnavailable(message)) => {
+                Some(Self::SecureStoreUnavailable(message.clone()))
+            }
+            _ => None,
+        }
+    }
+
+    /// The equivalent application error, so a caller that must report the
+    /// deferral as a failure keeps the typed locked reason.
+    #[must_use]
+    pub fn to_app_error(&self) -> AppError {
+        match self {
+            Self::SecureStoreLocked => {
+                AppError::Pairing(crate::pairing::PairingError::SecureStoreLocked)
+            }
+            Self::SecureStoreUnavailable(message) => AppError::Pairing(
+                crate::pairing::PairingError::SecureStoreUnavailable(message.clone()),
+            ),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+struct NetworkingDeferral {
+    reason: NetworkingDeferredReason,
+    /// True when even the device key could not be read, so there is no
+    /// networked core to defer into and the retry has to reopen the core.
+    requires_reopen: bool,
 }
 
 /// Cloneable application handle. Mutable orchestration is confined to one bounded owner task.
@@ -135,6 +190,7 @@ pub struct AppCore {
     pairing: Option<Arc<PairingManager>>,
     peer_sync: watch::Receiver<std::collections::HashMap<PeerId, PeerSyncProgress>>,
     network_foreground: Arc<AtomicBool>,
+    networking_deferred: Arc<Mutex<Option<NetworkingDeferral>>>,
 }
 
 impl std::fmt::Debug for AppCore {
@@ -221,7 +277,42 @@ impl AppCore {
             .map_err(|error| AppError::Storage(error.to_string()))?;
         let control_store = Arc::new(open_control_store(&data_dir).await?);
         resume_reset_if_outstanding(&data_dir, &control_store, Some(key_store.as_ref())).await?;
-        let identity = Arc::new(DeviceIdentity::load_or_create(key_store.as_ref()).await?);
+        let identity = match DeviceIdentity::load_or_create(key_store.as_ref()).await {
+            Ok(identity) => Arc::new(identity),
+            Err(error) => {
+                // No device key means no QUIC endpoint, so there is no
+                // networked core to defer into: open locally and let the retry
+                // re-attempt the whole networked open.
+                let error = AppError::from(error);
+                let Some(reason) = NetworkingDeferredReason::from_app_error(&error) else {
+                    return Err(error);
+                };
+                warn!(
+                    event = "networking_deferred",
+                    stage = "device_key",
+                    error = %error,
+                    "opening without peer networking"
+                );
+                return Self::open_with_components(
+                    data_dir,
+                    config,
+                    LocalTransport::new(),
+                    control_store,
+                    NetworkComponents {
+                        identity: None,
+                        network: None,
+                        endpoints: Arc::new(Mutex::new(EndpointRegistry::default())),
+                        connections: None,
+                        pairing: None,
+                        deferred: Some(NetworkingDeferral {
+                            reason,
+                            requires_reopen: true,
+                        }),
+                    },
+                )
+                .await;
+            }
+        };
         let created_at_ms = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
@@ -256,9 +347,28 @@ impl AppCore {
         if let Some(requests) = network.take_control_requests() {
             spawn_rotation_control(requests, pairing.clone());
         }
-        pairing
+        let mut deferred = None;
+        if let Err(error) = pairing
             .start_normal_discovery(network.local_addr()?.port())
-            .await?;
+            .await
+        {
+            // A locked or unavailable store is recoverable by the user, so the
+            // core opens with networking off rather than failing to open.
+            let error = AppError::from(error);
+            let Some(reason) = NetworkingDeferredReason::from_app_error(&error) else {
+                return Err(error);
+            };
+            warn!(
+                event = "networking_deferred",
+                stage = "discovery",
+                error = %error,
+                "opening without peer networking"
+            );
+            deferred = Some(NetworkingDeferral {
+                reason,
+                requires_reopen: false,
+            });
+        }
         Self::open_with_components(
             data_dir,
             config,
@@ -270,6 +380,7 @@ impl AppCore {
                 endpoints,
                 connections: Some(connections),
                 pairing: Some(pairing),
+                deferred,
             },
         )
         .await
@@ -301,6 +412,7 @@ impl AppCore {
                 endpoints: Arc::new(Mutex::new(EndpointRegistry::default())),
                 connections: None,
                 pairing: None,
+                deferred: None,
             },
         )
         .await
@@ -350,7 +462,11 @@ impl AppCore {
             );
         }
         if let Some(manager) = network_components.connections.clone() {
-            spawn_sync_bridge(peer_sync.clone(), manager);
+            spawn_sync_bridge(
+                peer_sync.clone(),
+                manager,
+                network_components.pairing.clone(),
+            );
         }
         if let (Some(pairing), Some(connections), Some(network)) = (
             network_components.pairing.clone(),
@@ -445,6 +561,7 @@ impl AppCore {
             pairing: network_components.pairing,
             peer_sync,
             network_foreground: Arc::new(AtomicBool::new(false)),
+            networking_deferred: Arc::new(Mutex::new(network_components.deferred)),
         })
     }
 
@@ -491,6 +608,59 @@ impl AppCore {
     pub fn device_id(&self) -> Option<DeviceId> {
         self.identity.as_ref().map(|identity| identity.id())
     }
+    /// Why peer networking is not running, when the core was opened in
+    /// networked mode and the secure store could not be read.
+    #[must_use]
+    pub fn networking_deferred(&self) -> Option<NetworkingDeferredReason> {
+        self.networking_deferred
+            .lock()
+            .ok()
+            .and_then(|deferral| deferral.as_ref().map(|value| value.reason.clone()))
+    }
+
+    /// True when the deferral happened before the device key could be read, so
+    /// the retry has to reopen the core rather than restart discovery in place.
+    #[must_use]
+    pub fn networking_requires_reopen(&self) -> bool {
+        self.networking_deferred
+            .lock()
+            .ok()
+            .and_then(|deferral| deferral.as_ref().map(|value| value.requires_reopen))
+            .unwrap_or(false)
+    }
+
+    /// Re-runs the networking startup deferred by a locked or unavailable
+    /// secure store and reports whether peer networking is now active.
+    /// Idempotent: with nothing deferred it neither restarts discovery nor
+    /// fails. A deferral that requires a reopen is reported as its original
+    /// reason, since this core cannot rebuild its own network stack.
+    pub async fn retry_networking(&self) -> Result<bool> {
+        let deferral = self
+            .networking_deferred
+            .lock()
+            .map_err(|_| AppError::Storage("networking deferral lock poisoned".into()))?
+            .clone();
+        let Some(deferral) = deferral else {
+            return Ok(self.pairing.is_some());
+        };
+        if deferral.requires_reopen {
+            return Err(deferral.reason.to_app_error());
+        }
+        let (Some(pairing), Some(port)) = (
+            self.pairing.as_ref(),
+            self.network_addr().map(|address| address.port()),
+        ) else {
+            return Ok(false);
+        };
+        pairing.start_normal_discovery(port).await?;
+        *self
+            .networking_deferred
+            .lock()
+            .map_err(|_| AppError::Storage("networking deferral lock poisoned".into()))? = None;
+        info!(event = "networking_resumed", "deferred networking started");
+        Ok(true)
+    }
+
     #[must_use]
     pub fn network_addr(&self) -> Option<SocketAddr> {
         self.network
@@ -662,17 +832,45 @@ impl AppCore {
             .await
             .map_err(Into::into)
     }
+    /// Confirms `session` and commits it.
+    ///
+    /// Any failure after the handshake drives the state machine to `Failed`
+    /// with the originating reason before returning, so the UI leaves the
+    /// committing state at once and a keystore failure is never reported as an
+    /// expiry. The trust record, if one was already stored, is kept: the peer
+    /// may legitimately hold trust for us, and the journal marks the session
+    /// incomplete so a later connection resumes it.
     pub async fn confirm_pairing(&self, session: PairingSessionId) -> Result<()> {
         let pairing = self
             .pairing
             .as_ref()
             .ok_or_else(|| AppError::Storage("pairing requires networked mode".into()))?;
         let plan = pairing.confirm(session).await?;
+        let outcome = self.commit_pairing(pairing, &plan).await;
+        if let Err(error) = &outcome {
+            let reason = pairing_failure_reason(error);
+            if let Err(journal_error) = pairing.journal_failure(&plan, &reason.to_string()) {
+                warn!(
+                    event = "pairing_journal_failure",
+                    error = %journal_error,
+                    "could not record the pairing failure reason"
+                );
+            }
+            pairing.fail(reason).await;
+        }
+        outcome
+    }
+
+    async fn commit_pairing(
+        &self,
+        pairing: &Arc<PairingManager>,
+        plan: &crate::pairing_manager::PairingCommitPlan,
+    ) -> Result<()> {
         if plan.compatibility == RootCompatibility::SameRoot {
-            pairing.finish_trust(&plan, current_time_ms())?;
+            pairing.finish_trust(plan, current_time_ms())?;
             return Ok(());
         }
-        if pairing.local_is_provisioner(&plan)? {
+        if pairing.local_is_provisioner(plan)? {
             let ApplicationState::Ready { root } = self.lifecycle_state() else {
                 return Err(AppError::Pairing(
                     crate::pairing::PairingError::InvalidTransition,
@@ -688,20 +886,20 @@ impl AppCore {
                 .ok_or_else(|| AppError::Storage("pairing requires networking".into()))?
                 .port();
             pairing.start_normal_discovery(sync_port).await?;
-            pairing.journal(&plan, crate::control::PairingJournalStage::Confirmed, None)?;
+            pairing.journal(plan, crate::control::PairingJournalStage::Confirmed, None)?;
             pairing.establish_trust(
                 plan.peer_public_key,
                 plan.peer_name.clone(),
                 current_time_ms(),
             )?;
             pairing.journal(
-                &plan,
+                plan,
                 crate::control::PairingJournalStage::AwaitingAcknowledgement,
                 None,
             )?;
             pairing
                 .send_provisioning(
-                    &plan,
+                    plan,
                     &ProvisioningData {
                         root,
                         discovery_secret: secret,
@@ -713,12 +911,12 @@ impl AppCore {
                     },
                 )
                 .await?;
-            pairing.finish_trust(&plan, current_time_ms())?;
-            pairing.journal(&plan, crate::control::PairingJournalStage::Complete, None)?;
+            pairing.finish_trust(plan, current_time_ms())?;
+            pairing.journal(plan, crate::control::PairingJournalStage::Complete, None)?;
             return Ok(());
         }
 
-        let provision = pairing.receive_provisioning(&plan).await?;
+        let provision = pairing.receive_provisioning(plan).await?;
         if provision.existing_device_id != plan.peer_device_id
             || !provision
                 .existing_public_key
@@ -735,7 +933,7 @@ impl AppCore {
             ));
         }
         pairing.journal(
-            &plan,
+            plan,
             crate::control::PairingJournalStage::ProvisioningStored,
             Some(provision.root.to_string()),
         )?;
@@ -759,13 +957,13 @@ impl AppCore {
             current_time_ms(),
         )?;
         pairing.journal(
-            &plan,
+            plan,
             crate::control::PairingJournalStage::TrustStored,
             Some(provision.root.to_string()),
         )?;
         self.join_existing(provision.root).await?;
         pairing.journal(
-            &plan,
+            plan,
             crate::control::PairingJournalStage::RootJoining,
             Some(provision.root.to_string()),
         )?;
@@ -788,10 +986,10 @@ impl AppCore {
         self.connect_peer(plan.peer_device_id, now).await?;
         self.wait_for_join_ready(provision.root, std::time::Duration::from_secs(120))
             .await?;
-        pairing.acknowledge_provisioning(&plan).await?;
-        pairing.finish_trust(&plan, current_time_ms())?;
+        pairing.acknowledge_provisioning(plan).await?;
+        pairing.finish_trust(plan, current_time_ms())?;
         pairing.journal(
-            &plan,
+            plan,
             crate::control::PairingJournalStage::Complete,
             Some(provision.root.to_string()),
         )?;
@@ -805,6 +1003,37 @@ impl AppCore {
             .await
             .map_err(Into::into)
     }
+    /// IP addresses at which trusted, non-revoked devices are known to be
+    /// reachable, from both durable peer metadata and the live endpoint
+    /// registry. A pairing candidate at one of these addresses is already
+    /// paired; the pairing beacon itself carries no identity, by design.
+    #[must_use]
+    pub fn trusted_device_addresses(&self) -> Vec<std::net::IpAddr> {
+        let Some(pairing) = self.pairing.as_ref() else {
+            return Vec::new();
+        };
+        let mut addresses = pairing.trusted_device_addresses().unwrap_or_default();
+        if let Ok(devices) = pairing.trusted_devices()
+            && let Ok(registry) = self.endpoints.lock()
+        {
+            let now = current_time_ms();
+            for device in devices {
+                if device.state != crate::control::TrustState::Trusted {
+                    continue;
+                }
+                addresses.extend(
+                    registry
+                        .ranked(device.device_id, now)
+                        .into_iter()
+                        .map(|endpoint| endpoint.address.ip()),
+                );
+            }
+        }
+        addresses.sort_unstable();
+        addresses.dedup();
+        addresses
+    }
+
     pub fn trusted_devices(&self) -> Result<Vec<crate::control::TrustedDeviceRecord>> {
         self.pairing
             .as_ref()
@@ -1553,9 +1782,21 @@ impl AppCore {
     }
 }
 
+/// The pairing reason to fail a session with for a commit-stage error.
+/// A pairing error keeps its own reason; anything else becomes a transport
+/// reason. Never `Expired`: the deadline path is the only thing allowed to
+/// report an expiry.
+fn pairing_failure_reason(error: &AppError) -> crate::pairing::PairingError {
+    match error {
+        AppError::Pairing(error) => error.clone(),
+        other => crate::pairing::PairingError::Transport(other.to_string()),
+    }
+}
+
 fn spawn_sync_bridge(
     mut sync: watch::Receiver<std::collections::HashMap<PeerId, PeerSyncProgress>>,
     manager: Arc<ConnectionManager>,
+    pairing: Option<Arc<PairingManager>>,
 ) {
     tokio::spawn(async move {
         let mut previous = std::collections::HashSet::new();
@@ -1580,6 +1821,27 @@ fn spawn_sync_bridge(
                         PeerSyncState::Synced => PeerConnectionState::Synced,
                     },
                 );
+            }
+            // A peer we have just authenticated with may be the other side of
+            // a commit that failed locally after it succeeded remotely. Finish
+            // it here rather than making the user open a new pairing window.
+            if let Some(pairing) = pairing.as_ref() {
+                for peer in current.difference(&previous) {
+                    match pairing.resume_incomplete_commit(*peer, current_time_ms()) {
+                        Ok(true) => info!(
+                            event = "pairing_commit_resumed",
+                            peer = %peer,
+                            "unacknowledged pairing commit completed on reconnect"
+                        ),
+                        Ok(false) => {}
+                        Err(error) => warn!(
+                            event = "pairing_commit_resume_failed",
+                            peer = %peer,
+                            error = %error,
+                            "could not resume the pairing commit"
+                        ),
+                    }
+                }
             }
             previous = current;
             if sync.changed().await.is_err() {

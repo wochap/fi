@@ -162,7 +162,16 @@ class _CollectionAppState extends State<CollectionApp>
                 const SizedBox(height: 12),
                 Text(message, textAlign: TextAlign.center),
                 const SizedBox(height: 12),
-                if (controller.fatalResetResolvable)
+                if (controller.fatalSecureStoreLocked)
+                  FilledButton.icon(
+                    key: const Key('retry-after-unlock'),
+                    onPressed: controller.retryingNetworking
+                        ? null
+                        : () => unawaited(controller.retryNetworking()),
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Retry after unlocking'),
+                  )
+                else if (controller.fatalResetResolvable)
                   FilledButton(
                     key: const Key('reset-dataset'),
                     onPressed: () => unawaited(_confirmResetFromError(context)),
@@ -178,7 +187,7 @@ class _CollectionAppState extends State<CollectionApp>
             ),
           );
         }
-        return switch (controller.state?.kind) {
+        final surface = switch (controller.state?.kind) {
           BootstrapKindDto.ready => CollectionShell(
             bridge: widget.bridge,
             devices: devices,
@@ -203,9 +212,78 @@ class _CollectionAppState extends State<CollectionApp>
             child: Text('The local collection service is unavailable.'),
           ),
         };
+        final deferred = controller.networkingDeferred;
+        if (deferred == null) return surface;
+        // Local data is usable; only peer networking is waiting, so the
+        // explanation sits above the app rather than replacing it.
+        return Column(
+          children: [
+            SafeArea(
+              bottom: false,
+              child: _NetworkingDeferredBanner(
+                deferred: deferred,
+                retryError: controller.networkingRetryError,
+                busy: controller.retryingNetworking,
+                onRetry: () => unawaited(controller.retryNetworking()),
+              ),
+            ),
+            Expanded(child: surface),
+          ],
+        );
       },
     ),
   );
+}
+
+/// Explains why peer networking is off and offers the retry that resumes it.
+/// A locked keyring names the keyring and the unlock, because that is the
+/// action that fixes it; an unavailable store has no such action.
+class _NetworkingDeferredBanner extends StatelessWidget {
+  const _NetworkingDeferredBanner({
+    required this.deferred,
+    required this.retryError,
+    required this.busy,
+    required this.onRetry,
+  });
+
+  final NetworkingDeferredDto deferred;
+  final String? retryError;
+  final bool busy;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final locked = deferred.kind == NetworkingDeferredKindDto.secureStoreLocked;
+    return MaterialBanner(
+      key: const Key('networking-deferred-banner'),
+      leading: Icon(locked ? Icons.lock_outline : Icons.cloud_off),
+      content: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            locked
+                ? 'Your login keyring is locked, so this device cannot reach '
+                      'your other devices. Unlock the keyring, then retry. '
+                      'Everything stored here still works.'
+                : deferred.message,
+            key: const Key('networking-deferred-message'),
+          ),
+          if (retryError case final message?) ...[
+            const SizedBox(height: 8),
+            Text(message, key: const Key('networking-retry-error')),
+          ],
+        ],
+      ),
+      actions: [
+        TextButton(
+          key: const Key('retry-networking'),
+          onPressed: busy ? null : onRetry,
+          child: const Text('Retry'),
+        ),
+      ],
+    );
+  }
 }
 
 class _CenteredSurface extends StatelessWidget {
@@ -516,10 +594,7 @@ class _CollectionShellState extends State<CollectionShell> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(_statusIcon(devices.syncStatus), size: 18),
-                        if (wide) ...[
-                          const SizedBox(width: 6),
-                          Text(label),
-                        ],
+                        if (wide) ...[const SizedBox(width: 6), Text(label)],
                       ],
                     ),
                   );
