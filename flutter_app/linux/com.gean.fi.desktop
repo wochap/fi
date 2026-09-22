@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=fi
+Comment=Local-first schema-driven collections
+Exec=fi
+Icon=com.gean.fi
+StartupWMClass=com.gean.fi
+Categories=Utility;
+Terminal=false
