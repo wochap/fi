@@ -62,3 +62,22 @@ identify which stage failed.
 - **WHEN** the trusted-device list is queried after a revocation whose later stage failed
 - **THEN** the device is presented as revoked, consistent with its durable record, and is not
   presented as trusted or merely hidden
+
+
+### Requirement: Trust records are root-scoped
+Trusted-peer and trusted-device records, the pairing journal, the discovery epoch, and the discovery-group secret SHALL be treated as state of the root this installation holds, and a dataset reset SHALL remove all of them.
+
+#### Scenario: Trust after reset
+- **WHEN** an installation with trusted devices resets its dataset
+- **THEN** it reopens with no trusted devices, no discovery secret, and cannot enter any peer's Repo transport until it pairs again
+
+### Requirement: Re-pairing after reset re-establishes trust only through SAS
+A device that reset and pairs again with a peer that previously trusted or revoked it SHALL be trusted by that peer only after the peer's user confirms a fresh SAS. The peer's record is upserted under the same `DeviceId`.
+
+#### Scenario: Peer had revoked the device
+- **WHEN** a previously revoked device resets and completes SAS-confirmed pairing with the revoking peer
+- **THEN** the peer's record for that `DeviceId` becomes trusted, because the peer's user explicitly confirmed it
+
+#### Scenario: Peer still trusted the device
+- **WHEN** a device resets and pairs again with a peer that still records it as trusted
+- **THEN** the peer's record is updated in place rather than duplicated

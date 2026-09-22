@@ -46,3 +46,22 @@ Application shutdown SHALL drain accepted commands, complete best-effort project
 #### Scenario: Restart after successful commands
 - **WHEN** an initialized application is shut down and reopened with its application-data directory
 - **THEN** collection schemas, record values, root identity, HLC resolution, and generic queries are preserved
+
+
+### Requirement: Control store records reset intent
+`control.sqlite` SHALL hold a durable, versioned reset-intent record separate from the bootstrap record. Writing the intent SHALL be its own committed transaction, and clearing it SHALL be committed in the same transaction that removes the root-scoped control rows.
+
+#### Scenario: Intent round trip
+- **WHEN** a reset intent is stored and the control store is reopened
+- **THEN** the intent is reported as outstanding
+
+#### Scenario: Intent cleared atomically with rows
+- **WHEN** the final reset transaction commits
+- **THEN** reopening reports no intent and no bootstrap record
+
+### Requirement: Initialization honors an outstanding reset intent
+Initialization SHALL read the reset intent immediately after opening `control.sqlite` and, if outstanding, SHALL complete the reset before opening the document store, the read model, or the Repo.
+
+#### Scenario: Open with outstanding intent
+- **WHEN** initialization runs against a directory whose control store has an outstanding reset intent
+- **THEN** the reset completes and initialization succeeds in `NeedsDecision`

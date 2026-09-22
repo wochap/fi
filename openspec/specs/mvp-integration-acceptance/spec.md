@@ -196,3 +196,25 @@ or half-applied.
 - **WHEN** retention is unavailable and rotation therefore fails after revocation committed
 - **THEN** the device is still reported and presented as revoked, and the rotation failure is surfaced
   as a separate retriable condition
+
+
+### Requirement: Reset-then-join acceptance
+Two installations that each created their own root SHALL be able to converge after one of them resets and joins the other through pairing.
+
+#### Scenario: Two rooted devices converge
+- **WHEN** device A resets its dataset and then pairs with device B from onboarding
+- **THEN** A joins B's root, reaches `Ready`, and B's records are visible on A
+
+### Requirement: Crash-interrupted reset acceptance
+An installation whose reset is interrupted at any step SHALL open successfully in `NeedsDecision` on the next start.
+
+#### Scenario: Interruption between every step
+- **WHEN** a reset is interrupted after each of: intent written, secrets removed, snapshots removed, read model removed
+- **THEN** each subsequent open completes the reset and reports `NeedsDecision` with no inconsistency error
+
+### Requirement: Schema-cliff reset acceptance
+An installation whose root carries an unsupported application schema version SHALL be recoverable to `NeedsDecision` through the reset affordance.
+
+#### Scenario: Reset from the error surface
+- **WHEN** initialization fails with an unsupported schema version and the user confirms reset from the error surface
+- **THEN** the installation reopens in `NeedsDecision` with the same `DeviceId`

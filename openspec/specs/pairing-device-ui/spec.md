@@ -132,12 +132,30 @@ can reach the failure they prevent.
 
 ### Requirement: Root mismatch is presented as an actionable condition
 A pairing attempt between two devices holding different established roots SHALL be presented as an
-actionable condition that states the cause and directs the user toward the available resolution. The
-application MUST NOT present it as a transient failure, offer a retry that cannot succeed, or imply
-that the two roots can be merged.
+actionable condition that states the cause and offers the dataset reset for this device as the
+resolution. The application MUST NOT present it as a transient failure, offer a retry that cannot
+succeed, or imply that the two roots can be merged.
 
 #### Scenario: Devices hold different roots
 - **WHEN** a device with an established root attempts to pair with a device holding a different
   established root
-- **THEN** the failure names the differing-root cause and directs the user to the supported resolution
-  rather than offering a retry of the same attempt
+- **THEN** the failure names the differing-root cause and presents a reset action for this device that
+  opens the reset confirmation, alongside the option to pair a different device
+
+### Requirement: Reset is reachable from the devices surface
+The devices surface SHALL offer a reset action that opens the reset confirmation and, on confirmation, performs the reset and returns the user to onboarding.
+
+#### Scenario: Reset from devices
+- **WHEN** the user confirms the reset from the devices surface
+- **THEN** pairing is stopped if active, the reset runs, and the onboarding surface is shown in `NeedsDecision`
+
+### Requirement: Fatal bootstrap errors offer reset when reset can resolve them
+The fatal bootstrap-error surface SHALL show a reset action instead of a retry action when the error is classified as reset-resolvable, and SHALL keep the retry action otherwise.
+
+#### Scenario: Unsupported schema version
+- **WHEN** initialization fails because the root's application schema version is unsupported
+- **THEN** the error surface offers "Reset this device's data" and no retry
+
+#### Scenario: Locked secure store
+- **WHEN** initialization fails because the secure key store is locked
+- **THEN** the error surface offers retry and no reset

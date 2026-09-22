@@ -87,3 +87,26 @@ The project SHALL pin compatible Flutter/Dart and Rust FRB packages, commit gene
 #### Scenario: Clean code generation
 - **WHEN** FRB generation runs in the project development shell
 - **THEN** generated Rust and Dart sources match the checked-in API definitions and compile for supported native targets
+
+
+### Requirement: Dataset reset bridge API
+The bridge SHALL expose a reset operation that stops pairing, shuts down the process core if one is live, resets the application-data directory it was initialized with, reopens, and returns the resulting bootstrap state. It SHALL NOT accept a directory path from the caller.
+
+#### Scenario: Reset with a live core
+- **WHEN** the reset operation is called while the core is open
+- **THEN** it returns a bootstrap state of `NeedsDecision` and subsequent bridge calls operate on the reopened core
+
+#### Scenario: Reset without a live core
+- **WHEN** the reset operation is called after initialization failed
+- **THEN** it resets the directory that initialization was attempted against and returns `NeedsDecision`
+
+### Requirement: Bridge errors carry reset resolvability
+Bridge errors raised from initialization SHALL carry a typed indicator of whether a dataset reset can resolve them.
+
+#### Scenario: Schema error is resolvable
+- **WHEN** initialization fails with an unsupported application schema version
+- **THEN** the returned bridge error is marked reset-resolvable
+
+#### Scenario: Transient error is not resolvable
+- **WHEN** initialization fails because the secure store is locked or the disk is unavailable
+- **THEN** the returned bridge error is not marked reset-resolvable
