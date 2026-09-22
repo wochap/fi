@@ -7,10 +7,10 @@ use crate::api::{
         BucketPeriodDto, CalendarPolicyDto, CategoryPointDto, CollectionQueryDto,
         ComparisonOperatorDto, ComputedFieldDefinitionDto, CurrentBoundaryDto, ExpressionDto,
         ExpressionKindDto, ExpressionNodeDto, FieldReferenceDto, FieldReferenceKindDto,
-        GroupingDto, NullOrderDto, QueryDefinitionDto, QueryResultDto, QueryResultKindDto,
-        QueryShapeDto, QueryShapeKindDto, ResultRecordDto, ResultRecordValueDto, RoundingPolicyDto,
-        SeriesPointDto, SortClauseDto, SortDirectionDto, TypedValueDto, ValueTypeDto,
-        ValueTypeKindDto, WeekStartDto,
+        GroupingDto, InferredTypeDto, NullOrderDto, QueryDefinitionDto, QueryResultDto,
+        QueryResultKindDto, QueryShapeDto, QueryShapeKindDto, ResultRecordDto,
+        ResultRecordValueDto, RoundingPolicyDto, SeriesPointDto, SortClauseDto, SortDirectionDto,
+        TypedValueDto, ValueTypeDto, ValueTypeKindDto, WeekStartDto,
     },
 };
 
@@ -137,6 +137,20 @@ pub async fn validate_collection_query(query: CollectionQueryDto) -> Result<(), 
         .validate_collection_query(&query.try_into()?)
         .map_err(|error| BridgeError::validation(error.path, error.message))
 }
+/// Runs core type inference for a candidate computed-field expression without
+/// writing anything; errors keep the core's positional path (`$.left.right`).
+pub async fn infer_computed_expression(
+    collection_id: String,
+    expression: ExpressionDto,
+) -> Result<InferredTypeDto, BridgeError> {
+    let collection_id = collection_id.parse().map_err(validation)?;
+    let expression = expression.try_into()?;
+    core()
+        .await?
+        .infer_computed_expression(collection_id, &expression)
+        .map(Into::into)
+        .map_err(inference_error)
+}
 pub async fn execute_collection_query(
     query: CollectionQueryDto,
     now_utc_ms: i64,
@@ -163,6 +177,9 @@ pub async fn execute_query_definition(
         .map_err(|error| BridgeError::validation("query", error.to_string()))
 }
 
+fn inference_error(error: app_core::QueryValidationError) -> BridgeError {
+    BridgeError::validation(error.path, error.message)
+}
 fn validation(error: impl std::fmt::Display) -> BridgeError {
     BridgeError::validation("id", error.to_string())
 }
@@ -188,6 +205,15 @@ impl TryFrom<ValueTypeDto> for app_core::ValueType {
         })
     }
 }
+impl From<app_core::InferredType> for InferredTypeDto {
+    fn from(value: app_core::InferredType) -> Self {
+        Self {
+            value_type: value.value_type.into(),
+            nullable: value.nullable,
+        }
+    }
+}
+
 impl From<app_core::ValueType> for ValueTypeDto {
     fn from(value: app_core::ValueType) -> Self {
         let (kind, scale) = match value {
@@ -998,5 +1024,68 @@ mod tests {
         assert!(dto.expression.is_none());
         assert_eq!(dto.expression_version, 77);
         assert!(dto.unsupported_body_json.unwrap().contains("future"));
+    }
+
+    #[test]
+    fn nested_inference_errors_keep_their_path_through_the_dto_boundary() {
+        use app_core::{
+            ArithmeticOperator, CollectionSchema, CollectionSchemaId, DisplayMetadata, Expression,
+            FieldDefinition, FieldId, FieldReference, FieldType, TypeEnvironment,
+            ValidationMetadata, infer_expression,
+        };
+        let field = |name: &str, scale: u8| FieldDefinition {
+            id: FieldId::new(),
+            name: name.into(),
+            field_type: FieldType::FixedDecimal { scale },
+            required: true,
+            default: None,
+            validation: ValidationMetadata::default(),
+            display: DisplayMetadata::default(),
+            order: 0,
+            deleted: false,
+            enum_options: vec![],
+        };
+        let amount = field("Amount", 2);
+        let rate = field("Rate", 3);
+        let schema = CollectionSchema {
+            id: CollectionSchemaId::new(),
+            name: "Ledger".into(),
+            description: String::new(),
+            fields: vec![amount.clone(), rate.clone()],
+            deleted: false,
+        };
+        let source = |field: &FieldDefinition| {
+            Box::new(Expression::Field {
+                field: FieldReference::Source(field.id),
+            })
+        };
+        // abs(amount) * (amount + rate): the inner `+` mixes scales.
+        let expression = Expression::Arithmetic {
+            operator: ArithmeticOperator::Multiply,
+            left: Box::new(Expression::Abs {
+                expression: source(&amount),
+            }),
+            right: Box::new(Expression::Arithmetic {
+                operator: ArithmeticOperator::Add,
+                left: source(&amount),
+                right: source(&rate),
+            }),
+        };
+        let dto = ExpressionDto::from(expression);
+        let decoded = app_core::Expression::try_from(dto).unwrap();
+        let error = infer_expression(
+            &decoded,
+            &TypeEnvironment {
+                schema: &schema,
+                computed: &[],
+            },
+            false,
+        )
+        .map(InferredTypeDto::from)
+        .map_err(inference_error)
+        .unwrap_err();
+        assert_eq!(error.kind, crate::api::models::BridgeErrorKind::Validation);
+        assert_eq!(error.field.as_deref(), Some("$.right"));
+        assert_eq!(error.message, "arithmetic operands are incompatible");
     }
 }

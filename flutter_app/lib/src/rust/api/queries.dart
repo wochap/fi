@@ -7,8 +7,8 @@ import '../frb_generated.dart';
 import 'models.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `comparison`, `decode_node`, `empty_node`, `encode_node`, `missing`, `rounding`, `validation`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `try_from`, `try_from`, `try_from`, `try_from`, `try_from`, `try_from`, `try_from`, `try_from`, `try_from`, `try_from`
+// These functions are ignored because they are not marked as `pub`: `comparison`, `decode_node`, `empty_node`, `encode_node`, `inference_error`, `missing`, `rounding`, `validation`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `try_from`, `try_from`, `try_from`, `try_from`, `try_from`, `try_from`, `try_from`, `try_from`, `try_from`, `try_from`
 
 Future<String> createComputedField({
   required ComputedFieldDefinitionDto definition,
@@ -79,6 +79,16 @@ Future<List<QueryDefinitionDto>> listQueryDefinitions({
 
 Future<void> validateCollectionQuery({required CollectionQueryDto query}) =>
     RustLib.instance.api.crateApiQueriesValidateCollectionQuery(query: query);
+
+/// Runs core type inference for a candidate computed-field expression without
+/// writing anything; errors keep the core's positional path (`$.left.right`).
+Future<InferredTypeDto> inferComputedExpression({
+  required String collectionId,
+  required ExpressionDto expression,
+}) => RustLib.instance.api.crateApiQueriesInferComputedExpression(
+  collectionId: collectionId,
+  expression: expression,
+);
 
 Future<QueryResultDto> executeCollectionQuery({
   required CollectionQueryDto query,

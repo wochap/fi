@@ -193,6 +193,12 @@ pub struct ValueTypeDto {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct InferredTypeDto {
+    pub value_type: ValueTypeDto,
+    pub nullable: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TypedValueDto {
     pub value_type: ValueTypeDto,
     pub integer_value: Option<i64>,

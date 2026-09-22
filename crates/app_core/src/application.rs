@@ -37,8 +37,9 @@ use crate::{
     pairing_manager::PairingManager,
     projection::{ReadModel, project, reconcile},
     query::{
-        CollectionQuery, ComputedFieldDefinition, ComputedFieldId, QueryDefinition, QueryId,
-        QueryResult, QueryValidationError, execute_query, validate_query,
+        CollectionQuery, ComputedFieldDefinition, ComputedFieldId, Expression, InferredType,
+        QueryDefinition, QueryId, QueryResult, QueryValidationError, TypeEnvironment,
+        execute_query, infer_expression, validate_query,
     },
     quinn_transport::{QuinnTransport, QuinnTransportConfig},
     records::{GenericRecord, RecordId},
@@ -1688,6 +1689,29 @@ impl AppCore {
             .computed_fields(query.collection_id)
             .map_err(|error| QueryValidationError::new("projection", error.to_string()))?;
         validate_query(query, &schema, &computed)
+    }
+    /// Infers the output type of a candidate computed-field expression without
+    /// persisting anything, using the same rules as commit-time validation.
+    pub fn infer_computed_expression(
+        &self,
+        collection_id: CollectionSchemaId,
+        expression: &Expression,
+    ) -> std::result::Result<InferredType, QueryValidationError> {
+        ensure_query_ready(self.lifecycle_state())
+            .map_err(|error| QueryValidationError::new("application", error.to_string()))?;
+        let schema = self
+            .read_model
+            .schema(collection_id)
+            .map_err(|error| QueryValidationError::new("projection", error.to_string()))?
+            .ok_or_else(|| QueryValidationError::new("collection_id", "collection not found"))?;
+        infer_expression(
+            expression,
+            &TypeEnvironment {
+                schema: &schema,
+                computed: &[],
+            },
+            false,
+        )
     }
     pub fn execute_collection_query(
         &self,

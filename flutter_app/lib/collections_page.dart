@@ -5,6 +5,8 @@ import 'package:fi/field_registry.dart';
 import 'package:fi/help_button.dart';
 import 'package:fi/help_copy.dart';
 import 'package:fi/src/rust/api/models.dart';
+import 'package:fi/widgets/computed_field_editor.dart';
+import 'package:fi/widgets/expression_builder.dart';
 import 'package:fi/widgets/query_builder.dart';
 import 'package:fi/widgets/query_editor_dialog.dart';
 import 'package:fi/widgets/widget_dashboard.dart';
@@ -414,21 +416,47 @@ class CollectionsPage extends StatelessWidget {
     );
   }
 
+  /// One computed field in the dialog list. Tapping opens the editor pre-filled; a definition the
+  /// builder cannot represent stays visible with its diagnostic but does not open.
+  Widget _computedFieldTile(
+    BuildContext context,
+    CollectionSchemaDto schema,
+    ComputedFieldDefinitionDto item,
+  ) {
+    final editable = isEditableComputedField(item);
+    return ListTile(
+      key: ValueKey('computed-${item.id}'),
+      title: Text(item.name),
+      subtitle: Text(
+        editable
+            ? '${describeValueType(item.declaredType)}'
+                  '${item.nullable ? ' · may be empty' : ''}'
+            : item.unsupportedBodyJson != null
+            ? 'Made by a newer version (expression v${item.expressionVersion}); not editable here'
+            : 'Uses operations this editor does not offer; not editable here',
+      ),
+      onTap: editable
+          ? () => unawaited(
+              showComputedFieldEditor(
+                context,
+                controller: controller,
+                schema: schema,
+                existing: item,
+              ),
+            )
+          : null,
+      trailing: IconButton(
+        tooltip: 'Remove computed field',
+        icon: const Icon(Icons.delete_outline),
+        onPressed: () => unawaited(controller.removeComputedField(item.id)),
+      ),
+    );
+  }
+
   Future<void> _queryEditor(
     BuildContext context,
     CollectionSchemaDto schema,
   ) async {
-    final numericFields = schema.fields
-        .where(
-          (field) =>
-              !field.deleted &&
-              (field.fieldType.kind == FieldTypeKindDto.integer ||
-                  field.fieldType.kind == FieldTypeKindDto.fixedDecimal ||
-                  field.fieldType.kind == FieldTypeKindDto.duration),
-        )
-        .toList();
-    String? selected = numericFields.isEmpty ? null : numericFields.first.id;
-    final name = TextEditingController();
     await showDialog<void>(
       context: context,
       builder: (dialog) => StatefulBuilder(
@@ -447,83 +475,24 @@ class CollectionsPage extends StatelessWidget {
                         'Computed fields',
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
-                      const HelpButton(HelpId.queryComputedFields),
+                      const HelpButton(HelpId.computedFields),
                     ],
                   ),
                   for (final item in controller.computedFields)
-                    ListTile(
-                      title: Text(item.name),
-                      subtitle: Text(item.declaredType.kind.name),
-                      trailing: IconButton(
-                        tooltip: 'Remove computed field',
-                        icon: const Icon(Icons.delete_outline),
-                        onPressed: () =>
-                            unawaited(controller.removeComputedField(item.id)),
-                      ),
-                    ),
-                  TextField(
-                    controller: name,
-                    decoration: const InputDecoration(
-                      labelText: 'Computed field name',
-                    ),
-                  ),
-                  DropdownButtonFormField<String>(
-                    initialValue: selected,
-                    decoration: const InputDecoration(
-                      labelText: 'Source numeric field',
-                    ),
-                    items: [
-                      for (final field in numericFields)
-                        DropdownMenuItem(
-                          value: field.id,
-                          child: Text(field.name),
-                        ),
-                    ],
-                    onChanged: (value) => setState(() => selected = value),
-                  ),
+                    _computedFieldTile(context, schema, item),
                   Align(
                     alignment: Alignment.centerLeft,
                     child: FilledButton.tonalIcon(
-                      onPressed: selected == null || name.text.trim().isEmpty
-                          ? null
-                          : () async {
-                              final field = numericFields.firstWhere(
-                                (item) => item.id == selected,
-                              );
-                              final source = ExpressionNodeDto(
-                                kind: ExpressionKindDto.field,
-                                field: FieldReferenceDto(
-                                  kind: FieldReferenceKindDto.source,
-                                  id: field.id,
-                                ),
-                              );
-                              final absolute = ExpressionNodeDto(
-                                kind: ExpressionKindDto.abs,
-                                expression: 0,
-                              );
-                              await controller.createComputedField(
-                                ComputedFieldDefinitionDto(
-                                  id: '',
-                                  collectionId: schema.id,
-                                  name: name.text.trim(),
-                                  declaredType: _queryValueType(
-                                    field.fieldType,
-                                  ),
-                                  nullable: !field.required_,
-                                  expressionVersion: 1,
-                                  expression: ExpressionDto(
-                                    root: 1,
-                                    nodes: [source, absolute],
-                                  ),
-                                  order: controller.computedFields.length,
-                                  deleted: false,
-                                ),
-                              );
-                              name.clear();
-                              setState(() {});
-                            },
+                      key: const Key('add-computed-field'),
+                      onPressed: () => unawaited(
+                        showComputedFieldEditor(
+                          context,
+                          controller: controller,
+                          schema: schema,
+                        ),
+                      ),
                       icon: const Icon(Icons.add),
-                      label: const Text('Add absolute-value field'),
+                      label: const Text('Add computed field'),
                     ),
                   ),
                   const Divider(height: 32),
@@ -1358,25 +1327,3 @@ int _fieldOrder(FieldDefinitionDto left, FieldDefinitionDto right) {
   final order = left.order.compareTo(right.order);
   return order == 0 ? left.id.compareTo(right.id) : order;
 }
-
-ValueTypeDto _queryValueType(FieldTypeDto type) => switch (type.kind) {
-  FieldTypeKindDto.text => const ValueTypeDto(kind: ValueTypeKindDto.text),
-  FieldTypeKindDto.integer => const ValueTypeDto(
-    kind: ValueTypeKindDto.integer,
-  ),
-  FieldTypeKindDto.fixedDecimal => ValueTypeDto(
-    kind: ValueTypeKindDto.fixedDecimal,
-    scale: type.scale,
-  ),
-  FieldTypeKindDto.boolean => const ValueTypeDto(
-    kind: ValueTypeKindDto.boolean,
-  ),
-  FieldTypeKindDto.date => const ValueTypeDto(kind: ValueTypeKindDto.date),
-  FieldTypeKindDto.dateTime => const ValueTypeDto(
-    kind: ValueTypeKindDto.dateTime,
-  ),
-  FieldTypeKindDto.duration => const ValueTypeDto(
-    kind: ValueTypeKindDto.duration,
-  ),
-  FieldTypeKindDto.enum_ => const ValueTypeDto(kind: ValueTypeKindDto.enum_),
-};

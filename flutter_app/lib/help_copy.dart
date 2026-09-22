@@ -34,7 +34,8 @@ enum HelpId {
   widgetPointRadius,
 
   // Computed fields and queries dialog.
-  queryComputedFields,
+  computedFields,
+  computedFieldResult,
   querySavedQueries,
 
   // Pairing card.
@@ -210,12 +211,28 @@ const Map<HelpId, HelpEntry> helpCopy = {
         'How large each plotted point is drawn, in logical pixels. Leave it empty for the default '
         'size.',
   ),
-  HelpId.queryComputedFields: HelpEntry(
+  HelpId.computedFields: HelpEntry(
     title: 'Computed fields',
     body:
-        'A field derived from other fields of the same record rather than typed in. It is '
-        'recalculated on read, so it is never out of date, and it can be used by queries like any '
-        'other field.',
+        'A computed field derives its value from other fields of the same record, such as '
+        'amount × rate or ended − started. It is recalculated on this device whenever it is read, '
+        'so it is never out of date, and only its definition is synchronised, never its values.\n\n'
+        'Use one for totals with the sign removed, products like price × quantity, or the time '
+        'between two dates. Queries and widgets can use it like any other field, and editing it '
+        'changes every query and widget that uses it.',
+  ),
+  HelpId.computedFieldResult: HelpEntry(
+    title: 'Result type',
+    body:
+        'The result type is worked out from the expression; you never pick it.\n\n'
+        '+ and − need both sides to have the same number of decimals. × adds the decimals of '
+        'both sides (scale 2 × scale 3 gives scale 5). Whole numbers and decimals cannot be mixed '
+        'in +, − or ×; turn the number into a decimal instead. Subtracting two dates gives a '
+        'duration.\n\n'
+        '÷ always gives a decimal at the scale you choose. "Round half to even" rounds the last '
+        'digit; "Reject inexact" leaves the value empty when the answer does not fit exactly.\n\n'
+        'If any field used is empty for a record, the result is empty for that record ("may be '
+        'empty").',
   ),
   HelpId.querySavedQueries: HelpEntry(
     title: 'Saved queries',

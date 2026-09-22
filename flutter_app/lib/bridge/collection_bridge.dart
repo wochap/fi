@@ -99,6 +99,14 @@ abstract interface class CollectionBridge {
   Future<void> reorderQueryDefinitions(String collectionId, List<String> ids);
   Future<List<QueryDefinitionDto>> listQueryDefinitions(String collectionId);
   Future<void> validateCollectionQuery(CollectionQueryDto query);
+
+  /// Rust inference for a candidate computed-field expression. Nothing is
+  /// written; a rejected expression throws a validation [BridgeError] whose
+  /// `field` is the positional path (`$.left.right`) of the offending node.
+  Future<InferredTypeDto> inferComputedExpression(
+    String collectionId,
+    ExpressionDto expression,
+  );
   Future<QueryResultDto> executeCollectionQuery(
     CollectionQueryDto query,
     int nowUtcMs,
@@ -376,6 +384,14 @@ final class RustCollectionBridge implements CollectionBridge {
   @override
   Future<void> validateCollectionQuery(CollectionQueryDto query) =>
       queries.validateCollectionQuery(query: query);
+  @override
+  Future<InferredTypeDto> inferComputedExpression(
+    String collectionId,
+    ExpressionDto expression,
+  ) => queries.inferComputedExpression(
+    collectionId: collectionId,
+    expression: expression,
+  );
   @override
   Future<QueryResultDto> executeCollectionQuery(
     CollectionQueryDto query,

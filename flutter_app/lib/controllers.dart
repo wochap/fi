@@ -328,6 +328,15 @@ final class CollectionsController extends ChangeNotifier {
     await refresh();
   }
 
+  /// Edits a computed field in place under its stable id, so queries and
+  /// widgets that reference it resolve the new definition after the refresh.
+  Future<void> updateComputedField(
+    ComputedFieldDefinitionDto definition,
+  ) async {
+    await bridge.updateComputedField(definition);
+    await refresh();
+  }
+
   /// Creates a saved query and returns its new id, so a widget can reference it immediately.
   Future<String> createQueryDefinition(QueryDefinitionDto definition) async {
     final id = await bridge.createQueryDefinition(definition);

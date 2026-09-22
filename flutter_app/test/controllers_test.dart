@@ -172,6 +172,98 @@ void main() {
     controller.dispose();
   });
 
+  test(
+    'updateComputedField edits in place and surfaces validation failures',
+    () async {
+      final bridge = FakeCollectionBridge();
+      final controller = CollectionsController(bridge);
+      await controller.start();
+      final collection = await controller.createCollection('Ledger');
+      await controller.selectCollection(collection);
+      await controller.addField(
+        const FieldDefinitionDto(
+          id: '',
+          name: 'Amount',
+          fieldType: FieldTypeDto(
+            kind: FieldTypeKindDto.fixedDecimal,
+            scale: 2,
+          ),
+          required_: true,
+          validation: ValidationMetadataDto(),
+          display: DisplayMetadataDto(multiline: false),
+          order: 0,
+          deleted: false,
+          enumOptions: [],
+        ),
+      );
+      final fieldId = controller.schema!.fields.single.id;
+      final amount = ExpressionNodeDto(
+        kind: ExpressionKindDto.field,
+        field: FieldReferenceDto(
+          kind: FieldReferenceKindDto.source,
+          id: fieldId,
+        ),
+      );
+      const decimal = ValueTypeDto(
+        kind: ValueTypeKindDto.fixedDecimal,
+        scale: 2,
+      );
+      ComputedFieldDefinitionDto definition(
+        String id,
+        String name,
+        ExpressionDto expression,
+      ) => ComputedFieldDefinitionDto(
+        id: id,
+        collectionId: collection,
+        name: name,
+        declaredType: decimal,
+        nullable: false,
+        expressionVersion: 1,
+        expression: expression,
+        order: 0,
+        deleted: false,
+      );
+      await controller.createComputedField(
+        definition(
+          '',
+          'Magnitude',
+          ExpressionDto(
+            root: 1,
+            nodes: [
+              amount,
+              const ExpressionNodeDto(
+                kind: ExpressionKindDto.abs,
+                expression: 0,
+              ),
+            ],
+          ),
+        ),
+      );
+      final id = controller.computedFields.single.id;
+      final doubled = ExpressionDto(root: 0, nodes: [amount]);
+
+      await controller.updateComputedField(
+        definition(id, 'Amount copy', doubled),
+      );
+      expect(controller.computedFields.single.id, id);
+      expect(controller.computedFields.single.name, 'Amount copy');
+      expect(controller.computedFields.single.expression, doubled);
+
+      bridge.nextError = const BridgeError(
+        kind: BridgeErrorKind.validation,
+        field: 'declared_type',
+        message: 'does not match inferred expression type',
+        resetResolvable: false,
+      );
+      await expectLater(
+        controller.updateComputedField(definition(id, 'Broken', doubled)),
+        throwsA(isA<BridgeError>()),
+      );
+      expect(controller.computedFields.single.name, 'Amount copy');
+      controller.dispose();
+    },
+  );
+
   test('controller drives widget lifecycle, evaluation, and unknown types', () async {
     final bridge = FakeCollectionBridge();
     final controller = CollectionsController(bridge);
@@ -536,7 +628,6 @@ void main() {
     expect(controller.selectedRecordIds, {ids.last});
     controller.dispose();
   });
-
 }
 
 /// A bridge whose connection-state stream can be ended from the Rust side.

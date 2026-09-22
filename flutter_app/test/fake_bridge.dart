@@ -71,6 +71,13 @@ final class FakeCollectionBridge implements CollectionBridge {
   );
   SyncStatusDto status = SyncStatusDto.offline;
   Object? nextError;
+
+  /// Every expression submitted for inference, in call order.
+  final List<ExpressionDto> inferenceRequests = [];
+
+  /// When set, returned (or thrown, if it is an error) instead of running the
+  /// small inference mirror below.
+  Object? nextInference;
   int _next = 1;
   final bootstrapController = StreamController<BootstrapDto>.broadcast();
   final projectionController = StreamController<ProjectionDto>.broadcast();
@@ -494,6 +501,7 @@ final class FakeCollectionBridge implements CollectionBridge {
   Future<void> updateComputedField(
     ComputedFieldDefinitionDto definition,
   ) async {
+    _fail();
     final items = computedFields[definition.collectionId]!;
     items[items.indexWhere((item) => item.id == definition.id)] = definition;
     changed(definition.collectionId);
@@ -598,6 +606,23 @@ final class FakeCollectionBridge implements CollectionBridge {
   @override
   Future<void> validateCollectionQuery(CollectionQueryDto query) async {
     _fail();
+  }
+
+  @override
+  Future<InferredTypeDto> inferComputedExpression(
+    String collectionId,
+    ExpressionDto expression,
+  ) async {
+    inferenceRequests.add(expression);
+    final override = nextInference;
+    nextInference = null;
+    if (override is InferredTypeDto) return override;
+    if (override != null) throw override;
+    final fields = schemas[collectionId]?.fields ?? const [];
+    return _FakeInference(
+      fields,
+      expression.nodes,
+    ).infer(expression.root, r'$');
   }
 
   @override
@@ -908,3 +933,115 @@ FieldDefinitionDto _copyField(
   deleted: field.deleted,
   enumOptions: enumOptions ?? field.enumOptions,
 );
+
+/// A test-only mirror of the core computed-field typing rules, covering the
+/// operators the builder exposes. Production code always asks Rust.
+final class _FakeInference {
+  _FakeInference(this.fields, this.nodes);
+
+  final List<FieldDefinitionDto> fields;
+  final List<ExpressionNodeDto> nodes;
+
+  static BridgeError _error(String path, String message) => BridgeError(
+    kind: BridgeErrorKind.validation,
+    field: path,
+    message: message,
+    resetResolvable: false,
+  );
+
+  InferredTypeDto infer(int index, String path) {
+    final node = nodes[index];
+    switch (node.kind) {
+      case ExpressionKindDto.constant:
+        final value = node.value!;
+        return InferredTypeDto(
+          valueType: value.valueType,
+          nullable: value.valueType.kind == ValueTypeKindDto.null_,
+        );
+      case ExpressionKindDto.field:
+        final reference = node.field!;
+        if (reference.kind == FieldReferenceKindDto.computed) {
+          throw _error(
+            path,
+            'computed fields may reference source fields only',
+          );
+        }
+        final field = fields
+            .where((item) => item.id == reference.id && !item.deleted)
+            .firstOrNull;
+        if (field == null) {
+          throw _error(path, 'source field was not found or is removed');
+        }
+        return InferredTypeDto(
+          valueType: ValueTypeDto(
+            kind: ValueTypeKindDto.values.byName(field.fieldType.kind.name),
+            scale: field.fieldType.scale,
+          ),
+          nullable: !field.required_,
+        );
+      case ExpressionKindDto.arithmetic:
+        final left = infer(node.left!, '$path.left');
+        final right = infer(node.right!, '$path.right');
+        final a = left.valueType;
+        final b = right.valueType;
+        final operator = node.arithmeticOperator!;
+        final ValueTypeDto type;
+        if (a.kind == ValueTypeKindDto.integer &&
+            b.kind == ValueTypeKindDto.integer) {
+          type = a;
+        } else if (a.kind == ValueTypeKindDto.fixedDecimal &&
+            b.kind == ValueTypeKindDto.fixedDecimal &&
+            operator != ArithmeticOperatorDto.multiply &&
+            a.scale == b.scale) {
+          type = a;
+        } else if (a.kind == ValueTypeKindDto.fixedDecimal &&
+            b.kind == ValueTypeKindDto.fixedDecimal &&
+            operator == ArithmeticOperatorDto.multiply) {
+          final scale = a.scale! + b.scale!;
+          if (scale > 18) throw _error(path, 'decimal result scale exceeds 18');
+          type = ValueTypeDto(
+            kind: ValueTypeKindDto.fixedDecimal,
+            scale: scale,
+          );
+        } else if (operator == ArithmeticOperatorDto.subtract &&
+            a == b &&
+            (a.kind == ValueTypeKindDto.date ||
+                a.kind == ValueTypeKindDto.dateTime)) {
+          type = const ValueTypeDto(kind: ValueTypeKindDto.duration);
+        } else {
+          throw _error(path, 'arithmetic operands are incompatible');
+        }
+        return InferredTypeDto(
+          valueType: type,
+          nullable: left.nullable || right.nullable,
+        );
+      case ExpressionKindDto.divide:
+        final left = infer(node.left!, '$path.left');
+        final right = infer(node.right!, '$path.right');
+        bool numeric(ValueTypeDto type) =>
+            type.kind == ValueTypeKindDto.integer ||
+            type.kind == ValueTypeKindDto.fixedDecimal;
+        if (!numeric(left.valueType) || !numeric(right.valueType)) {
+          throw _error(path, 'division operands must be numeric');
+        }
+        return InferredTypeDto(
+          valueType: ValueTypeDto(
+            kind: ValueTypeKindDto.fixedDecimal,
+            scale: node.outputScale,
+          ),
+          nullable: left.nullable || right.nullable,
+        );
+      case ExpressionKindDto.abs:
+        final inner = infer(node.expression!, '$path.expression');
+        final kind = inner.valueType.kind;
+        if (kind != ValueTypeKindDto.integer &&
+            kind != ValueTypeKindDto.fixedDecimal &&
+            kind != ValueTypeKindDto.duration) {
+          throw _error(path, 'Abs operand must be numeric or Duration');
+        }
+        return inner;
+      default:
+        throw _error(path, 'unsupported in the fake inference mirror');
+    }
+  }
+}
