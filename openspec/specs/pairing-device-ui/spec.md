@@ -33,6 +33,8 @@ Flutter SHALL display the zero-padded six-digit SAS supplied by Rust for the cur
 ### Requirement: Trusted-device list
 The devices screen SHALL list locally trusted and revoked device records with friendly name, DeviceId presentation, connectivity, last seen, last sync, and status obtained through Rust queries/events. Last sync SHALL reflect the most recent time the peer reached the synced state, not only the pairing time, and SHALL be carried by the same connection-state emission that reports the synced state so the row never shows synced connectivity alongside a never-synced timestamp.
 
+Last seen and last sync SHALL be presented as status times, not exact values: an absent value reads "never"; a value under one minute old reads "just now"; under one hour reads a whole number of minutes ago; under twenty-four hours reads a whole number of hours ago; anything older reads as a short local date and time with weekday, day, month, and hour:minute, adding the year only when it differs from the current year. A value in the future because of clock skew SHALL read as "just now". Relative wording SHALL be refreshed at least once per minute while the devices screen is mounted, without waiting for a device event. Record field values, chart axes, and query output SHALL keep their exact formatting; this presentation applies to status metadata only.
+
 #### Scenario: Device connects and syncs
 - **WHEN** Rust advances a trusted peer from connected through syncing to synced
 - **THEN** the corresponding row and global status update without UI timing heuristics
@@ -40,6 +42,22 @@ The devices screen SHALL list locally trusted and revoked device records with fr
 #### Scenario: Synced row shows a sync time
 - **WHEN** the row for a peer reports synced connectivity
 - **THEN** its last-sync value is a timestamp rather than "never", and it is no earlier than the transition that produced the synced state
+
+#### Scenario: Recent timestamps read relatively
+- **WHEN** a device was last seen 30 minutes ago and last synced 3 hours ago
+- **THEN** the row reads "Last seen 30 min ago · Last sync 3 h ago"
+
+#### Scenario: Older timestamps read as a short date
+- **WHEN** a device was last synced two days ago on Tuesday 22 September at 13:00 local time in the current year
+- **THEN** the row reads "Last sync Tue 22 Sep 13:00", and a value from a previous year includes that year
+
+#### Scenario: Relative wording stays current
+- **WHEN** the devices screen stays open for two minutes with no device event
+- **THEN** a row that read "just now" reads "2 min ago" without any refresh action
+
+#### Scenario: Record values unaffected
+- **WHEN** a record has a Date & time field
+- **THEN** its list row and editor still show the exact `yyyy-MM-dd HH:mm` value
 
 ### Requirement: Device rename and revoke actions
 Flutter SHALL expose friendly-name editing and confirmed revoke/unpair actions that delegate to Rust and refresh persisted device state.
