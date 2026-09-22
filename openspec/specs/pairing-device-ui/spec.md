@@ -45,11 +45,19 @@ Flutter SHALL expose friendly-name editing and confirmed revoke/unpair actions t
 - **THEN** Rust revokes and disconnects the device and the UI presents it as revoked rather than merely hiding it
 
 ### Requirement: Complete sync-status vocabulary
-The application shell SHALL present `Offline`, `Searching`, `Connected`, `Syncing`, `Synced`, or `Error` exactly from typed Rust aggregate status.
+The application shell SHALL present the typed Rust aggregate status exactly, mapping `Offline`, `Searching`, `Connected`, `Syncing`, `Synced`, and `Error` to the labels "Offline", "Looking for paired devices", "Connected", "Syncing", "Synced", and "Error", each with a distinct icon. The label for `Searching` MUST NOT reuse the word "Searching" so it is not mistaken for pairing discovery, which keeps its own copy on the pairing card.
 
 #### Scenario: Heads change while connected
 - **WHEN** a previously synced peer relationship receives or creates new authoritative heads
 - **THEN** presentation returns to `Syncing` until Rust reports convergence
+
+#### Scenario: Searching at startup
+- **WHEN** the application is foregrounded with trusted devices recorded and none yet reachable
+- **THEN** the shell shows "Looking for paired devices" with its icon, and the pairing card still shows its idle copy because pairing mode was not started
+
+#### Scenario: Every status has an icon
+- **WHEN** the aggregate status takes each of its six values in turn
+- **THEN** the status chip shows a different icon for each value alongside the label
 
 ### Requirement: Pairing is reachable from a rootless onboarding state
 The onboarding surface presented when a local dataset does not yet exist SHALL provide a pairing entry

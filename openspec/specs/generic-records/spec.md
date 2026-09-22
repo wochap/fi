@@ -51,11 +51,19 @@ Generic records and typed field values SHALL synchronize through the existing Au
 - **THEN** the desktop projection and generic record query return that record with the same IDs and typed values
 
 ### Requirement: Semantic inconsistency preservation
-Structurally valid values made semantically inconsistent by concurrent schema evolution SHALL be retained and projected with typed diagnostics rather than dropped or allowed to block unrelated collections.
+Structurally valid values made semantically inconsistent by schema evolution, whether concurrent across devices or performed locally over existing records, SHALL be retained and projected with typed diagnostics rather than dropped or allowed to block unrelated collections.
 
 #### Scenario: Concurrent required field and record creation
 - **WHEN** one offline device makes a field required while another creates a record without it and both states merge
 - **THEN** the record remains recoverable, is marked invalid, and can be repaired through typed editing
+
+#### Scenario: Local required field over existing records
+- **WHEN** a device makes a field required with no default while its own active records lack that field
+- **THEN** those records remain recoverable, are marked invalid with the same missing-required diagnostic as the merged case, and can be repaired through typed editing
+
+#### Scenario: Diagnostics do not block creation elsewhere
+- **WHEN** a collection holds records marked invalid for a missing required field
+- **THEN** creating a valid new record in that collection, and any record in another collection, succeeds normally
 
 ### Requirement: Generic record read APIs
 The application SHALL provide list and get queries backed by SQLite, exclude logically deleted data by default, use deterministic ordering, and return owned typed views without opening Automerge transactions.

@@ -59,3 +59,41 @@ Widget results and rendering coordinates SHALL be derived from the current SQLit
 #### Scenario: Record changes widget result
 - **WHEN** a synchronized record advances the projection
 - **THEN** reevaluating its widget query produces updated data without synchronizing a cached result
+
+### Requirement: Saved queries are editable in place
+Flutter SHALL let the user edit an existing saved query through the same query builder used to create one, pre-filled from the projected definition, and SHALL submit the edit through the update-query command so the `QueryId` is preserved and every widget referencing it evaluates the edited definition. The editor SHALL state how many active widgets reference the query before the edit is saved. The queries dialog SHALL offer edit alongside delete for each saved query, and the widget form SHALL offer "Edit this query" when a saved query is selected.
+
+#### Scenario: Edit from the queries dialog
+- **WHEN** the user taps edit on a saved query in the computed-fields-and-queries dialog, changes its aggregation, and saves
+- **THEN** the query keeps its id, the change synchronizes as an update, and every widget referencing it renders the new result on next evaluation
+
+#### Scenario: Edit from the widget form
+- **WHEN** a widget form has "Use a saved query" on with a query selected and the user chooses "Edit this query"
+- **THEN** the query builder opens pre-filled with that query, and saving updates it in place rather than creating a new definition
+
+#### Scenario: Save as new from the widget form
+- **WHEN** the user chooses "Save as new" instead of editing in place
+- **THEN** a new `QueryId` is created from the builder contents, the original query is unchanged, and the widget being edited references the new id
+
+#### Scenario: Referencing widgets are disclosed
+- **WHEN** the user opens the editor for a query referenced by three active widgets
+- **THEN** the editor states that three widgets use this query before the save action is available
+
+#### Scenario: Pre-fill fidelity
+- **WHEN** the builder is opened for a saved query with a filter, a Month grouping on a date field, and a Sum aggregation
+- **THEN** every builder control reflects those values, and saving without changes produces a definition equal to the original apart from its version
+
+### Requirement: Chart query controls are always visible and presettable
+For line-chart and bar-chart widgets the query builder SHALL always show "Group by" (calendar period or none) and, when a period is chosen, "Date field", rather than revealing them conditionally, and SHALL label the ungrouped category selector "Category field". The builder SHALL offer presets that prefill aggregation, operand, group-by, and date field, at minimum "Daily total", "Monthly total", "Count per day", and "Latest values", and applying a preset SHALL leave every control editable afterward.
+
+#### Scenario: Daily total in two taps
+- **WHEN** the user picks line-chart and applies the "Daily total" preset in a collection with one FixedDecimal field and one Date field
+- **THEN** aggregation is Sum over that FixedDecimal field, group-by is Day on that Date field, and the form is submittable without further choices
+
+#### Scenario: Preset needs a choice
+- **WHEN** the user applies "Daily total" in a collection with two numeric fields
+- **THEN** group-by and date field are filled and the field-to-aggregate control is left for the user with the form blocker naming it
+
+#### Scenario: Controls remain visible
+- **WHEN** the user opens the builder for a bar chart with no grouping chosen
+- **THEN** "Group by" is shown with "None" selected and "Category field" is shown, rather than the period controls being hidden until a bucket is chosen
