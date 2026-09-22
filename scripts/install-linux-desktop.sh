@@ -15,6 +15,8 @@ for size in 16 24 32 48 64 96 128 192 256 512; do
   mkdir -p "$ICON_DIR/${size}x${size}/apps"
   magick "$SRC" -resize "${size}x${size}" "$ICON_DIR/${size}x${size}/apps/$APP_ID.png"
 done
+mkdir -p "$ICON_DIR/scalable/apps"
+cp "$ROOT/flutter_app/assets/icon/icon.svg" "$ICON_DIR/scalable/apps/$APP_ID.svg"
 
 mkdir -p "$APP_DIR"
 BIN="$ROOT/flutter_app/build/linux/x64/debug/bundle/fi"
