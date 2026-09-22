@@ -30,11 +30,34 @@ Private device keys SHALL remain outside `control.sqlite` and `read-model.sqlite
 - **THEN** the reported error identifies the operation without including private key bytes
 
 ### Requirement: Secure-store availability is explicit
-Production secure-store adapters SHALL return typed locked or unavailable failures and MUST NOT silently fall back to plaintext key files.
+Production secure-store adapters SHALL return typed locked or unavailable failures and MUST NOT silently fall back to plaintext key files. Before reporting a locked store, a desktop adapter SHALL request an unlock from the session's secret service exactly once per operation and retry the operation when the unlock succeeds. A store that is still locked after that attempt SHALL be reported as locked, distinctly from unavailable, and the distinction SHALL survive every conversion up to the user-facing surface.
 
 #### Scenario: Linux secret service unavailable
 - **WHEN** no usable Secret Service exists in the desktop session
 - **THEN** identity-dependent networking remains disabled with an actionable error and no plaintext private key is created
+
+#### Scenario: Locked collection is unlocked on demand
+- **WHEN** a key-store operation meets a locked default collection and the session unlock succeeds
+- **THEN** the original operation is retried once and returns its normal result without surfacing an error
+
+#### Scenario: Unlock is declined or fails
+- **WHEN** the unlock request is declined, dismissed, or fails
+- **THEN** the operation reports the locked variant, distinct from unavailable and from a generic operation failure, and no private key material is written outside the store
+
+#### Scenario: Locked reason reaches the caller
+- **WHEN** a locked store failure is converted into an application error
+- **THEN** the locked reason remains recoverable by the caller rather than collapsing into a generic networking-initialization failure
+
+### Requirement: Networked startup degrades rather than aborting on a locked store
+Opening the application in networked mode SHALL NOT fail when the discovery-group secret cannot be read because the secure store is locked. The application SHALL open with peer networking disabled, report the locked-store reason, and SHALL expose an idempotent retry that re-runs the deferred networking startup in place.
+
+#### Scenario: Boot with a locked keyring
+- **WHEN** the application opens in networked mode while the desktop keyring is locked and the unlock attempt does not succeed
+- **THEN** the application reaches a usable local state with networking disabled and reports the locked-store reason instead of failing to open
+
+#### Scenario: Retry after the user unlocks
+- **WHEN** the user unlocks the keyring and triggers the retry
+- **THEN** the discovery secret is read, normal discovery starts, and the locked-store condition is cleared without restarting the application
 
 
 ### Requirement: Installation identity survives dataset reset

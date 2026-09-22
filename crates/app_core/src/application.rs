@@ -64,6 +64,29 @@ pub struct RevocationOutcome {
     pub rotation_error: Option<String>,
 }
 
+/// What a background lifecycle report does to peer networking. Flutter
+/// reports lifecycle on every platform; this policy, owned by Rust, decides.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum LifecyclePolicy {
+    /// Android: no background execution guarantee, so background stops
+    /// discovery and closes sessions.
+    SuspendInBackground,
+    /// Desktop: focus loss and minimising report `inactive`/`hidden`, which
+    /// must not drop the LAN session. Only shutdown tears networking down.
+    KeepNetworkingInBackground,
+}
+
+impl LifecyclePolicy {
+    #[must_use]
+    pub const fn platform_default() -> Self {
+        if cfg!(target_os = "android") {
+            Self::SuspendInBackground
+        } else {
+            Self::KeepNetworkingInBackground
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct AppCoreConfig {
     pub command_capacity: usize,
@@ -71,6 +94,7 @@ pub struct AppCoreConfig {
     pub repo: RepoConfig,
     pub hlc_node_id: Option<HlcNodeId>,
     pub wall_time: Arc<dyn WallTime>,
+    pub lifecycle_policy: LifecyclePolicy,
 }
 
 impl std::fmt::Debug for AppCoreConfig {
@@ -81,6 +105,7 @@ impl std::fmt::Debug for AppCoreConfig {
             .field("transient_event_capacity", &self.transient_event_capacity)
             .field("repo", &self.repo)
             .field("hlc_node_id", &self.hlc_node_id)
+            .field("lifecycle_policy", &self.lifecycle_policy)
             .finish_non_exhaustive()
     }
 }
@@ -93,6 +118,7 @@ impl Default for AppCoreConfig {
             repo: RepoConfig::default(),
             hlc_node_id: None,
             wall_time: Arc::new(SystemWallTime),
+            lifecycle_policy: LifecyclePolicy::platform_default(),
         }
     }
 }
@@ -190,6 +216,7 @@ pub struct AppCore {
     pairing: Option<Arc<PairingManager>>,
     peer_sync: watch::Receiver<std::collections::HashMap<PeerId, PeerSyncProgress>>,
     network_foreground: Arc<AtomicBool>,
+    lifecycle_policy: LifecyclePolicy,
     networking_deferred: Arc<Mutex<Option<NetworkingDeferral>>>,
 }
 
@@ -333,10 +360,9 @@ impl AppCore {
         let endpoints = Arc::new(Mutex::new(EndpointRegistry::new(
             crate::discovery::AddressPolicy::for_bind(bind.ip()),
         )));
-        let connections = Arc::new(
+        let connections =
             ConnectionManager::new(identity.id(), network.clone(), endpoints.clone(), 4)
-                .map_err(|message| AppError::Storage(message.into()))?,
-        );
+                .map_err(|message| AppError::Storage(message.into()))?;
         let pairing = PairingManager::new(
             identity.clone(),
             key_store,
@@ -444,7 +470,7 @@ impl AppCore {
         let read_model = ReadModel::open_disposable(data_dir.join("read-model.sqlite"))?;
         let repo = Repo::open(
             document_store,
-            control_store,
+            control_store.clone(),
             transport,
             config.repo.clone(),
         )
@@ -466,6 +492,7 @@ impl AppCore {
                 peer_sync.clone(),
                 manager,
                 network_components.pairing.clone(),
+                control_store.clone(),
             );
         }
         if let (Some(pairing), Some(connections), Some(network)) = (
@@ -561,6 +588,7 @@ impl AppCore {
             pairing: network_components.pairing,
             peer_sync,
             network_foreground: Arc::new(AtomicBool::new(false)),
+            lifecycle_policy: config.lifecycle_policy,
             networking_deferred: Arc::new(Mutex::new(network_components.deferred)),
         })
     }
@@ -689,12 +717,24 @@ impl AppCore {
             });
         if status == crate::routing::SyncStatus::Offline
             && self.pairing.is_some()
-            && self.network_foreground.load(Ordering::Acquire)
+            && self.networking_active()
         {
             crate::routing::SyncStatus::Searching
         } else {
             status
         }
+    }
+
+    /// Discovery and sessions are running: always under
+    /// `KeepNetworkingInBackground`, only while foregrounded otherwise.
+    fn networking_active(&self) -> bool {
+        self.lifecycle_policy == LifecyclePolicy::KeepNetworkingInBackground
+            || self.network_foreground.load(Ordering::Acquire)
+    }
+
+    #[must_use]
+    pub const fn lifecycle_policy(&self) -> LifecyclePolicy {
+        self.lifecycle_policy
     }
 
     pub async fn set_foreground(&self, foreground: bool) -> Result<()> {
@@ -706,7 +746,16 @@ impl AppCore {
             if let Some(port) = self.network_addr().map(|address| address.port()) {
                 pairing.start_normal_discovery(port).await?;
             }
-        } else {
+            if let Some(connections) = self.connections.as_ref() {
+                connections.set_suspended(false);
+                // Returning from background must not wait for mDNS to
+                // re-announce a peer whose address is still known.
+                connections.reconnect_known_peers(current_time_ms());
+            }
+        } else if self.lifecycle_policy == LifecyclePolicy::SuspendInBackground {
+            if let Some(connections) = self.connections.as_ref() {
+                connections.set_suspended(true);
+            }
             pairing.stop_normal_discovery().await?;
             let peers = self.connection_states().into_keys().collect::<Vec<_>>();
             for peer in peers {
@@ -1778,6 +1827,18 @@ impl AppCore {
         evaluate_widget(definition, resolved, outcome)
     }
     pub async fn shutdown(&self) -> Result<()> {
+        // Before the transport closes, so no retry races the teardown and a
+        // replaced core stops dialing.
+        if let Some(connections) = self.connections.as_ref() {
+            connections.close();
+        }
+        // Under `KeepNetworkingInBackground` a background report no longer
+        // stops discovery, so shutdown is the one place that must.
+        if let Some(pairing) = self.pairing.as_ref()
+            && let Err(error) = pairing.stop_normal_discovery().await
+        {
+            warn!(event = "discovery_stop_failed", error = %error, "could not stop discovery on shutdown");
+        }
         request(&self.commands, OwnerCommand::Shutdown).await
     }
 }
@@ -1793,13 +1854,56 @@ fn pairing_failure_reason(error: &AppError) -> crate::pairing::PairingError {
     }
 }
 
+/// Minimum spacing between two last-sync writes for one peer, so a burst of
+/// remote edits (Synced -> Syncing -> Synced ...) costs one small write.
+const ACTIVITY_WRITE_INTERVAL_MS: u64 = 5_000;
+
+/// Decides which trusted-device activity timestamps a sync-state observation
+/// should persist. Edge-triggered: only a new session or a transition into
+/// `Synced` writes, and sync writes are throttled per peer.
+#[derive(Default)]
+struct ActivityRecorder {
+    states: std::collections::HashMap<DeviceId, PeerSyncState>,
+    last_sync_write: std::collections::HashMap<DeviceId, u64>,
+}
+
+impl ActivityRecorder {
+    /// Returns `(last_seen_ms, last_sync_ms)` to write, or `None`.
+    fn observe(
+        &mut self,
+        device: DeviceId,
+        state: PeerSyncState,
+        now_ms: u64,
+    ) -> Option<(Option<u64>, Option<u64>)> {
+        let before = self.states.insert(device, state);
+        let entered_synced =
+            state == PeerSyncState::Synced && before != Some(PeerSyncState::Synced);
+        if entered_synced
+            && self
+                .last_sync_write
+                .get(&device)
+                .is_none_or(|last| now_ms.saturating_sub(*last) >= ACTIVITY_WRITE_INTERVAL_MS)
+        {
+            self.last_sync_write.insert(device, now_ms);
+            return Some((Some(now_ms), Some(now_ms)));
+        }
+        before.is_none().then_some((Some(now_ms), None))
+    }
+
+    fn forget(&mut self, device: DeviceId) {
+        self.states.remove(&device);
+    }
+}
+
 fn spawn_sync_bridge(
     mut sync: watch::Receiver<std::collections::HashMap<PeerId, PeerSyncProgress>>,
     manager: Arc<ConnectionManager>,
     pairing: Option<Arc<PairingManager>>,
+    control: Arc<SqliteControlStore>,
 ) {
     tokio::spawn(async move {
         let mut previous = std::collections::HashSet::new();
+        let mut activity = ActivityRecorder::default();
         loop {
             let snapshot = sync.borrow_and_update().clone();
             let current = snapshot
@@ -1807,12 +1911,27 @@ fn spawn_sync_bridge(
                 .filter_map(|peer| peer.as_str().parse::<DeviceId>().ok())
                 .collect::<std::collections::HashSet<_>>();
             for disconnected in previous.difference(&current) {
+                activity.forget(*disconnected);
                 manager.set_state(*disconnected, PeerConnectionState::Disconnected);
             }
             for (peer, progress) in snapshot {
                 let Ok(device) = peer.as_str().parse::<DeviceId>() else {
                     continue;
                 };
+                // Written before the state change is published: the devices
+                // stream re-queries trusted devices on that change, so the row
+                // never shows Synced next to "Last sync never".
+                if let Some((seen, synced)) =
+                    activity.observe(device, progress.state, current_time_ms())
+                    && let Err(error) = control.record_trusted_device_activity(device, seen, synced)
+                {
+                    warn!(
+                        event = "trusted_device_activity_failed",
+                        device_id = %device,
+                        error = %error,
+                        "could not record peer activity"
+                    );
+                }
                 manager.set_state(
                     device,
                     match progress.state {
@@ -1913,15 +2032,56 @@ fn spawn_discovery_bridge(
                     },
                 );
             }
+            // Discovery only reports trusted peers, so every upsert is a
+            // reason to dial when there is no session. This used to be gated
+            // on a pending rotation, which left reconnected devices offline.
+            connections.request_connect(peer, now);
             if let Ok(frames) = pairing.rotation_update_frames()
                 && let Some((_, frame)) = frames.into_iter().find(|(device, _)| *device == peer)
-                && connections.connect_manual(peer, now).await.is_ok()
-                && let Ok(response) = network.exchange_control(peer, &frame).await
             {
-                let _ = pairing.validate_rotation_ack(&response).await;
+                let (pairing, connections, network) =
+                    (pairing.clone(), connections.clone(), network.clone());
+                tokio::spawn(async move {
+                    if wait_for_session(&connections, peer, ROTATION_SESSION_WAIT).await
+                        && let Ok(response) = network.exchange_control(peer, &frame).await
+                    {
+                        let _ = pairing.validate_rotation_ack(&response).await;
+                    }
+                });
             }
         }
     });
+}
+
+/// Covers the non-preferred dial delay plus one bounded dial.
+const ROTATION_SESSION_WAIT: std::time::Duration = std::time::Duration::from_secs(15);
+
+/// Waits until `peer` has an authenticated session, up to `timeout`.
+async fn wait_for_session(
+    connections: &ConnectionManager,
+    peer: DeviceId,
+    timeout: std::time::Duration,
+) -> bool {
+    let mut states = connections.subscribe();
+    tokio::time::timeout(timeout, async {
+        loop {
+            if matches!(
+                states.borrow_and_update().get(&peer),
+                Some(
+                    PeerConnectionState::Connected
+                        | PeerConnectionState::Syncing
+                        | PeerConnectionState::Synced
+                )
+            ) {
+                return true;
+            }
+            if states.changed().await.is_err() {
+                return false;
+            }
+        }
+    })
+    .await
+    .unwrap_or(false)
 }
 
 /// Records the address each authenticated session was actually reached on, so the
@@ -2502,4 +2662,57 @@ pub fn platform_data_dir(application_id: &str) -> Result<PathBuf> {
     base.map(|path| path.join(application_id)).ok_or_else(|| {
         AppError::Storage("platform application-data directory is unavailable".into())
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn device(seed: u8) -> DeviceId {
+        DeviceId::from_public_key(&[seed; 32])
+    }
+
+    // Pins the sync-bridge side of "Last sync never": entering Synced records
+    // both timestamps, a new session records last-seen, and a burst of
+    // re-syncs inside the throttle window costs one write.
+    #[test]
+    fn activity_recorder_is_edge_triggered_and_throttled() {
+        let peer = device(1);
+        let mut activity = ActivityRecorder::default();
+        assert_eq!(
+            activity.observe(peer, PeerSyncState::Connected, 1_000),
+            Some((Some(1_000), None)),
+            "a new session refreshes last-seen"
+        );
+        assert_eq!(activity.observe(peer, PeerSyncState::Syncing, 1_100), None);
+        assert_eq!(
+            activity.observe(peer, PeerSyncState::Synced, 1_200),
+            Some((Some(1_200), Some(1_200)))
+        );
+        assert_eq!(
+            activity.observe(peer, PeerSyncState::Synced, 1_300),
+            None,
+            "staying Synced is not a transition"
+        );
+        for step in 0..5 {
+            let now = 1_400 + step * 500;
+            assert_eq!(activity.observe(peer, PeerSyncState::Syncing, now), None);
+            assert_eq!(
+                activity.observe(peer, PeerSyncState::Synced, now + 100),
+                None,
+                "re-sync within the window is throttled"
+            );
+        }
+        assert_eq!(activity.observe(peer, PeerSyncState::Syncing, 6_300), None);
+        assert_eq!(
+            activity.observe(peer, PeerSyncState::Synced, 6_300),
+            Some((Some(6_300), Some(6_300)))
+        );
+        activity.forget(peer);
+        assert_eq!(
+            activity.observe(peer, PeerSyncState::Connected, 7_000),
+            Some((Some(7_000), None)),
+            "a reconnect is a new session"
+        );
+    }
 }

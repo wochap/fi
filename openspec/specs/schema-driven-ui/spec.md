@@ -90,3 +90,26 @@ Collection and record controllers SHALL react to typed data/projection events by
 #### Scenario: Remote record arrives
 - **WHEN** synchronization advances the projection for the visible collection
 - **THEN** its generic record list refreshes without reading Automerge directly
+
+### Requirement: Multi-select record actions
+The generic collection screen SHALL offer a selection mode in which the user selects multiple records, sees the selected count, and applies a batch delete or a batch edit that sets one active field to one typed value on every selected record. Both batch actions SHALL require confirmation in a dialog that states the number of affected records, SHALL submit a single batch command through the bridge, and SHALL report the affected count after success. Single-record delete from the list SHALL remain immediate with no confirmation. Selection SHALL be cleared after a batch completes and SHALL drop records that disappear from the projected list.
+
+#### Scenario: Enter selection and batch delete
+- **WHEN** the user long-presses a record, selects two more, and taps Delete
+- **THEN** a dialog reads "Delete 3 records?", confirming submits one batch delete, the list refreshes without those records, and feedback shows "3 records deleted"
+
+#### Scenario: Batch edit one field
+- **WHEN** the user selects records, chooses the `category` field, enters a value with that field's registered editor, and confirms "Set category on 4 records?"
+- **THEN** Flutter submits one batch field-set command and the four records show the new value after refresh
+
+#### Scenario: Cancel keeps selection
+- **WHEN** the user dismisses the confirmation dialog
+- **THEN** no command is sent and the selection is unchanged
+
+#### Scenario: Rust rejects the batch
+- **WHEN** the batch is rejected because a selected record was deleted remotely or the value violates the field definition
+- **THEN** the screen shows the typed error, no record changes, and the selection is pruned to records still present
+
+#### Scenario: Single delete unchanged
+- **WHEN** the user taps the delete icon on one record outside selection mode
+- **THEN** the record is deleted immediately with no confirmation dialog

@@ -755,6 +755,37 @@ impl SqliteControlStore {
             .map_err(|error| storage_error("trusted_device_rename", None, &self.path, error))
     }
 
+    /// Touches only the activity timestamps, leaving any `None` unchanged.
+    /// Deliberately not load-then-upsert: that would overwrite a rename or
+    /// revocation committed between the load and the write.
+    pub fn record_trusted_device_activity(
+        &self,
+        device: DeviceId,
+        last_seen_ms: Option<u64>,
+        last_sync_ms: Option<u64>,
+    ) -> Result<bool, StorageError> {
+        self.ensure_open("trusted_device_activity")?;
+        let seen = optional_timestamp(last_seen_ms, "trusted_device_activity", &self.path)?;
+        let sync = optional_timestamp(last_sync_ms, "trusted_device_activity", &self.path)?;
+        self.connection
+            .lock()
+            .map_err(|_| {
+                storage_error(
+                    "trusted_device_activity",
+                    None,
+                    &self.path,
+                    "connection lock poisoned",
+                )
+            })?
+            .execute(
+                "UPDATE trusted_devices SET last_seen_ms=COALESCE(?2,last_seen_ms),
+                 last_sync_ms=COALESCE(?3,last_sync_ms) WHERE device_id=?1",
+                params![device.to_string(), seen, sync],
+            )
+            .map(|changed| changed == 1)
+            .map_err(|error| storage_error("trusted_device_activity", None, &self.path, error))
+    }
+
     pub fn revoke_trusted_device(
         &self,
         device: DeviceId,
@@ -1534,6 +1565,54 @@ mod tests {
         assert_eq!(store.peer_connection(device_id).unwrap(), Some(connection));
         let bytes = std::fs::read(path).unwrap();
         assert!(!bytes.windows(32).any(|window| window == [7; 32]));
+    }
+
+    // Pins "Last sync never" and the rename race: the activity write touches
+    // only the two timestamps, so a rename landing between the sync bridge's
+    // observation and its write survives, and the timestamp survives too.
+    #[test]
+    fn activity_timestamps_and_concurrent_rename_both_persist() {
+        let directory = tempfile::tempdir().unwrap();
+        let store =
+            Arc::new(SqliteControlStore::open(directory.path().join("control.sqlite")).unwrap());
+        let key = PrivateDeviceKey::from_seed(&[18; 32]).unwrap().public_key();
+        let device = DeviceId::from_public_key(key.as_bytes());
+        store
+            .upsert_trusted_device(&TrustedDeviceRecord {
+                device_id: device,
+                public_key: key,
+                friendly_name: "Phone".into(),
+                paired_at_ms: 10,
+                last_seen_ms: Some(10),
+                last_sync_ms: None,
+                state: TrustState::Trusted,
+            })
+            .unwrap();
+        let renamer = {
+            let store = store.clone();
+            std::thread::spawn(move || store.rename_trusted_device(device, "Pocket phone").unwrap())
+        };
+        assert!(
+            store
+                .record_trusted_device_activity(device, Some(40), Some(40))
+                .unwrap()
+        );
+        assert!(renamer.join().unwrap());
+        // A seen-only write leaves the recorded sync time alone.
+        store
+            .record_trusted_device_activity(device, Some(50), None)
+            .unwrap();
+        let record = store.trusted_device(device).unwrap().unwrap();
+        assert_eq!(record.friendly_name, "Pocket phone");
+        assert_eq!(record.last_sync_ms, Some(40));
+        assert_eq!(record.last_seen_ms, Some(50));
+        let unknown = DeviceId::from_public_key(&[19; 32]);
+        assert!(
+            !store
+                .record_trusted_device_activity(unknown, Some(1), Some(1))
+                .unwrap(),
+            "never creates a row"
+        );
     }
 
     #[test]

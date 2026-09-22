@@ -84,11 +84,15 @@ Pairing sessions, instance IDs, nonces, confirmations, and provisioning messages
 - **THEN** verification fails for the new transcript
 
 ### Requirement: Idempotent pairing commit journal
-The application SHALL durably journal non-secret pairing commit progress so interruption can be recovered or safely re-paired without treating partial state as bilateral success.
+The application SHALL durably journal non-secret pairing commit progress so interruption can be recovered or safely re-paired without treating partial state as bilateral success. A device that stored trust for a session whose commit later failed SHALL record the session as incomplete, and a subsequent authenticated connection with that peer SHALL resume the unfinished commit instead of leaving the two devices with opposite outcomes.
 
 #### Scenario: Connection drops during commit
 - **WHEN** one device persists trust or provisioning progress but final acknowledgement is lost
 - **THEN** restart exposes a recoverable incomplete state and repeating the authenticated commit does not create conflicting trust/root records
+
+#### Scenario: One side commits while the other fails
+- **WHEN** the peer completes its commit and reports success while the local commit fails before acknowledgement
+- **THEN** the local journal records the session as incomplete with its failure reason, and the next authenticated connection with that peer resumes the commit rather than requiring a fresh pairing window
 
 ### Requirement: The pairing window accepts more than one inbound connection
 The accept path SHALL remain active for the lifetime of the discoverable window rather than consuming
@@ -124,3 +128,29 @@ SHALL update the value a subsequent handshake reads.
 - **WHEN** a handshake occurs while the device is joining a received root
 - **THEN** the advertised root state is ready with that root, so a third device cannot provision it
   mid-join
+
+### Requirement: A commit-stage failure fails the session immediately
+Any error raised while committing a pairing session SHALL drive the pairing state machine to the failed state, carrying the originating reason, before the error is returned to the caller. The committing state MUST NOT be left to lapse into the deadline timeout, and a failure whose cause is not the deadline MUST NOT be reported as an expiry.
+
+#### Scenario: Secure store is locked during commit
+- **WHEN** storing or reading the discovery-group secret fails because the secure store is locked
+- **THEN** the session transitions to failed with the locked-store reason, its transient session state is released, and the caller receives that reason
+
+#### Scenario: Expiry is not used as a catch-all
+- **WHEN** a commit-stage failure other than the deadline occurs
+- **THEN** the reported failure reason is the originating one and is never the expiry reason
+
+#### Scenario: Deadline still expires a stalled session
+- **WHEN** no commit-stage error occurs and the deadline passes
+- **THEN** the session fails with the expiry reason as before
+
+### Requirement: Already-trusted peers are distinguishable during pairing
+The pairing manager SHALL expose whether a connected peer is already a trusted, non-revoked device, and SHALL expose the endpoints of trusted devices so a candidate list can suppress candidates that resolve to them. A handshake with an already-trusted peer SHALL reach a success outcome that identifies the peer as already paired and MUST NOT create a duplicate trust record.
+
+#### Scenario: Candidate belongs to a trusted device
+- **WHEN** a pairing candidate's address matches a known endpoint of a trusted, non-revoked device
+- **THEN** the candidate is reported as already paired so it can be suppressed from the selectable list
+
+#### Scenario: Handshake with an already-trusted peer
+- **WHEN** pairing is confirmed with a peer that is already trusted and shares the same root
+- **THEN** the session completes as already paired, the existing trust record is updated rather than duplicated, and no second provisioning is performed

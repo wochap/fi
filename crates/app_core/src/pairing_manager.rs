@@ -1388,9 +1388,11 @@ impl PairingManager {
             device_id,
             public_key: peer_key,
             friendly_name: name,
-            paired_at_ms: existing.map_or(now, |record| record.paired_at_ms),
+            paired_at_ms: existing.as_ref().map_or(now, |record| record.paired_at_ms),
             last_seen_ms: Some(now),
-            last_sync_ms: None,
+            // The sync bridge may already have recorded convergence (the
+            // joiner syncs before `finish_trust` re-runs this); keep it.
+            last_sync_ms: existing.and_then(|record| record.last_sync_ms),
             state: TrustState::Trusted,
         };
         self.control

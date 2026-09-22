@@ -117,6 +117,10 @@ void main() {
     await openDevices(tester, bridge);
     expect(find.text('Synced'), findsWidgets);
     expect(find.textContaining('Connected'), findsOneWidget);
+    // A persisted sync time renders as a timestamp, never as "never".
+    final lastSync = DateTime.fromMillisecondsSinceEpoch(3).toLocal();
+    expect(find.textContaining('Last sync $lastSync'), findsOneWidget);
+    expect(find.textContaining('Last sync never'), findsNothing);
 
     await tester.tap(find.byType(PopupMenuButton<String>));
     await tester.pumpAndSettle();

@@ -5,7 +5,7 @@ TBD: Define Flutter pairing controls, SAS confirmation, trusted-device managemen
 ## Requirements
 
 ### Requirement: Pairing-mode UI
-Flutter SHALL provide controls to start and stop pairing mode, show its remaining bounded lifetime, list live ephemeral candidates, and select one candidate for connection.
+Flutter SHALL provide controls to start and stop pairing mode, show its remaining bounded lifetime, list live ephemeral candidates, and select one candidate for connection. Candidates that Rust reports as already paired SHALL be hidden from the selectable list, and when every discovered candidate is already paired the UI SHALL say so rather than showing an empty search.
 
 #### Scenario: User starts pairing
 - **WHEN** the user explicitly enters pairing mode
@@ -14,6 +14,10 @@ Flutter SHALL provide controls to start and stop pairing mode, show its remainin
 #### Scenario: Pairing expires
 - **WHEN** Rust reports pairing timeout
 - **THEN** the UI removes stale candidates and returns to an idle/error explanation without showing success
+
+#### Scenario: Already-paired device is discovered
+- **WHEN** a discovered candidate is reported as belonging to an already-trusted device
+- **THEN** it is not offered for selection, and the list explains that the remaining devices are already paired rather than appearing empty
 
 ### Requirement: SAS confirmation UI
 Flutter SHALL display the zero-padded six-digit SAS supplied by Rust for the current attempt and provide explicit confirm and reject actions, without calculating or transmitting the SAS itself.
@@ -167,3 +171,18 @@ The fatal bootstrap-error surface SHALL show a reset action instead of a retry a
 #### Scenario: Locked secure store
 - **WHEN** initialization fails because the secure key store is locked
 - **THEN** the error surface offers retry and no reset
+
+### Requirement: Locked secure store is explained with a retry
+When Rust reports that the secure key store is locked, Flutter SHALL show that specific condition — naming the desktop keyring and the action of unlocking it — instead of the generic networking-initialization message, and SHALL offer a retry action that re-runs the failed operation without restarting the application.
+
+#### Scenario: Startup meets a locked keyring
+- **WHEN** networking cannot start because the secure store is locked
+- **THEN** the UI shows a locked-keyring explanation with a retry action, and local data remains usable
+
+#### Scenario: Commit fails on a locked keyring
+- **WHEN** a pairing commit fails because the secure store is locked
+- **THEN** the pairing card leaves the "saving trust" progress state at once and shows the locked-keyring explanation with retry, never an expiry message
+
+#### Scenario: Retry succeeds after unlocking
+- **WHEN** the user unlocks the keyring and presses retry
+- **THEN** the locked-keyring message clears and the affected operation proceeds

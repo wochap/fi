@@ -57,11 +57,15 @@ The bridge SHALL expose typed add, update, remove, reorder, list, get, and evalu
 - **THEN** the bridge preserves the unknown type and structured configuration unchanged
 
 ### Requirement: Typed bridge errors
-Rust initialization, validation, persistence, projection, lifecycle, and bootstrap failures SHALL cross the bridge as stable typed error categories with safe user-facing messages and stable entity/field context where applicable.
+Rust initialization, validation, persistence, projection, lifecycle, and bootstrap failures SHALL cross the bridge as stable typed error categories with safe user-facing messages and stable entity/field context where applicable. A failure caused by a locked secure key store SHALL cross as its own category, distinct from generic initialization failures, so Flutter can offer an unlock-and-retry path.
 
 #### Scenario: Invalid dynamic form submission
 - **WHEN** Rust rejects a submitted field value
 - **THEN** Flutter receives a validation category, target field ID, and safe message rather than a panic or opaque native failure
+
+#### Scenario: Locked secure store
+- **WHEN** an operation fails because the desktop secure key store is locked
+- **THEN** Flutter receives the locked-secure-store category with a safe message naming the keyring, and not the generic initialization category
 
 ### Requirement: Typed event streams
 The bridge SHALL expose streams for retained application/projection state and transient collection/schema/record change and error events, and stream loss SHALL be recoverable by reopening the stream and refreshing queries. A transient failure of a query used to build a stream emission MUST NOT silently
@@ -122,3 +126,14 @@ Bridge errors raised from initialization SHALL carry a typed indicator of whethe
 #### Scenario: Transient error is not resolvable
 - **WHEN** initialization fails because the secure store is locked or the disk is unavailable
 - **THEN** the returned bridge error is not marked reset-resolvable
+
+### Requirement: Networking retry bridge API
+The bridge SHALL expose an idempotent call that retries the networking startup deferred by a locked or unavailable secure store, returning whether networking is now active, and SHALL expose candidates with their already-paired status.
+
+#### Scenario: Retry after unlocking
+- **WHEN** Flutter calls the networking retry after the user unlocks the keyring
+- **THEN** the call starts discovery and reports networking as active, and calling it again while networking is already active succeeds without restarting discovery
+
+#### Scenario: Candidate carries already-paired status
+- **WHEN** the bridge emits pairing candidates
+- **THEN** each candidate carries whether it resolves to an already-trusted device

@@ -27,7 +27,8 @@ pub mod widget_registry;
 pub mod widgets;
 
 pub use application::{
-    AppCore, AppCoreConfig, NetworkingDeferredReason, RevocationOutcome, reset_dataset,
+    AppCore, AppCoreConfig, LifecyclePolicy, NetworkingDeferredReason, RevocationOutcome,
+    reset_dataset,
 };
 pub use automerge_repo::{
     QuarantineReason, RecoveryOutcome, RecoveryReason, RecoveryRecord,
@@ -81,9 +82,9 @@ pub use quinn_transport::{
 };
 pub use records::{GenericRecord, RecordId, RecordValidationError, validate_record};
 pub use routing::{
-    ConnectionDirection, ConnectionFailure, ConnectionManager, EndpointRegistry, EndpointSource,
-    NetworkEndpoint, PeerConnectionState, PeerConnector, SessionCandidate, SyncStatus,
-    aggregate_sync_status, choose_session, is_preferred_initiator, rank_endpoints,
+    ConnectionDirection, ConnectionFailure, ConnectionManager, DialTiming, EndpointRegistry,
+    EndpointSource, NetworkEndpoint, PeerConnectionState, PeerConnector, SessionCandidate,
+    SyncStatus, aggregate_sync_status, choose_session, is_preferred_initiator, rank_endpoints,
 };
 pub use schema::{
     CollectionSchema, CollectionSchemaId, DisplayMetadata, EnumOption, EnumOptionId,
