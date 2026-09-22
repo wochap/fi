@@ -268,3 +268,49 @@ the stream nor leaves a long-lived controller presenting stale state.
 - **WHEN** a bridge stream ends unexpectedly under a controller owned at application scope
 - **THEN** the controller reopens the stream and refreshes its queries without a screen remount or an
   application restart
+
+### Requirement: Root snapshot loss recovery acceptance
+The end-to-end suite SHALL prove that a trusted device which loses its root Automerge snapshot while retaining its control store and secure key store recovers the identical root from a peer without a new pairing ceremony, and SHALL prove it never re-mints a different root.
+
+#### Scenario: Recover root from trusted peer
+- **WHEN** a paired and synchronized device has its root snapshot removed from `automerge/documents` and both application cores restart
+- **THEN** the recovering device re-joins the same root ID, re-synchronizes complete authoritative data, rebuilds its read model, and resumes accepting commands without any SAS confirmation
+
+#### Scenario: Recovery preserves root identity
+- **WHEN** recovery completes after root snapshot loss
+- **THEN** the recovered root ID equals the pre-loss root ID and the peer reports no `RootMismatch`
+
+#### Scenario: Corrupt root snapshot recovers
+- **WHEN** the recorded root snapshot is replaced with bytes that cannot be strictly loaded and the application restarts
+- **THEN** the unloadable bytes are quarantined, the root is recovered from the peer for the same root ID, and opening does not fail fatally
+
+#### Scenario: Writes stay gated while recovering
+- **WHEN** a collection or record command is issued before recovery completes
+- **THEN** the command is rejected with a typed bootstrap error and commits no authoritative or projected data
+
+### Requirement: No-peer recovery outcome acceptance
+The end-to-end suite SHALL prove that root snapshot loss with no reachable trusted peer produces an explicit no-peer-available outcome that retains the recorded root and quarantined bytes, rather than an indefinite wait, a fabricated dataset, or a silent transition to `NeedsDecision`.
+
+#### Scenario: Sole device loses its snapshot
+- **WHEN** the only device in a group loses its root snapshot and no trusted peer is reachable
+- **THEN** the bootstrap signal reports no-peer-available, the repository remains `Joining` for the same root ID, and creating a new dataset is not performed automatically
+
+#### Scenario: Peer returns later
+- **WHEN** a trusted peer becomes reachable after a no-peer-available outcome and the application restarts or reconnects
+- **THEN** recovery completes for the same root ID without a new pairing ceremony
+
+### Requirement: Orphaned document quarantine acceptance
+The end-to-end suite SHALL prove that documents present without a bootstrap record are quarantined rather than deleted or adopted, that the application opens in `NeedsDecision`, and that a quarantined document matching a subsequently joined root is adopted with its history preserved.
+
+#### Scenario: Orphaned documents on open
+- **WHEN** the control store's bootstrap record is removed while `automerge/documents` still holds the root snapshot, and the application restarts
+- **THEN** opening succeeds in `NeedsDecision`, the snapshots are moved to quarantine, and nothing is deleted
+
+#### Scenario: Re-pair adopts matching orphan
+- **WHEN** the device subsequently pairs into a root whose ID matches a quarantined document that loads strictly
+- **THEN** that document is adopted instead of waiting for peer synchronization and its history merges with the group
+
+#### Scenario: Corrupt state is not silently repaired
+- **WHEN** a `Creating` or `Joining` record is accompanied by documents other than the recorded root
+- **THEN** opening fails with a fatal structured error and performs no mutation, inference, or root selection
+

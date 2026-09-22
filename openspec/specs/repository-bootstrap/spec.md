@@ -16,19 +16,27 @@ A repository with neither a bootstrap record nor documents SHALL enter `NeedsDec
 - **THEN** the operation fails with a structured bootstrap lifecycle error and commits no Automerge change
 
 ### Requirement: Strict bootstrap consistency on opening
-`Repo::open()` SHALL validate all listed snapshots and the bootstrap record, complete recoverable Creating or Joining transitions, reject inconsistent state without mutation, and start networking only after validation and recovery succeed.
+`Repo::open()` SHALL validate all listed snapshots and the bootstrap record, complete recoverable Creating or Joining transitions, classify every remaining inconsistency as recoverable or fatal, and start networking only after validation and recovery succeed. A state SHALL be classified recoverable only where the recorded root ID is known and an external authority can re-supply that root's content; recoverable states SHALL be resolved without mutating or destroying user data beyond quarantine. Fatal states SHALL be rejected without mutation.
 
 #### Scenario: Orphaned documents
 - **WHEN** document files exist without a bootstrap record
-- **THEN** opening fails with `OrphanedDocuments` and does not infer a root, delete data, or replace control state
+- **THEN** opening quarantines those documents and succeeds in `NeedsDecision`, without inferring a root, deleting data, or replacing control state
 
 #### Scenario: Ready root missing
 - **WHEN** a Ready record names a root snapshot that is absent
-- **THEN** opening fails with a fatal structured bootstrap consistency error
+- **THEN** opening preserves the recorded root ID, transitions the record to `Joining` for that same root, and resumes root-only synchronization instead of failing
+
+#### Scenario: Ready root unloadable
+- **WHEN** a Ready record names a root snapshot that exists but cannot be strictly loaded
+- **THEN** the unloadable bytes are quarantined, the document is treated as absent, and opening proceeds as for a missing Ready root
 
 #### Scenario: Any listed snapshot is corrupt
-- **WHEN** one listed snapshot cannot be strictly loaded
+- **WHEN** a listed snapshot that is not the recorded root cannot be strictly loaded
 - **THEN** opening fails with its document and storage-path context before consuming network events
+
+#### Scenario: Genuinely inconsistent state remains fatal
+- **WHEN** a Creating or Joining record is accompanied by documents other than the recorded root, or the bootstrap record itself is malformed
+- **THEN** opening fails with a fatal structured bootstrap consistency error and performs no mutation, inference, or root selection
 
 ### Requirement: Creating recovery is idempotent
 Opening `Creating { root }` SHALL preserve the recorded root, durably create its required existence history only when absent, and durably transition the same record to `Ready` without duplicating history.

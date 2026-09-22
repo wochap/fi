@@ -23,11 +23,23 @@ The create-new-dataset operation SHALL call the custom Repo's explicit initializ
 - **THEN** the application becomes ready only after the Repo root, generic application schema, and matching read-model checkpoint are durable
 
 ### Requirement: Canonical application storage layout
-The application SHALL resolve one platform application-data directory containing `automerge/documents`, `control.sqlite`, and disposable `read-model.sqlite`, and SHALL restrict filesystem maintenance to those resolved application paths.
+The application SHALL resolve one platform application-data directory containing `automerge/documents`, `control.sqlite`, disposable `read-model.sqlite`, and a quarantine location for snapshots set aside by bootstrap recovery. It SHALL restrict filesystem maintenance to those resolved application paths. The layout SHALL distinguish authoritative stores — `control.sqlite`, `automerge/documents`, and the platform secure key store — from disposable stores that are always rebuildable, and quarantine SHALL preserve rather than destroy bytes removed from an authoritative location.
 
 #### Scenario: New application directory
 - **WHEN** initialization runs against an empty application-data directory
 - **THEN** it creates the required private directories and databases without creating authoritative SQLite domain rows
+
+#### Scenario: Quarantine created on demand
+- **WHEN** bootstrap recovery quarantines a corrupt or orphaned snapshot for the first time
+- **THEN** the quarantine location is created inside the resolved application-data directory and no path outside the resolved application paths is touched
+
+#### Scenario: Disposable store loss does not require recovery
+- **WHEN** only `read-model.sqlite` is missing or stale
+- **THEN** it is rebuilt from authoritative Automerge state and the bootstrap record is left untouched
+
+#### Scenario: Authoritative store loss is recoverable only with a known root
+- **WHEN** an authoritative store is lost or damaged while the recorded root ID and device trust remain available
+- **THEN** recovery is attempted against that same root, and where the root ID is unknowable the failure is surfaced rather than resolved by discarding authoritative data
 
 ### Requirement: SQLite Repo control store
 `control.sqlite` SHALL implement the Repo bootstrap `ControlStore` contract atomically and durably, with one bootstrap record serving as the local root-document record alongside versioned non-secret application control metadata.
