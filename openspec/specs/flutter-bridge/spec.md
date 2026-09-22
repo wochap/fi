@@ -64,7 +64,10 @@ Rust initialization, validation, persistence, projection, lifecycle, and bootstr
 - **THEN** Flutter receives a validation category, target field ID, and safe message rather than a panic or opaque native failure
 
 ### Requirement: Typed event streams
-The bridge SHALL expose streams for retained application/projection state and transient collection/schema/record change and error events, and stream loss SHALL be recoverable by reopening the stream and refreshing queries.
+The bridge SHALL expose streams for retained application/projection state and transient collection/schema/record change and error events, and stream loss SHALL be recoverable by reopening the stream and refreshing queries. A transient failure of a query used to build a stream emission MUST NOT silently
+end the stream; the emission SHALL be skipped and the stream SHALL continue. When a stream does end
+unexpectedly, its subscriber SHALL detect the closure and reopen the stream with a query refresh rather
+than presenting stale state indefinitely.
 
 #### Scenario: Record changes after subscription
 - **WHEN** a projected record command or synchronized record change completes
@@ -73,6 +76,15 @@ The bridge SHALL expose streams for retained application/projection state and tr
 #### Scenario: Subscriber is recreated
 - **WHEN** a widget or isolate cancels and reopens a status stream
 - **THEN** it receives the latest retained state without requiring an application restart
+
+#### Scenario: Query fails transiently
+- **WHEN** a query used to build a stream emission fails while the underlying subscription is still live
+- **THEN** that emission is skipped, the stream remains open, and the next change produces an emission
+
+#### Scenario: Stream ends unexpectedly
+- **WHEN** a bridge stream closes without the subscriber cancelling it
+- **THEN** the subscriber reopens the stream and refreshes the associated queries, and long-lived
+  application-scoped controllers recover without a screen remount or application restart
 
 ### Requirement: Widget event stream
 The bridge SHALL expose widget-specific data-change information sufficient for Flutter to refresh affected collection dashboards, with projection refresh remaining the recovery path after lag.

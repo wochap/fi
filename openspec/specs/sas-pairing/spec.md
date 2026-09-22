@@ -5,7 +5,11 @@ Define an explicit, authenticated, short-authentication-string pairing protocol 
 ## Requirements
 
 ### Requirement: Explicit pairing state machine
-Pairing SHALL use a single typed state machine covering idle, discoverable, connecting, awaiting confirmation, committing, trusted, and failed states rather than independent boolean flags.
+Pairing SHALL use a single typed state machine covering idle, discoverable, connecting, awaiting confirmation, committing, trusted, and failed states rather than independent boolean flags. An inbound
+connection that cannot be accepted SHALL be refused on its own connection and MUST NOT be treated as a
+failure of the local pairing attempt; the discoverable window, the candidate list, and any in-flight
+outbound attempt SHALL survive it. An outbound attempt refused by a busy peer SHALL return the local
+device to discoverable rather than to failed, so the user can retry without restarting pairing.
 
 #### Scenario: Candidate selected
 - **WHEN** the user selects a live pairing candidate
@@ -14,6 +18,26 @@ Pairing SHALL use a single typed state machine covering idle, discoverable, conn
 #### Scenario: Terminal cleanup
 - **WHEN** pairing succeeds, is rejected, times out, or fails
 - **THEN** its connection, secrets, timers, and candidate-specific transient state are closed or zeroized before returning to a stable terminal/idle state
+
+#### Scenario: Inbound arrives while connecting
+- **WHEN** an inbound pairing connection arrives while the local device is already connecting outbound
+- **THEN** the inbound connection is refused with a busy reason on its own connection, the local
+  outbound attempt continues, and the local discoverable window remains open
+
+#### Scenario: Outbound refused by a busy peer
+- **WHEN** the peer closes an outbound pairing connection with the busy reason
+- **THEN** the local device returns to discoverable with its window and candidate list intact, and
+  the attempt is reported as retryable rather than as a pairing failure
+
+#### Scenario: Both devices dial simultaneously
+- **WHEN** two devices in pairing mode each select the other as a candidate at the same time
+- **THEN** each refuses the other's inbound, neither is left in a failed state, both windows remain
+  open, and a single retry from either device establishes one session
+
+#### Scenario: Inbound arrives during commitment
+- **WHEN** an inbound pairing connection arrives while the local device is awaiting confirmation or
+  committing
+- **THEN** it is refused without disturbing the in-progress commitment and without failing the session
 
 ### Requirement: Pairing-specific authenticated channel
 Pairing SHALL use QUIC TLS 1.3 with ALPN `fi-pair/1`, require both peers to present structurally valid identity-key certificates, verify handshake signatures and hello/certificate key equality, and MUST NOT register the connection with the Repo transport.
@@ -65,3 +89,38 @@ The application SHALL durably journal non-secret pairing commit progress so inte
 #### Scenario: Connection drops during commit
 - **WHEN** one device persists trust or provisioning progress but final acknowledgement is lost
 - **THEN** restart exposes a recoverable incomplete state and repeating the authenticated commit does not create conflicting trust/root records
+
+### Requirement: The pairing window accepts more than one inbound connection
+The accept path SHALL remain active for the lifetime of the discoverable window rather than consuming
+it on the first inbound connection, so that a refused inbound does not end the window and a later
+inbound within the same window can still be accepted.
+
+#### Scenario: Refused inbound is followed by a valid one
+- **WHEN** an inbound connection is refused and a second inbound connection arrives within the same
+  discoverable window while the device is discoverable
+- **THEN** the second connection is processed normally
+
+#### Scenario: Window expires
+- **WHEN** the discoverable window deadline passes
+- **THEN** the accept path stops and no further inbound connection is processed
+
+### Requirement: The advertised root state is current at handshake time
+The root state carried in a pairing handshake SHALL be read at the moment the handshake occurs and
+SHALL NOT be captured when the pairing window is opened. Every path that commits a bootstrap transition
+SHALL update the value a subsequent handshake reads.
+
+#### Scenario: Root is created after the window opens
+- **WHEN** a device opens a pairing window in the needs-decision state and then creates a local root
+  before a handshake occurs
+- **THEN** the handshake advertises the ready state holding the created root, and a peer does not elect
+  itself provisioner against a superseded needs-decision advertisement
+
+#### Scenario: Root is received after the window opens
+- **WHEN** a device opens a pairing window and completes a join through another path before a further
+  handshake occurs
+- **THEN** the subsequent handshake advertises the joined root rather than the needs-decision state
+
+#### Scenario: Joining is treated as rooted
+- **WHEN** a handshake occurs while the device is joining a received root
+- **THEN** the advertised root state is ready with that root, so a third device cannot provision it
+  mid-join

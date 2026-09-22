@@ -218,3 +218,53 @@ An installation whose root carries an unsupported application schema version SHA
 #### Scenario: Reset from the error surface
 - **WHEN** initialization fails with an unsupported schema version and the user confirms reset from the error surface
 - **THEN** the installation reopens in `NeedsDecision` with the same `DeviceId`
+
+### Requirement: Simultaneous-dial acceptance
+The end-to-end suite SHALL prove that two devices which select each other as candidates at the same
+time are both left able to pair without restarting pairing, and SHALL prove that an inbound connection
+refused because the local device is busy does not end the local pairing window.
+
+#### Scenario: Both devices dial at once
+- **WHEN** two devices in pairing mode each select the other within the same window
+- **THEN** neither device enters a failed state, both windows stay open, and a single retry from
+  either device reaches SAS display on both
+
+#### Scenario: Refused inbound leaves the window usable
+- **WHEN** an inbound connection is refused because the local device is connecting outbound
+- **THEN** the local window stays open, the candidate list is retained, and a subsequent inbound
+  connection within the same window is processed
+
+#### Scenario: Repeated busy dialing
+- **WHEN** a peer repeatedly dials while the local device holds a session
+- **THEN** every such connection is refused on its own connection, the local session is undisturbed,
+  the window still expires at its deadline, and no trust is created without bilateral SAS
+  confirmation
+
+### Requirement: Root-state currency acceptance
+The end-to-end suite SHALL prove that a root created while a pairing window is open is advertised
+correctly to a peer that connects afterwards, and that no provisioning is attempted against a
+superseded root state.
+
+#### Scenario: Root created mid-window
+- **WHEN** a needs-decision device opens a pairing window, creates a local root, and then completes a
+  handshake with a peer holding a different root
+- **THEN** both devices advertise their actual ready states, the attempt fails as a root mismatch, and
+  no device adopts or partially commits the other's root
+
+#### Scenario: Join completed mid-window
+- **WHEN** a device completes a join through one pairing session and a further handshake occurs in a
+  later window
+- **THEN** the later handshake advertises the joined root rather than a needs-decision state
+
+### Requirement: Stream resilience acceptance
+The suite SHALL prove that a transient failure of a query backing a bridge event stream neither ends
+the stream nor leaves a long-lived controller presenting stale state.
+
+#### Scenario: Trusted-device query fails transiently
+- **WHEN** the query backing the connection-state stream fails once while the subscription remains live
+- **THEN** the stream stays open and the next connection change produces a normal emission
+
+#### Scenario: Application-scoped controller recovers
+- **WHEN** a bridge stream ends unexpectedly under a controller owned at application scope
+- **THEN** the controller reopens the stream and refreshes its queries without a screen remount or an
+  application restart
