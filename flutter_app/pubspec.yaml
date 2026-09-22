@@ -37,6 +37,7 @@ dependencies:
   app_bridge:
     path: rust_builder
   flutter_rust_bridge: 2.12.0
+  clock: ^1.1.2
   intl: ^0.20.3
   path_provider: ^2.1.6
   # 2.3.x adds a JNI native build pinned to Flutter's NDK rather than our Nix NDK.

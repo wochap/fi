@@ -1,11 +1,13 @@
 import 'dart:async';
 
+import 'package:clock/clock.dart';
 import 'package:fi/bridge/collection_bridge.dart';
 import 'package:fi/controllers.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/collections_page.dart';
 import 'package:fi/pairing_card.dart';
 import 'package:fi/reset_dialog.dart';
+import 'package:fi/status_time.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -687,102 +689,135 @@ IconData _statusIcon(SyncStatusDto status) => switch (status) {
   SyncStatusDto.error => Icons.error_outline,
 };
 
-class DevicesPage extends StatelessWidget {
+class DevicesPage extends StatefulWidget {
   const DevicesPage({required this.controller, this.onResetDataset, super.key});
   final DevicesController controller;
   final ResetDatasetAction? onResetDataset;
 
   @override
-  Widget build(BuildContext context) => ListView(
-    key: const Key('devices-page'),
-    padding: const EdgeInsets.all(16),
-    children: [
-      Row(
-        children: [
-          Expanded(
-            child: Text(
-              'Devices',
-              style: Theme.of(context).textTheme.headlineSmall,
+  State<DevicesPage> createState() => _DevicesPageState();
+}
+
+class _DevicesPageState extends State<DevicesPage> {
+  // Relative status times ("5 min ago") go stale without device events, so
+  // the page rebuilds once a minute while mounted.
+  late final Timer _ticker;
+
+  DevicesController get controller => widget.controller;
+  ResetDatasetAction? get onResetDataset => widget.onResetDataset;
+
+  @override
+  void initState() {
+    super.initState();
+    _ticker = Timer.periodic(
+      const Duration(minutes: 1),
+      (_) => setState(() {}),
+    );
+  }
+
+  @override
+  void dispose() {
+    _ticker.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // `clock` rather than `DateTime.now()` so widget tests can advance time.
+    final now = clock.now();
+    return ListView(
+      key: const Key('devices-page'),
+      padding: const EdgeInsets.all(16),
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Devices',
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
             ),
-          ),
-          _SyncChip(status: controller.syncStatus),
-        ],
-      ),
-      const SizedBox(height: 16),
-      if (controller.errorMessage case final error?) _ErrorBanner(error),
-      if (controller.rotationError case final error?)
-        MaterialBanner(
-          key: const Key('rotation-error'),
-          content: Text(
-            'The device was revoked, but the discovery secret could not be '
-            'rotated: $error',
-          ),
-          actions: [
-            TextButton(
-              key: const Key('retry-rotation'),
-              onPressed: controller.busy ? null : controller.retryRotation,
-              child: const Text('Retry rotation'),
-            ),
+            _SyncChip(status: controller.syncStatus),
           ],
         ),
-      PairingCard(controller: controller, onResetDataset: onResetDataset),
-      const SizedBox(height: 24),
-      Text('Trusted devices', style: Theme.of(context).textTheme.titleLarge),
-      const SizedBox(height: 8),
-      if (controller.devices.isEmpty)
-        const Text('No devices have been paired yet.')
-      else
-        ...controller.devices.map(
-          (device) => Card(
-            key: Key('device-${device.deviceId}'),
-            child: ListTile(
-              leading: Icon(device.revoked ? Icons.block : Icons.devices_other),
-              title: Text(device.friendlyName),
-              subtitle: Text(
-                '${_shortDeviceId(device.deviceId)} · '
-                '${device.revoked ? 'Revoked' : _connectionText(device.connection)}\n'
-                'Last seen ${_timestamp(device.lastSeenMs)} · '
-                'Last sync ${_timestamp(device.lastSyncMs)}',
+        const SizedBox(height: 16),
+        if (controller.errorMessage case final error?) _ErrorBanner(error),
+        if (controller.rotationError case final error?)
+          MaterialBanner(
+            key: const Key('rotation-error'),
+            content: Text(
+              'The device was revoked, but the discovery secret could not be '
+              'rotated: $error',
+            ),
+            actions: [
+              TextButton(
+                key: const Key('retry-rotation'),
+                onPressed: controller.busy ? null : controller.retryRotation,
+                child: const Text('Retry rotation'),
               ),
-              isThreeLine: true,
-              trailing: PopupMenuButton<String>(
-                onSelected: (action) {
-                  if (action == 'rename') _renameDevice(context, device);
-                  if (action == 'revoke') _revokeDevice(context, device);
-                },
-                itemBuilder: (_) => [
-                  const PopupMenuItem(value: 'rename', child: Text('Rename')),
-                  if (!device.revoked)
-                    const PopupMenuItem(
-                      value: 'revoke',
-                      child: Text('Revoke / unpair'),
-                    ),
-                ],
+            ],
+          ),
+        PairingCard(controller: controller, onResetDataset: onResetDataset),
+        const SizedBox(height: 24),
+        Text('Trusted devices', style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 8),
+        if (controller.devices.isEmpty)
+          const Text('No devices have been paired yet.')
+        else
+          ...controller.devices.map(
+            (device) => Card(
+              key: Key('device-${device.deviceId}'),
+              child: ListTile(
+                leading: Icon(
+                  device.revoked ? Icons.block : Icons.devices_other,
+                ),
+                title: Text(device.friendlyName),
+                subtitle: Text(
+                  '${_shortDeviceId(device.deviceId)} · '
+                  '${device.revoked ? 'Revoked' : _connectionText(device.connection)}\n'
+                  'Last seen ${formatStatusTime(device.lastSeenMs, now: now)} · '
+                  'Last sync ${formatStatusTime(device.lastSyncMs, now: now)}',
+                ),
+                isThreeLine: true,
+                trailing: PopupMenuButton<String>(
+                  onSelected: (action) {
+                    if (action == 'rename') _renameDevice(context, device);
+                    if (action == 'revoke') _revokeDevice(context, device);
+                  },
+                  itemBuilder: (_) => [
+                    const PopupMenuItem(value: 'rename', child: Text('Rename')),
+                    if (!device.revoked)
+                      const PopupMenuItem(
+                        value: 'revoke',
+                        child: Text('Revoke / unpair'),
+                      ),
+                  ],
+                ),
               ),
             ),
           ),
-        ),
-      if (onResetDataset != null) ...[
-        const SizedBox(height: 32),
-        Text('This device', style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: 8),
-        const Text(
-          'Abandon the dataset on this device to create a new one or join '
-          "another device's. Your device identity is kept.",
-        ),
-        const SizedBox(height: 8),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: OutlinedButton.icon(
-            key: const Key('reset-dataset'),
-            onPressed: controller.busy ? null : () => _resetDataset(context),
-            icon: const Icon(Icons.restart_alt),
-            label: const Text("Reset this device's data"),
+        if (onResetDataset != null) ...[
+          const SizedBox(height: 32),
+          Text('This device', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 8),
+          const Text(
+            'Abandon the dataset on this device to create a new one or join '
+            "another device's. Your device identity is kept.",
           ),
-        ),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              key: const Key('reset-dataset'),
+              onPressed: controller.busy ? null : () => _resetDataset(context),
+              icon: const Icon(Icons.restart_alt),
+              label: const Text("Reset this device's data"),
+            ),
+          ),
+        ],
       ],
-    ],
-  );
+    );
+  }
 
   Future<void> _resetDataset(BuildContext context) async {
     final action = onResetDataset;
@@ -883,9 +918,6 @@ String _connectionText(PeerConnectionKindDto state) => switch (state) {
   PeerConnectionKindDto.synced => 'Synced',
   PeerConnectionKindDto.error => 'Error',
 };
-String _timestamp(int? milliseconds) => milliseconds == null
-    ? 'never'
-    : DateTime.fromMillisecondsSinceEpoch(milliseconds).toLocal().toString();
 
 class _ErrorBanner extends StatelessWidget {
   const _ErrorBanner(this.message);

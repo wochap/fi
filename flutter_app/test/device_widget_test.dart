@@ -1,3 +1,4 @@
+import 'package:clock/clock.dart';
 import 'package:fi/app.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:flutter/material.dart';
@@ -100,16 +101,21 @@ void main() {
   testWidgets('device rows refresh rename, revoke, connection and sync state', (
     tester,
   ) async {
+    final now = clock.now();
     final bridge = FakeCollectionBridge()
       ..status = SyncStatusDto.synced
       ..devices.add(
-        const TrustedDeviceDto(
+        TrustedDeviceDto(
           deviceId:
               '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
           friendlyName: 'Tablet',
           pairedAtMs: 1,
-          lastSeenMs: 2,
-          lastSyncMs: 3,
+          lastSeenMs: now
+              .subtract(const Duration(minutes: 30))
+              .millisecondsSinceEpoch,
+          lastSyncMs: now
+              .subtract(const Duration(hours: 3))
+              .millisecondsSinceEpoch,
           revoked: false,
           connection: PeerConnectionKindDto.connected,
         ),
@@ -117,9 +123,12 @@ void main() {
     await openDevices(tester, bridge);
     expect(find.text('Synced'), findsWidgets);
     expect(find.textContaining('Connected'), findsOneWidget);
-    // A persisted sync time renders as a timestamp, never as "never".
-    final lastSync = DateTime.fromMillisecondsSinceEpoch(3).toLocal();
-    expect(find.textContaining('Last sync $lastSync'), findsOneWidget);
+    // Status times read relatively, and a persisted sync time is never
+    // "never".
+    expect(
+      find.textContaining('Last seen 30 min ago · Last sync 3 h ago'),
+      findsOneWidget,
+    );
     expect(find.textContaining('Last sync never'), findsNothing);
 
     await tester.tap(find.byType(PopupMenuButton<String>));
@@ -142,6 +151,28 @@ void main() {
     await tester.pumpAndSettle();
     expect(bridge.revokedDevices, isNotEmpty);
     expect(find.textContaining('Revoked'), findsOneWidget);
+  });
+
+  testWidgets('relative status times advance without a device event', (
+    tester,
+  ) async {
+    final bridge = FakeCollectionBridge()
+      ..devices.add(
+        TrustedDeviceDto(
+          deviceId:
+              '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+          friendlyName: 'Tablet',
+          pairedAtMs: 1,
+          lastSeenMs: clock.now().millisecondsSinceEpoch,
+          revoked: false,
+          connection: PeerConnectionKindDto.connected,
+        ),
+      );
+    await openDevices(tester, bridge);
+    expect(find.textContaining('Last seen just now'), findsOneWidget);
+
+    await tester.pump(const Duration(seconds: 61));
+    expect(find.textContaining('Last seen 1 min ago'), findsOneWidget);
   });
 
   testWidgets('a revocation whose rotation failed stays revoked and retries', (
