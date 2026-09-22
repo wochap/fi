@@ -25,6 +25,13 @@ use crate::{
 const EXPORTER_LABEL: &[u8] = b"EXPORTER-fi-pair-v1";
 const MAX_WIRE_MESSAGE: usize = 1024;
 
+/// Application close code for an orderly close: pairing completed, stopped,
+/// or timed out.
+const CLOSE_CODE_DONE: u32 = 0;
+/// Application close code for "I cannot take this connection right now". The
+/// dialer maps it to [`PairingError::PeerBusy`] and keeps its own window.
+const CLOSE_CODE_BUSY: u32 = 1;
+
 #[derive(Debug)]
 struct StructuralServerVerifier {
     provider: Arc<CryptoProvider>,
@@ -136,6 +143,7 @@ impl ClientCertVerifier for StructuralClientVerifier {
     }
 }
 
+#[derive(Clone)]
 pub struct PairingConnection {
     connection: Connection,
     peer_public_key: PublicDeviceKey,
@@ -182,7 +190,27 @@ impl PairingConnection {
         Ok(PairingStream { send, recv })
     }
     pub fn close(&self) {
-        self.connection.close(0_u32.into(), b"pairing complete");
+        self.connection
+            .close(CLOSE_CODE_DONE.into(), b"pairing complete");
+    }
+    /// Closes an inbound connection the local device cannot accept right now,
+    /// with a reason the dialer can distinguish from a failure.
+    pub fn refuse(&self) {
+        self.connection
+            .close(CLOSE_CODE_BUSY.into(), b"pairing busy");
+    }
+    /// Returns `PeerBusy` when the peer closed this connection with the busy
+    /// code; `None` when it is open or closed for any other reason.
+    #[must_use]
+    pub fn peer_refusal(&self) -> Option<PairingError> {
+        match self.connection.close_reason()? {
+            quinn::ConnectionError::ApplicationClosed(close)
+                if close.error_code == quinn::VarInt::from_u32(CLOSE_CODE_BUSY) =>
+            {
+                Some(PairingError::PeerBusy)
+            }
+            _ => None,
+        }
     }
 }
 
@@ -301,7 +329,7 @@ impl PairingTransport {
         self.endpoint.set_server_config(None);
         if let Ok(mut connections) = self.connections.lock() {
             for connection in connections.drain(..) {
-                connection.close(0_u32.into(), b"pairing inactive");
+                connection.close(CLOSE_CODE_DONE.into(), b"pairing inactive");
             }
         }
     }

@@ -209,6 +209,10 @@ pub struct PairingManager {
     deadline: Mutex<Option<JoinHandle<()>>>,
     accept_task: Mutex<Option<JoinHandle<()>>>,
     sessions: Mutex<HashMap<PairingSessionId, Arc<ActivePairingSession>>>,
+    /// The root state advertised in every `Hello`. Read at handshake time, not
+    /// captured when the window opens; `AppCore` updates it on every bootstrap
+    /// transition through [`Self::set_root_state`].
+    root_state: Mutex<RootState>,
     discovery_task: JoinHandle<()>,
 }
 
@@ -342,8 +346,33 @@ impl PairingManager {
             deadline: Mutex::new(None),
             accept_task: Mutex::new(None),
             sessions: Mutex::new(HashMap::new()),
+            root_state: Mutex::new(RootState::NeedsDecision),
             discovery_task,
         }))
+    }
+
+    /// Replaces the root state a subsequent handshake advertises. The single
+    /// update point for every bootstrap transition.
+    pub fn set_root_state(&self, state: RootState) {
+        if let Ok(mut current) = self.root_state.lock()
+            && *current != state
+        {
+            tracing::info!(
+                event = "pairing_root_state",
+                ready = matches!(state, RootState::Ready(_)),
+                "pairing root state updated"
+            );
+            *current = state;
+        }
+    }
+
+    /// The root state a handshake started now would advertise.
+    #[must_use]
+    pub fn root_state(&self) -> RootState {
+        self.root_state
+            .lock()
+            .map(|state| state.clone())
+            .unwrap_or(RootState::NeedsDecision)
     }
 
     #[must_use]
@@ -389,7 +418,6 @@ impl PairingManager {
         self: &Arc<Self>,
         duration: Duration,
         friendly_name: String,
-        root_state: RootState,
     ) -> Result<PairingInstanceId, PairingError> {
         if duration.is_zero() {
             return Err(PairingError::InvalidTransition);
@@ -435,41 +463,74 @@ impl PairingManager {
                     let _ = manager.timeout().await;
                 }
             }));
+        self.cancel_accept();
         let manager = self.clone();
         *self
             .accept_task
             .lock()
             .map_err(|_| PairingError::Transport("accept lock poisoned".into()))? =
             Some(tokio::spawn(async move {
-                if manager.state_is_active() {
-                    let connection = match manager.transport.accept().await {
-                        Ok(connection) => connection,
-                        Err(error) => {
-                            tracing::warn!(
-                                event = "pairing_accept_error",
-                                error = %error,
-                                "pairing listener failed to accept"
-                            );
-                            return;
-                        }
-                    };
-                    tracing::info!(
-                        event = "pairing_accept",
-                        remote = %connection.remote_address(),
-                        "accepted inbound pairing connection"
-                    );
-                    match manager
-                        .accept_handshake(connection, friendly_name.clone(), root_state.clone())
-                        .await
-                    {
-                        Ok(_) => {}
-                        Err(error) => {
-                            manager.fail(error).await;
-                        }
-                    }
-                }
+                manager.accept_loop(duration, friendly_name).await;
             }));
         Ok(instance)
+    }
+
+    /// Accepts inbound pairing connections for the lifetime of the window.
+    ///
+    /// An inbound connection that cannot be taken right now — the device is
+    /// already connecting, confirming, or committing — is refused on its own
+    /// connection and the loop keeps listening. The local window, candidate
+    /// list, and any in-flight outbound attempt are untouched. Only a failure
+    /// inside an accepted handshake ends the local attempt.
+    async fn accept_loop(self: Arc<Self>, window: Duration, friendly_name: String) {
+        let deadline = tokio::time::sleep(window);
+        tokio::pin!(deadline);
+        loop {
+            if !self.state_is_active() {
+                return;
+            }
+            let connection = tokio::select! {
+                () = &mut deadline => return,
+                accepted = self.transport.accept() => match accepted {
+                    Ok(connection) => connection,
+                    Err(error) => {
+                        tracing::warn!(
+                            event = "pairing_accept_error",
+                            error = %error,
+                            "pairing listener failed to accept"
+                        );
+                        return;
+                    }
+                },
+            };
+            tracing::info!(
+                event = "pairing_accept",
+                remote = %connection.remote_address(),
+                "accepted inbound pairing connection"
+            );
+            match self
+                .accept_handshake(connection.clone(), friendly_name.clone())
+                .await
+            {
+                Ok(_) => {}
+                Err(PairingError::Busy) => {
+                    tracing::info!(
+                        event = "pairing_refuse",
+                        remote = %connection.remote_address(),
+                        "refused inbound pairing connection while busy"
+                    );
+                    connection.refuse();
+                }
+                Err(PairingError::Inactive) => {
+                    connection.close();
+                    return;
+                }
+                Err(error) => {
+                    self.fail(error).await;
+                    return;
+                }
+            }
+        }
     }
 
     pub async fn stop(&self) -> Result<(), PairingError> {
@@ -536,32 +597,40 @@ impl PairingManager {
         &self,
         candidate: PairingCandidate,
         friendly_name: String,
-        root_state: RootState,
         duration: Duration,
     ) -> Result<PairingSessionId, PairingError> {
-        let result = self
-            .connect_inner(candidate, friendly_name, root_state, duration)
-            .await;
-        if let Err(error) = &result {
-            self.fail(error.clone()).await;
+        let result = self.connect_inner(candidate, friendly_name, duration).await;
+        match &result {
+            Ok(_) => {}
+            // The peer refused because it was busy. That is the peer's session,
+            // not a local failure: return to discoverable so the user can retry
+            // without restarting pairing.
+            Err(PairingError::PeerBusy) => self.release(),
+            // The local device already holds a session (an inbound landed
+            // first, or an earlier select is in flight). Leave it alone.
+            Err(PairingError::Busy) => {}
+            Err(error) => self.fail(error.clone()).await,
         }
         result
+    }
+
+    fn release(&self) {
+        if let PairingState::Connecting { session_id, .. } = self.state() {
+            tracing::info!(
+                event = "pairing_released",
+                "peer was busy; returning to discoverable"
+            );
+            let _ = self.apply(PairingInput::Release { session_id });
+        }
     }
 
     async fn connect_inner(
         &self,
         candidate: PairingCandidate,
         friendly_name: String,
-        root_state: RootState,
         duration: Duration,
     ) -> Result<PairingSessionId, PairingError> {
-        let (local_instance, window_deadline) = match self.state() {
-            PairingState::Discoverable {
-                instance_id,
-                deadline_ms,
-            } => (instance_id, deadline_ms),
-            _ => return Err(PairingError::Inactive),
-        };
+        let (local_instance, window_deadline) = self.discoverable_window()?;
         let session_id = pairing_session_id(local_instance, candidate.instance_id);
         let deadline_ms = now_ms()
             .saturating_add(duration.as_millis().try_into().unwrap_or(u64::MAX))
@@ -583,11 +652,17 @@ impl PairingManager {
             local_instance,
             self.identity.public_key(),
             friendly_name,
-            root_state,
+            self.root_state(),
         );
-        let mut stream = connection.open_stream().await?;
-        stream.send(&PairingMessage::Hello(hello.clone())).await?;
-        let PairingMessage::Hello(peer) = stream.receive().await? else {
+        // A peer that is busy closes the connection with a distinct code; a
+        // stream error observed after that close is a refusal, not a failure.
+        let refused = |error: PairingError| connection.peer_refusal().unwrap_or(error);
+        let mut stream = connection.open_stream().await.map_err(refused)?;
+        stream
+            .send(&PairingMessage::Hello(hello.clone()))
+            .await
+            .map_err(refused)?;
+        let PairingMessage::Hello(peer) = stream.receive().await.map_err(refused)? else {
             return Err(PairingError::Malformed("hello required"));
         };
         self.finish_handshake(session_id, connection, stream, hello, peer)
@@ -1332,6 +1407,10 @@ impl PairingManager {
                 session.connection.close();
             }
         }
+        self.cancel_accept();
+    }
+
+    fn cancel_accept(&self) {
         if let Ok(mut task) = self.accept_task.lock()
             && let Some(task) = task.take()
         {
@@ -1356,19 +1435,18 @@ impl PairingManager {
             .ok_or(PairingError::Inactive)
     }
 
+    /// Runs the responder side of a handshake on an accepted connection.
+    ///
+    /// Returns `Busy` when the device already holds a session (connecting,
+    /// awaiting confirmation, or committing) and `Inactive` when no window is
+    /// open. Neither is a failure of the local attempt; the caller refuses or
+    /// drops the connection and decides whether to keep listening.
     async fn accept_handshake(
         &self,
         connection: PairingConnection,
         friendly_name: String,
-        root_state: RootState,
     ) -> Result<PairingSessionId, PairingError> {
-        let (local_instance, window_deadline) = match self.state() {
-            PairingState::Discoverable {
-                instance_id,
-                deadline_ms,
-            } => (instance_id, deadline_ms),
-            _ => return Err(PairingError::Inactive),
-        };
+        let (local_instance, window_deadline) = self.discoverable_window()?;
         let mut stream = connection.accept_stream().await?;
         let PairingMessage::Hello(peer) = stream.receive().await? else {
             return Err(PairingError::Malformed("hello required"));
@@ -1379,22 +1457,45 @@ impl PairingManager {
             expires_at_ms: window_deadline,
         };
         let session_id = pairing_session_id(peer.instance_id, local_instance);
-        self.apply(PairingInput::Select {
+        // The state may have moved while the peer's `Hello` was in flight (a
+        // local outbound select, for instance). That is still "busy", not a
+        // failure.
+        if let Err(error) = self.apply(PairingInput::Select {
             session_id,
             candidate,
             deadline_ms: window_deadline,
-        })?;
+        }) {
+            return Err(self
+                .discoverable_window()
+                .map_or_else(|busy| busy, |_| error));
+        }
         let hello = make_hello(
             PairingRole::Responder,
             local_instance,
             self.identity.public_key(),
             friendly_name,
-            root_state,
+            self.root_state(),
         );
         stream.send(&PairingMessage::Hello(hello.clone())).await?;
         self.finish_handshake(session_id, connection, stream, hello, peer)
             .await?;
         Ok(session_id)
+    }
+
+    /// The open discoverable window, or why an inbound cannot be taken now.
+    fn discoverable_window(&self) -> Result<(PairingInstanceId, u64), PairingError> {
+        match self.state() {
+            PairingState::Discoverable {
+                instance_id,
+                deadline_ms,
+            } => Ok((instance_id, deadline_ms)),
+            PairingState::Connecting { .. }
+            | PairingState::AwaitingConfirmation { .. }
+            | PairingState::Committing { .. } => Err(PairingError::Busy),
+            PairingState::Idle | PairingState::Trusted { .. } | PairingState::Failed { .. } => {
+                Err(PairingError::Inactive)
+            }
+        }
     }
 
     async fn finish_handshake(
@@ -1647,23 +1748,24 @@ mod tests {
         let (b, _, _b_dir) = manager(7).await;
         let root = automerge_repo::DocumentId::new();
         let window = Duration::from_secs(5);
-        let a_instance = a
-            .start(window, "A".into(), RootState::Ready(root))
-            .await
-            .unwrap();
-        let b_instance = b
-            .start(window, "B".into(), RootState::Ready(root))
-            .await
-            .unwrap();
+        let a_instance = {
+            a.set_root_state(RootState::Ready(root));
+            a.start(window, "A".into())
+        }
+        .await
+        .unwrap();
+        let b_instance = {
+            b.set_root_state(RootState::Ready(root));
+            b.start(window, "B".into())
+        }
+        .await
+        .unwrap();
         let candidate = PairingCandidate {
             instance_id: b_instance,
             endpoint: b.transport.local_addr().unwrap(),
             expires_at_ms: now_ms() + 5_000,
         };
-        let a_session = a
-            .connect(candidate, "A".into(), RootState::Ready(root), window)
-            .await
-            .unwrap();
+        let a_session = a.connect(candidate, "A".into(), window).await.unwrap();
         let b_session = loop {
             if let PairingState::AwaitingConfirmation { session_id, .. } = b.state() {
                 break session_id;
@@ -1700,11 +1802,10 @@ mod tests {
                 .await
                 .is_err()
         );
-        a.start(
-            Duration::from_millis(20),
-            "A".into(),
-            RootState::NeedsDecision,
-        )
+        {
+            a.set_root_state(RootState::NeedsDecision);
+            a.start(Duration::from_millis(20), "A".into())
+        }
         .await
         .unwrap();
         assert_eq!(discovery.advertisements().len(), 1);
@@ -1956,13 +2057,18 @@ mod tests {
         let (b, _, _b_dir) = manager(32).await;
         let root = automerge_repo::DocumentId::new();
         let window = Duration::from_secs(5);
-        a.start(window, "A".into(), RootState::Ready(root))
-            .await
-            .unwrap();
-        let b_instance = b
-            .start(window, "B".into(), RootState::Ready(root))
-            .await
-            .unwrap();
+        {
+            a.set_root_state(RootState::Ready(root));
+            a.start(window, "A".into())
+        }
+        .await
+        .unwrap();
+        let b_instance = {
+            b.set_root_state(RootState::Ready(root));
+            b.start(window, "B".into())
+        }
+        .await
+        .unwrap();
         let a_session = a
             .connect(
                 PairingCandidate {
@@ -1971,7 +2077,6 @@ mod tests {
                     expires_at_ms: now_ms() + 5_000,
                 },
                 "A".into(),
-                RootState::Ready(root),
                 window,
             )
             .await
@@ -2001,13 +2106,18 @@ mod tests {
                 .is_none()
         );
 
-        a.start(window, "A".into(), RootState::Ready(root))
-            .await
-            .unwrap();
-        let next_b = b
-            .start(window, "B".into(), RootState::Ready(root))
-            .await
-            .unwrap();
+        {
+            a.set_root_state(RootState::Ready(root));
+            a.start(window, "A".into())
+        }
+        .await
+        .unwrap();
+        let next_b = {
+            b.set_root_state(RootState::Ready(root));
+            b.start(window, "B".into())
+        }
+        .await
+        .unwrap();
         let next_a_session = a
             .connect(
                 PairingCandidate {
@@ -2016,7 +2126,6 @@ mod tests {
                     expires_at_ms: now_ms() + 5_000,
                 },
                 "A".into(),
-                RootState::Ready(root),
                 window,
             )
             .await
@@ -2038,14 +2147,12 @@ mod tests {
     async fn hello_key_mismatch_never_displays_sas_or_creates_trust() {
         let (target, _, _target_dir) = manager(41).await;
         let root = automerge_repo::DocumentId::new();
-        target
-            .start(
-                Duration::from_secs(5),
-                "target".into(),
-                RootState::Ready(root),
-            )
-            .await
-            .unwrap();
+        {
+            target.set_root_state(RootState::Ready(root));
+            target.start(Duration::from_secs(5), "target".into())
+        }
+        .await
+        .unwrap();
         let rogue_keys = InMemorySecureKeyStore::seeded([42; 32]);
         let rogue_identity = DeviceIdentity::load_or_create(&rogue_keys).await.unwrap();
         let rogue =
@@ -2091,13 +2198,18 @@ mod tests {
         let (b, _, _b_dir) = manager(46).await;
         let root = automerge_repo::DocumentId::new();
         let window = Duration::from_secs(5);
-        a.start(window, "A".into(), RootState::Ready(root))
-            .await
-            .unwrap();
-        let b_instance = b
-            .start(window, "B".into(), RootState::Ready(root))
-            .await
-            .unwrap();
+        {
+            a.set_root_state(RootState::Ready(root));
+            a.start(window, "A".into())
+        }
+        .await
+        .unwrap();
+        let b_instance = {
+            b.set_root_state(RootState::Ready(root));
+            b.start(window, "B".into())
+        }
+        .await
+        .unwrap();
         let session = a
             .connect(
                 PairingCandidate {
@@ -2106,7 +2218,6 @@ mod tests {
                     expires_at_ms: now_ms() + 5_000,
                 },
                 "A".into(),
-                RootState::Ready(root),
                 window,
             )
             .await
@@ -2190,6 +2301,207 @@ mod tests {
             tokio::time::timeout(Duration::from_millis(50), b_events.recv())
                 .await
                 .is_err()
+        );
+    }
+
+    fn candidate_for(manager: &PairingManager, instance: PairingInstanceId) -> PairingCandidate {
+        PairingCandidate {
+            instance_id: instance,
+            endpoint: manager.transport.local_addr().unwrap(),
+            expires_at_ms: now_ms() + 5_000,
+        }
+    }
+
+    async fn await_sas(manager: &PairingManager) -> PairingSessionId {
+        let mut state = manager.subscribe_state();
+        tokio::time::timeout(Duration::from_secs(2), async {
+            loop {
+                if let PairingState::AwaitingConfirmation { session_id, .. } =
+                    state.borrow().clone()
+                {
+                    break session_id;
+                }
+                state.changed().await.unwrap();
+            }
+        })
+        .await
+        .expect("SAS displayed")
+    }
+
+    #[tokio::test]
+    async fn refused_inbound_leaves_window_open_and_later_inbound_is_processed() {
+        let (a, a_discovery, _a_dir) = manager(51).await;
+        let (b, _, _b_dir) = manager(52).await;
+        let root = automerge_repo::DocumentId::new();
+        let window = Duration::from_secs(5);
+        a.set_root_state(RootState::Ready(root));
+        b.set_root_state(RootState::Ready(root));
+        let a_instance = a.start(window, "A".into()).await.unwrap();
+        let b_instance = b.start(window, "B".into()).await.unwrap();
+        // A holds an outbound attempt (selected, not yet dialed) when B's
+        // inbound arrives.
+        a.select(candidate_for(&b, b_instance), window).unwrap();
+        assert_eq!(
+            b.connect(candidate_for(&a, a_instance), "B".into(), window)
+                .await,
+            Err(PairingError::PeerBusy)
+        );
+        assert!(
+            matches!(b.state(), PairingState::Discoverable { .. }),
+            "the dialer keeps its window: {:?}",
+            b.state()
+        );
+        assert!(
+            matches!(a.state(), PairingState::Connecting { .. }),
+            "the refusal did not disturb the local attempt: {:?}",
+            a.state()
+        );
+        assert_eq!(
+            a_discovery.advertisements().len(),
+            1,
+            "the refused inbound did not end the window"
+        );
+        // The outbound attempt is abandoned; the same window accepts the next
+        // inbound.
+        a.release();
+        assert!(matches!(a.state(), PairingState::Discoverable { .. }));
+        let b_session = b
+            .connect(candidate_for(&a, a_instance), "B".into(), window)
+            .await
+            .unwrap();
+        assert_eq!(await_sas(&a).await, b_session);
+        assert_eq!(b_session, pairing_session_id(b_instance, a_instance));
+    }
+
+    #[tokio::test]
+    async fn simultaneous_dial_never_destroys_both_windows() {
+        let (a, a_discovery, _a_dir) = manager(53).await;
+        let (b, b_discovery, _b_dir) = manager(54).await;
+        let root = automerge_repo::DocumentId::new();
+        let window = Duration::from_secs(5);
+        a.set_root_state(RootState::Ready(root));
+        b.set_root_state(RootState::Ready(root));
+        let a_instance = a.start(window, "A".into()).await.unwrap();
+        let b_instance = b.start(window, "B".into()).await.unwrap();
+        let (from_a, from_b) = tokio::join!(
+            a.connect(candidate_for(&b, b_instance), "A".into(), window),
+            b.connect(candidate_for(&a, a_instance), "B".into(), window),
+        );
+        assert!(
+            !matches!(a.state(), PairingState::Failed { .. }),
+            "A must not fail: {:?}",
+            a.state()
+        );
+        assert!(
+            !matches!(b.state(), PairingState::Failed { .. }),
+            "B must not fail: {:?}",
+            b.state()
+        );
+        assert_eq!(a_discovery.advertisements().len(), 1);
+        assert_eq!(b_discovery.advertisements().len(), 1);
+        for outcome in [&from_a, &from_b] {
+            if let Err(error) = outcome {
+                assert!(
+                    matches!(error, PairingError::Busy | PairingError::PeerBusy),
+                    "only a busy refusal is acceptable: {error:?}"
+                );
+            }
+        }
+        let session = match (from_a, from_b) {
+            (Ok(_), Ok(_)) => panic!("two sessions cannot both be established"),
+            (Ok(session), Err(_)) | (Err(_), Ok(session)) => session,
+            (Err(_), Err(_)) => {
+                // Phase A: both refused, both windows open, one retry succeeds.
+                assert!(matches!(a.state(), PairingState::Discoverable { .. }));
+                assert!(matches!(b.state(), PairingState::Discoverable { .. }));
+                a.connect(candidate_for(&b, b_instance), "A".into(), window)
+                    .await
+                    .unwrap()
+            }
+        };
+        assert_eq!(await_sas(&a).await, session);
+        assert_eq!(await_sas(&b).await, session);
+    }
+
+    #[tokio::test]
+    async fn root_created_after_window_opens_is_advertised_and_never_provisioned() {
+        let (a, _, _a_dir) = manager(55).await;
+        let (b, _, _b_dir) = manager(56).await;
+        let window = Duration::from_secs(5);
+        a.set_root_state(RootState::NeedsDecision);
+        b.set_root_state(RootState::Ready(automerge_repo::DocumentId::new()));
+        let a_instance = a.start(window, "A".into()).await.unwrap();
+        b.start(window, "B".into()).await.unwrap();
+        // A creates its own root while its window is open.
+        a.set_root_state(RootState::Ready(automerge_repo::DocumentId::new()));
+        // The responder judges compatibility first and may drop the connection
+        // before the initiator has judged it, so the dialer sees either the
+        // mismatch or the resulting transport loss. Never a provisioning plan.
+        let outcome = b
+            .connect(candidate_for(&a, a_instance), "B".into(), window)
+            .await;
+        assert!(
+            matches!(
+                outcome,
+                Err(PairingError::RootMismatch | PairingError::Transport(_))
+            ),
+            "unexpected outcome: {outcome:?}"
+        );
+        let mut state = a.subscribe_state();
+        tokio::time::timeout(Duration::from_secs(2), async {
+            loop {
+                if let PairingState::Failed { error } = state.borrow().clone() {
+                    assert_eq!(
+                        error,
+                        PairingError::RootMismatch,
+                        "the handshake carries the current root, not the captured needs-decision"
+                    );
+                    break;
+                }
+                state.changed().await.unwrap();
+            }
+        })
+        .await
+        .unwrap();
+        assert!(a.sessions.lock().unwrap().is_empty());
+        assert!(b.sessions.lock().unwrap().is_empty());
+        assert!(a.trusted_devices().unwrap().is_empty());
+        assert!(b.trusted_devices().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn join_completed_in_one_session_is_advertised_ready_in_the_next() {
+        let (a, _, _a_dir) = manager(57).await;
+        let (b, _, _b_dir) = manager(58).await;
+        let root = automerge_repo::DocumentId::new();
+        let window = Duration::from_secs(5);
+        a.set_root_state(RootState::NeedsDecision);
+        b.set_root_state(RootState::Ready(root));
+        let a_instance = a.start(window, "A".into()).await.unwrap();
+        b.start(window, "B".into()).await.unwrap();
+        let first = b
+            .connect(candidate_for(&a, a_instance), "B".into(), window)
+            .await
+            .unwrap();
+        await_sas(&a).await;
+        assert_eq!(
+            a.session(first).unwrap().compatibility,
+            RootCompatibility::ProvisionInitiatorToResponder
+        );
+        a.stop().await.unwrap();
+        b.stop().await.unwrap();
+        // The join through that session lands; the manager learns the root.
+        a.set_root_state(RootState::Ready(root));
+        let a_instance = a.start(window, "A".into()).await.unwrap();
+        b.start(window, "B".into()).await.unwrap();
+        let second = b
+            .connect(candidate_for(&a, a_instance), "B".into(), window)
+            .await
+            .unwrap();
+        await_sas(&a).await;
+        assert_eq!(
+            a.session(second).unwrap().compatibility,
+            RootCompatibility::SameRoot
         );
     }
 }

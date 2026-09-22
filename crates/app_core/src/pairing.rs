@@ -204,6 +204,12 @@ pub enum PairingState {
         session_id: PairingSessionId,
         candidate: PairingCandidate,
         deadline_ms: u64,
+        /// The local instance id of the discoverable window this attempt
+        /// belongs to, kept so a released attempt can return to it.
+        instance_id: PairingInstanceId,
+        /// The deadline of the discoverable window, which outlives the
+        /// per-attempt `deadline_ms`.
+        window_deadline_ms: u64,
     },
     AwaitingConfirmation {
         session_id: PairingSessionId,
@@ -260,6 +266,12 @@ pub enum PairingInput {
     Reject {
         session_id: Option<PairingSessionId>,
     },
+    /// Abandons an outbound attempt without failing the window: the peer
+    /// refused the connection because it was busy, so the local device returns
+    /// to discoverable and may select again.
+    Release {
+        session_id: PairingSessionId,
+    },
     Timeout {
         now_ms: u64,
     },
@@ -270,6 +282,7 @@ pub enum PairingInput {
 pub enum PairingEvent {
     Started { deadline_ms: u64 },
     CandidateSelected(PairingSessionId),
+    CandidateReleased(PairingSessionId),
     SasReady(SasCode),
     ConfirmationChanged { local: bool, remote: bool },
     CommitReady(PairingSessionId),
@@ -282,6 +295,14 @@ pub enum PairingEvent {
 pub enum PairingError {
     #[error("pairing is not active")]
     Inactive,
+    /// The local device cannot accept an inbound connection right now because
+    /// it already holds a pairing session. Never fatal to the local window.
+    #[error("the device is busy with another pairing session")]
+    Busy,
+    /// The peer refused the outbound connection because it was busy. The local
+    /// window survives and the attempt may be retried.
+    #[error("the peer is busy with another pairing session")]
+    PeerBusy,
     #[error("pairing transition is invalid")]
     InvalidTransition,
     #[error("pairing session has expired")]
@@ -326,8 +347,8 @@ pub fn reduce_pairing(
         )),
         (
             S::Discoverable {
+                instance_id,
                 deadline_ms: active,
-                ..
             },
             I::Select {
                 session_id,
@@ -339,8 +360,25 @@ pub fn reduce_pairing(
                 session_id,
                 candidate,
                 deadline_ms,
+                instance_id: *instance_id,
+                window_deadline_ms: *active,
             },
             PairingEvent::CandidateSelected(session_id),
+        )),
+        (
+            S::Connecting {
+                session_id: active,
+                instance_id,
+                window_deadline_ms,
+                ..
+            },
+            I::Release { session_id },
+        ) if *active == session_id => Ok((
+            S::Discoverable {
+                instance_id: *instance_id,
+                deadline_ms: *window_deadline_ms,
+            },
+            PairingEvent::CandidateReleased(session_id),
         )),
         (
             S::Connecting {

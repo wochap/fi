@@ -119,29 +119,59 @@ pub async fn connection_state_stream(
     sink: StreamSink<Vec<TrustedDeviceDto>>,
 ) -> Result<(), BridgeError> {
     let core = core().await?;
-    let mut receiver = core
+    let receiver = core
         .subscribe_connections()
         .ok_or_else(|| BridgeError::lifecycle("Device networking is unavailable."))?;
-    tokio::spawn(async move {
-        loop {
-            let connections = receiver.borrow_and_update().clone();
-            let devices = match core.trusted_devices() {
-                Ok(devices) => devices,
-                Err(_) => break,
-            };
-            let values = devices
-                .into_iter()
-                .map(|record| {
-                    let connection = connections.get(&record.device_id);
-                    TrustedDeviceDto::from_core(record, connection)
-                })
-                .collect();
-            if sink.add(values).is_err() || receiver.changed().await.is_err() {
-                break;
+    tokio::spawn(forward_connection_states(
+        receiver,
+        move || core.trusted_devices().map_err(BridgeError::from),
+        move |values| sink.add(values).is_ok(),
+    ));
+    Ok(())
+}
+
+/// Emits the trusted-device list joined with connection state on every
+/// connection change. A transient query failure skips that emission and keeps
+/// waiting; the stream ends only when the subscriber goes away or the
+/// connection source closes. The loop is driven by connection changes, not a
+/// timer, so a persistent failure cannot spin.
+async fn forward_connection_states<Q, E>(
+    mut receiver: tokio::sync::watch::Receiver<
+        std::collections::HashMap<DeviceId, app_core::PeerConnectionState>,
+    >,
+    mut query: Q,
+    mut emit: E,
+) where
+    Q: FnMut() -> Result<Vec<app_core::TrustedDeviceRecord>, BridgeError>,
+    E: FnMut(Vec<TrustedDeviceDto>) -> bool,
+{
+    loop {
+        let connections = receiver.borrow_and_update().clone();
+        match query() {
+            Ok(devices) => {
+                let values = devices
+                    .into_iter()
+                    .map(|record| {
+                        let connection = connections.get(&record.device_id);
+                        TrustedDeviceDto::from_core(record, connection)
+                    })
+                    .collect();
+                if !emit(values) {
+                    return;
+                }
+            }
+            Err(error) => {
+                tracing::warn!(
+                    event = "connection_state_stream_query_failed",
+                    error = %error,
+                    "skipping connection-state emission"
+                );
             }
         }
-    });
-    Ok(())
+        if receiver.changed().await.is_err() {
+            return;
+        }
+    }
 }
 
 pub async fn sync_status_stream(sink: StreamSink<SyncStatusDto>) -> Result<(), BridgeError> {
@@ -264,4 +294,85 @@ fn nibble(value: u8) -> Result<u8, BridgeError> {
 
 fn encode_16(value: [u8; 16]) -> String {
     value.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        collections::HashMap,
+        sync::{Arc, Mutex},
+    };
+
+    use app_core::{
+        DeviceId, PeerConnectionState, PrivateDeviceKey, TrustState, TrustedDeviceRecord,
+    };
+
+    use super::forward_connection_states;
+    use crate::api::models::BridgeError;
+
+    fn record() -> TrustedDeviceRecord {
+        let key = PrivateDeviceKey::from_seed(&[7; 32]).unwrap().public_key();
+        TrustedDeviceRecord {
+            device_id: DeviceId::from_public_key(key.as_bytes()),
+            public_key: key,
+            friendly_name: "peer".into(),
+            paired_at_ms: 1,
+            last_seen_ms: None,
+            last_sync_ms: None,
+            state: TrustState::Trusted,
+        }
+    }
+
+    #[tokio::test]
+    async fn transient_query_failure_keeps_the_stream_open() {
+        let (tx, rx) = tokio::sync::watch::channel(HashMap::<DeviceId, PeerConnectionState>::new());
+        let emitted = Arc::new(Mutex::new(Vec::new()));
+        let calls = Arc::new(Mutex::new(0_u32));
+        let query = {
+            let calls = calls.clone();
+            move || {
+                let mut calls = calls.lock().unwrap();
+                *calls += 1;
+                if *calls == 1 {
+                    Err(BridgeError::lifecycle("database is busy"))
+                } else {
+                    Ok(vec![record()])
+                }
+            }
+        };
+        let emit = {
+            let emitted = emitted.clone();
+            move |values: Vec<super::TrustedDeviceDto>| {
+                emitted.lock().unwrap().push(values.len());
+                true
+            }
+        };
+        let task = tokio::spawn(forward_connection_states(rx, query, emit));
+        tokio::task::yield_now().await;
+        assert!(
+            emitted.lock().unwrap().is_empty(),
+            "the failed emission is skipped, not synthesised"
+        );
+        assert!(
+            !task.is_finished(),
+            "a transient failure does not end the stream"
+        );
+        // The next connection change drives a normal emission.
+        tx.send_replace(HashMap::new());
+        tokio::time::timeout(std::time::Duration::from_secs(1), async {
+            while emitted.lock().unwrap().is_empty() {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(*emitted.lock().unwrap(), vec![1]);
+        assert!(!task.is_finished());
+        // The stream ends only when its source does.
+        drop(tx);
+        tokio::time::timeout(std::time::Duration::from_secs(1), task)
+            .await
+            .unwrap()
+            .unwrap();
+    }
 }

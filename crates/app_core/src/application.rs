@@ -360,6 +360,9 @@ impl AppCore {
             BootstrapStatus::Closed => ApplicationState::Closed,
         };
         let (lifecycle_tx, lifecycle) = watch::channel(initial.clone());
+        if let Some(pairing) = network_components.pairing.clone() {
+            spawn_pairing_root_state_bridge(lifecycle.clone(), pairing);
+        }
         let (projection_tx, projection_rx) = watch::channel(ProjectionState::Unavailable);
         let (data_events, _) = broadcast::channel(config.transient_event_capacity);
         let (error_events, _) = broadcast::channel(config.transient_event_capacity);
@@ -558,7 +561,6 @@ impl AppCore {
             .start(
                 std::time::Duration::from_millis(duration_ms),
                 self.local_pairing_name(),
-                self.pairing_root_state(),
             )
             .await
             .map_err(Into::into)
@@ -623,7 +625,6 @@ impl AppCore {
             .connect(
                 candidate,
                 self.local_pairing_name(),
-                self.pairing_root_state(),
                 std::time::Duration::from_millis(timeout_ms),
             )
             .await
@@ -869,15 +870,6 @@ impl AppCore {
         Ok(epoch)
     }
 
-    fn pairing_root_state(&self) -> RootState {
-        match self.lifecycle_state() {
-            ApplicationState::Ready { root } | ApplicationState::Joining { root } => {
-                RootState::Ready(root)
-            }
-            _ => RootState::NeedsDecision,
-        }
-    }
-
     fn local_pairing_name(&self) -> String {
         self.device_id().map_or_else(
             || "Fi device".into(),
@@ -911,10 +903,24 @@ impl AppCore {
     }
 
     pub async fn create_new_dataset(&self) -> Result<DocumentId> {
-        request(&self.commands, OwnerCommand::CreateNew).await
+        let root = request(&self.commands, OwnerCommand::CreateNew).await?;
+        self.sync_pairing_root_state();
+        Ok(root)
     }
     pub async fn join_existing(&self, root: DocumentId) -> Result<()> {
-        request(&self.commands, |reply| OwnerCommand::Join(root, reply)).await
+        request(&self.commands, |reply| OwnerCommand::Join(root, reply)).await?;
+        self.sync_pairing_root_state();
+        Ok(())
+    }
+
+    /// Pushes the current lifecycle state into the pairing manager before the
+    /// caller returns, so a handshake started right after a bootstrap command
+    /// completes cannot observe the previous root state. The lifecycle bridge
+    /// spawned at open covers every other transition.
+    fn sync_pairing_root_state(&self) {
+        if let Some(pairing) = self.pairing.as_ref() {
+            pairing.set_root_state(pairing_root_state(&self.lifecycle_state()));
+        }
     }
 
     pub async fn create_collection(
@@ -1502,6 +1508,36 @@ fn spawn_sync_bridge(
             if sync.changed().await.is_err() {
                 break;
             }
+        }
+    });
+}
+
+/// The root state a pairing handshake advertises for `state`.
+///
+/// `Joining` is already rooted: the device has adopted a root and must not be
+/// provisioned by a third device mid-join.
+fn pairing_root_state(state: &ApplicationState) -> RootState {
+    match state {
+        ApplicationState::Ready { root } | ApplicationState::Joining { root } => {
+            RootState::Ready(*root)
+        }
+        _ => RootState::NeedsDecision,
+    }
+}
+
+/// Keeps the pairing manager's advertised root state current. Every bootstrap
+/// transition goes through the lifecycle channel, so this is the one update
+/// point: a handshake reads the value at the moment it runs rather than the
+/// value captured when the window opened.
+fn spawn_pairing_root_state_bridge(
+    mut lifecycle: watch::Receiver<ApplicationState>,
+    pairing: Arc<PairingManager>,
+) {
+    pairing.set_root_state(pairing_root_state(&lifecycle.borrow_and_update()));
+    tokio::spawn(async move {
+        while lifecycle.changed().await.is_ok() {
+            let state = pairing_root_state(&lifecycle.borrow_and_update());
+            pairing.set_root_state(state);
         }
     });
 }

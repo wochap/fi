@@ -399,36 +399,84 @@ final class DevicesController extends ChangeNotifier {
   Timer? _clock;
   final List<StreamSubscription<Object?>> _subscriptions = [];
 
+  /// Bumped by [restart] and [dispose]; a stream that ends after its
+  /// generation moved on belongs to a subscription set that was torn down
+  /// deliberately and must not reopen itself.
+  int _generation = 0;
+
   Future<void> start() async {
-    _subscriptions
-      ..add(bridge.pairingStateEvents().listen(_setPairing, onError: _setError))
-      ..add(
-        bridge.pairingCandidateEvents().listen((value) {
-          candidates = value;
-          notifyListeners();
-        }, onError: _setError),
-      )
-      ..add(
-        bridge.connectionStateEvents().listen((value) {
-          devices = value;
-          notifyListeners();
-        }, onError: _setError),
-      )
-      ..add(
-        bridge.syncStatusEvents().listen((value) {
-          syncStatus = value;
-          notifyListeners();
-        }, onError: _setError),
-      );
+    _subscribe(bridge.pairingStateEvents, _setPairing);
+    _subscribe(bridge.pairingCandidateEvents, (value) {
+      candidates = value;
+      notifyListeners();
+    });
+    _subscribe(bridge.connectionStateEvents, (value) {
+      devices = value;
+      notifyListeners();
+    }, refresh: refreshDevices);
+    _subscribe(bridge.syncStatusEvents, (value) {
+      syncStatus = value;
+      notifyListeners();
+    }, refresh: _refreshSyncStatus);
     await refreshDevices();
-    syncStatus = await bridge.syncStatus();
-    notifyListeners();
+    await _refreshSyncStatus();
+  }
+
+  /// Subscribes to [open] and keeps the subscription alive for the life of
+  /// this controller: a bridge stream that ends without being cancelled here
+  /// is reopened and the query it backs is refreshed. This controller is
+  /// owned at application scope, so no screen remount will resubscribe it.
+  void _subscribe<T>(
+    Stream<T> Function() open,
+    void Function(T value) onData, {
+    Future<void> Function()? refresh,
+  }) {
+    final generation = _generation;
+    late final StreamSubscription<T> subscription;
+    subscription = open().listen(
+      onData,
+      onError: _setError,
+      onDone: () {
+        _subscriptions.remove(subscription);
+        if (_disposed || generation != _generation) return;
+        unawaited(
+          _reopen(open, onData, refresh: refresh, generation: generation),
+        );
+      },
+    );
+    _subscriptions.add(subscription);
+  }
+
+  Future<void> _reopen<T>(
+    Stream<T> Function() open,
+    void Function(T value) onData, {
+    required Future<void> Function()? refresh,
+    required int generation,
+  }) async {
+    await Future<void>.delayed(_reopenDelay);
+    if (_disposed || generation != _generation) return;
+    _subscribe(open, onData, refresh: refresh);
+    if (refresh != null) await refresh();
+  }
+
+  /// Pause before reopening a stream that ended unexpectedly, so a source
+  /// that closes on every open cannot spin the controller.
+  static const _reopenDelay = Duration(seconds: 1);
+
+  Future<void> _refreshSyncStatus() async {
+    try {
+      syncStatus = await bridge.syncStatus();
+    } catch (error) {
+      _setError(error);
+    }
+    if (!_disposed) notifyListeners();
   }
 
   /// Drops every stream and cached value and starts again, so the controller
   /// observes the core that replaced the one it was subscribed to (after a
   /// dataset reset). Safe to call whether or not [start] ran before.
   Future<void> restart() async {
+    _generation++;
     for (final subscription in _subscriptions) {
       unawaited(subscription.cancel());
     }
@@ -549,6 +597,7 @@ final class DevicesController extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _generation++;
     _clock?.cancel();
     for (final subscription in _subscriptions) {
       unawaited(subscription.cancel());

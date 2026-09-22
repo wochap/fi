@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:fi/bridge/collection_bridge.dart';
 import 'package:fi/controllers.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -376,6 +379,77 @@ void main() {
     expect(controller.records, hasLength(1));
     controller.dispose();
   });
+
+  test(
+    'devices controller reopens a bridge stream that ends unexpectedly',
+    () async {
+      final bridge = ClosingDevicesBridge();
+      final controller = DevicesController(bridge);
+      await controller.start();
+      expect(bridge.opens, 1);
+      expect(controller.devices, isEmpty);
+      // The Rust side ends the stream without the subscriber cancelling it.
+      bridge.devices.add(
+        const TrustedDeviceDto(
+          deviceId: 'peer',
+          friendlyName: 'Peer',
+          pairedAtMs: 1,
+          lastSeenMs: null,
+          lastSyncMs: null,
+          revoked: false,
+          connection: PeerConnectionKindDto.offline,
+        ),
+      );
+      await bridge.closeCurrent();
+      await Future<void>.delayed(const Duration(milliseconds: 1300));
+      expect(bridge.opens, 2, reason: 'the stream is reopened');
+      expect(
+        controller.devices.map((device) => device.deviceId),
+        ['peer'],
+        reason: 'the backing query is refreshed on reopen',
+      );
+      // A deliberate teardown does not reopen.
+      controller.dispose();
+      await bridge.closeCurrent();
+      await Future<void>.delayed(const Duration(milliseconds: 1300));
+      expect(bridge.opens, 2);
+    },
+  );
+}
+
+/// A bridge whose connection-state stream can be ended from the Rust side.
+final class ClosingDevicesBridge implements CollectionBridge {
+  final inner = FakeCollectionBridge();
+  int opens = 0;
+  StreamController<List<TrustedDeviceDto>>? _current;
+
+  List<TrustedDeviceDto> get devices => inner.devices;
+
+  Future<void> closeCurrent() async => _current?.close();
+
+  @override
+  Stream<PairingStateDto> pairingStateEvents() => inner.pairingStateEvents();
+  @override
+  Stream<List<PairingCandidateDto>> pairingCandidateEvents() =>
+      inner.pairingCandidateEvents();
+  @override
+  Stream<SyncStatusDto> syncStatusEvents() => inner.syncStatusEvents();
+  @override
+  Future<List<TrustedDeviceDto>> trustedDevices() => inner.trustedDevices();
+  @override
+  Future<SyncStatusDto> syncStatus() => inner.syncStatus();
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw UnimplementedError(invocation.memberName.toString());
+
+  @override
+  Stream<List<TrustedDeviceDto>> connectionStateEvents() {
+    opens += 1;
+    final controller = StreamController<List<TrustedDeviceDto>>();
+    _current = controller;
+    return controller.stream;
+  }
 }
 
 StructuredValueDto _map(Map<String, StructuredValueDto> entries) =>
