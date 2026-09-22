@@ -57,6 +57,10 @@ pub enum AppError {
     Network(#[from] crate::quinn_transport::QuinnTransportError),
     #[error(transparent)]
     Pairing(#[from] crate::pairing::PairingError),
+    /// Typed repository bootstrap failure, kept structured so open-time
+    /// validation failures can be classified as reset-resolvable.
+    #[error(transparent)]
+    RepositoryBootstrap(automerge_repo::error::BootstrapError),
     #[error("repository operation failed: {0}")]
     Repository(String),
     #[error("storage operation failed: {0}")]
@@ -65,9 +69,33 @@ pub enum AppError {
     OwnerStopped,
 }
 
+impl AppError {
+    /// Whether a deliberate dataset reset would resolve this error. True only
+    /// for conditions that describe the local dataset itself (an unsupported
+    /// application schema, a bootstrap record without its root, snapshots
+    /// without a record). Keystore, network, and I/O failures are transient
+    /// and stay unclassified so a retry is offered instead of a destructive
+    /// action.
+    #[must_use]
+    pub fn is_reset_resolvable(&self) -> bool {
+        use automerge_repo::error::BootstrapError as RepoBootstrapError;
+        matches!(
+            self,
+            Self::Domain(DomainError::UnsupportedSchema(_))
+                | Self::RepositoryBootstrap(
+                    RepoBootstrapError::Inconsistent { .. }
+                        | RepoBootstrapError::OrphanedDocuments { .. }
+                )
+        )
+    }
+}
+
 impl From<automerge_repo::Error> for AppError {
     fn from(value: automerge_repo::Error) -> Self {
-        Self::Repository(value.to_string())
+        match value {
+            automerge_repo::Error::Bootstrap(error) => Self::RepositoryBootstrap(error),
+            other => Self::Repository(other.to_string()),
+        }
     }
 }
 

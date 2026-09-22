@@ -7,7 +7,10 @@ import '../frb_generated.dart';
 import 'models.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `core`, `initialize_networked`, `process_core`
+// These functions are ignored because they are not marked as `pub`: `core`, `initialize_with`, `open_core`, `process_slot`
+// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `OpenMode`, `OpenTarget`, `ProcessSlot`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`
+// These functions are ignored (category: IgnoreBecauseOwnerTyShouldIgnore): `default`
 
 Future<BootstrapDto> initialize({required String dataDir}) =>
     RustLib.instance.api.crateApiLifecycleInitialize(dataDir: dataDir);
@@ -26,6 +29,13 @@ Future<BootstrapDto> initializeAndroidNetworked({
   deviceSeed: deviceSeed,
   discoverySecret: discoverySecret,
 );
+
+/// Deliberately abandons this device's local dataset and reopens the core in
+/// `NeedsDecision`. Stops pairing and shuts the live core down first; works
+/// equally when the last initialization failed (schema cliff), since the
+/// directory and key store are remembered from that attempt.
+Future<BootstrapDto> resetDataset() =>
+    RustLib.instance.api.crateApiLifecycleResetDataset();
 
 Future<BootstrapDto> bootstrapState() =>
     RustLib.instance.api.crateApiLifecycleBootstrapState();

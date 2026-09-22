@@ -27,6 +27,7 @@ void main() {
       kind: BridgeErrorKind.validation,
       field: 'name',
       message: 'Name is required.',
+      resetResolvable: false,
     );
     await expectLater(
       controller.createCollection(''),
@@ -329,6 +330,7 @@ void main() {
     bridge.nextError = const BridgeError(
       kind: BridgeErrorKind.projection,
       message: 'projection is not ready',
+      resetResolvable: false,
     );
     await controller.refresh();
     expect(controller.errorMessage, 'projection is not ready');
@@ -366,6 +368,7 @@ void main() {
     bridge.nextError = const BridgeError(
       kind: BridgeErrorKind.projection,
       message: 'evaluation unavailable',
+      resetResolvable: false,
     );
     await controller.refreshWidgets();
     expect(controller.widgetErrorMessage, 'evaluation unavailable');

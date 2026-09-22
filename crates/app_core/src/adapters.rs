@@ -25,7 +25,7 @@ use crate::{
     control::{
         DiscoveryGroupMetadata, DiscoveryRotationJournal, DiscoveryRotationStage,
         LocalIdentityRecord, PairingJournalRecord, PairingJournalStage, PeerConnectionMetadata,
-        PeerTrustRecord, TrustState, TrustedDeviceRecord,
+        PeerTrustRecord, ResetIntent, TrustState, TrustedDeviceRecord,
     },
     identity::{DeviceId, PublicDeviceKey},
     routing::{ConnectionFailure, PeerConnectionState},
@@ -295,6 +295,11 @@ impl SqliteControlStore {
                 retain_until_ms INTEGER NOT NULL CHECK(retain_until_ms >= 0),
                 stage TEXT NOT NULL CHECK(stage IN ('prepared', 'active')),
                 updated_at_ms INTEGER NOT NULL CHECK(updated_at_ms >= 0)
+             ) STRICT;
+             CREATE TABLE IF NOT EXISTS reset_intent (
+                singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
+                version INTEGER NOT NULL CHECK(version = 1),
+                requested_at_ms INTEGER NOT NULL CHECK(requested_at_ms >= 0)
              ) STRICT;",
         )
             .map_err(|e| storage_error("control_open", None, &path, e))?;
@@ -931,6 +936,104 @@ impl SqliteControlStore {
             .map(|_| ())
             .map_err(|error| storage_error("discovery_rotation_clear", None, &self.path, error))
     }
+
+    /// Durably records that a dataset reset has begun. Its own committed
+    /// transaction, so the marker is on disk before any destructive step runs.
+    pub fn store_reset_intent(&self, intent: ResetIntent) -> Result<(), StorageError> {
+        self.ensure_open("reset_intent_store")?;
+        let requested =
+            checked_timestamp(intent.requested_at_ms, "reset_intent_store", &self.path)?;
+        let mut connection = self.connection.lock().map_err(|_| {
+            storage_error(
+                "reset_intent_store",
+                None,
+                &self.path,
+                "connection lock poisoned",
+            )
+        })?;
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|error| storage_error("reset_intent_store", None, &self.path, error))?;
+        transaction
+            .execute(
+                "INSERT INTO reset_intent(singleton,version,requested_at_ms) VALUES(1,1,?1)
+                 ON CONFLICT(singleton) DO UPDATE SET version=1,requested_at_ms=excluded.requested_at_ms",
+                params![requested],
+            )
+            .map_err(|error| storage_error("reset_intent_store", None, &self.path, error))?;
+        transaction
+            .commit()
+            .map_err(|error| storage_error("reset_intent_store", None, &self.path, error))
+    }
+
+    pub fn load_reset_intent(&self) -> Result<Option<ResetIntent>, StorageError> {
+        self.ensure_open("reset_intent_load")?;
+        let row: Option<(i64, i64)> = self
+            .connection
+            .lock()
+            .map_err(|_| {
+                storage_error(
+                    "reset_intent_load",
+                    None,
+                    &self.path,
+                    "connection lock poisoned",
+                )
+            })?
+            .query_row(
+                "SELECT version,requested_at_ms FROM reset_intent WHERE singleton=1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()
+            .map_err(|error| storage_error("reset_intent_load", None, &self.path, error))?;
+        row.map(|(version, requested)| {
+            if version != 1 {
+                return Err(storage_error(
+                    "reset_intent_load",
+                    None,
+                    &self.path,
+                    "unsupported reset intent version",
+                ));
+            }
+            Ok(ResetIntent {
+                requested_at_ms: decode_timestamp(requested, "reset_intent_load", &self.path)?,
+            })
+        })
+        .transpose()
+    }
+
+    /// Final step of a dataset reset: removes every root-scoped row and the
+    /// reset intent in one transaction. `local_identity` is deliberately kept so
+    /// the installation's `DeviceId` survives. A no-op when nothing is set.
+    pub fn complete_reset(&self) -> Result<(), StorageError> {
+        self.ensure_open("reset_complete")?;
+        let mut connection = self.connection.lock().map_err(|_| {
+            storage_error(
+                "reset_complete",
+                None,
+                &self.path,
+                "connection lock poisoned",
+            )
+        })?;
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|error| storage_error("reset_complete", None, &self.path, error))?;
+        transaction
+            .execute_batch(
+                "DELETE FROM app_control;
+                 DELETE FROM trusted_peers;
+                 DELETE FROM peer_connections;
+                 DELETE FROM trusted_devices;
+                 DELETE FROM pairing_journal;
+                 DELETE FROM discovery_group;
+                 DELETE FROM discovery_rotation;
+                 DELETE FROM reset_intent;",
+            )
+            .map_err(|error| storage_error("reset_complete", None, &self.path, error))?;
+        transaction
+            .commit()
+            .map_err(|error| storage_error("reset_complete", None, &self.path, error))
+    }
 }
 
 fn validate_trusted_device(record: &TrustedDeviceRecord, path: &Path) -> Result<(), StorageError> {
@@ -1300,6 +1403,98 @@ mod tests {
             reopened.peer_trust(device).unwrap().unwrap().state,
             TrustState::Revoked
         );
+    }
+
+    #[tokio::test]
+    async fn reset_intent_round_trips_and_complete_reset_keeps_only_identity() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("control.sqlite");
+        let key = PrivateDeviceKey::from_seed(&[21; 32]).unwrap().public_key();
+        let device = DeviceId::from_public_key(key.as_bytes());
+        let local = LocalIdentityRecord {
+            device_id: device,
+            public_key: key,
+            created_at_ms: 1,
+        };
+        {
+            let store = SqliteControlStore::open(path.clone()).unwrap();
+            assert_eq!(store.load_reset_intent().unwrap(), None);
+            // Nothing set: complete_reset is a harmless no-op.
+            store.complete_reset().unwrap();
+            store.store_local_identity(&local).unwrap();
+            ControlStore::store(
+                &store,
+                BootstrapRecord::Ready {
+                    root: DocumentId::new(),
+                },
+            )
+            .await
+            .unwrap();
+            store
+                .upsert_trusted_device(&TrustedDeviceRecord {
+                    device_id: device,
+                    public_key: key,
+                    friendly_name: "Laptop".into(),
+                    paired_at_ms: 2,
+                    last_seen_ms: None,
+                    last_sync_ms: None,
+                    state: TrustState::Trusted,
+                })
+                .unwrap();
+            store
+                .store_peer_connection(&PeerConnectionMetadata {
+                    device_id: device,
+                    state: PeerConnectionState::Connected,
+                    endpoint: None,
+                    updated_at_ms: 3,
+                })
+                .unwrap();
+            store
+                .store_pairing_journal(&PairingJournalRecord {
+                    session_id: [5; 16],
+                    peer_device_id: device,
+                    stage: PairingJournalStage::Complete,
+                    joining_root: None,
+                    updated_at_ms: 4,
+                })
+                .unwrap();
+            store
+                .store_discovery_metadata(DiscoveryGroupMetadata {
+                    epoch: 1,
+                    updated_at_ms: 5,
+                })
+                .unwrap();
+            store
+                .store_discovery_rotation(DiscoveryRotationJournal {
+                    previous_epoch: 1,
+                    target_epoch: 2,
+                    retain_until_ms: 6,
+                    stage: DiscoveryRotationStage::Prepared,
+                    updated_at_ms: 6,
+                })
+                .unwrap();
+            store
+                .store_reset_intent(ResetIntent { requested_at_ms: 7 })
+                .unwrap();
+        }
+        let reopened = SqliteControlStore::open(path.clone()).unwrap();
+        assert_eq!(
+            reopened.load_reset_intent().unwrap(),
+            Some(ResetIntent { requested_at_ms: 7 })
+        );
+        reopened.complete_reset().unwrap();
+        assert_eq!(reopened.load_reset_intent().unwrap(), None);
+        assert_eq!(ControlStore::load(&reopened).await.unwrap(), None);
+        assert_eq!(reopened.trusted_devices().unwrap(), vec![]);
+        assert_eq!(reopened.peer_trust(device).unwrap(), None);
+        assert_eq!(reopened.peer_connection(device).unwrap(), None);
+        assert_eq!(reopened.pairing_journal([5; 16]).unwrap(), None);
+        assert_eq!(reopened.discovery_metadata().unwrap(), None);
+        assert_eq!(reopened.discovery_rotation().unwrap(), None);
+        assert_eq!(reopened.load_local_identity().unwrap(), Some(local));
+        drop(reopened);
+        let again = SqliteControlStore::open(path).unwrap();
+        assert_eq!(again.load_reset_intent().unwrap(), None);
     }
 
     #[tokio::test]

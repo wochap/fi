@@ -559,6 +559,12 @@ pub struct BridgeError {
     pub kind: BridgeErrorKind,
     pub field: Option<String>,
     pub message: String,
+    /// True when a deliberate dataset reset would resolve this error (an
+    /// unsupported application schema, a bootstrap record without its root,
+    /// snapshots without a record). Keystore, network, and I/O failures are
+    /// never marked, so the shell offers a retry rather than a destructive
+    /// action for them.
+    pub reset_resolvable: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -1098,15 +1104,21 @@ impl From<ErrorEvent> for BridgeErrorEventDto {
 
 impl From<AppError> for BridgeError {
     fn from(value: AppError) -> Self {
-        match value {
+        let reset_resolvable = value.is_reset_resolvable();
+        let mut error = match value {
             AppError::Domain(DomainError::Invalid { field, message }) => Self {
                 kind: BridgeErrorKind::Validation,
                 field: Some(field.into()),
                 message,
+                reset_resolvable: false,
             },
             AppError::Domain(DomainError::NotFound { kind, .. }) => Self::safe(
                 BridgeErrorKind::Validation,
                 format!("The selected {kind} no longer exists."),
+            ),
+            AppError::Domain(DomainError::UnsupportedSchema(_)) => Self::safe(
+                BridgeErrorKind::Bootstrap,
+                "This device's local data was created by an incompatible application version.",
             ),
             AppError::Domain(_) => Self::safe(
                 BridgeErrorKind::Internal,
@@ -1117,10 +1129,16 @@ impl From<AppError> for BridgeError {
                 BridgeErrorKind::Projection,
                 "The local read model could not be refreshed.",
             ),
-            AppError::Repository(_) | AppError::Storage(_) => Self::safe(
-                BridgeErrorKind::Persistence,
-                "Local data could not be saved or loaded.",
+            AppError::RepositoryBootstrap(_) if reset_resolvable => Self::safe(
+                BridgeErrorKind::Bootstrap,
+                "This device's local data is incomplete and cannot be opened.",
             ),
+            AppError::RepositoryBootstrap(_) | AppError::Repository(_) | AppError::Storage(_) => {
+                Self::safe(
+                    BridgeErrorKind::Persistence,
+                    "Local data could not be saved or loaded.",
+                )
+            }
             AppError::Identity(_) | AppError::Network(_) | AppError::Pairing(_) => Self::safe(
                 BridgeErrorKind::Initialization,
                 "Secure device networking could not be initialized.",
@@ -1130,7 +1148,9 @@ impl From<AppError> for BridgeError {
                 BridgeErrorKind::Lifecycle,
                 "The local collection service is not running.",
             ),
-        }
+        };
+        error.reset_resolvable = reset_resolvable;
+        error
     }
 }
 
@@ -1140,6 +1160,7 @@ impl BridgeError {
             kind: BridgeErrorKind::Validation,
             field: Some(field.into()),
             message: message.into(),
+            reset_resolvable: false,
         }
     }
     pub(crate) fn initialization(message: impl Into<String>) -> Self {
@@ -1155,6 +1176,7 @@ impl BridgeError {
             kind,
             field: None,
             message: message.into(),
+            reset_resolvable: false,
         }
     }
 }
@@ -1180,5 +1202,23 @@ mod tests {
         assert_eq!(storage.kind, BridgeErrorKind::Persistence);
         assert!(!storage.message.contains("/private/path"));
         assert!(!storage.message.contains("sqlite"));
+        assert!(!storage.reset_resolvable);
+    }
+
+    #[test]
+    fn marks_reset_resolvable_from_the_core_classification() {
+        let schema = BridgeError::from(AppError::Domain(DomainError::UnsupportedSchema(99)));
+        assert!(schema.reset_resolvable);
+        assert_eq!(schema.kind, BridgeErrorKind::Bootstrap);
+
+        let orphaned = BridgeError::from(AppError::from(automerge_repo::Error::Bootstrap(
+            automerge_repo::error::BootstrapError::OrphanedDocuments { documents: vec![] },
+        )));
+        assert!(orphaned.reset_resolvable);
+
+        let locked = BridgeError::from(AppError::Identity(app_core::IdentityError::SecureStore(
+            app_core::SecureStoreError::Locked,
+        )));
+        assert!(!locked.reset_resolvable);
     }
 }

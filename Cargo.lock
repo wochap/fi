@@ -123,6 +123,7 @@ version = "0.1.0"
 dependencies = [
  "android_log-sys",
  "app-core",
+ "automerge-repo",
  "flutter_rust_bridge",
  "serde_json",
  "tempfile",

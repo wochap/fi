@@ -91,6 +91,7 @@ void main() {
       kind: BridgeErrorKind.validation,
       field: 'name',
       message: 'Name is required.',
+      resetResolvable: false,
     );
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();

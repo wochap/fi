@@ -1,4 +1,5 @@
 import 'package:fi/controllers.dart';
+import 'package:fi/reset_dialog.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:flutter/material.dart';
 
@@ -7,8 +8,11 @@ import 'package:flutter/material.dart';
 /// The SAS is rendered exactly as Rust supplies it; this widget never
 /// computes or reformats it beyond the fixed six-digit zero padding.
 class PairingCard extends StatelessWidget {
-  const PairingCard({required this.controller, super.key});
+  const PairingCard({required this.controller, this.onResetDataset, super.key});
   final DevicesController controller;
+
+  /// Offered on the root-mismatch outcome; the only way past that dead end.
+  final ResetDatasetAction? onResetDataset;
 
   @override
   Widget build(BuildContext context) => Card(
@@ -137,6 +141,13 @@ class PairingCard extends StatelessWidget {
             key: Key('pairing-root-mismatch'),
             textAlign: TextAlign.center,
           ),
+          if (onResetDataset != null)
+            FilledButton.icon(
+              key: const Key('reset-dataset'),
+              onPressed: controller.busy ? null : () => _confirmReset(context),
+              icon: const Icon(Icons.restart_alt),
+              label: const Text("Reset this device's data"),
+            ),
           TextButton(
             onPressed: controller.beginPairing,
             child: const Text('Pair a different device'),
@@ -154,4 +165,19 @@ class PairingCard extends StatelessWidget {
           ),
         ],
       };
+
+  Future<void> _confirmReset(BuildContext context) async {
+    final action = onResetDataset;
+    if (action == null) return;
+    final confirmed = await ResetDatasetDialog.show(
+      context,
+      lead:
+          "To join the other device's dataset, this device's local data must "
+          'be reset first.',
+      trustedDeviceCount: controller.devices
+          .where((device) => !device.revoked)
+          .length,
+    );
+    if (confirmed) await action();
+  }
 }

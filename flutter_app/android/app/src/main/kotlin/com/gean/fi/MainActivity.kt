@@ -55,6 +55,10 @@ class MainActivity : FlutterActivity() {
                     storeSecret("discovery-secret", secret)
                     result.success(null)
                 }
+                "secureRemoveDiscoverySecret" -> {
+                    removeSecret("discovery-secret")
+                    result.success(null)
+                }
                 else -> result.notImplemented()
             }
         } catch (failure: Exception) {
@@ -119,6 +123,16 @@ class MainActivity : FlutterActivity() {
                 .commit(),
         ) { "secret_persistence_failed" }
         sealed.fill(0)
+    }
+
+    // Absent entry is success: reset must be idempotent.
+    private fun removeSecret(kind: String) {
+        check(
+            getSharedPreferences(SECRET_PREFERENCES, Context.MODE_PRIVATE)
+                .edit()
+                .remove(kind)
+                .commit(),
+        ) { "secret_persistence_failed" }
     }
 
     private fun wrappingKey(): SecretKey {

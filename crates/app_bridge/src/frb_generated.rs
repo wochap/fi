@@ -38,7 +38,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1370578436;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1106612202;
 
 // Section: executor
 
@@ -2110,6 +2110,41 @@ fn wire__crate__api__widgets__reorder_widgets_impl(
         },
     )
 }
+fn wire__crate__api__lifecycle__reset_dataset_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "reset_dataset",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, crate::api::models::BridgeError>(
+                    (move || async move {
+                        let output_ok = crate::api::lifecycle::reset_dataset().await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
 fn wire__crate__api__pairing__revoke_trusted_device_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -3011,10 +3046,12 @@ impl SseDecode for crate::api::models::BridgeError {
         let mut var_kind = <crate::api::models::BridgeErrorKind>::sse_decode(deserializer);
         let mut var_field = <Option<String>>::sse_decode(deserializer);
         let mut var_message = <String>::sse_decode(deserializer);
+        let mut var_resetResolvable = <bool>::sse_decode(deserializer);
         return crate::api::models::BridgeError {
             kind: var_kind,
             field: var_field,
             message: var_message,
+            reset_resolvable: var_resetResolvable,
         };
     }
 }
@@ -5073,58 +5110,59 @@ fn pde_ffi_dispatcher_primary_impl(
             data_len,
         ),
         54 => wire__crate__api__widgets__reorder_widgets_impl(port, ptr, rust_vec_len, data_len),
-        55 => {
+        55 => wire__crate__api__lifecycle__reset_dataset_impl(port, ptr, rust_vec_len, data_len),
+        56 => {
             wire__crate__api__pairing__revoke_trusted_device_impl(port, ptr, rust_vec_len, data_len)
         }
-        56 => wire__crate__api__pairing__rotate_discovery_secret_impl(
+        57 => wire__crate__api__pairing__rotate_discovery_secret_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        57 => wire__crate__api__lifecycle__set_foreground_impl(port, ptr, rust_vec_len, data_len),
-        58 => wire__crate__api__lifecycle__shutdown_impl(port, ptr, rust_vec_len, data_len),
-        59 => wire__crate__api__pairing__start_pairing_impl(port, ptr, rust_vec_len, data_len),
-        60 => wire__crate__api__pairing__stop_pairing_impl(port, ptr, rust_vec_len, data_len),
-        61 => wire__crate__api__pairing__sync_status_impl(port, ptr, rust_vec_len, data_len),
-        62 => wire__crate__api__pairing__sync_status_stream_impl(port, ptr, rust_vec_len, data_len),
-        63 => wire__crate__api__pairing__trusted_devices_impl(port, ptr, rust_vec_len, data_len),
-        64 => {
+        58 => wire__crate__api__lifecycle__set_foreground_impl(port, ptr, rust_vec_len, data_len),
+        59 => wire__crate__api__lifecycle__shutdown_impl(port, ptr, rust_vec_len, data_len),
+        60 => wire__crate__api__pairing__start_pairing_impl(port, ptr, rust_vec_len, data_len),
+        61 => wire__crate__api__pairing__stop_pairing_impl(port, ptr, rust_vec_len, data_len),
+        62 => wire__crate__api__pairing__sync_status_impl(port, ptr, rust_vec_len, data_len),
+        63 => wire__crate__api__pairing__sync_status_stream_impl(port, ptr, rust_vec_len, data_len),
+        64 => wire__crate__api__pairing__trusted_devices_impl(port, ptr, rust_vec_len, data_len),
+        65 => {
             wire__crate__api__queries__update_computed_field_impl(port, ptr, rust_vec_len, data_len)
         }
-        65 => wire__crate__api__collections__update_field_impl(port, ptr, rust_vec_len, data_len),
-        66 => wire__crate__api__queries__update_query_definition_impl(
+        66 => wire__crate__api__collections__update_field_impl(port, ptr, rust_vec_len, data_len),
+        67 => wire__crate__api__queries__update_query_definition_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        67 => wire__crate__api__collections__update_record_field_impl(
+        68 => wire__crate__api__collections__update_record_field_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        68 => wire__crate__api__widgets__update_widget_impl(port, ptr, rust_vec_len, data_len),
-        69 => wire__crate__api__collections__upsert_enum_option_impl(
+        69 => wire__crate__api__widgets__update_widget_impl(port, ptr, rust_vec_len, data_len),
+        70 => wire__crate__api__collections__upsert_enum_option_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        70 => wire__crate__api__queries__validate_collection_query_impl(
+        71 => wire__crate__api__queries__validate_collection_query_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        71 => wire__crate__api__models__validation_metadata_dto_default_impl(
+        72 => wire__crate__api__models__validation_metadata_dto_default_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        72 => wire__crate__api__widgets__widget_diagnostics_impl(port, ptr, rust_vec_len, data_len),
+        73 => wire__crate__api__widgets__widget_diagnostics_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -5286,6 +5324,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::models::BridgeError {
             self.kind.into_into_dart().into_dart(),
             self.field.into_into_dart().into_dart(),
             self.message.into_into_dart().into_dart(),
+            self.reset_resolvable.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -7131,6 +7170,7 @@ impl SseEncode for crate::api::models::BridgeError {
         <crate::api::models::BridgeErrorKind>::sse_encode(self.kind, serializer);
         <Option<String>>::sse_encode(self.field, serializer);
         <String>::sse_encode(self.message, serializer);
+        <bool>::sse_encode(self.reset_resolvable, serializer);
     }
 }
 

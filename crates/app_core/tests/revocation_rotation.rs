@@ -49,6 +49,9 @@ impl SecureKeyStore for RetentionSwitchKeyStore {
     ) -> Result<(), SecureStoreError> {
         self.inner.store_discovery_group_secret(secret).await
     }
+    async fn remove_discovery_group_secret(&self) -> Result<(), SecureStoreError> {
+        self.inner.remove_discovery_group_secret().await
+    }
     async fn load_previous_discovery_group_secret(
         &self,
     ) -> Result<Option<(u64, DiscoveryGroupSecret)>, SecureStoreError> {

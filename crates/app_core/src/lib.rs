@@ -26,11 +26,11 @@ pub mod values;
 pub mod widget_registry;
 pub mod widgets;
 
-pub use application::{AppCore, AppCoreConfig, RevocationOutcome};
+pub use application::{AppCore, AppCoreConfig, RevocationOutcome, reset_dataset};
 pub use control::{
     DiscoveryGroupMetadata, DiscoveryRotationJournal, DiscoveryRotationStage, LocalIdentityRecord,
-    PairingJournalRecord, PairingJournalStage, PeerConnectionMetadata, PeerTrustRecord, TrustState,
-    TrustedDeviceRecord,
+    PairingJournalRecord, PairingJournalStage, PeerConnectionMetadata, PeerTrustRecord,
+    ResetIntent, TrustState, TrustedDeviceRecord,
 };
 pub use discovery::{
     Clock, DiscoveredEndpoint, DiscoveryAdvertisement, DiscoveryError, DiscoveryEvent,

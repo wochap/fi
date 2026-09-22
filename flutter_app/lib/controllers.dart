@@ -16,34 +16,77 @@ final class BootstrapController extends ChangeNotifier {
   final Future<String> Function() dataDirProvider;
   BootstrapDto? state;
   String? fatalError;
+
+  /// Whether [fatalError] is one a dataset reset resolves (unsupported
+  /// schema, incomplete local store). False for transient failures such as a
+  /// locked keystore, where retry is the right affordance.
+  bool fatalResetResolvable = false;
   bool loading = true;
   bool creating = false;
+  bool resetting = false;
   StreamSubscription<BootstrapDto>? _subscription;
 
   Future<void> start() async {
     loading = true;
-    fatalError = null;
+    _clearFatal();
     notifyListeners();
     try {
       await initializeRust();
       state = await bridge.initialize(await dataDirProvider());
-      await _subscription?.cancel();
-      _subscription = bridge.bootstrapEvents().listen(
-        (value) {
-          state = value;
-          notifyListeners();
-        },
-        onError: (Object error) {
-          fatalError = bridgeMessage(error);
-          notifyListeners();
-        },
-      );
+      await _listen();
     } catch (error) {
-      fatalError = bridgeMessage(error);
+      _setFatal(error);
     } finally {
       loading = false;
       notifyListeners();
     }
+  }
+
+  /// Deliberately abandons this device's local dataset. The bridge stops
+  /// pairing, shuts the core down, resets, and reopens; the returned state
+  /// replaces the current one and the lifecycle stream is re-subscribed
+  /// against the reopened core. Works from a fatal-error state too.
+  Future<void> resetDataset() async {
+    resetting = true;
+    loading = true;
+    notifyListeners();
+    try {
+      state = await bridge.resetDataset();
+      _clearFatal();
+      await _listen();
+    } catch (error) {
+      _setFatal(error);
+    } finally {
+      resetting = false;
+      loading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _listen() async {
+    // Not awaited: the stream is a broadcast source whose cancel may settle
+    // only after the next frame, and nothing here depends on it.
+    unawaited(_subscription?.cancel());
+    _subscription = bridge.bootstrapEvents().listen(
+      (value) {
+        state = value;
+        notifyListeners();
+      },
+      onError: (Object error) {
+        _setFatal(error);
+        notifyListeners();
+      },
+    );
+  }
+
+  void _setFatal(Object error) {
+    fatalError = bridgeMessage(error);
+    fatalResetResolvable = error is BridgeError && error.resetResolvable;
+  }
+
+  void _clearFatal() {
+    fatalError = null;
+    fatalResetResolvable = false;
   }
 
   Future<void> createNewDataset() async {
@@ -380,6 +423,29 @@ final class DevicesController extends ChangeNotifier {
     await refreshDevices();
     syncStatus = await bridge.syncStatus();
     notifyListeners();
+  }
+
+  /// Drops every stream and cached value and starts again, so the controller
+  /// observes the core that replaced the one it was subscribed to (after a
+  /// dataset reset). Safe to call whether or not [start] ran before.
+  Future<void> restart() async {
+    for (final subscription in _subscriptions) {
+      unawaited(subscription.cancel());
+    }
+    _subscriptions.clear();
+    _clock?.cancel();
+    pairing = const PairingStateDto(
+      kind: PairingKindDto.idle,
+      localConfirmed: false,
+      remoteConfirmed: false,
+    );
+    candidates = const [];
+    devices = const [];
+    syncStatus = SyncStatusDto.offline;
+    errorMessage = null;
+    rotationError = null;
+    busy = false;
+    await start();
   }
 
   /// Friendly name of the peer in the current pairing session, resolved from

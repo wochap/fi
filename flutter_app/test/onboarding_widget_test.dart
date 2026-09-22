@@ -71,6 +71,7 @@ final class RootlessBridge implements CollectionBridge {
     throw const BridgeError(
       kind: BridgeErrorKind.lifecycle,
       message: 'A local dataset is required.',
+      resetResolvable: false,
     );
   }
 }

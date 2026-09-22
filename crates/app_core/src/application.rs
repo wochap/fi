@@ -18,7 +18,7 @@ use tokio::sync::{broadcast, mpsc, oneshot, watch};
 use tracing::{error, info, instrument};
 
 use crate::{
-    LocalIdentityRecord,
+    LocalIdentityRecord, ResetIntent,
     adapters::{FileDocumentStore, LocalTransport, SqliteControlStore},
     discovery::DiscoveryGroupSecret,
     error::{AppError, BootstrapError, Result},
@@ -28,7 +28,7 @@ use crate::{
         initialize_generic,
     },
     hlc::{HlcNodeId, HybridLogicalClock, SystemWallTime, WallTime},
-    identity::{DeviceId, DeviceIdentity, SecureKeyStore},
+    identity::{DeviceId, DeviceIdentity, IdentityError, SecureKeyStore},
     pairing::{
         PairingCandidate, PairingEvent, PairingSessionId, PairingState, ProvisioningData,
         RootCompatibility, RootState,
@@ -218,6 +218,7 @@ impl AppCore {
             .await
             .map_err(|error| AppError::Storage(error.to_string()))?;
         let control_store = Arc::new(SqliteControlStore::open(data_dir.join("control.sqlite"))?);
+        resume_reset_if_outstanding(&data_dir, &control_store, Some(key_store.as_ref())).await?;
         let identity = Arc::new(DeviceIdentity::load_or_create(key_store.as_ref()).await?);
         let created_at_ms = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -286,6 +287,7 @@ impl AppCore {
             .await
             .map_err(|e| AppError::Storage(e.to_string()))?;
         let control_store = Arc::new(SqliteControlStore::open(data_dir.join("control.sqlite"))?);
+        resume_reset_if_outstanding(&data_dir, &control_store, None).await?;
         Self::open_with_components(
             data_dir,
             config,
@@ -1891,6 +1893,100 @@ fn command_name(command: &GenericCommand) -> &'static str {
         GenericCommand::UpdateWidget(_) => "update_widget",
         GenericCommand::RemoveWidget { .. } => "remove_widget",
         GenericCommand::ReorderWidgets { .. } => "reorder_widgets",
+    }
+}
+
+/// Deliberately abandons this installation's local copy of its root and
+/// returns the directory to a `NeedsDecision` state, keeping the device
+/// identity. Runs against a closed data directory: no `AppCore` may be live
+/// for `data_dir`.
+///
+/// Crash-safe by write-ahead intent: the marker is committed to
+/// `control.sqlite` before any destructive step, and every opener finishes an
+/// outstanding reset before bootstrap validation runs. `key_store` is `None`
+/// for a local (non-networked) installation, which holds no secrets.
+pub async fn reset_dataset(
+    data_dir: impl AsRef<Path>,
+    key_store: Option<&dyn SecureKeyStore>,
+) -> Result<()> {
+    let data_dir = data_dir.as_ref();
+    tokio::fs::create_dir_all(data_dir)
+        .await
+        .map_err(|error| AppError::Storage(error.to_string()))?;
+    let control_store = SqliteControlStore::open(data_dir.join("control.sqlite"))?;
+    control_store.store_reset_intent(ResetIntent {
+        requested_at_ms: current_time_ms(),
+    })?;
+    info!(event = "dataset_reset_started", data_dir = %data_dir.display());
+    run_reset_steps(data_dir, &control_store, key_store).await
+}
+
+/// Open-time hook: completes an interrupted reset before the document store,
+/// read model, or `Repo` are opened, so a half-deleted dataset is never
+/// validated (or classified for recovery) as if it were intact.
+async fn resume_reset_if_outstanding(
+    data_dir: &Path,
+    control_store: &SqliteControlStore,
+    key_store: Option<&dyn SecureKeyStore>,
+) -> Result<()> {
+    if control_store.load_reset_intent()?.is_none() {
+        return Ok(());
+    }
+    info!(event = "dataset_reset_resumed", data_dir = %data_dir.display());
+    run_reset_steps(data_dir, control_store, key_store).await
+}
+
+/// Destructive steps in D3 order. Each step treats an absent target as
+/// success; any other failure returns immediately with the intent still set so
+/// the next open resumes from here. The final control-store transaction is the
+/// only step that clears the intent.
+async fn run_reset_steps(
+    data_dir: &Path,
+    control_store: &SqliteControlStore,
+    key_store: Option<&dyn SecureKeyStore>,
+) -> Result<()> {
+    if let Some(key_store) = key_store {
+        key_store
+            .remove_discovery_group_secret()
+            .await
+            .map_err(IdentityError::from)?;
+        key_store
+            .remove_previous_discovery_group_secret()
+            .await
+            .map_err(IdentityError::from)?;
+    }
+    remove_dir_if_present(&data_dir.join("automerge/documents")).await?;
+    for name in [
+        "read-model.sqlite",
+        "read-model.sqlite-wal",
+        "read-model.sqlite-shm",
+    ] {
+        remove_file_if_present(&data_dir.join(name)).await?;
+    }
+    control_store.complete_reset()?;
+    info!(event = "dataset_reset_completed", data_dir = %data_dir.display());
+    Ok(())
+}
+
+async fn remove_dir_if_present(path: &Path) -> Result<()> {
+    match tokio::fs::remove_dir_all(path).await {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(AppError::Storage(format!(
+            "could not remove {}: {error}",
+            path.display()
+        ))),
+    }
+}
+
+async fn remove_file_if_present(path: &Path) -> Result<()> {
+    match tokio::fs::remove_file(path).await {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(AppError::Storage(format!(
+            "could not remove {}: {error}",
+            path.display()
+        ))),
     }
 }
 

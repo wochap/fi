@@ -10,6 +10,10 @@ import 'package:flutter/services.dart';
 abstract interface class CollectionBridge {
   Future<BootstrapDto> initialize(String dataDir);
   Future<BootstrapDto> createNewDataset();
+
+  /// Deliberate local dataset reset; see `lifecycle.resetDataset`. Returns the
+  /// post-reset bootstrap state, normally `needsDecision`.
+  Future<BootstrapDto> resetDataset();
   Future<ProjectionDto> projectionState();
   Stream<BootstrapDto> bootstrapEvents();
   Stream<ProjectionDto> projectionEvents();
@@ -126,6 +130,18 @@ final class RustCollectionBridge implements CollectionBridge {
 
   @override
   Future<BootstrapDto> createNewDataset() => collections.createNewDataset();
+  @override
+  Future<BootstrapDto> resetDataset() async {
+    final state = await lifecycle.resetDataset();
+    // Rust cleared its (in-memory, on Android) key store; the platform copy
+    // that seeds it on the next launch must go too, or the abandoned group's
+    // secret would be re-injected.
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      await _platform.invokeMethod<void>('secureRemoveDiscoverySecret');
+    }
+    return state;
+  }
+
   @override
   Future<ProjectionDto> projectionState() => lifecycle.projectionState();
   @override

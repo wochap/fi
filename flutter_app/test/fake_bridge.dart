@@ -125,6 +125,21 @@ final class FakeCollectionBridge implements CollectionBridge {
   }
 
   @override
+  Future<BootstrapDto> resetDataset() async {
+    pairingCalls.add('resetDataset');
+    _fail();
+    bootstrap = const BootstrapDto(kind: BootstrapKindDto.needsDecision);
+    devices.clear();
+    pairing = const PairingStateDto(
+      kind: PairingKindDto.idle,
+      localConfirmed: false,
+      remoteConfirmed: false,
+    );
+    bootstrapController.add(bootstrap);
+    return bootstrap;
+  }
+
+  @override
   Future<ProjectionDto> projectionState() async => projection;
   @override
   Stream<BootstrapDto> bootstrapEvents() => bootstrapController.stream;
@@ -648,6 +663,7 @@ final class FakeCollectionBridge implements CollectionBridge {
       throw BridgeError(
         kind: BridgeErrorKind.validation,
         message: 'The selected widget no longer exists.',
+        resetResolvable: false,
       );
     }
     return _evaluate(definition);

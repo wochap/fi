@@ -186,6 +186,11 @@ pub trait SecureKeyStore: Send + Sync + 'static {
         &self,
         secret: &DiscoveryGroupSecret,
     ) -> Result<(), SecureStoreError>;
+    /// Removes the current discovery-group secret. Required (no default): a
+    /// keystore that silently keeps the secret after a dataset reset would
+    /// leave the device able to answer discovery for a group it has left.
+    /// An absent secret is success.
+    async fn remove_discovery_group_secret(&self) -> Result<(), SecureStoreError>;
     async fn load_previous_discovery_group_secret(
         &self,
     ) -> Result<Option<(u64, DiscoveryGroupSecret)>, SecureStoreError> {
@@ -350,6 +355,21 @@ impl SecureKeyStore for LinuxSecretServiceKeyStore {
         Ok(())
     }
 
+    async fn remove_discovery_group_secret(&self) -> Result<(), SecureStoreError> {
+        use linux_secret_service::{Session, attributes, map_error};
+
+        let session = Session::connect().await?;
+        let collection = session.unlocked_collection().await?;
+        let items = collection
+            .search_items(attributes(&self.application_id, DISCOVERY_SECRET_KIND))
+            .await
+            .map_err(map_error)?;
+        for item in items {
+            item.delete().await.map_err(map_error)?;
+        }
+        Ok(())
+    }
+
     async fn load_previous_discovery_group_secret(
         &self,
     ) -> Result<Option<(u64, DiscoveryGroupSecret)>, SecureStoreError> {
@@ -461,6 +481,11 @@ impl SecureKeyStore for LinuxSecretServiceKeyStore {
             "Linux Secret Service is unavailable on this platform".into(),
         ))
     }
+    async fn remove_discovery_group_secret(&self) -> Result<(), SecureStoreError> {
+        Err(SecureStoreError::Unavailable(
+            "Linux Secret Service is unavailable on this platform".into(),
+        ))
+    }
     async fn load_previous_discovery_group_secret(
         &self,
     ) -> Result<Option<(u64, DiscoveryGroupSecret)>, SecureStoreError> {
@@ -549,6 +574,13 @@ impl SecureKeyStore for InMemorySecureKeyStore {
         Ok(())
     }
 
+    async fn remove_discovery_group_secret(&self) -> Result<(), SecureStoreError> {
+        *self.discovery_secret.lock().map_err(|_| {
+            SecureStoreError::Operation("in-memory discovery lock poisoned".into())
+        })? = None;
+        Ok(())
+    }
+
     async fn load_previous_discovery_group_secret(
         &self,
     ) -> Result<Option<(u64, DiscoveryGroupSecret)>, SecureStoreError> {
@@ -597,6 +629,9 @@ impl SecureKeyStore for UnavailableSecureKeyStore {
     ) -> Result<(), SecureStoreError> {
         Err(self.0.clone())
     }
+    async fn remove_discovery_group_secret(&self) -> Result<(), SecureStoreError> {
+        Err(self.0.clone())
+    }
     async fn load_previous_discovery_group_secret(
         &self,
     ) -> Result<Option<(u64, DiscoveryGroupSecret)>, SecureStoreError> {
@@ -632,6 +667,20 @@ mod tests {
             store.load_discovery_group_secret().await.unwrap(),
             Some(group)
         );
+    }
+
+    #[tokio::test]
+    async fn removing_the_group_secret_keeps_the_device_key() {
+        let store = InMemorySecureKeyStore::empty();
+        let identity = DeviceIdentity::load_or_create(&store).await.unwrap();
+        let group = DiscoveryGroupSecret::from_bytes([9; 32]);
+        store.store_discovery_group_secret(&group).await.unwrap();
+        store.remove_discovery_group_secret().await.unwrap();
+        assert_eq!(store.load_discovery_group_secret().await.unwrap(), None);
+        // Absent secret: removal is still success.
+        store.remove_discovery_group_secret().await.unwrap();
+        let reloaded = DeviceIdentity::load_or_create(&store).await.unwrap();
+        assert_eq!(reloaded.id(), identity.id());
     }
 
     #[test]

@@ -1,6 +1,4 @@
-use std::sync::OnceLock;
-
-use std::{net::SocketAddr, sync::Arc};
+use std::{net::SocketAddr, path::PathBuf, sync::Arc, sync::OnceLock};
 
 use app_core::{
     AppCore, AppCoreConfig, DiscoveryGroupSecret, DomainKind, InMemorySecureKeyStore,
@@ -17,16 +15,43 @@ use crate::{
     frb_generated::StreamSink,
 };
 
-static CORE: OnceLock<RwLock<Option<AppCore>>> = OnceLock::new();
+/// How the process core was (last) opened. Kept next to the core so a dataset
+/// reset reopens the exact directory and key store initialization used and
+/// never takes a path from Dart.
+#[frb(ignore)]
+#[derive(Clone)]
+enum OpenMode {
+    Local,
+    Networked(Arc<dyn SecureKeyStore>),
+}
 
-fn process_core() -> &'static RwLock<Option<AppCore>> {
-    CORE.get_or_init(|| RwLock::new(None))
+#[frb(ignore)]
+#[derive(Clone)]
+struct OpenTarget {
+    data_dir: PathBuf,
+    mode: OpenMode,
+}
+
+#[frb(ignore)]
+#[derive(Default)]
+struct ProcessSlot {
+    core: Option<AppCore>,
+    /// Set on every initialization attempt, including a failed one, so reset
+    /// can run against a directory whose open never succeeded.
+    target: Option<OpenTarget>,
+}
+
+static SLOT: OnceLock<RwLock<ProcessSlot>> = OnceLock::new();
+
+fn process_slot() -> &'static RwLock<ProcessSlot> {
+    SLOT.get_or_init(|| RwLock::new(ProcessSlot::default()))
 }
 
 pub(crate) async fn core() -> Result<AppCore, BridgeError> {
-    process_core()
+    process_slot()
         .read()
         .await
+        .core
         .clone()
         .ok_or_else(|| BridgeError::lifecycle("The local collection service is not initialized."))
 }
@@ -42,26 +67,55 @@ pub fn init_app() {
     flutter_rust_bridge::setup_default_user_utils();
 }
 
-pub async fn initialize(data_dir: String) -> Result<BootstrapDto, BridgeError> {
+#[frb(ignore)]
+async fn open_core(target: &OpenTarget) -> Result<AppCore, BridgeError> {
+    match &target.mode {
+        OpenMode::Local => AppCore::open(target.data_dir.clone()).await,
+        OpenMode::Networked(key_store) => AppCore::open_networked(
+            target.data_dir.clone(),
+            key_store.clone(),
+            SocketAddr::from(([0, 0, 0, 0], 0)),
+            AppCoreConfig::default(),
+            QuinnTransportConfig::default(),
+        )
+        .await
+        .inspect_err(|error| {
+            tracing::error!(event = "bootstrap_error", error = %error, "networked core failed to open")
+        }),
+    }
+    .map_err(BridgeError::from)
+}
+
+#[frb(ignore)]
+async fn initialize_with(data_dir: String, mode: OpenMode) -> Result<BootstrapDto, BridgeError> {
     if data_dir.trim().is_empty() {
         return Err(BridgeError::initialization(
             "An application data directory is required.",
         ));
     }
-    let mut slot = process_core().write().await;
-    if let Some(core) = slot.as_ref() {
+    let mut slot = process_slot().write().await;
+    if let Some(core) = slot.core.as_ref() {
         return Ok(BootstrapDto::from_core(core.lifecycle_state()));
     }
-    let core = AppCore::open(data_dir).await.map_err(BridgeError::from)?;
+    let target = OpenTarget {
+        data_dir: PathBuf::from(data_dir),
+        mode,
+    };
+    slot.target = Some(target.clone());
+    let core = open_core(&target).await?;
     let state = BootstrapDto::from_core(core.lifecycle_state());
-    *slot = Some(core);
+    slot.core = Some(core);
     Ok(state)
 }
 
+pub async fn initialize(data_dir: String) -> Result<BootstrapDto, BridgeError> {
+    initialize_with(data_dir, OpenMode::Local).await
+}
+
 pub async fn initialize_desktop_networked(data_dir: String) -> Result<BootstrapDto, BridgeError> {
-    initialize_networked(
+    initialize_with(
         data_dir,
-        Arc::new(LinuxSecretServiceKeyStore::new("com.gean.fi")),
+        OpenMode::Networked(Arc::new(LinuxSecretServiceKeyStore::new("com.gean.fi"))),
     )
     .await
 }
@@ -84,36 +138,33 @@ pub async fn initialize_android_networked(
             .await
             .map_err(|_| BridgeError::initialization("Android secure storage is unavailable."))?;
     }
-    initialize_networked(data_dir, store).await
+    initialize_with(data_dir, OpenMode::Networked(store)).await
 }
 
-async fn initialize_networked(
-    data_dir: String,
-    key_store: Arc<dyn SecureKeyStore>,
-) -> Result<BootstrapDto, BridgeError> {
-    if data_dir.trim().is_empty() {
-        return Err(BridgeError::initialization(
-            "An application data directory is required.",
-        ));
+/// Deliberately abandons this device's local dataset and reopens the core in
+/// `NeedsDecision`. Stops pairing and shuts the live core down first; works
+/// equally when the last initialization failed (schema cliff), since the
+/// directory and key store are remembered from that attempt.
+pub async fn reset_dataset() -> Result<BootstrapDto, BridgeError> {
+    let mut slot = process_slot().write().await;
+    let target = slot.target.clone().ok_or_else(|| {
+        BridgeError::lifecycle("The local collection service was never initialized.")
+    })?;
+    if let Some(core) = slot.core.take() {
+        // Local cores have no pairing; ignore that refusal.
+        let _ = core.stop_pairing().await;
+        core.shutdown().await.map_err(BridgeError::from)?;
     }
-    let mut slot = process_core().write().await;
-    if let Some(core) = slot.as_ref() {
-        return Ok(BootstrapDto::from_core(core.lifecycle_state()));
-    }
-    let core = AppCore::open_networked(
-        data_dir,
-        key_store,
-        SocketAddr::from(([0, 0, 0, 0], 0)),
-        AppCoreConfig::default(),
-        QuinnTransportConfig::default(),
-    )
-    .await
-    .inspect_err(|error| {
-        tracing::error!(event = "bootstrap_error", error = %error, "networked core failed to open")
-    })
-    .map_err(BridgeError::from)?;
+    let key_store = match &target.mode {
+        OpenMode::Local => None,
+        OpenMode::Networked(key_store) => Some(key_store.as_ref()),
+    };
+    app_core::reset_dataset(&target.data_dir, key_store)
+        .await
+        .map_err(BridgeError::from)?;
+    let core = open_core(&target).await?;
     let state = BootstrapDto::from_core(core.lifecycle_state());
-    *slot = Some(core);
+    slot.core = Some(core);
     Ok(state)
 }
 
@@ -126,7 +177,7 @@ pub async fn projection_state() -> Result<ProjectionDto, BridgeError> {
 }
 
 pub async fn shutdown() -> Result<(), BridgeError> {
-    let app = process_core().write().await.take();
+    let app = process_slot().write().await.core.take();
     if let Some(app) = app {
         app.shutdown().await.map_err(BridgeError::from)?;
     }
@@ -236,10 +287,14 @@ mod tests {
 
     use crate::api::{collections, models::BootstrapKindDto};
 
-    use super::{core, initialize, shutdown};
+    use super::{core, initialize, reset_dataset, shutdown};
+
+    /// Bridge tests share one process slot; serialize the ones that use it.
+    static SLOT_GUARD: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
     #[tokio::test]
     async fn delegates_commands_and_stream_sources_reconnect() {
+        let _guard = SLOT_GUARD.lock().await;
         let directory = tempfile::tempdir().unwrap();
         let initial = initialize(directory.path().to_string_lossy().into_owned())
             .await
@@ -290,6 +345,43 @@ mod tests {
             .await
             .unwrap_err();
         assert_eq!(error.kind, crate::api::models::BridgeErrorKind::Validation);
+        shutdown().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn reset_reopens_in_needs_decision_with_and_without_a_live_core() {
+        let _guard = SLOT_GUARD.lock().await;
+        let directory = tempfile::tempdir().unwrap();
+        let data_dir = directory.path().to_string_lossy().into_owned();
+
+        // Live core in Ready: reset lands in NeedsDecision and later calls use
+        // the reopened core.
+        initialize(data_dir.clone()).await.unwrap();
+        let ready = collections::create_new_dataset().await.unwrap();
+        assert_eq!(ready.kind, BootstrapKindDto::Ready);
+        let after = reset_dataset().await.unwrap();
+        assert_eq!(after.kind, BootstrapKindDto::NeedsDecision);
+        assert_eq!(
+            core().await.unwrap().lifecycle_state(),
+            app_core::ApplicationState::NeedsDecision
+        );
+
+        // Bootstrap record without its root snapshot: initialization fails
+        // with a reset-resolvable error and reset still works without a live
+        // core.
+        collections::create_new_dataset().await.unwrap();
+        shutdown().await.unwrap();
+        std::fs::remove_dir_all(directory.path().join("automerge/documents")).unwrap();
+
+        let error = initialize(data_dir.clone()).await.unwrap_err();
+        assert!(error.reset_resolvable, "{error:?}");
+        assert!(core().await.is_err());
+        let after = reset_dataset().await.unwrap();
+        assert_eq!(after.kind, BootstrapKindDto::NeedsDecision);
+        assert_eq!(
+            initialize(data_dir).await.unwrap().kind,
+            BootstrapKindDto::NeedsDecision
+        );
         shutdown().await.unwrap();
     }
 }

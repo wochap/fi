@@ -5,6 +5,7 @@ import 'package:fi/controllers.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/collections_page.dart';
 import 'package:fi/pairing_card.dart';
+import 'package:fi/reset_dialog.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -61,6 +62,28 @@ class _CollectionAppState extends State<CollectionApp>
       _devicesStarted = true;
       await devices.start();
     }
+  }
+
+  /// Runs a confirmed dataset reset. The devices controller is restarted
+  /// afterwards so its streams observe the reopened core rather than the one
+  /// the bridge shut down.
+  Future<void> _resetDataset() async {
+    await controller.resetDataset();
+    if (controller.fatalError != null) return;
+    await _setForeground(true);
+    _devicesStarted = true;
+    await devices.restart();
+  }
+
+  Future<void> _confirmResetFromError(BuildContext context) async {
+    final confirmed = await ResetDatasetDialog.show(
+      context,
+      lead:
+          "This device's local data cannot be opened by this version of the "
+          'app. Resetting it lets you create a new dataset or join one from '
+          'another device.',
+    );
+    if (confirmed) await _resetDataset();
   }
 
   @override
@@ -125,10 +148,18 @@ class _CollectionAppState extends State<CollectionApp>
                 const SizedBox(height: 12),
                 Text(message, textAlign: TextAlign.center),
                 const SizedBox(height: 12),
-                FilledButton(
-                  onPressed: () => unawaited(_start()),
-                  child: const Text('Retry'),
-                ),
+                if (controller.fatalResetResolvable)
+                  FilledButton(
+                    key: const Key('reset-dataset'),
+                    onPressed: () => unawaited(_confirmResetFromError(context)),
+                    child: const Text("Reset this device's data"),
+                  )
+                else
+                  FilledButton(
+                    key: const Key('retry-bootstrap'),
+                    onPressed: () => unawaited(_start()),
+                    child: const Text('Retry'),
+                  ),
               ],
             ),
           );
@@ -137,10 +168,12 @@ class _CollectionAppState extends State<CollectionApp>
           BootstrapKindDto.ready => CollectionShell(
             bridge: widget.bridge,
             devices: devices,
+            onResetDataset: _resetDataset,
           ),
           BootstrapKindDto.needsDecision => OnboardingPage(
             controller: controller,
             devices: devices,
+            onResetDataset: _resetDataset,
           ),
           BootstrapKindDto.joining => JoiningSurface(devices: devices),
           BootstrapKindDto.creating => const _CenteredSurface(
@@ -197,10 +230,12 @@ class OnboardingPage extends StatefulWidget {
   const OnboardingPage({
     required this.controller,
     required this.devices,
+    this.onResetDataset,
     super.key,
   });
   final BootstrapController controller;
   final DevicesController devices;
+  final ResetDatasetAction? onResetDataset;
 
   @override
   State<OnboardingPage> createState() => _OnboardingPageState();
@@ -284,7 +319,10 @@ class _OnboardingPageState extends State<OnboardingPage> {
                     const SizedBox(height: 12),
                     if (widget.devices.errorMessage case final error?)
                       _ErrorBanner(error),
-                    PairingCard(controller: widget.devices),
+                    PairingCard(
+                      controller: widget.devices,
+                      onResetDataset: widget.onResetDataset,
+                    ),
                   ],
                 ],
               ),
@@ -300,10 +338,12 @@ class CollectionShell extends StatefulWidget {
   const CollectionShell({
     required this.bridge,
     required this.devices,
+    this.onResetDataset,
     super.key,
   });
   final CollectionBridge bridge;
   final DevicesController devices;
+  final ResetDatasetAction? onResetDataset;
 
   @override
   State<CollectionShell> createState() => _CollectionShellState();
@@ -346,7 +386,10 @@ class _CollectionShellState extends State<CollectionShell> {
             index: selected,
             children: [
               CollectionsPage(controller: controller),
-              DevicesPage(controller: devices),
+              DevicesPage(
+                controller: devices,
+                onResetDataset: widget.onResetDataset,
+              ),
             ],
           );
           if (constraints.maxWidth >= 720) {
@@ -409,8 +452,9 @@ String _statusText(SyncStatusDto status) => switch (status) {
 };
 
 class DevicesPage extends StatelessWidget {
-  const DevicesPage({required this.controller, super.key});
+  const DevicesPage({required this.controller, this.onResetDataset, super.key});
   final DevicesController controller;
+  final ResetDatasetAction? onResetDataset;
 
   @override
   Widget build(BuildContext context) => ListView(
@@ -445,7 +489,7 @@ class DevicesPage extends StatelessWidget {
             ),
           ],
         ),
-      PairingCard(controller: controller),
+      PairingCard(controller: controller, onResetDataset: onResetDataset),
       const SizedBox(height: 24),
       Text('Trusted devices', style: Theme.of(context).textTheme.titleLarge),
       const SizedBox(height: 8),
@@ -482,8 +526,43 @@ class DevicesPage extends StatelessWidget {
             ),
           ),
         ),
+      if (onResetDataset != null) ...[
+        const SizedBox(height: 32),
+        Text('This device', style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 8),
+        const Text(
+          'Abandon the dataset on this device to create a new one or join '
+          "another device's. Your device identity is kept.",
+        ),
+        const SizedBox(height: 8),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: OutlinedButton.icon(
+            key: const Key('reset-dataset'),
+            onPressed: controller.busy ? null : () => _resetDataset(context),
+            icon: const Icon(Icons.restart_alt),
+            label: const Text("Reset this device's data"),
+          ),
+        ),
+      ],
     ],
   );
+
+  Future<void> _resetDataset(BuildContext context) async {
+    final action = onResetDataset;
+    if (action == null) return;
+    final trusted = controller.devices
+        .where((device) => !device.revoked)
+        .length;
+    final confirmed = await ResetDatasetDialog.show(
+      context,
+      lead:
+          'You are about to abandon the dataset on this device and return to '
+          'onboarding.',
+      trustedDeviceCount: trusted,
+    );
+    if (confirmed) await action();
+  }
 
   Future<void> _renameDevice(
     BuildContext context,

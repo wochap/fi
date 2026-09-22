@@ -418,6 +418,7 @@ void main() {
       field: 'query_id',
       message:
           'query_id: returns a record set result but core.aggregate-number accepts scalar',
+      resetResolvable: false,
     );
     await tester.tap(find.byKey(const Key('save-widget')));
     await pumpUntilFound(tester, find.byKey(const Key('widget-editor-error')));

@@ -851,11 +851,21 @@ impl PairingManager {
         else {
             return Ok(false);
         };
-        let mut metadata = self
+        // A secret with no epoch row is an orphan: the key store is host-scoped
+        // while the metadata is dataset-scoped, so a fresh or reset data
+        // directory can meet a secret left by another dataset on this host.
+        // That is "not in a group", not a malformed store.
+        let Some(mut metadata) = self
             .control
             .discovery_metadata()
             .map_err(|error| PairingError::Transport(error.to_string()))?
-            .ok_or(PairingError::Malformed("secret metadata missing"))?;
+        else {
+            tracing::warn!(
+                event = "discovery_secret_orphaned",
+                "discovery secret present without group metadata; treating as not in a group"
+            );
+            return Ok(false);
+        };
         let journal = self
             .control
             .discovery_rotation()

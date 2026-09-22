@@ -109,6 +109,14 @@ pub struct PairingJournalRecord {
     pub updated_at_ms: u64,
 }
 
+/// Durable write-ahead marker for a dataset reset. Written in its own
+/// transaction before any destructive step and cleared in the same transaction
+/// that removes the root-scoped control rows.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ResetIntent {
+    pub requested_at_ms: u64,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct DiscoveryGroupMetadata {
     pub epoch: u64,

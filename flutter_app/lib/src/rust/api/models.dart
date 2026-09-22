@@ -79,10 +79,26 @@ class BridgeError implements FrbException {
   final String? field;
   final String message;
 
-  const BridgeError({required this.kind, this.field, required this.message});
+  /// True when a deliberate dataset reset would resolve this error (an
+  /// unsupported application schema, a bootstrap record without its root,
+  /// snapshots without a record). Keystore, network, and I/O failures are
+  /// never marked, so the shell offers a retry rather than a destructive
+  /// action for them.
+  final bool resetResolvable;
+
+  const BridgeError({
+    required this.kind,
+    this.field,
+    required this.message,
+    required this.resetResolvable,
+  });
 
   @override
-  int get hashCode => kind.hashCode ^ field.hashCode ^ message.hashCode;
+  int get hashCode =>
+      kind.hashCode ^
+      field.hashCode ^
+      message.hashCode ^
+      resetResolvable.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -91,7 +107,8 @@ class BridgeError implements FrbException {
           runtimeType == other.runtimeType &&
           kind == other.kind &&
           field == other.field &&
-          message == other.message;
+          message == other.message &&
+          resetResolvable == other.resetResolvable;
 }
 
 class BridgeErrorEventDto {
