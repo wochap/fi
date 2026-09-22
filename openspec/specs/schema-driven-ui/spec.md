@@ -113,3 +113,33 @@ The generic collection screen SHALL offer a selection mode in which the user sel
 #### Scenario: Single delete unchanged
 - **WHEN** the user taps the delete icon on one record outside selection mode
 - **THEN** the record is deleted immediately with no confirmation dialog
+
+### Requirement: Structured computed-field editor
+Flutter SHALL provide a computed-field editor, reachable from the collection's computed-field list for both creating a new field and editing an existing one, that collects a name and a structured expression through a builder limited to source-field references, typed numeric constants, addition, subtraction, multiplication, division with an output scale and rounding policy, and absolute value. The editor SHALL obtain the output type and nullability from Rust inference on every expression change and display them; the user MUST NOT be asked to choose a declared type. When Rust rejects the expression the editor SHALL show the typed error at the offending node and keep the save action disabled. Saving an existing field SHALL issue an in-place update for its stable ID.
+
+#### Scenario: Build a product of two decimals
+- **WHEN** the user names a field, selects `amount`, chooses `*`, selects `rate`, and both are FixedDecimal
+- **THEN** the editor shows "FixedDecimal, scale (sum of the two scales), may be empty if either source is optional" and enables Save
+
+#### Scenario: Incompatible scales are explained at the node
+- **WHEN** the user adds a scale-two decimal field to a scale-three decimal field
+- **THEN** the editor marks the `+` node with the Rust error, keeps Save disabled, and offers no local guess at a result type
+
+#### Scenario: Division collects its policy
+- **WHEN** the user chooses `/`
+- **THEN** the editor requires an output scale and a rounding choice (reject inexact or round half to even) before the expression is submitted for inference
+
+#### Scenario: Edit an existing computed field
+- **WHEN** the user taps an existing computed field in the list
+- **THEN** the editor opens pre-filled with its name and expression tree, and saving submits an update for the same ID rather than creating a new field
+
+#### Scenario: Definition from an unsupported expression version
+- **WHEN** an existing computed field carries an expression the current client cannot decode
+- **THEN** the list shows it as not editable with its diagnostic and the editor does not open for it
+
+### Requirement: Computed-field explainer
+The computed-field section and editor SHALL include an on-demand explainer, opened from a "?" affordance, that states in plain language that a computed field derives a value from the record's own fields on this device and is never synchronised as data, and that summarises the numeric rules the builder enforces.
+
+#### Scenario: Open the explainer
+- **WHEN** the user taps the "?" next to "Computed fields"
+- **THEN** a dismissible popup shows the explanation and the numeric rules without leaving the dialog

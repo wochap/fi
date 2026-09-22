@@ -49,3 +49,29 @@ Structurally preserved computed definitions that become invalid after synchroniz
 #### Scenario: Source field concurrently removed
 - **WHEN** a computed definition synchronizes concurrently with logical removal of its source field
 - **THEN** the definition and source record data remain preserved while evaluation reports the invalid dependency
+
+### Requirement: Pre-commit expression inference
+The core SHALL expose a read-only operation that, given a collection ID and a candidate computed-field expression, resolves referenced source fields against the active schema and returns either the inferred output type and nullability or the typed, path-addressed validation error, using the same inference rules that `validate_computed_field` applies at commit time. The operation MUST NOT persist anything and MUST reject computed-field references and contextual time nodes exactly as commit-time validation does.
+
+#### Scenario: Inference for a valid multiplication
+- **WHEN** a client submits `amount * rate` where `amount` is a required scale-two FixedDecimal and `rate` is an optional scale-three FixedDecimal
+- **THEN** the core returns output type FixedDecimal with scale five and nullable true, and nothing is written
+
+#### Scenario: Inference surfaces the commit-time error
+- **WHEN** a client submits `amount + count` where `amount` is FixedDecimal and `count` is Integer
+- **THEN** the core returns the validation error at path `$` with the same message that a `CreateComputedField` command for that expression would produce
+
+#### Scenario: Inference rejects computed references
+- **WHEN** a client submits an expression whose `Field` node references a computed field
+- **THEN** the core returns the "computed fields may reference source fields only" error at that node's path
+
+### Requirement: In-place computed-field update
+A computed-field definition SHALL be updatable under its existing stable ID with a new name, expression, declared type and nullability, subject to the same validation as creation, and consumers that reference the ID SHALL observe the new definition after projection without re-binding.
+
+#### Scenario: Edit expression of a referenced field
+- **WHEN** a computed field referenced by a saved query has its expression changed from `abs(amount)` to `amount * 2` and the update validates
+- **THEN** the saved query continues to reference the same ID and its next execution uses the new expression
+
+#### Scenario: Edit that changes the inferred type
+- **WHEN** an update changes an expression whose inferred type is FixedDecimal to one whose inferred type is Duration, and the submitted declared type is the new inferred type
+- **THEN** the update is accepted and the definition's declared type becomes Duration
