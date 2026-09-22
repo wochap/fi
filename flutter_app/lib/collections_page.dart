@@ -2,7 +2,11 @@ import 'dart:async';
 
 import 'package:fi/controllers.dart';
 import 'package:fi/field_registry.dart';
+import 'package:fi/help_button.dart';
+import 'package:fi/help_copy.dart';
 import 'package:fi/src/rust/api/models.dart';
+import 'package:fi/widgets/query_builder.dart';
+import 'package:fi/widgets/query_editor_dialog.dart';
 import 'package:fi/widgets/widget_dashboard.dart';
 import 'package:flutter/material.dart';
 
@@ -397,9 +401,14 @@ class CollectionsPage extends StatelessWidget {
               listenable: controller,
               builder: (context, _) => ListView(
                 children: [
-                  Text(
-                    'Computed fields',
-                    style: Theme.of(context).textTheme.titleMedium,
+                  Row(
+                    children: [
+                      Text(
+                        'Computed fields',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const HelpButton(HelpId.queryComputedFields),
+                    ],
                   ),
                   for (final item in controller.computedFields)
                     ListTile(
@@ -478,20 +487,47 @@ class CollectionsPage extends StatelessWidget {
                     ),
                   ),
                   const Divider(height: 32),
-                  Text(
-                    'Saved queries',
-                    style: Theme.of(context).textTheme.titleMedium,
+                  Row(
+                    children: [
+                      Text(
+                        'Saved queries',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const HelpButton(HelpId.querySavedQueries),
+                    ],
                   ),
                   for (final item in controller.queryDefinitions)
                     ListTile(
+                      key: ValueKey('saved-query-${item.id}'),
                       title: Text(item.name),
-                      subtitle: const Text('Typed collection query'),
-                      trailing: IconButton(
-                        tooltip: 'Remove query',
-                        icon: const Icon(Icons.delete_outline),
-                        onPressed: () => unawaited(
-                          controller.removeQueryDefinition(item.id),
-                        ),
+                      subtitle: Text(describeQuery(item, schema)),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            key: ValueKey('edit-query-${item.id}'),
+                            tooltip: 'Edit query',
+                            icon: const Icon(Icons.edit_outlined),
+                            onPressed: () => unawaited(
+                              showSavedQueryEditor(
+                                context,
+                                controller: controller,
+                                schema: schema,
+                                definition: item,
+                                // Editing in place keeps the id, so every widget that references
+                                // this query evaluates the edited definition.
+                                onSave: controller.updateQueryDefinition,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'Remove query',
+                            icon: const Icon(Icons.delete_outline),
+                            onPressed: () => unawaited(
+                              controller.removeQueryDefinition(item.id),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   Align(
@@ -541,6 +577,105 @@ class CollectionsPage extends StatelessWidget {
     );
   }
 
+  /// How many active records would be marked invalid by this field as it currently stands.
+  ///
+  /// The projected record list is already loaded in full for the collection, so this is a read of
+  /// what is on screen rather than another trip through the bridge. It is a disclosure, not a
+  /// guard: Rust accepts the command either way.
+  int _missingRequiredCount({
+    required bool required,
+    required bool hasDefault,
+    required FieldDefinitionDto? existing,
+  }) {
+    if (!required || hasDefault) return 0;
+    // A brand new field has an id no record can hold a value for yet.
+    if (existing == null) return controller.records.length;
+    return controller.records
+        .where((record) => _recordValue(record, existing.id) == null)
+        .length;
+  }
+
+  /// A schema-metadata slot edited with the very control that edits a record of that type.
+  ///
+  /// A default and a range bound are values of the field's own type, so typing an epoch day or a
+  /// scaled integer by hand was never the right ask. The draft field carries only what the
+  /// renderer needs; [slot] keys the control so switching type or scale rebuilds it empty rather
+  /// than leaving digits that now mean something else.
+  Widget _metadataInput({
+    required String slot,
+    required String label,
+    required HelpId help,
+    required FieldTypeKindDto kind,
+    required int scale,
+    required List<EnumOptionDto> enumOptions,
+    required FieldValueDto? value,
+    required ValueChanged<FieldValueDto?> onChanged,
+  }) => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Expanded(
+        child: KeyedSubtree(
+          key: ValueKey('$slot-$kind-$scale'),
+          child: const FieldRendererRegistry().editor(
+            FieldDefinitionDto(
+              id: slot,
+              name: label,
+              fieldType: FieldTypeDto(
+                kind: kind,
+                scale: kind == FieldTypeKindDto.fixedDecimal ? scale : null,
+              ),
+              // Never required: the slot itself is optional whatever the field demands of records.
+              required_: false,
+              validation: const ValidationMetadataDto(),
+              display: const DisplayMetadataDto(multiline: false),
+              order: 0,
+              deleted: false,
+              enumOptions: enumOptions,
+            ),
+            value,
+            (typed) => onChanged(
+              typed.kind == FieldValueKindDto.null_ ? null : typed,
+            ),
+            label: label,
+            allowClear: true,
+          ),
+        ),
+      ),
+      Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: HelpButton(help),
+      ),
+    ],
+  );
+
+  Future<bool> _confirmInvalidating(BuildContext context, int missing) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        key: const Key('required-confirmation'),
+        title: const Text('Make this field required?'),
+        content: Text(
+          '$missing ${missing == 1 ? 'record has' : 'records have'} no value for this field. '
+          '${missing == 1 ? 'It' : 'They'} will be marked invalid until you fill the field in. '
+          'Nothing is deleted.',
+        ),
+        actions: [
+          TextButton(
+            key: const Key('required-cancel'),
+            onPressed: () => Navigator.pop(dialog, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            key: const Key('required-confirm'),
+            onPressed: () => Navigator.pop(dialog, true),
+            child: const Text('Make required'),
+          ),
+        ],
+      ),
+    );
+    return confirmed ?? false;
+  }
+
   Future<void> _fieldEditor(
     BuildContext context, [
     FieldDefinitionDto? existing,
@@ -550,21 +685,20 @@ class CollectionsPage extends StatelessWidget {
     var required = existing?.required_ ?? false;
     var multiline = existing?.display.multiline ?? false;
     var scale = existing?.fieldType.scale ?? 2;
-    final minimum = TextEditingController(
-      text: existing?.validation.minInteger?.toString() ?? '',
-    );
-    final maximum = TextEditingController(
-      text: existing?.validation.maxInteger?.toString() ?? '',
-    );
+    // Range bounds are compared against the stored integer, which is epoch days for a Date, epoch
+    // milliseconds for a DateTime, and the scaled representation for a FixedDecimal. Holding them
+    // as integers lets the same typed control that edits a record edit the bound.
+    var minimum = existing?.validation.minInteger;
+    var maximum = existing?.validation.maxInteger;
     final minLength = TextEditingController(
       text: existing?.validation.minLength?.toString() ?? '',
     );
     final maxLength = TextEditingController(
       text: existing?.validation.maxLength?.toString() ?? '',
     );
-    final defaultValue = TextEditingController(
-      text: _defaultText(existing?.defaultValue, kind, scale),
-    );
+    var defaultValue = existing?.defaultValue?.kind == FieldValueKindDto.null_
+        ? null
+        : existing?.defaultValue;
     String? error;
     await showDialog<void>(
       context: context,
@@ -599,7 +733,10 @@ class CollectionsPage extends StatelessWidget {
                     onChanged: existing == null
                         ? (value) => setState(() {
                             kind = value!;
-                            defaultValue.clear();
+                            // Default and bounds are typed by the kind, so they cannot survive it.
+                            defaultValue = null;
+                            minimum = null;
+                            maximum = null;
                           })
                         : null,
                   ),
@@ -607,19 +744,29 @@ class CollectionsPage extends StatelessWidget {
                     TextFormField(
                       initialValue: '$scale',
                       keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'Decimal scale',
+                      decoration: labelWithHelp(
+                        'Decimal scale',
+                        HelpId.fieldDecimalScale,
                       ),
-                      onChanged: (value) => scale = int.tryParse(value) ?? 255,
+                      // The scale decides what the stored integer means, so a change to it
+                      // cannot leave a default or a bound behind reading as something else.
+                      onChanged: (value) => setState(() {
+                        scale = int.tryParse(value) ?? 255;
+                        defaultValue = null;
+                        minimum = null;
+                        maximum = null;
+                      }),
                     ),
                   SwitchListTile(
                     title: const Text('Required'),
+                    secondary: const HelpButton(HelpId.fieldRequired),
                     value: required,
                     onChanged: (value) => setState(() => required = value),
                   ),
                   if (kind == FieldTypeKindDto.text) ...[
                     SwitchListTile(
                       title: const Text('Multiline'),
+                      secondary: const HelpButton(HelpId.fieldMultiline),
                       value: multiline,
                       onChanged: (value) => setState(() => multiline = value),
                     ),
@@ -629,8 +776,9 @@ class CollectionsPage extends StatelessWidget {
                           child: TextField(
                             controller: minLength,
                             keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(
-                              labelText: 'Minimum length',
+                            decoration: labelWithHelp(
+                              'Minimum length',
+                              HelpId.fieldMinMaxLength,
                             ),
                           ),
                         ),
@@ -639,8 +787,9 @@ class CollectionsPage extends StatelessWidget {
                           child: TextField(
                             controller: maxLength,
                             keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(
-                              labelText: 'Maximum length',
+                            decoration: labelWithHelp(
+                              'Maximum length',
+                              HelpId.fieldMinMaxLength,
                             ),
                           ),
                         ),
@@ -651,43 +800,68 @@ class CollectionsPage extends StatelessWidget {
                       kind != FieldTypeKindDto.boolean &&
                       kind != FieldTypeKindDto.enum_)
                     Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Expanded(
-                          child: TextField(
-                            controller: minimum,
-                            keyboardType: const TextInputType.numberWithOptions(
-                              signed: true,
-                            ),
-                            decoration: const InputDecoration(
-                              labelText: 'Minimum',
+                          child: _metadataInput(
+                            slot: 'field-minimum',
+                            label: 'Minimum',
+                            help: HelpId.fieldMinMax,
+                            kind: kind,
+                            scale: scale,
+                            enumOptions: existing?.enumOptions ?? const [],
+                            value: _boundValue(minimum, kind, scale),
+                            onChanged: (value) => setState(
+                              () => minimum = value?.integerValue,
                             ),
                           ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
-                          child: TextField(
-                            controller: maximum,
-                            keyboardType: const TextInputType.numberWithOptions(
-                              signed: true,
-                            ),
-                            decoration: const InputDecoration(
-                              labelText: 'Maximum',
+                          child: _metadataInput(
+                            slot: 'field-maximum',
+                            label: 'Maximum',
+                            help: HelpId.fieldMinMax,
+                            kind: kind,
+                            scale: scale,
+                            enumOptions: existing?.enumOptions ?? const [],
+                            value: _boundValue(maximum, kind, scale),
+                            onChanged: (value) => setState(
+                              () => maximum = value?.integerValue,
                             ),
                           ),
                         ),
                       ],
                     ),
-                  TextField(
-                    controller: defaultValue,
-                    decoration: InputDecoration(
-                      labelText: 'Default (optional)',
-                      helperText: kind == FieldTypeKindDto.enum_
-                          ? 'Enum option UUID'
-                          : kind == FieldTypeKindDto.boolean
-                          ? 'true or false'
-                          : null,
-                    ),
+                  _metadataInput(
+                    slot: 'field-default',
+                    label: 'Default (optional)',
+                    help: HelpId.fieldDefault,
+                    kind: kind,
+                    scale: scale,
+                    enumOptions: existing?.enumOptions ?? const [],
+                    value: defaultValue,
+                    onChanged: (value) => setState(() => defaultValue = value),
                   ),
+                  if (_missingRequiredCount(
+                        required: required,
+                        hasDefault: defaultValue != null,
+                        existing: existing,
+                      )
+                      case final missing when missing > 0)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: ListTile(
+                        key: const Key('required-warning'),
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.warning_amber),
+                        title: Text(
+                          '$missing ${missing == 1 ? 'record has' : 'records have'} no value for '
+                          'this field and will be marked invalid until you fill them in. '
+                          'Add a default to avoid this.',
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -700,6 +874,17 @@ class CollectionsPage extends StatelessWidget {
             FilledButton(
               onPressed: () async {
                 final fields = controller.schema?.fields ?? const [];
+                final missing = _missingRequiredCount(
+                  required: required,
+                  hasDefault: defaultValue != null,
+                  existing: existing,
+                );
+                // Rust no longer refuses this, so the disclosure has to happen here, before the
+                // command is sent and with the count the user is about to invalidate.
+                if (missing > 0 &&
+                    !await _confirmInvalidating(context, missing)) {
+                  return;
+                }
                 try {
                   final dto = FieldDefinitionDto(
                     id: existing?.id ?? '',
@@ -711,10 +896,10 @@ class CollectionsPage extends StatelessWidget {
                           : null,
                     ),
                     required_: required,
-                    defaultValue: _parseDefault(defaultValue.text, kind, scale),
+                    defaultValue: defaultValue,
                     validation: ValidationMetadataDto(
-                      minInteger: int.tryParse(minimum.text),
-                      maxInteger: int.tryParse(maximum.text),
+                      minInteger: minimum,
+                      maxInteger: maximum,
                       minLength: int.tryParse(minLength.text),
                       maxLength: int.tryParse(maxLength.text),
                     ),
@@ -884,6 +1069,9 @@ class CollectionsPage extends StatelessWidget {
                         field,
                         values[field.id],
                         (value) => values[field.id] = value,
+                        // A record opened from the list because it is invalid should say which
+                        // field is at fault, not leave the user hunting for it.
+                        errorText: _diagnosticFor(existing, field.id),
                       ),
                     ),
                   if (error != null)
@@ -932,6 +1120,30 @@ class CollectionsPage extends StatelessWidget {
   }
 }
 
+/// The projected diagnostic naming [fieldId], if this record carries one.
+String? _diagnosticFor(RecordDto? record, String fieldId) => record?.diagnostics
+    .where((item) => item.fieldId == fieldId)
+    .map((item) => item.message)
+    .firstOrNull;
+
+/// A stored range bound as a typed value of the field's own kind, so the bound is edited with a
+/// date picker or a decimal box rather than as the raw integer it is compared as.
+FieldValueDto? _boundValue(int? bound, FieldTypeKindDto kind, int scale) {
+  if (bound == null) return null;
+  return FieldValueDto(
+    kind: switch (kind) {
+      FieldTypeKindDto.integer => FieldValueKindDto.integer,
+      FieldTypeKindDto.fixedDecimal => FieldValueKindDto.fixedDecimal,
+      FieldTypeKindDto.date => FieldValueKindDto.date,
+      FieldTypeKindDto.dateTime => FieldValueKindDto.dateTime,
+      FieldTypeKindDto.duration => FieldValueKindDto.duration,
+      // Text, boolean, and enum carry no numeric range; the control is not rendered for them.
+      _ => FieldValueKindDto.null_,
+    },
+    integerValue: bound,
+  );
+}
+
 FieldValueDto? _recordValue(RecordDto record, String fieldId) {
   for (final item in record.values) {
     if (item.fieldId == fieldId) return item.value;
@@ -966,66 +1178,3 @@ ValueTypeDto _queryValueType(FieldTypeDto type) => switch (type.kind) {
   FieldTypeKindDto.enum_ => const ValueTypeDto(kind: ValueTypeKindDto.enum_),
 };
 
-String _defaultText(FieldValueDto? value, FieldTypeKindDto kind, int scale) {
-  if (value == null || value.kind == FieldValueKindDto.null_) return '';
-  if (kind == FieldTypeKindDto.fixedDecimal) {
-    return formatScaled(value.integerValue ?? 0, scale);
-  }
-  if (kind == FieldTypeKindDto.text || kind == FieldTypeKindDto.enum_) {
-    return value.textValue ?? '';
-  }
-  if (kind == FieldTypeKindDto.boolean) return '${value.booleanValue ?? false}';
-  return '${value.integerValue ?? 0}';
-}
-
-FieldValueDto? _parseDefault(String raw, FieldTypeKindDto kind, int scale) {
-  if (raw.trim().isEmpty) return null;
-  final value = switch (kind) {
-    FieldTypeKindDto.text => FieldValueDto(
-      kind: FieldValueKindDto.text,
-      textValue: raw,
-    ),
-    FieldTypeKindDto.integer => FieldValueDto(
-      kind: FieldValueKindDto.integer,
-      integerValue: int.tryParse(raw),
-    ),
-    FieldTypeKindDto.fixedDecimal => FieldValueDto(
-      kind: FieldValueKindDto.fixedDecimal,
-      integerValue: parseScaled(raw, scale),
-    ),
-    FieldTypeKindDto.boolean => FieldValueDto(
-      kind: FieldValueKindDto.boolean,
-      booleanValue: switch (raw.trim().toLowerCase()) {
-        'true' => true,
-        'false' => false,
-        _ => null,
-      },
-    ),
-    FieldTypeKindDto.date => FieldValueDto(
-      kind: FieldValueKindDto.date,
-      integerValue: int.tryParse(raw),
-    ),
-    FieldTypeKindDto.dateTime => FieldValueDto(
-      kind: FieldValueKindDto.dateTime,
-      integerValue: int.tryParse(raw),
-    ),
-    FieldTypeKindDto.duration => FieldValueDto(
-      kind: FieldValueKindDto.duration,
-      integerValue: int.tryParse(raw),
-    ),
-    FieldTypeKindDto.enum_ => FieldValueDto(
-      kind: FieldValueKindDto.enum_,
-      textValue: raw.trim(),
-    ),
-  };
-  if ((kind == FieldTypeKindDto.boolean && value.booleanValue == null) ||
-      (kind != FieldTypeKindDto.text &&
-          kind != FieldTypeKindDto.enum_ &&
-          kind != FieldTypeKindDto.boolean &&
-          value.integerValue == null)) {
-    throw const FormatException(
-      'Default value is invalid for this field type.',
-    );
-  }
-  return value;
-}

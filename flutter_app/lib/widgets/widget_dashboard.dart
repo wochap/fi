@@ -1,8 +1,11 @@
 import 'dart:async';
 
 import 'package:fi/controllers.dart';
-import 'package:fi/exact_format.dart';
+import 'package:fi/help_button.dart';
+import 'package:fi/help_copy.dart';
 import 'package:fi/src/rust/api/models.dart';
+import 'package:fi/widgets/query_builder.dart';
+import 'package:fi/widgets/query_editor_dialog.dart';
 import 'package:fi/widgets/widget_renderers.dart';
 import 'package:flutter/material.dart';
 
@@ -217,26 +220,15 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
   late final CollectionsController controller = widget.controller;
   late final WidgetDefinitionDto? existing = widget.existing;
   late final bool supported;
-  late String widgetType;
   late WidgetSizeDto size;
   final title = TextEditingController();
+
+  /// The whole query, including the widget type that selects its result shape.
+  late QueryBuilderState query;
 
   // Query source: reuse a saved definition or build a new typed one.
   late bool reuseQuery;
   String? savedQueryId;
-  AggregationKindDto aggregation = AggregationKindDto.count;
-  String? operandFieldId;
-  String? categoryFieldId;
-  String? seriesXFieldId;
-  String? seriesYFieldId;
-  BucketPeriodDto? bucket;
-  int outputScale = 2;
-  RoundingPolicyDto rounding = RoundingPolicyDto.halfEven;
-
-  // Optional filter.
-  String? filterFieldId;
-  ComparisonOperatorDto filterOperator = ComparisonOperatorDto.equal;
-  final filterValue = TextEditingController();
 
   // Presentation, kept separate from the query.
   final suffix = TextEditingController();
@@ -247,14 +239,17 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
 
   String? error;
 
+  String get widgetType => query.widgetType;
+
   @override
   void initState() {
     super.initState();
-    widgetType =
+    final initialType =
         existing?.widgetType ??
         (controller.widgetDescriptors.isEmpty
             ? 'core.aggregate-number'
             : controller.widgetDescriptors.first.widgetType);
+    query = QueryBuilderState(widgetType: initialType);
     supported = existing == null
         ? true
         : controller.widgetDescriptors.any(
@@ -277,59 +272,10 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
   @override
   void dispose() {
     title.dispose();
-    filterValue.dispose();
     suffix.dispose();
     axisLabel.dispose();
     super.dispose();
   }
-
-  List<FieldDefinitionDto> get _fields => [
-    ...(controller.schema?.fields ?? const []).where((field) => !field.deleted),
-  ];
-
-  List<FieldDefinitionDto> _fieldsWhere(bool Function(FieldTypeKindDto) test) =>
-      _fields.where((field) => test(field.fieldType.kind)).toList();
-
-  List<FieldDefinitionDto> get _numericFields => _fieldsWhere(
-    (kind) =>
-        kind == FieldTypeKindDto.integer ||
-        kind == FieldTypeKindDto.fixedDecimal ||
-        kind == FieldTypeKindDto.duration,
-  );
-
-  List<FieldDefinitionDto> get _timeFields => _fieldsWhere(
-    (kind) =>
-        kind == FieldTypeKindDto.date || kind == FieldTypeKindDto.dateTime,
-  );
-
-  List<FieldDefinitionDto> get _categoryFields => _fieldsWhere(
-    (kind) =>
-        kind == FieldTypeKindDto.enum_ ||
-        kind == FieldTypeKindDto.text ||
-        kind == FieldTypeKindDto.boolean ||
-        kind == FieldTypeKindDto.date ||
-        kind == FieldTypeKindDto.dateTime,
-  );
-
-  List<FieldDefinitionDto> get _plotFields => _fieldsWhere(
-    (kind) =>
-        kind == FieldTypeKindDto.integer ||
-        kind == FieldTypeKindDto.fixedDecimal ||
-        kind == FieldTypeKindDto.duration ||
-        kind == FieldTypeKindDto.date ||
-        kind == FieldTypeKindDto.dateTime,
-  );
-
-  bool get _isChart => widgetType != 'core.aggregate-number';
-  bool get _isScatter => widgetType == 'core.scatter-plot';
-  bool get _needsAggregation =>
-      widgetType == 'core.aggregate-number' ||
-      widgetType == 'core.bar-chart' ||
-      (widgetType == 'core.line-chart' && bucket != null);
-  bool get _needsSeries =>
-      _isChart &&
-      !(_isScatter ? false : bucket != null) &&
-      (widgetType == 'core.scatter-plot' || widgetType == 'core.line-chart');
 
   /// What still has to be chosen before the form can be submitted.
   String? get _blocker {
@@ -337,27 +283,12 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
     if (reuseQuery) {
       return savedQueryId == null ? 'Choose a saved query.' : null;
     }
-    if (_needsAggregation) {
-      if (aggregation != AggregationKindDto.count && operandFieldId == null) {
-        return 'Choose the field to aggregate.';
-      }
-      if (widgetType != 'core.aggregate-number' && categoryFieldId == null) {
-        return 'Choose the category or period field.';
-      }
-    }
-    if (_needsSeries && (seriesXFieldId == null || seriesYFieldId == null)) {
-      return 'Choose both axes.';
-    }
-    if (widgetType == 'core.bar-chart' &&
-        bucket == null &&
-        categoryFieldId == null) {
-      return 'Choose the category field.';
-    }
-    if (filterFieldId != null && filterValue.text.trim().isEmpty) {
-      return 'Enter the filter value or clear the filter.';
-    }
-    return null;
+    return query.blocker;
   }
+
+  QueryDefinitionDto? get _selectedQuery => controller.queryDefinitions
+      .where((item) => item.id == savedQueryId)
+      .firstOrNull;
 
   @override
   Widget build(BuildContext context) {
@@ -375,7 +306,7 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
                 DropdownButtonFormField<String>(
                   key: const Key('widget-type'),
                   initialValue: widgetType,
-                  decoration: const InputDecoration(labelText: 'Widget type'),
+                  decoration: labelWithHelp('Widget type', HelpId.widgetType),
                   items: [
                     for (final descriptor in controller.widgetDescriptors)
                       DropdownMenuItem(
@@ -384,8 +315,10 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
                       ),
                   ],
                   onChanged: (value) => setState(() {
-                    widgetType = value!;
-                    if (value == 'core.scatter-plot') bucket = null;
+                    query = query.copyWith(
+                      widgetType: value!,
+                      bucket: value == 'core.scatter-plot' ? null : query.bucket,
+                    );
                   }),
                 ),
               ] else ...[
@@ -408,10 +341,11 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
                 key: const Key('reuse-query'),
                 contentPadding: EdgeInsets.zero,
                 title: const Text('Use a saved query'),
+                secondary: const HelpButton(HelpId.widgetUseSavedQuery),
                 value: reuseQuery,
                 onChanged: (value) => setState(() => reuseQuery = value),
               ),
-              if (reuseQuery)
+              if (reuseQuery) ...[
                 DropdownButtonFormField<String>(
                   key: const Key('saved-query'),
                   initialValue:
@@ -429,9 +363,15 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
                       ),
                   ],
                   onChanged: (value) => setState(() => savedQueryId = value),
-                )
-              else if (schema != null)
-                ..._queryBuilder(schema),
+                ),
+                if (_selectedQuery case final selected? when schema != null)
+                  ..._savedQueryActions(schema, selected),
+              ] else if (schema != null)
+                QueryBuilder(
+                  schema: schema,
+                  state: query,
+                  onChanged: (next) => setState(() => query = next),
+                ),
               const Divider(height: 28),
               Text(
                 'Presentation',
@@ -509,177 +449,87 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
     );
   }
 
-  List<Widget> _queryBuilder(CollectionSchemaDto schema) => [
-    Text('Query', style: Theme.of(context).textTheme.titleSmall),
-    if (_needsAggregation) ...[
-      DropdownButtonFormField<AggregationKindDto>(
-        key: const Key('aggregation'),
-        initialValue: aggregation,
-        decoration: const InputDecoration(labelText: 'Aggregation'),
-        items: const [
-          DropdownMenuItem(
-            value: AggregationKindDto.count,
-            child: Text('Count'),
-          ),
-          DropdownMenuItem(value: AggregationKindDto.sum, child: Text('Sum')),
-          DropdownMenuItem(
-            value: AggregationKindDto.average,
-            child: Text('Average'),
-          ),
-          DropdownMenuItem(value: AggregationKindDto.min, child: Text('Min')),
-          DropdownMenuItem(value: AggregationKindDto.max, child: Text('Max')),
-        ],
-        onChanged: (value) => setState(() {
-          aggregation = value ?? aggregation;
-          if (aggregation == AggregationKindDto.count) operandFieldId = null;
-        }),
-      ),
-      if (aggregation != AggregationKindDto.count)
-        _fieldDropdown(
-          // Keyed by the aggregation so switching back to Count clears the displayed operand
-          // instead of leaving a stale choice the form state no longer holds.
-          key: ValueKey('operand-field-$aggregation'),
-          label: 'Field to aggregate',
-          fields: _numericFields,
-          value: operandFieldId,
-          onChanged: (value) => setState(() => operandFieldId = value),
+  /// The selected saved query in words, plus the two ways to change it. Editing in place reaches
+  /// every widget using the query, so the alternative sits beside it rather than behind a menu.
+  List<Widget> _savedQueryActions(
+    CollectionSchemaDto schema,
+    QueryDefinitionDto selected,
+  ) {
+    final used = widgetsUsingQuery(controller, selected.id);
+    return [
+      Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: Text(
+          describeQuery(selected, schema),
+          key: const Key('saved-query-summary'),
+          style: Theme.of(context).textTheme.bodySmall,
         ),
-      // An exact numeric policy is mandatory for Average so no implicit rounding is invented.
-      if (aggregation == AggregationKindDto.average) ...[
-        TextFormField(
-          key: const Key('output-scale'),
-          initialValue: '$outputScale',
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(labelText: 'Output scale'),
-          onChanged: (value) =>
-              setState(() => outputScale = int.tryParse(value) ?? outputScale),
-        ),
-        DropdownButtonFormField<RoundingPolicyDto>(
-          key: const Key('rounding'),
-          initialValue: rounding,
-          decoration: const InputDecoration(labelText: 'Rounding policy'),
-          items: const [
-            DropdownMenuItem(
-              value: RoundingPolicyDto.halfEven,
-              child: Text('Half to even'),
-            ),
-            DropdownMenuItem(
-              value: RoundingPolicyDto.rejectInexact,
-              child: Text('Reject inexact'),
-            ),
-          ],
-          onChanged: (value) => setState(() => rounding = value ?? rounding),
-        ),
-      ],
-    ],
-    if (_isChart && !_isScatter) ...[
-      _fieldDropdown(
-        // Keyed by the bucket choice: switching buckets swaps the allowed field kinds, so the
-        // previous selection must not linger on screen.
-        key: ValueKey('category-field-$bucket'),
-        label: bucket == null ? 'Category field' : 'Period field',
-        fields: bucket == null ? _categoryFields : _timeFields,
-        value: categoryFieldId,
-        onChanged: (value) => setState(() => categoryFieldId = value),
       ),
-      if (!_isScatter)
-        DropdownButtonFormField<BucketPeriodDto?>(
-          key: const Key('bucket-period'),
-          initialValue: bucket,
-          decoration: const InputDecoration(labelText: 'Time bucket'),
-          items: const [
-            DropdownMenuItem(value: null, child: Text('None')),
-            DropdownMenuItem(value: BucketPeriodDto.day, child: Text('Day')),
-            DropdownMenuItem(value: BucketPeriodDto.week, child: Text('Week')),
-            DropdownMenuItem(
-              value: BucketPeriodDto.month,
-              child: Text('Month'),
-            ),
-            DropdownMenuItem(value: BucketPeriodDto.year, child: Text('Year')),
-          ],
-          onChanged: widgetType == 'core.scatter-plot'
-              ? null
-              : (value) => setState(() {
-                  bucket = value;
-                  if (value != null) categoryFieldId = null;
-                }),
-        ),
-    ],
-    if (_needsSeries) ...[
-      _fieldDropdown(
-        key: const Key('series-x'),
-        label: 'X axis',
-        fields: _plotFields,
-        value: seriesXFieldId,
-        onChanged: (value) => setState(() => seriesXFieldId = value),
+      Text(
+        switch (used) {
+          0 => 'Used by no widgets',
+          1 => 'Used by 1 widget',
+          _ => 'Used by $used widgets',
+        },
+        key: const Key('saved-query-usage'),
+        style: Theme.of(context).textTheme.bodySmall,
       ),
-      _fieldDropdown(
-        key: const Key('series-y'),
-        label: 'Y axis',
-        fields: _numericFields,
-        value: seriesYFieldId,
-        onChanged: (value) => setState(() => seriesYFieldId = value),
-      ),
-    ],
-    const Divider(height: 20),
-    _fieldDropdown(
-      key: const Key('filter-field'),
-      label: 'Filter field (optional)',
-      fields: _fields,
-      value: filterFieldId,
-      allowClear: true,
-      onChanged: (value) => setState(() => filterFieldId = value),
-    ),
-    if (filterFieldId != null) ...[
-      DropdownButtonFormField<ComparisonOperatorDto>(
-        key: const Key('filter-operator'),
-        initialValue: filterOperator,
-        decoration: const InputDecoration(labelText: 'Filter operator'),
-        items: const [
-          DropdownMenuItem(
-            value: ComparisonOperatorDto.equal,
-            child: Text('equals'),
+      Row(
+        children: [
+          TextButton(
+            key: const Key('edit-saved-query'),
+            onPressed: () =>
+                unawaited(_editSavedQuery(schema, selected, asNew: false)),
+            child: const Text('Edit this query'),
           ),
-          DropdownMenuItem(
-            value: ComparisonOperatorDto.notEqual,
-            child: Text('is not'),
-          ),
-          DropdownMenuItem(
-            value: ComparisonOperatorDto.greaterThan,
-            child: Text('greater than'),
-          ),
-          DropdownMenuItem(
-            value: ComparisonOperatorDto.greaterThanOrEqual,
-            child: Text('at least'),
-          ),
-          DropdownMenuItem(
-            value: ComparisonOperatorDto.lessThan,
-            child: Text('less than'),
-          ),
-          DropdownMenuItem(
-            value: ComparisonOperatorDto.lessThanOrEqual,
-            child: Text('at most'),
+          TextButton(
+            key: const Key('save-query-as-new'),
+            onPressed: () =>
+                unawaited(_editSavedQuery(schema, selected, asNew: true)),
+            child: const Text('Save as new'),
           ),
         ],
-        onChanged: (value) =>
-            setState(() => filterOperator = value ?? filterOperator),
       ),
-      TextField(
-        key: const Key('filter-value'),
-        controller: filterValue,
-        decoration: const InputDecoration(labelText: 'Filter value'),
-        onChanged: (_) => setState(() {}),
+    ];
+  }
+
+  Future<void> _editSavedQuery(
+    CollectionSchemaDto schema,
+    QueryDefinitionDto selected, {
+    required bool asNew,
+  }) async {
+    await showDialog<bool>(
+      context: context,
+      builder: (dialog) => QueryEditorDialog(
+        schema: schema,
+        heading: asNew ? 'Save as new query' : 'Edit query',
+        initialName: asNew ? '${selected.name} copy' : selected.name,
+        initialState: QueryBuilderState.fromDefinition(selected, schema),
+        // Saving as new starts from the same contents but must not inherit the id.
+        existing: asNew ? null : selected,
+        order: controller.queryDefinitions.length,
+        referencingWidgets: asNew ? 0 : widgetsUsingQuery(controller, selected.id),
+        onSave: (definition) async {
+          if (asNew) {
+            final id = await controller.createQueryDefinition(definition);
+            if (mounted) setState(() => savedQueryId = id);
+          } else {
+            await controller.updateQueryDefinition(definition);
+          }
+        },
       ),
-    ],
-  ];
+    );
+    if (mounted) setState(() {});
+  }
 
   List<Widget> _presentationFields() => switch (widgetType) {
     'core.aggregate-number' => [
       TextField(
         key: const Key('config-suffix'),
         controller: suffix,
-        decoration: const InputDecoration(
-          labelText: 'Unit suffix (optional)',
+        decoration: labelWithHelp(
+          'Unit suffix (optional)',
+          HelpId.widgetUnitSuffix,
           helperText: 'Shown after the exact value, for example "EUR".',
         ),
       ),
@@ -689,13 +539,17 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
         key: const Key('config-show-points'),
         contentPadding: EdgeInsets.zero,
         title: const Text('Show points'),
+        secondary: const HelpButton(HelpId.widgetShowPoints),
         value: showPoints,
         onChanged: (value) => setState(() => showPoints = value),
       ),
       TextField(
         key: const Key('config-axis-label'),
         controller: axisLabel,
-        decoration: const InputDecoration(labelText: 'Y axis label (optional)'),
+        decoration: labelWithHelp(
+          'Y axis label (optional)',
+          HelpId.widgetAxisLabel,
+        ),
       ),
     ],
     'core.bar-chart' => [
@@ -703,13 +557,19 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
         key: const Key('config-bar-width'),
         initialValue: barWidth?.toString() ?? '',
         keyboardType: TextInputType.number,
-        decoration: const InputDecoration(labelText: 'Bar width (optional)'),
+        decoration: labelWithHelp(
+          'Bar width (optional)',
+          HelpId.widgetBarWidth,
+        ),
         onChanged: (value) => setState(() => barWidth = int.tryParse(value)),
       ),
       TextField(
         key: const Key('config-axis-label'),
         controller: axisLabel,
-        decoration: const InputDecoration(labelText: 'Y axis label (optional)'),
+        decoration: labelWithHelp(
+          'Y axis label (optional)',
+          HelpId.widgetAxisLabel,
+        ),
       ),
     ],
     'core.scatter-plot' => [
@@ -717,40 +577,23 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
         key: const Key('config-point-radius'),
         initialValue: pointRadius?.toString() ?? '',
         keyboardType: TextInputType.number,
-        decoration: const InputDecoration(labelText: 'Point radius (optional)'),
+        decoration: labelWithHelp(
+          'Point radius (optional)',
+          HelpId.widgetPointRadius,
+        ),
         onChanged: (value) => setState(() => pointRadius = int.tryParse(value)),
       ),
       TextField(
         key: const Key('config-axis-label'),
         controller: axisLabel,
-        decoration: const InputDecoration(labelText: 'Y axis label (optional)'),
+        decoration: labelWithHelp(
+          'Y axis label (optional)',
+          HelpId.widgetAxisLabel,
+        ),
       ),
     ],
     _ => const [],
   };
-
-  Widget _fieldDropdown({
-    required Key key,
-    required String label,
-    required List<FieldDefinitionDto> fields,
-    required String? value,
-    required ValueChanged<String?> onChanged,
-    bool allowClear = false,
-  }) {
-    final current = fields.any((field) => field.id == value) ? value : null;
-    return DropdownButtonFormField<String>(
-      key: key,
-      initialValue: current,
-      decoration: InputDecoration(labelText: label),
-      items: [
-        if (allowClear)
-          const DropdownMenuItem<String>(value: null, child: Text('None')),
-        for (final field in fields)
-          DropdownMenuItem(value: field.id, child: Text(field.name)),
-      ],
-      onChanged: onChanged,
-    );
-  }
 
   Future<void> _save() async {
     final schema = controller.schema;
@@ -758,7 +601,13 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
     try {
       final queryId = reuseQuery
           ? savedQueryId!
-          : await controller.createQueryDefinition(_queryDefinition(schema));
+          : await controller.createQueryDefinition(
+              query.toDefinition(
+                schema,
+                title.text.trim().isEmpty ? 'Widget query' : title.text.trim(),
+                controller.queryDefinitions.length,
+              ),
+            );
       // Omitting configuration for an unsupported widget leaves its opaque value untouched.
       final configuration = supported ? _configuration() : null;
       if (existing == null) {
@@ -829,180 +678,7 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
 
   WidgetConfigurationDto _emptyConfiguration() =>
       WidgetConfigurationDto(version: 1, body: _emptyStructuredMap());
-
-  QueryDefinitionDto _queryDefinition(CollectionSchemaDto schema) =>
-      QueryDefinitionDto(
-        id: '',
-        collectionId: schema.id,
-        name: title.text.trim().isEmpty ? 'Widget query' : title.text.trim(),
-        queryVersion: 1,
-        query: CollectionQueryDto(
-          collectionId: schema.id,
-          filter: _filter(),
-          grouping: bucket == null || categoryFieldId == null
-              ? null
-              : GroupingDto(
-                  expression: _fieldExpression(categoryFieldId!),
-                  period: bucket!,
-                ),
-          shape: _shape(),
-          sorting: _sorting(),
-          calendar: const CalendarPolicyDto(
-            timezone: 'UTC',
-            weekStart: WeekStartDto.monday,
-          ),
-        ),
-        order: controller.queryDefinitions.length,
-        deleted: false,
-      );
-
-  QueryShapeDto _shape() => switch (widgetType) {
-    'core.scatter-plot' => QueryShapeDto(
-      kind: QueryShapeKindDto.series,
-      x: _fieldExpression(seriesXFieldId!),
-      y: _fieldExpression(seriesYFieldId!),
-      fields: const [],
-    ),
-    'core.line-chart' =>
-      bucket != null
-          ? QueryShapeDto(
-              kind: QueryShapeKindDto.categorySeries,
-              category: _fieldExpression(categoryFieldId!),
-              aggregation: _aggregation(),
-              fields: const [],
-            )
-          : QueryShapeDto(
-              kind: QueryShapeKindDto.series,
-              x: _fieldExpression(seriesXFieldId!),
-              y: _fieldExpression(seriesYFieldId!),
-              fields: const [],
-            ),
-    'core.bar-chart' => QueryShapeDto(
-      kind: QueryShapeKindDto.categorySeries,
-      category: _fieldExpression(categoryFieldId!),
-      aggregation: _aggregation(),
-      fields: const [],
-    ),
-    _ => QueryShapeDto(
-      kind: QueryShapeKindDto.scalar,
-      aggregation: _aggregation(),
-      fields: const [],
-    ),
-  };
-
-  List<SortClauseDto> _sorting() {
-    // A Series is plotted exactly in the order the query returns, so chronological charts need
-    // an explicit ascending sort on the X expression.
-    final x = switch (widgetType) {
-      'core.scatter-plot' => seriesXFieldId,
-      'core.line-chart' => bucket == null ? seriesXFieldId : null,
-      _ => null,
-    };
-    if (x == null) return const [];
-    return [
-      SortClauseDto(
-        expression: _fieldExpression(x),
-        direction: SortDirectionDto.ascending,
-        nullOrder: NullOrderDto.last,
-      ),
-    ];
-  }
-
-  AggregationDto _aggregation() => switch (aggregation) {
-    AggregationKindDto.count => const AggregationDto(
-      kind: AggregationKindDto.count,
-    ),
-    AggregationKindDto.sum => AggregationDto(
-      kind: AggregationKindDto.sum,
-      expression: _fieldExpression(operandFieldId!),
-    ),
-    AggregationKindDto.min => AggregationDto(
-      kind: AggregationKindDto.min,
-      expression: _fieldExpression(operandFieldId!),
-    ),
-    AggregationKindDto.max => AggregationDto(
-      kind: AggregationKindDto.max,
-      expression: _fieldExpression(operandFieldId!),
-    ),
-    AggregationKindDto.average => AggregationDto(
-      kind: AggregationKindDto.average,
-      expression: _fieldExpression(operandFieldId!),
-      outputScale: outputScale,
-      rounding: rounding,
-    ),
-  };
-
-  ExpressionDto? _filter() {
-    final fieldId = filterFieldId;
-    if (fieldId == null) return null;
-    final field = _fields.firstWhere((item) => item.id == fieldId);
-    final constant = _constant(field);
-    if (constant == null) return null;
-    return ExpressionDto(
-      root: 2,
-      nodes: [
-        ExpressionNodeDto(
-          kind: ExpressionKindDto.field,
-          field: FieldReferenceDto(
-            kind: FieldReferenceKindDto.source,
-            id: fieldId,
-          ),
-        ),
-        ExpressionNodeDto(kind: ExpressionKindDto.constant, value: constant),
-        ExpressionNodeDto(
-          kind: ExpressionKindDto.compare,
-          comparisonOperator: filterOperator,
-          left: 0,
-          right: 1,
-        ),
-      ],
-    );
-  }
-
-  TypedValueDto? _constant(FieldDefinitionDto field) {
-    final raw = filterValue.text.trim();
-    final kind = switch (field.fieldType.kind) {
-      FieldTypeKindDto.text => ValueTypeKindDto.text,
-      FieldTypeKindDto.integer => ValueTypeKindDto.integer,
-      FieldTypeKindDto.fixedDecimal => ValueTypeKindDto.fixedDecimal,
-      FieldTypeKindDto.boolean => ValueTypeKindDto.boolean,
-      FieldTypeKindDto.date => ValueTypeKindDto.date,
-      FieldTypeKindDto.dateTime => ValueTypeKindDto.dateTime,
-      FieldTypeKindDto.duration => ValueTypeKindDto.duration,
-      FieldTypeKindDto.enum_ => ValueTypeKindDto.enum_,
-    };
-    final valueType = ValueTypeDto(kind: kind, scale: field.fieldType.scale);
-    return switch (kind) {
-      ValueTypeKindDto.text || ValueTypeKindDto.enum_ => TypedValueDto(
-        valueType: valueType,
-        textValue: raw,
-      ),
-      ValueTypeKindDto.boolean => TypedValueDto(
-        valueType: valueType,
-        booleanValue: switch (raw.toLowerCase()) {
-          'true' => true,
-          'false' => false,
-          _ => null,
-        },
-      ),
-      ValueTypeKindDto.fixedDecimal => TypedValueDto(
-        valueType: valueType,
-        integerValue: parseScaled(raw, field.fieldType.scale ?? 0),
-      ),
-      _ => TypedValueDto(valueType: valueType, integerValue: int.tryParse(raw)),
-    };
-  }
 }
-
-ExpressionDto _fieldExpression(String fieldId) => ExpressionDto(
-  root: 0,
-  nodes: [
-    ExpressionNodeDto(
-      kind: ExpressionKindDto.field,
-      field: FieldReferenceDto(kind: FieldReferenceKindDto.source, id: fieldId),
-    ),
-  ],
-);
 
 StructuredValueDto _emptyStructuredMap() => _structuredMap(const {});
 

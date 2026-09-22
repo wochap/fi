@@ -627,4 +627,179 @@ void main() {
     );
     expect(find.text('Beta'), findsNothing);
   });
+
+  testWidgets('editing a saved query in place keeps the widget referencing it', (
+    tester,
+  ) async {
+    final seeded = await seed(tester);
+    await seeded.controller.createWidget(
+      _widget(
+        collectionId: seeded.collectionId,
+        queryId: seeded.queryId,
+        title: 'Count',
+      ),
+    );
+    await pumpPage(tester, seeded.controller);
+    final widgetId = seeded.controller.widgetDefinitions.single.id;
+    final queriesBefore =
+        seeded.bridge.queryDefinitions[seeded.collectionId]!.length;
+
+    await tester.tap(find.text('Count'));
+    await pumpUntilFound(tester, find.byKey(const Key('edit-saved-query')));
+    // The propagation is disclosed where the decision is made.
+    expect(find.text('Used by 1 widget'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('edit-saved-query')));
+    await pumpUntilFound(tester, find.byKey(const Key('query-editor')));
+    expect(
+      find.byKey(const Key('query-editor-usage')),
+      findsOneWidget,
+    );
+    await tester.tap(find.byKey(const Key('aggregation')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Sum').last);
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('operand-field-AggregationKindDto.sum')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Intensity').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('save-query')));
+    await tester.pumpAndSettle();
+
+    final queries = seeded.bridge.queryDefinitions[seeded.collectionId]!;
+    // An edit is an update, not a new definition.
+    expect(queries, hasLength(queriesBefore));
+    final edited = queries.firstWhere((item) => item.id == seeded.queryId);
+    expect(edited.query!.shape.aggregation?.kind, AggregationKindDto.sum);
+    expect(
+      seeded.bridge.widgetDefinitions[seeded.collectionId]!
+          .firstWhere((item) => item.id == widgetId)
+          .queryId,
+      seeded.queryId,
+    );
+  });
+
+  testWidgets('save as new leaves the original query alone', (tester) async {
+    final seeded = await seed(tester);
+    await seeded.controller.createWidget(
+      _widget(
+        collectionId: seeded.collectionId,
+        queryId: seeded.queryId,
+        title: 'Count',
+      ),
+    );
+    await pumpPage(tester, seeded.controller);
+    final queriesBefore =
+        seeded.bridge.queryDefinitions[seeded.collectionId]!.length;
+
+    await tester.tap(find.text('Count'));
+    await pumpUntilFound(tester, find.byKey(const Key('save-query-as-new')));
+    await tester.tap(find.byKey(const Key('save-query-as-new')));
+    await pumpUntilFound(tester, find.byKey(const Key('query-editor')));
+    await tester.tap(find.byKey(const Key('aggregation')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Sum').last);
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('operand-field-AggregationKindDto.sum')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Intensity').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('save-query')));
+    await tester.pumpAndSettle();
+
+    final queries = seeded.bridge.queryDefinitions[seeded.collectionId]!;
+    expect(queries, hasLength(queriesBefore + 1));
+    final original = queries.firstWhere((item) => item.id == seeded.queryId);
+    expect(original.query!.shape.aggregation?.kind, AggregationKindDto.count);
+
+    // Saving the widget now points it at the copy.
+    await tester.tap(find.byKey(const Key('save-widget')));
+    await tester.pumpAndSettle();
+    expect(
+      seeded.bridge.widgetDefinitions[seeded.collectionId]!.single.queryId,
+      queries.last.id,
+    );
+  });
+
+  testWidgets('a query the builder cannot read stays read-only and deletable', (
+    tester,
+  ) async {
+    final seeded = await seed(tester);
+    await seeded.bridge.createQueryDefinition(
+      QueryDefinitionDto(
+        id: '',
+        collectionId: seeded.collectionId,
+        name: 'Made elsewhere',
+        queryVersion: 1,
+        query: CollectionQueryDto(
+          collectionId: seeded.collectionId,
+          shape: const QueryShapeDto(
+            kind: QueryShapeKindDto.recordSet,
+            fields: [],
+          ),
+          sorting: const [],
+          calendar: const CalendarPolicyDto(
+            timezone: 'UTC',
+            weekStart: WeekStartDto.monday,
+          ),
+        ),
+        order: 1,
+        deleted: false,
+      ),
+    );
+    await seeded.controller.refresh();
+    await pumpPage(tester, seeded.controller);
+
+    await tester.tap(find.text('Queries'));
+    await pumpUntilFound(tester, find.text('Made elsewhere'));
+    final unreadable = seeded.controller.queryDefinitions
+        .firstWhere((item) => item.name == 'Made elsewhere')
+        .id;
+    // Delete stays available even for a query this build cannot edit.
+    expect(find.byTooltip('Remove query'), findsNWidgets(2));
+
+    await tester.tap(find.byKey(ValueKey('edit-query-$unreadable')));
+    await pumpUntilFound(tester, find.byKey(const Key('query-editor')));
+    expect(find.byKey(const Key('query-editor-readonly')), findsOneWidget);
+    expect(find.byKey(const Key('save-query')), findsNothing);
+  });
+
+  testWidgets('the Daily total preset makes a line chart submittable', (
+    tester,
+  ) async {
+    final seeded = await seed(tester);
+    await pumpPage(tester, seeded.controller);
+
+    await tester.tap(find.byKey(const Key('add-widget')));
+    await pumpUntilFound(tester, find.byKey(const Key('widget-type')));
+    await tester.tap(find.byKey(const Key('widget-type')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Line chart').last);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('widget-title')), 'Daily');
+
+    // Group by and the aggregation controls are on screen before any period is chosen.
+    expect(find.byKey(const Key('bucket-period')), findsOneWidget);
+    expect(find.byKey(const Key('aggregation')), findsOneWidget);
+    expect(
+      find.text('Choose a Group by period to aggregate'),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const Key('preset-dailyTotal')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('save-widget')));
+    await pumpUntilFound(tester, find.text('Daily'));
+    await tester.pumpAndSettle();
+
+    final query = seeded.bridge.queryDefinitions[seeded.collectionId]!.last;
+    expect(query.query!.shape.kind, QueryShapeKindDto.categorySeries);
+    expect(query.query!.grouping?.period, BucketPeriodDto.day);
+    expect(query.query!.shape.aggregation?.kind, AggregationKindDto.sum);
+  });
 }

@@ -1,4 +1,6 @@
 import 'package:fi/controllers.dart';
+import 'package:fi/help_button.dart';
+import 'package:fi/help_copy.dart';
 import 'package:fi/reset_dialog.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:flutter/material.dart';
@@ -36,11 +38,17 @@ class PairingCard extends StatelessWidget {
     PairingKindDto.idle => [
       const Text('Pairing is off. Start it only when both devices are nearby.'),
       const SizedBox(height: 12),
-      FilledButton.icon(
-        key: const Key('start-pairing'),
-        onPressed: controller.busy ? null : controller.beginPairing,
-        icon: const Icon(Icons.link),
-        label: const Text('Start pairing'),
+      Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          FilledButton.icon(
+            key: const Key('start-pairing'),
+            onPressed: controller.busy ? null : controller.beginPairing,
+            icon: const Icon(Icons.link),
+            label: const Text('Start pairing'),
+          ),
+          const HelpButton(HelpId.pairingStartPairing),
+        ],
       ),
     ],
     PairingKindDto.discoverable => [
@@ -52,9 +60,16 @@ class PairingCard extends StatelessWidget {
       if (controller.candidates.isEmpty)
         const Text('No nearby pairing candidates yet.')
       else ...[
-        const Text(
-          'Tap Connect on one device only; the other device just waits.',
-          key: Key('single-initiator-hint'),
+        Row(
+          children: [
+            const Expanded(
+              child: Text(
+                'Tap Connect on one device only; the other device just waits.',
+                key: Key('single-initiator-hint'),
+              ),
+            ),
+            const HelpButton(HelpId.pairingSingleInitiator),
+          ],
         ),
         ...controller.candidates.map(
           (candidate) => ListTile(

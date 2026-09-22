@@ -165,7 +165,6 @@ impl GenericCommand {
                 if schema.fields.iter().any(|item| item.id == field.id) {
                     return Err(invalid("field_id", "already exists"));
                 }
-                validate_required_evolution(field, snapshot, schema.id)?;
             }
             Self::UpdateField {
                 collection_id,
@@ -189,7 +188,6 @@ impl GenericCommand {
                         "cannot change a populated field type or decimal scale",
                     ));
                 }
-                validate_required_evolution(field, snapshot, schema.id)?;
             }
             Self::RemoveField {
                 collection_id,
@@ -1474,26 +1472,6 @@ fn active_record(snapshot: &GenericSnapshot, id: RecordId) -> Result<&GenericRec
             Ok(item)
         }
     })
-}
-fn validate_required_evolution(
-    field: &FieldDefinition,
-    snapshot: &GenericSnapshot,
-    collection_id: CollectionSchemaId,
-) -> Result<(), DomainError> {
-    if field.required
-        && field.default.is_none()
-        && snapshot.records.iter().any(|record| {
-            !record.deleted
-                && record.collection_id == collection_id
-                && !record.values.contains_key(&field.id)
-        })
-    {
-        return Err(invalid(
-            "required",
-            "active records require an atomically applicable default",
-        ));
-    }
-    Ok(())
 }
 fn validate_name(value: &str) -> Result<(), DomainError> {
     let len = value.trim().chars().count();

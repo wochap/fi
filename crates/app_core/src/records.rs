@@ -113,7 +113,11 @@ pub fn validate_record(
             record.values.insert(field.id, default.clone());
         }
         match record.values.get(&field.id) {
-            None if field.required => return Err(RecordValidationError::MissingRequired(field.id)),
+            // A default satisfies requiredness even on the projection path, where defaults are not
+            // inserted: the field reads as its default everywhere, so the record is not missing it.
+            None if field.required && field.default.is_none() => {
+                return Err(RecordValidationError::MissingRequired(field.id));
+            }
             Some(value) => field.validate_value(value, false).map_err(|error| {
                 RecordValidationError::InvalidValue {
                     field: field.id,

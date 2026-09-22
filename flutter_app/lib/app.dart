@@ -502,7 +502,30 @@ class _CollectionShellState extends State<CollectionShell> {
         actions: [
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Center(child: Text(_statusText(devices.syncStatus))),
+            child: Center(
+              child: LayoutBuilder(
+                // The full label does not fit a phone-width app bar, so the icon carries the
+                // status there and the label stays reachable as the tooltip.
+                builder: (context, _) {
+                  final wide = MediaQuery.sizeOf(context).width >= 600;
+                  final label = _statusText(devices.syncStatus);
+                  return Tooltip(
+                    message: label,
+                    child: Row(
+                      key: const Key('app-bar-sync-status'),
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(_statusIcon(devices.syncStatus), size: 18),
+                        if (wide) ...[
+                          const SizedBox(width: 6),
+                          Text(label),
+                        ],
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
           ),
         ],
       ),
@@ -570,11 +593,23 @@ class _CollectionShellState extends State<CollectionShell> {
 
 String _statusText(SyncStatusDto status) => switch (status) {
   SyncStatusDto.offline => 'Offline',
-  SyncStatusDto.searching => 'Searching',
+  // Not "Searching": that word belongs to pairing discovery on the pairing card, and the
+  // aggregate status is already `Searching` at boot before the user has touched pairing.
+  SyncStatusDto.searching => 'Looking for paired devices',
   SyncStatusDto.connected => 'Connected',
   SyncStatusDto.syncing => 'Syncing',
   SyncStatusDto.synced => 'Synced',
   SyncStatusDto.error => 'Error',
+};
+
+/// One distinct icon per aggregate status, so the state is readable without the label.
+IconData _statusIcon(SyncStatusDto status) => switch (status) {
+  SyncStatusDto.offline => Icons.cloud_off,
+  SyncStatusDto.searching => Icons.radar,
+  SyncStatusDto.connected => Icons.link,
+  SyncStatusDto.syncing => Icons.sync,
+  SyncStatusDto.synced => Icons.cloud_done,
+  SyncStatusDto.error => Icons.error_outline,
 };
 
 class DevicesPage extends StatelessWidget {
@@ -757,10 +792,7 @@ class _SyncChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Chip(
     key: const Key('sync-status'),
-    avatar: Icon(
-      status == SyncStatusDto.error ? Icons.error_outline : Icons.sync,
-      size: 18,
-    ),
+    avatar: Icon(_statusIcon(status), size: 18),
     label: Text(_statusText(status)),
   );
 }

@@ -171,4 +171,44 @@ void main() {
     expect(find.byKey(const Key('rotation-error')), findsNothing);
     expect(find.textContaining('Revoked'), findsOneWidget);
   });
+
+  testWidgets(
+    'every aggregate status has its own label and icon, and Searching does not '
+    'reuse the pairing word',
+    (tester) async {
+      final bridge = FakeCollectionBridge();
+      await openDevices(tester, bridge);
+
+      const expected = {
+        SyncStatusDto.offline: 'Offline',
+        SyncStatusDto.searching: 'Looking for paired devices',
+        SyncStatusDto.connected: 'Connected',
+        SyncStatusDto.syncing: 'Syncing',
+        SyncStatusDto.synced: 'Synced',
+        SyncStatusDto.error: 'Error',
+      };
+      final icons = <IconData>{};
+      for (final entry in expected.entries) {
+        bridge.status = entry.key;
+        bridge.statusController.add(entry.key);
+        await tester.pumpAndSettle();
+
+        final chip = find.byKey(const Key('sync-status'));
+        expect(chip, findsOneWidget);
+        expect(
+          find.descendant(of: chip, matching: find.text(entry.value)),
+          findsOneWidget,
+          reason: '${entry.key} should read "${entry.value}"',
+        );
+        final icon = tester.widget<Icon>(
+          find.descendant(of: chip, matching: find.byType(Icon)),
+        );
+        icons.add(icon.icon!);
+      }
+      // Six values, six icons: the status is readable without the label.
+      expect(icons, hasLength(expected.length));
+      // The pairing card keeps "Searching" for discovery; the aggregate must not reuse it.
+      expect(find.text('Searching'), findsNothing);
+    },
+  );
 }

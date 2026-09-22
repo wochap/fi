@@ -282,6 +282,13 @@ final class CollectionsController extends ChangeNotifier {
     return id;
   }
 
+  /// Edits a saved query in place. The id is preserved, so every widget referencing it evaluates
+  /// the new definition after the refresh.
+  Future<void> updateQueryDefinition(QueryDefinitionDto definition) async {
+    await bridge.updateQueryDefinition(definition);
+    await refresh();
+  }
+
   Future<void> removeComputedField(String id) async {
     await bridge.removeComputedField(selectedCollectionId!, id);
     await refresh();

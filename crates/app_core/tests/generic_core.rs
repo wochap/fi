@@ -545,3 +545,91 @@ async fn in_memory_two_device_schema_and_record_sync() {
     a.shutdown().await.unwrap();
     b.shutdown().await.unwrap();
 }
+
+#[tokio::test]
+async fn required_may_be_introduced_over_records_that_lack_the_field() {
+    let directory = tempfile::tempdir().unwrap();
+    let app = AppCore::open(directory.path()).await.unwrap();
+    app.create_new_dataset().await.unwrap();
+    let collection = app
+        .create_collection("Headaches".into(), String::new())
+        .await
+        .unwrap();
+    let other = app
+        .create_collection("Meals".into(), String::new())
+        .await
+        .unwrap();
+    let intensity = field("Intensity", FieldType::Integer, false, 0);
+    app.add_field(collection, intensity.clone()).await.unwrap();
+    let sparse = app
+        .create_record(collection, BTreeMap::new())
+        .await
+        .unwrap();
+    let filled = app
+        .create_record(
+            collection,
+            BTreeMap::from([(intensity.id, FieldValue::Integer(7))]),
+        )
+        .await
+        .unwrap();
+
+    // Making it required with no default is accepted; the sparse record becomes invalid instead.
+    let mut required = intensity.clone();
+    required.required = true;
+    app.update_field(collection, required.clone())
+        .await
+        .unwrap();
+
+    let projected = app.record(sparse).unwrap().unwrap();
+    assert!(!projected.valid);
+    let diagnostic = projected
+        .diagnostics
+        .iter()
+        .find(|item| item.kind == "record_validation")
+        .expect("missing-required diagnostic");
+    assert_eq!(diagnostic.field_id, Some(intensity.id));
+    assert!(app.record(filled).unwrap().unwrap().valid);
+
+    // Neither this collection nor any other is blocked by the invalid record.
+    let repaired = app
+        .create_record(
+            collection,
+            BTreeMap::from([(intensity.id, FieldValue::Integer(3))]),
+        )
+        .await
+        .unwrap();
+    assert!(app.record(repaired).unwrap().unwrap().valid);
+    let elsewhere = app.create_record(other, BTreeMap::new()).await.unwrap();
+    assert!(app.record(elsewhere).unwrap().unwrap().valid);
+
+    // Supplying the value repairs the record through ordinary typed editing.
+    app.update_record_field(sparse, collection, intensity.id, FieldValue::Integer(5))
+        .await
+        .unwrap();
+    let repaired_view = app.record(sparse).unwrap().unwrap();
+    assert!(repaired_view.valid);
+    assert!(repaired_view.diagnostics.is_empty());
+
+    // A required field carrying a default leaves records lacking it valid, because the default
+    // satisfies the constraint on read.
+    let mut notes = field("Notes", FieldType::Text, true, 1);
+    notes.default = Some(FieldValue::Text("none".into()));
+    app.add_field(collection, notes.clone()).await.unwrap();
+    for id in [sparse, filled, repaired] {
+        let view = app.record(id).unwrap().unwrap();
+        assert!(view.valid, "record {id:?} should stay valid");
+    }
+
+    // Adding a required field with no default over existing records is accepted too.
+    let mood = field("Mood", FieldType::Text, true, 2);
+    app.add_field(collection, mood.clone()).await.unwrap();
+    let view = app.record(filled).unwrap().unwrap();
+    assert!(!view.valid);
+    assert!(
+        view.diagnostics
+            .iter()
+            .any(|item| item.field_id == Some(mood.id))
+    );
+
+    app.shutdown().await.unwrap();
+}
