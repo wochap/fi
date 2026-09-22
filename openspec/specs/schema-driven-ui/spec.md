@@ -12,9 +12,15 @@ The Flutter application SHALL show active user-defined collections and open a ge
 - **THEN** the screen is constructed from its synchronized schema without a Headache-specific page
 
 ### Requirement: Functional schema editor
-Flutter SHALL provide create, rename, logical-delete, add-field, edit-field, remove-field, enum-option, and reorder workflows for supported schema metadata, while Rust remains the authoritative validator. When the field editor has Required on, no default, and the collection contains active records lacking the field, the editor SHALL show an inline warning stating how many records will become invalid, and the save action SHALL open a confirmation dialog stating that count before the schema command is submitted. The count SHALL be derived from the projected record list already loaded for the collection.
+Flutter SHALL provide create, rename, logical-delete, add-field, edit-field, remove-field, and reorder workflows for supported schema metadata, while Rust remains the authoritative validator. Enum option maintenance SHALL be part of the field editor rather than a separate workflow. When the field editor has Required on, no default, and the collection contains active records lacking the field, the editor SHALL show an inline warning stating how many records will become invalid, and the save action SHALL open a confirmation dialog stating that count before the schema command is submitted. The count SHALL be derived from the projected record list already loaded for the collection.
 
 Schema metadata that holds a value of the field's own type — the default and the minimum and maximum bounds — SHALL be edited with the same typed control the record editor uses for that type, never as the raw stored integer, and each such control SHALL offer an explicit unset state because the slot is optional whatever the field requires of records. Changing the field type or the decimal scale SHALL clear those slots rather than reinterpret them.
+
+Every field kind SHALL be shown to the user by a human label — Text, Integer, Decimal, Boolean, Date, Date & time, Duration, Choice — in the type selector, in the field list, and in any other place a kind is named. Generated identifiers such as `enum_` or `fixedDecimal` MUST NOT appear in the UI.
+
+When the kind is Choice, the field editor SHALL show an inline options section listing the option labels in order with add, rename, remove, and drag reorder. Edits to options SHALL be held in the editor and committed on Save together with the field, for a new field and for an existing one alike; Cancel SHALL discard them. The default selector for a Choice field SHALL offer the options currently held in the editor, including ones not yet saved.
+
+On Save the editor SHALL submit the field definition, then the option changes as individual option commands (create, rename or reorder, remove), then, when the chosen default is an option created by this save, a second field update carrying the option ID returned for it. Options left unchanged SHALL NOT be resubmitted.
 
 #### Scenario: Rust rejects schema edit
 - **WHEN** a submitted field definition violates a core validation rule
@@ -33,8 +39,8 @@ Schema metadata that holds a value of the field's own type — the default and t
 - **THEN** the control is the typed editor for that field — a date picker for a Date, an exact decimal box stating the scale for a FixedDecimal — and the value submitted is the stored integer the bound is compared as, with no epoch number or scaled integer typed by hand
 
 #### Scenario: An optional slot can be left unset
-- **WHEN** the field type is Boolean or Enum, or a date default has already been picked
-- **THEN** the control offers an explicit unset choice, so a boolean default reads None, True, or False, an enum default is chosen by option label with a None entry, and a picked date can be cleared
+- **WHEN** the field type is Boolean or Choice, or a date default has already been picked
+- **THEN** the control offers an explicit unset choice, so a boolean default reads None, True, or False, a Choice default is chosen by option label with a None entry, and a picked date can be cleared
 
 #### Scenario: Retyping a field drops metadata typed for the old type
 - **WHEN** the user changes the field type, or the decimal scale, after entering a default or a bound
@@ -43,6 +49,34 @@ Schema metadata that holds a value of the field's own type — the default and t
 #### Scenario: No confirmation when nothing becomes invalid
 - **WHEN** the user saves a required field with a default, or a required field in a collection with no records lacking it
 - **THEN** the schema command is submitted without a confirmation dialog
+
+#### Scenario: Kind labels are human
+- **WHEN** the user opens the type selector or reads the field list
+- **THEN** kinds read Text, Integer, Decimal, Boolean, Date, Date & time, Duration, and Choice, and a Choice row lists its option labels in order
+
+#### Scenario: Create a Choice field with options and a default in one save
+- **WHEN** the user picks Choice, adds options "Low", "Medium", "High", chooses "Medium" as the default, and taps Save
+- **THEN** the field is created, three option commands follow with orders 0, 1, 2, and a final field update sets the default to the ID returned for "Medium"; the field list then shows "Choice · Low, Medium, High"
+
+#### Scenario: Edit options of an existing Choice field
+- **WHEN** the user renames "Medium" to "Mid", drags "High" above "Low", removes "Low", and taps Save
+- **THEN** exactly three option commands are submitted — a rename for "Mid", a reorder for "High", and a remove for "Low" — and no command is sent for an option that did not change
+
+#### Scenario: Cancel discards option edits
+- **WHEN** the user adds or removes options and taps Cancel
+- **THEN** no field or option command is submitted and the stored options are unchanged
+
+#### Scenario: Removing the default option clears the default
+- **WHEN** the user removes the option currently chosen as the default
+- **THEN** the default selector returns to None before Save
+
+#### Scenario: Option write rejected after the field saved
+- **WHEN** Rust rejects one option command after the field definition was accepted
+- **THEN** the editor stays open with the typed error and the user's option edits intact, and a later Save resubmits only the options that still differ from the stored ones
+
+#### Scenario: Single entry point for options
+- **WHEN** the user looks for a way to edit a Choice field's options
+- **THEN** the only path is opening the field in the field editor; there is no separate options dialog or icon on the field row
 
 ### Requirement: Registry-driven field rendering
 A Flutter field renderer registry SHALL map supported field kinds to editor and display components, and generic forms MUST NOT use domain-specific Headache or Money implementations.
