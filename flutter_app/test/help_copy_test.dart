@@ -7,7 +7,11 @@ void main() {
   test('every help id has reviewable copy', () {
     for (final id in HelpId.values) {
       final entry = helpCopy[id];
-      expect(entry, isNotNull, reason: 'no help copy registered for ${id.name}');
+      expect(
+        entry,
+        isNotNull,
+        reason: 'no help copy registered for ${id.name}',
+      );
       expect(
         entry!.title.trim(),
         isNotEmpty,
@@ -58,6 +62,9 @@ void main() {
 
     expect(find.byKey(const Key('help-dialog')), findsNothing);
     expect(switchValue, isFalse);
-    expect(tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value, isFalse);
+    expect(
+      tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value,
+      isFalse,
+    );
   });
 }

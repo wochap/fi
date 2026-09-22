@@ -156,6 +156,42 @@ final class BootstrapController extends ChangeNotifier {
   }
 }
 
+/// The ID the field editor gives an option that has not been saved yet.
+///
+/// Rust mints the real ID on the first upsert; until then this key stands in for it, including
+/// as the chosen default.
+String tempOptionId(int n) => 'new-$n';
+
+/// Whether [id] was made by [tempOptionId] rather than returned by Rust.
+bool isTempOptionId(String id) => id.startsWith('new-');
+
+/// What one field-editor save has already written, carried across a retry after a failure.
+final class FieldSaveSession {
+  /// The field's ID once it exists, so a retry updates it rather than adding a second field.
+  String? fieldId;
+
+  /// Real option IDs by the temp ID the editor used, for options already created.
+  final Map<String, String> optionIds = {};
+}
+
+FieldDefinitionDto _fieldWith(
+  FieldDefinitionDto field, {
+  required String id,
+  required FieldValueDto? defaultValue,
+  required List<EnumOptionDto> enumOptions,
+}) => FieldDefinitionDto(
+  id: id,
+  name: field.name,
+  fieldType: field.fieldType,
+  required_: field.required_,
+  defaultValue: defaultValue,
+  validation: field.validation,
+  display: field.display,
+  order: field.order,
+  deleted: field.deleted,
+  enumOptions: enumOptions,
+);
+
 final class CollectionsController extends ChangeNotifier {
   CollectionsController(this.bridge);
 
@@ -381,14 +417,137 @@ final class CollectionsController extends ChangeNotifier {
     await refresh();
   }
 
-  Future<void> addField(FieldDefinitionDto field) async {
-    await bridge.addField(selectedCollectionId!, field);
+  Future<String> addField(FieldDefinitionDto field) async {
+    final id = await bridge.addField(selectedCollectionId!, field);
     await refresh();
+    return id;
   }
 
   Future<void> updateField(FieldDefinitionDto field) async {
     await bridge.updateField(selectedCollectionId!, field);
     await refresh();
+  }
+
+  /// Saves a field and its Choice options as the field editor holds them, in one user action.
+  ///
+  /// [options] is the editor's list in display order; an option's `order` is taken from its
+  /// position, and an ID made by [tempOptionId] marks an option that does not exist yet. The
+  /// `enumOptions` on [field] are ignored: the stored field definition carries its options, so
+  /// every field write here resubmits the stored ones and options change only through the
+  /// per-option commands.
+  ///
+  /// A default pointing at a new option cannot be submitted before that option has a real ID, so
+  /// it is held back and written by a second field update once the option exists. Options the
+  /// user did not touch are not resubmitted.
+  ///
+  /// When a command fails after the field was written, the error is rethrown and [session]
+  /// remembers what was already created, so saving again with the same session updates that
+  /// field and those options instead of creating them twice.
+  Future<String> saveFieldWithOptions(
+    FieldDefinitionDto field,
+    List<EnumOptionDto> options, {
+    FieldSaveSession? session,
+  }) async {
+    final collectionId = selectedCollectionId!;
+    final minted = session?.optionIds ?? <String, String>{};
+    String resolve(String id) => minted[id] ?? id;
+    final fieldId = field.id.isEmpty ? (session?.fieldId ?? '') : field.id;
+    final choice = field.fieldType.kind == FieldTypeKindDto.enum_;
+    final chosen = field.defaultValue;
+    final pendingDefault =
+        choice &&
+            chosen?.kind == FieldValueKindDto.enum_ &&
+            isTempOptionId(resolve(chosen?.textValue ?? ''))
+        ? chosen!.textValue
+        : null;
+    final defaultValue = choice && chosen?.kind == FieldValueKindDto.enum_
+        ? FieldValueDto(
+            kind: FieldValueKindDto.enum_,
+            textValue: resolve(chosen!.textValue!),
+          )
+        : chosen;
+    final stored = schema?.fields
+        .where((item) => item.id == fieldId)
+        .firstOrNull;
+    final storedOptions = stored?.enumOptions ?? const <EnumOptionDto>[];
+    try {
+      final submitted = _fieldWith(
+        field,
+        id: fieldId,
+        defaultValue: pendingDefault == null ? defaultValue : null,
+        enumOptions: storedOptions,
+      );
+      final String savedId;
+      if (fieldId.isEmpty) {
+        savedId = await bridge.addField(collectionId, submitted);
+      } else {
+        await bridge.updateField(collectionId, submitted);
+        savedId = fieldId;
+      }
+      session?.fieldId = savedId;
+      if (!choice) return savedId;
+
+      final active = {
+        for (final option in storedOptions)
+          if (!option.deleted) option.id: option,
+      };
+      final kept = {for (final option in options) resolve(option.id)};
+      for (final option in active.values) {
+        if (!kept.contains(option.id)) {
+          await bridge.removeEnumOption(collectionId, savedId, option.id);
+        }
+      }
+      for (final (order, option) in options.indexed) {
+        final id = resolve(option.id);
+        if (isTempOptionId(id)) {
+          minted[option.id] = await bridge.upsertEnumOption(
+            collectionId,
+            savedId,
+            EnumOptionDto(
+              id: '',
+              label: option.label,
+              order: order,
+              deleted: false,
+            ),
+          );
+        } else if (active[id] case final prior?
+            when prior.label != option.label || prior.order != order) {
+          await bridge.upsertEnumOption(
+            collectionId,
+            savedId,
+            EnumOptionDto(
+              id: id,
+              label: option.label,
+              order: order,
+              deleted: false,
+            ),
+          );
+        }
+      }
+
+      if (pendingDefault != null) {
+        // The options just written live inside the stored definition, so the follow-up write
+        // starts from what Rust now holds rather than from the list this call began with.
+        final current = (await bridge.getCollectionSchema(
+          collectionId,
+        ))?.fields.where((item) => item.id == savedId).firstOrNull;
+        await bridge.updateField(
+          collectionId,
+          _fieldWith(
+            field,
+            id: savedId,
+            defaultValue: FieldValueDto(
+              kind: FieldValueKindDto.enum_,
+              textValue: resolve(pendingDefault),
+            ),
+            enumOptions: current?.enumOptions ?? const [],
+          ),
+        );
+      }
+      return savedId;
+    } finally {
+      await refresh();
+    }
   }
 
   Future<void> removeField(String fieldId) async {

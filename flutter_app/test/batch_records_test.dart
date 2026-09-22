@@ -58,7 +58,10 @@ FakeCollectionBridge seeded(int count) {
   return bridge;
 }
 
-Future<void> openCollection(WidgetTester tester, FakeCollectionBridge bridge) async {
+Future<void> openCollection(
+  WidgetTester tester,
+  FakeCollectionBridge bridge,
+) async {
   await tester.pumpWidget(app(bridge));
   await pumpUntilFound(tester, find.text('Headaches'));
   await tester.tap(find.text('Headaches'));

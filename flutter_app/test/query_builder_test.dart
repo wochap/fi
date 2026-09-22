@@ -64,7 +64,10 @@ void expectSameQuery(QueryDefinitionDto actual, QueryDefinitionDto expected) {
   expectSameExpression(left.shape.category, right.shape.category);
   expect(left.shape.fields, right.shape.fields);
   expect(left.shape.aggregation?.kind, right.shape.aggregation?.kind);
-  expect(left.shape.aggregation?.outputScale, right.shape.aggregation?.outputScale);
+  expect(
+    left.shape.aggregation?.outputScale,
+    right.shape.aggregation?.outputScale,
+  );
   expect(left.shape.aggregation?.rounding, right.shape.aggregation?.rounding);
   expectSameExpression(
     left.shape.aggregation?.expression,
@@ -74,7 +77,10 @@ void expectSameQuery(QueryDefinitionDto actual, QueryDefinitionDto expected) {
   for (var i = 0; i < left.sorting.length; i++) {
     expect(left.sorting[i].direction, right.sorting[i].direction);
     expect(left.sorting[i].nullOrder, right.sorting[i].nullOrder);
-    expectSameExpression(left.sorting[i].expression, right.sorting[i].expression);
+    expectSameExpression(
+      left.sorting[i].expression,
+      right.sorting[i].expression,
+    );
   }
 }
 
@@ -143,16 +149,17 @@ void main() {
 
   for (final entry in shapes.entries) {
     for (final filtered in [false, true]) {
-      test(
-        'round trip: ${entry.key}${filtered ? ' with a filter' : ''}',
-        () {
-          final state = filtered ? _withFilter(entry.value) : entry.value;
-          final original = _definition(state);
-          final loaded = QueryBuilderState.fromDefinition(original, schema);
-          expect(loaded, isNotNull, reason: 'builder could not read its own output');
-          expectSameQuery(_definition(loaded!), original);
-        },
-      );
+      test('round trip: ${entry.key}${filtered ? ' with a filter' : ''}', () {
+        final state = filtered ? _withFilter(entry.value) : entry.value;
+        final original = _definition(state);
+        final loaded = QueryBuilderState.fromDefinition(original, schema);
+        expect(
+          loaded,
+          isNotNull,
+          reason: 'builder could not read its own output',
+        );
+        expectSameQuery(_definition(loaded!), original);
+      });
     }
   }
 

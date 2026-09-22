@@ -146,7 +146,7 @@ void main() {
     await settle(tester);
 
     expect(
-      find.text('Result: FixedDecimal, scale 5 · may be empty'),
+      find.text('Result: Decimal, scale 5 · may be empty'),
       findsOneWidget,
     );
     await tester.tap(find.byKey(const Key('save-computed')));

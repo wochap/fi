@@ -240,8 +240,24 @@ final class FakeCollectionBridge implements CollectionBridge {
     changed(id);
   }
 
+  /// Schema commands in call order, for asserting what one editor save submits.
+  ///
+  /// Entries read `addField`, `updateField default=<option id or ->`,
+  /// `upsertEnumOption <id or ->|<label>|<order>`, and `removeEnumOption <id>`.
+  final List<String> schemaCalls = [];
+
+  /// When set, the next option command throws it and changes nothing.
+  Object? nextOptionError;
+
+  void _failOption() {
+    final error = nextOptionError;
+    nextOptionError = null;
+    if (error != null) throw error;
+  }
+
   @override
   Future<String> addField(String collectionId, FieldDefinitionDto field) async {
+    schemaCalls.add('addField');
     final id = field.id.isEmpty ? 'field-${_next++}' : field.id;
     final normalized = _copyField(field, id: id);
     final schema = schemas[collectionId]!;
@@ -260,6 +276,9 @@ final class FakeCollectionBridge implements CollectionBridge {
     String collectionId,
     FieldDefinitionDto field,
   ) async {
+    schemaCalls.add(
+      'updateField default=${field.defaultValue?.textValue ?? '-'}',
+    );
     final schema = schemas[collectionId]!;
     schemas[collectionId] = CollectionSchemaDto(
       id: schema.id,
@@ -307,6 +326,10 @@ final class FakeCollectionBridge implements CollectionBridge {
     String fieldId,
     EnumOptionDto option,
   ) async {
+    _failOption();
+    schemaCalls.add(
+      'upsertEnumOption ${option.id.isEmpty ? '-' : option.id}|${option.label}|${option.order}',
+    );
     final id = option.id.isEmpty ? 'option-${_next++}' : option.id;
     final schema = schemas[collectionId]!;
     final fields = [
@@ -343,6 +366,8 @@ final class FakeCollectionBridge implements CollectionBridge {
     String fieldId,
     String optionId,
   ) async {
+    _failOption();
+    schemaCalls.add('removeEnumOption $optionId');
     final schema = schemas[collectionId]!;
     final fields = [
       for (final field in schema.fields)

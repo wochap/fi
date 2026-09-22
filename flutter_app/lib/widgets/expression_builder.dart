@@ -305,16 +305,16 @@ ExprNode replaceAt(ExprNode root, String path, ExprNode replacement) {
 
 String _parentPath(String path) => path.substring(0, path.lastIndexOf('.'));
 
-/// A human label for an inferred type, e.g. `FixedDecimal, scale 2`.
+/// A human label for an inferred type, e.g. `Decimal, scale 2`, in the words of `fieldKindLabel`.
 String describeValueType(ValueTypeDto type) => switch (type.kind) {
   ValueTypeKindDto.integer => 'Integer',
-  ValueTypeKindDto.fixedDecimal => 'FixedDecimal, scale ${type.scale ?? 0}',
+  ValueTypeKindDto.fixedDecimal => 'Decimal, scale ${type.scale ?? 0}',
   ValueTypeKindDto.duration => 'Duration',
   ValueTypeKindDto.date => 'Date',
-  ValueTypeKindDto.dateTime => 'DateTime',
+  ValueTypeKindDto.dateTime => 'Date & time',
   ValueTypeKindDto.boolean => 'Boolean',
   ValueTypeKindDto.text => 'Text',
-  ValueTypeKindDto.enum_ => 'Enum',
+  ValueTypeKindDto.enum_ => 'Choice',
   ValueTypeKindDto.null_ => 'Empty',
 };
 

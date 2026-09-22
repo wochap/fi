@@ -317,7 +317,9 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
                   onChanged: (value) => setState(() {
                     query = query.copyWith(
                       widgetType: value!,
-                      bucket: value == 'core.scatter-plot' ? null : query.bucket,
+                      bucket: value == 'core.scatter-plot'
+                          ? null
+                          : query.bucket,
                     );
                   }),
                 ),
@@ -508,7 +510,9 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
         // Saving as new starts from the same contents but must not inherit the id.
         existing: asNew ? null : selected,
         order: controller.queryDefinitions.length,
-        referencingWidgets: asNew ? 0 : widgetsUsingQuery(controller, selected.id),
+        referencingWidgets: asNew
+            ? 0
+            : widgetsUsingQuery(controller, selected.id),
         onSave: (definition) async {
           if (asNew) {
             final id = await controller.createQueryDefinition(definition);

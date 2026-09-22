@@ -30,16 +30,14 @@ void main() {
     // A retry that is still locked keeps the explanation and reports why.
     bridge.nextRetryNetworkingError = const BridgeError(
       kind: BridgeErrorKind.secureStoreLocked,
-      message: 'Your login keyring is locked, so secure device networking '
+      message:
+          'Your login keyring is locked, so secure device networking '
           'cannot start. Unlock the keyring and retry.',
       resetResolvable: false,
     );
     await tester.tap(find.byKey(const Key('retry-networking')));
     await tester.pumpAndSettle();
-    expect(
-      find.byKey(const Key('networking-deferred-banner')),
-      findsOneWidget,
-    );
+    expect(find.byKey(const Key('networking-deferred-banner')), findsOneWidget);
     expect(find.byKey(const Key('networking-retry-error')), findsOneWidget);
 
     // After the user unlocks, the retry clears the banner in place.
@@ -56,7 +54,8 @@ void main() {
     final bridge = FakeCollectionBridge()
       ..nextError = const BridgeError(
         kind: BridgeErrorKind.secureStoreLocked,
-        message: 'Your login keyring is locked, so secure device networking '
+        message:
+            'Your login keyring is locked, so secure device networking '
             'cannot start. Unlock the keyring and retry.',
         resetResolvable: false,
       );

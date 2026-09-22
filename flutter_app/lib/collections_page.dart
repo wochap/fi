@@ -371,30 +371,13 @@ class CollectionsPage extends StatelessWidget {
                   return ListTile(
                     key: ValueKey(field.id),
                     title: Text(field.name),
-                    subtitle: Text(
-                      field.fieldType.kind == FieldTypeKindDto.enum_ &&
-                              field.enumOptions.isNotEmpty
-                          ? '${field.fieldType.kind.name} · ${field.enumOptions.where((option) => !option.deleted).map((option) => option.label).join(', ')}'
-                          : field.fieldType.kind.name,
-                    ),
+                    subtitle: Text(_fieldSubtitle(field)),
                     onTap: () => _fieldEditor(dialog, field),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (field.fieldType.kind == FieldTypeKindDto.enum_)
-                          IconButton(
-                            tooltip: 'Edit enum options',
-                            icon: const Icon(Icons.list_alt),
-                            onPressed: () =>
-                                _enumOptionsEditor(dialog, field.id),
-                          ),
-                        IconButton(
-                          tooltip: 'Remove field',
-                          icon: const Icon(Icons.delete_outline),
-                          onPressed: () =>
-                              unawaited(controller.removeField(field.id)),
-                        ),
-                      ],
+                    trailing: IconButton(
+                      tooltip: 'Remove field',
+                      icon: const Icon(Icons.delete_outline),
+                      onPressed: () =>
+                          unawaited(controller.removeField(field.id)),
                     ),
                   );
                 },
@@ -609,7 +592,8 @@ class CollectionsPage extends StatelessWidget {
   /// A default and a range bound are values of the field's own type, so typing an epoch day or a
   /// scaled integer by hand was never the right ask. The draft field carries only what the
   /// renderer needs; [slot] keys the control so switching type or scale rebuilds it empty rather
-  /// than leaving digits that now mean something else.
+  /// than leaving digits that now mean something else. [revision] does the same when the Choice
+  /// options held in the editor change, so the dropdown never keeps an option that is gone.
   Widget _metadataInput({
     required String slot,
     required String label,
@@ -619,12 +603,13 @@ class CollectionsPage extends StatelessWidget {
     required List<EnumOptionDto> enumOptions,
     required FieldValueDto? value,
     required ValueChanged<FieldValueDto?> onChanged,
+    String revision = '',
   }) => Row(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       Expanded(
         child: KeyedSubtree(
-          key: ValueKey('$slot-$kind-$scale'),
+          key: ValueKey('$slot-$kind-$scale-$revision'),
           child: const FieldRendererRegistry().editor(
             FieldDefinitionDto(
               id: slot,
@@ -704,6 +689,27 @@ class CollectionsPage extends StatelessWidget {
     var defaultValue = existing?.defaultValue?.kind == FieldValueKindDto.null_
         ? null
         : existing?.defaultValue;
+    // Choice options are held here until Save, so a new field can get options and a default in
+    // the same step and Cancel leaves the stored options untouched.
+    final options = [
+      for (final option in [
+        ...?existing?.enumOptions.where((option) => !option.deleted),
+      ]..sort(_optionOrder))
+        _DraftOption(option.id, option.label),
+    ];
+    var addedOptions = 0;
+    List<EnumOptionDto> draftOptions() => [
+      for (final (index, option) in options.indexed)
+        EnumOptionDto(
+          id: option.id,
+          label: option.label.text,
+          order: index,
+          deleted: false,
+        ),
+    ];
+    final order = existing?.order ?? controller.schema?.fields.length ?? 0;
+    // Survives a failed save, so retrying updates what the first attempt already created.
+    final session = FieldSaveSession();
     String? error;
     await showDialog<void>(
       context: context,
@@ -731,7 +737,7 @@ class CollectionsPage extends StatelessWidget {
                         .map(
                           (value) => DropdownMenuItem(
                             value: value,
-                            child: Text(value.name),
+                            child: Text(fieldKindLabel(value)),
                           ),
                         )
                         .toList(),
@@ -740,6 +746,7 @@ class CollectionsPage extends StatelessWidget {
                             kind = value!;
                             // Default and bounds are typed by the kind, so they cannot survive it.
                             defaultValue = null;
+                            if (kind != FieldTypeKindDto.enum_) options.clear();
                             minimum = null;
                             maximum = null;
                           })
@@ -836,15 +843,41 @@ class CollectionsPage extends StatelessWidget {
                         ),
                       ],
                     ),
+                  if (kind == FieldTypeKindDto.enum_)
+                    ..._optionsEditor(
+                      options,
+                      onReorder: (from, to) => setState(() {
+                        options.insert(
+                          to > from ? to - 1 : to,
+                          options.removeAt(from),
+                        );
+                      }),
+                      onRenamed: () => setState(() {}),
+                      onRemove: (option) => setState(() {
+                        options.remove(option);
+                        if (defaultValue?.textValue == option.id) {
+                          defaultValue = null;
+                        }
+                      }),
+                      onAdd: () => setState(
+                        () => options.add(
+                          _DraftOption(tempOptionId(++addedOptions), ''),
+                        ),
+                      ),
+                    ),
                   _metadataInput(
                     slot: 'field-default',
                     label: 'Default (optional)',
                     help: HelpId.fieldDefault,
                     kind: kind,
                     scale: scale,
-                    enumOptions: existing?.enumOptions ?? const [],
+                    enumOptions: draftOptions(),
                     value: defaultValue,
                     onChanged: (value) => setState(() => defaultValue = value),
+                    revision: [
+                      for (final option in options)
+                        '${option.id}=${option.label.text}',
+                    ].join('|'),
                   ),
                   if (_missingRequiredCount(
                         required: required,
@@ -876,7 +909,6 @@ class CollectionsPage extends StatelessWidget {
             ),
             FilledButton(
               onPressed: () async {
-                final fields = controller.schema?.fields ?? const [];
                 final missing = _missingRequiredCount(
                   required: required,
                   hasDefault: defaultValue != null,
@@ -907,127 +939,15 @@ class CollectionsPage extends StatelessWidget {
                       maxLength: int.tryParse(maxLength.text),
                     ),
                     display: DisplayMetadataDto(multiline: multiline),
-                    order: existing?.order ?? fields.length,
+                    order: order,
                     deleted: false,
-                    enumOptions: existing?.enumOptions ?? const [],
+                    // Options travel separately; the controller keeps the stored ones here.
+                    enumOptions: const [],
                   );
-                  if (existing == null) {
-                    await controller.addField(dto);
-                  } else {
-                    await controller.updateField(dto);
-                  }
-                  if (dialog.mounted) Navigator.pop(dialog);
-                } catch (failure) {
-                  setState(() => error = bridgeMessage(failure));
-                }
-              },
-              child: const Text('Save'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _enumOptionsEditor(BuildContext context, String fieldId) async {
-    await showDialog<void>(
-      context: context,
-      builder: (dialog) => AlertDialog(
-        title: const Text('Enum options'),
-        content: SizedBox(
-          width: 420,
-          height: 320,
-          child: ListenableBuilder(
-            listenable: controller,
-            builder: (context, child) {
-              final field = controller.schema?.fields
-                  .where((item) => item.id == fieldId)
-                  .firstOrNull;
-              final options =
-                  [...?field?.enumOptions.where((item) => !item.deleted)]
-                    ..sort((left, right) {
-                      final order = left.order.compareTo(right.order);
-                      return order == 0 ? left.id.compareTo(right.id) : order;
-                    });
-              return options.isEmpty
-                  ? const Center(
-                      child: Text(
-                        'Add at least one option before creating enum values.',
-                      ),
-                    )
-                  : ListView(
-                      children: [
-                        for (final option in options)
-                          ListTile(
-                            key: ValueKey(option.id),
-                            title: Text(option.label),
-                            onTap: () =>
-                                _editEnumOption(dialog, fieldId, option),
-                            trailing: IconButton(
-                              tooltip: 'Remove option',
-                              icon: const Icon(Icons.delete_outline),
-                              onPressed: () => unawaited(
-                                controller.removeEnumOption(fieldId, option.id),
-                              ),
-                            ),
-                          ),
-                      ],
-                    );
-            },
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => _editEnumOption(dialog, fieldId),
-            child: const Text('Add option'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialog),
-            child: const Text('Done'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _editEnumOption(
-    BuildContext context,
-    String fieldId, [
-    EnumOptionDto? existing,
-  ]) async {
-    final label = TextEditingController(text: existing?.label);
-    String? error;
-    await showDialog<void>(
-      context: context,
-      builder: (dialog) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: Text(
-            existing == null ? 'Add enum option' : 'Edit enum option',
-          ),
-          content: TextField(
-            controller: label,
-            autofocus: true,
-            decoration: InputDecoration(labelText: 'Label', errorText: error),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialog),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () async {
-                try {
-                  final field = controller.schema!.fields.firstWhere(
-                    (item) => item.id == fieldId,
-                  );
-                  await controller.upsertEnumOption(
-                    fieldId,
-                    EnumOptionDto(
-                      id: existing?.id ?? '',
-                      label: label.text,
-                      order: existing?.order ?? field.enumOptions.length,
-                      deleted: false,
-                    ),
+                  await controller.saveFieldWithOptions(
+                    dto,
+                    draftOptions(),
+                    session: session,
                   );
                   if (dialog.mounted) Navigator.pop(dialog);
                 } catch (failure) {
@@ -1041,6 +961,72 @@ class CollectionsPage extends StatelessWidget {
       ),
     );
   }
+
+  /// The Options section of the field editor for a Choice field: one row per option in the order
+  /// it will be saved, each with a drag handle, its label, and a remove button.
+  List<Widget> _optionsEditor(
+    List<_DraftOption> options, {
+    required ReorderCallback onReorder,
+    required VoidCallback onRenamed,
+    required ValueChanged<_DraftOption> onRemove,
+    required VoidCallback onAdd,
+  }) => [
+    const Padding(
+      padding: EdgeInsets.only(top: 12),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Text('Options', style: TextStyle(fontWeight: FontWeight.w600)),
+      ),
+    ),
+    ReorderableListView(
+      key: const Key('field-options'),
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      buildDefaultDragHandles: false,
+      onReorder: onReorder,
+      children: [
+        for (final (index, option) in options.indexed)
+          Row(
+            key: ValueKey(option.id),
+            children: [
+              ReorderableDragStartListener(
+                index: index,
+                child: const Padding(
+                  padding: EdgeInsets.all(8),
+                  child: Icon(Icons.drag_handle),
+                ),
+              ),
+              Expanded(
+                child: TextField(
+                  key: ValueKey('option-label-${option.id}'),
+                  controller: option.label,
+                  // A freshly added row is where the user is about to type.
+                  autofocus:
+                      isTempOptionId(option.id) && option.label.text.isEmpty,
+                  decoration: const InputDecoration(hintText: 'Option label'),
+                  onChanged: (_) => onRenamed(),
+                ),
+              ),
+              IconButton(
+                key: ValueKey('remove-option-${option.id}'),
+                tooltip: 'Remove option',
+                icon: const Icon(Icons.close),
+                onPressed: () => onRemove(option),
+              ),
+            ],
+          ),
+      ],
+    ),
+    Align(
+      alignment: Alignment.centerLeft,
+      child: TextButton.icon(
+        key: const Key('add-option'),
+        onPressed: onAdd,
+        icon: const Icon(Icons.add),
+        label: const Text('Add option'),
+      ),
+    ),
+  ];
 
   /// Replaces the collection header while records are being selected.
   Widget _selectionHeader(BuildContext context, CollectionSchemaDto schema) {
@@ -1321,6 +1307,30 @@ FieldValueDto? _recordValue(RecordDto record, String fieldId) {
     if (item.fieldId == fieldId) return item.value;
   }
   return null;
+}
+
+/// A field's kind in words, and for a Choice field its option labels in order.
+String _fieldSubtitle(FieldDefinitionDto field) {
+  final label = fieldKindLabel(field.fieldType.kind);
+  if (field.fieldType.kind != FieldTypeKindDto.enum_) return label;
+  final options = [...field.enumOptions.where((option) => !option.deleted)]
+    ..sort(_optionOrder);
+  if (options.isEmpty) return label;
+  return '$label · ${options.map((option) => option.label).join(', ')}';
+}
+
+/// One Choice option as the field editor holds it until Save. [id] is the stored ID, or one made
+/// by [tempOptionId] for an option this editor added.
+final class _DraftOption {
+  _DraftOption(this.id, String label)
+    : label = TextEditingController(text: label);
+  final String id;
+  final TextEditingController label;
+}
+
+int _optionOrder(EnumOptionDto left, EnumOptionDto right) {
+  final order = left.order.compareTo(right.order);
+  return order == 0 ? left.id.compareTo(right.id) : order;
 }
 
 int _fieldOrder(FieldDefinitionDto left, FieldDefinitionDto right) {

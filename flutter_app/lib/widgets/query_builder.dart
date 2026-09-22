@@ -112,7 +112,8 @@ final class QueryBuilderState {
 
   /// Whether the aggregation controls are shown at all. A line chart always shows them so the
   /// "sum per day" path is discoverable before a period has been chosen.
-  bool get showsAggregation => needsAggregation || widgetType == 'core.line-chart';
+  bool get showsAggregation =>
+      needsAggregation || widgetType == 'core.line-chart';
 
   bool get needsSeries =>
       isScatter || (widgetType == 'core.line-chart' && bucket == null);
@@ -258,9 +259,7 @@ final class QueryBuilderState {
   ExpressionDto? _filterExpression(CollectionSchemaDto schema) {
     final fieldId = filterFieldId;
     if (fieldId == null) return null;
-    final field = schema.fields
-        .where((item) => item.id == fieldId)
-        .firstOrNull;
+    final field = schema.fields.where((item) => item.id == fieldId).firstOrNull;
     if (field == null) return null;
     final constant = _constant(field);
     if (constant == null) return null;
@@ -350,9 +349,7 @@ final class QueryBuilderState {
         if (query.sorting.isNotEmpty || query.limit != null) return null;
         final aggregation = _parseAggregation(shape.aggregation);
         if (aggregation == null) return null;
-        return aggregation(
-          state.copyWith(widgetType: 'core.aggregate-number'),
-        );
+        return aggregation(state.copyWith(widgetType: 'core.aggregate-number'));
       case QueryShapeKindDto.categorySeries:
         if (query.sorting.isNotEmpty || query.limit != null) return null;
         final categoryFieldId = shape.category == null
@@ -457,7 +454,10 @@ QueryBuilderState applyPreset(
 T? _soleOrNull<T>(List<T> items) => items.length == 1 ? items.single : null;
 
 /// A one-line description of a saved query, for the places that offer to edit it.
-String describeQuery(QueryDefinitionDto definition, CollectionSchemaDto schema) {
+String describeQuery(
+  QueryDefinitionDto definition,
+  CollectionSchemaDto schema,
+) {
   final query = definition.query;
   if (query == null) return 'Made elsewhere; not editable here.';
   String fieldName(ExpressionDto expression) {
@@ -569,10 +569,7 @@ final class _ParsedFilter {
   final String value;
 }
 
-_ParsedFilter? _parseFilter(
-  ExpressionDto filter,
-  CollectionSchemaDto schema,
-) {
+_ParsedFilter? _parseFilter(ExpressionDto filter, CollectionSchemaDto schema) {
   if (filter.nodes.length != 3 || filter.root != 2) return null;
   final left = filter.nodes[0];
   final constant = filter.nodes[1];
@@ -739,8 +736,7 @@ class _QueryBuilderState extends State<QueryBuilder> {
                 ActionChip(
                   key: Key('preset-${preset.name}'),
                   label: Text(presetLabel(preset)),
-                  onPressed: () =>
-                      _emit(applyPreset(preset, state, schema)),
+                  onPressed: () => _emit(applyPreset(preset, state, schema)),
                 ),
             ],
           ),
@@ -839,7 +835,9 @@ class _QueryBuilderState extends State<QueryBuilder> {
             keyboardType: TextInputType.number,
             decoration: labelWithHelp('Output scale', HelpId.widgetOutputScale),
             onChanged: (value) => _emit(
-              state.copyWith(outputScale: int.tryParse(value) ?? state.outputScale),
+              state.copyWith(
+                outputScale: int.tryParse(value) ?? state.outputScale,
+              ),
             ),
           ),
           DropdownButtonFormField<RoundingPolicyDto>(
@@ -922,8 +920,9 @@ class _QueryBuilderState extends State<QueryBuilder> {
               child: Text('at most'),
             ),
           ],
-          onChanged: (value) =>
-              _emit(state.copyWith(filterOperator: value ?? state.filterOperator)),
+          onChanged: (value) => _emit(
+            state.copyWith(filterOperator: value ?? state.filterOperator),
+          ),
         ),
         TextField(
           key: const Key('filter-value'),

@@ -597,10 +597,7 @@ void main() {
       message: 'member 0: record not found',
       resetResolvable: false,
     );
-    await expectLater(
-      controller.deleteSelected(),
-      throwsA(isA<BridgeError>()),
-    );
+    await expectLater(controller.deleteSelected(), throwsA(isA<BridgeError>()));
     expect(controller.selecting, isTrue, reason: 'selection mode survives');
     expect(
       controller.selectedRecordIds,
@@ -627,6 +624,152 @@ void main() {
     await controller.refresh();
     expect(controller.selectedRecordIds, {ids.last});
     controller.dispose();
+  });
+
+  group('saveFieldWithOptions', () {
+    FieldDefinitionDto choiceField({String id = '', FieldValueDto? value}) =>
+        FieldDefinitionDto(
+          id: id,
+          name: 'Priority',
+          fieldType: const FieldTypeDto(kind: FieldTypeKindDto.enum_),
+          required_: false,
+          defaultValue: value,
+          validation: const ValidationMetadataDto(),
+          display: const DisplayMetadataDto(multiline: false),
+          order: 0,
+          deleted: false,
+          enumOptions: const [],
+        );
+    EnumOptionDto option(String id, String label) =>
+        EnumOptionDto(id: id, label: label, order: 0, deleted: false);
+    FieldValueDto choice(String id) =>
+        FieldValueDto(kind: FieldValueKindDto.enum_, textValue: id);
+
+    Future<(FakeCollectionBridge, CollectionsController)> start() async {
+      final bridge = FakeCollectionBridge();
+      final controller = CollectionsController(bridge);
+      addTearDown(controller.dispose);
+      await controller.start();
+      await controller.selectCollection(
+        await controller.createCollection('Tasks'),
+      );
+      return (bridge, controller);
+    }
+
+    List<String> labels(CollectionsController controller) {
+      final options = [
+        ...controller.schema!.fields.single.enumOptions.where(
+          (item) => !item.deleted,
+        ),
+      ]..sort((a, b) => a.order.compareTo(b.order));
+      return options.map((item) => item.label).toList();
+    }
+
+    test('creates the field, its options in order, then the default', () async {
+      final (bridge, controller) = await start();
+      final id = await controller
+          .saveFieldWithOptions(choiceField(value: choice(tempOptionId(2))), [
+            option(tempOptionId(1), 'Low'),
+            option(tempOptionId(2), 'Medium'),
+            option(tempOptionId(3), 'High'),
+          ]);
+      final field = controller.schema!.fields.single;
+      final medium = field.enumOptions.firstWhere(
+        (item) => item.label == 'Medium',
+      );
+      expect(field.id, id);
+      expect(bridge.schemaCalls, [
+        'addField',
+        'upsertEnumOption -|Low|0',
+        'upsertEnumOption -|Medium|1',
+        'upsertEnumOption -|High|2',
+        'updateField default=${medium.id}',
+      ]);
+      expect(labels(controller), ['Low', 'Medium', 'High']);
+      expect(field.defaultValue?.textValue, medium.id);
+    });
+
+    test('edits send only the options that changed', () async {
+      final (bridge, controller) = await start();
+      await controller.saveFieldWithOptions(choiceField(), [
+        option(tempOptionId(1), 'Low'),
+        option(tempOptionId(2), 'Medium'),
+        option(tempOptionId(3), 'High'),
+      ]);
+      final stored = controller.schema!.fields.single;
+      String idOf(String label) =>
+          stored.enumOptions.firstWhere((item) => item.label == label).id;
+      bridge.schemaCalls.clear();
+
+      // Rename Medium, drag High above Low, remove Low.
+      await controller.saveFieldWithOptions(choiceField(id: stored.id), [
+        option(idOf('High'), 'High'),
+        option(idOf('Medium'), 'Mid'),
+      ]);
+      expect(bridge.schemaCalls, [
+        'updateField default=-',
+        'removeEnumOption ${idOf('Low')}',
+        'upsertEnumOption ${idOf('High')}|High|0',
+        // Medium keeps order 1, so only its label changed.
+        'upsertEnumOption ${idOf('Medium')}|Mid|1',
+      ]);
+      expect(labels(controller), ['High', 'Mid']);
+    });
+
+    test('unchanged options are not resubmitted', () async {
+      final (bridge, controller) = await start();
+      await controller.saveFieldWithOptions(choiceField(), [
+        option(tempOptionId(1), 'A'),
+        option(tempOptionId(2), 'B'),
+      ]);
+      final stored = controller.schema!.fields.single;
+      bridge.schemaCalls.clear();
+      final sorted = [...stored.enumOptions]
+        ..sort((a, b) => a.order.compareTo(b.order));
+      await controller.saveFieldWithOptions(choiceField(id: stored.id), sorted);
+      expect(bridge.schemaCalls, ['updateField default=-']);
+      expect(labels(controller), ['A', 'B']);
+    });
+
+    test(
+      'a failed option write rethrows, keeps the field, and retries cleanly',
+      () async {
+        final (bridge, controller) = await start();
+        final session = FieldSaveSession();
+        final draft = [
+          option(tempOptionId(1), 'Low'),
+          option(tempOptionId(2), 'High'),
+        ];
+        final field = choiceField(value: choice(tempOptionId(2)));
+        bridge.nextOptionError = const BridgeError(
+          kind: BridgeErrorKind.validation,
+          field: 'enum_option_label',
+          message: 'Label is required.',
+          resetResolvable: false,
+        );
+        await expectLater(
+          controller.saveFieldWithOptions(field, draft, session: session),
+          throwsA(isA<BridgeError>()),
+        );
+        expect(controller.schema!.fields, hasLength(1));
+        expect(controller.schema!.fields.single.enumOptions, isEmpty);
+        expect(session.fieldId, controller.schema!.fields.single.id);
+
+        bridge.schemaCalls.clear();
+        await controller.saveFieldWithOptions(field, draft, session: session);
+        final high = controller.schema!.fields.single.enumOptions.firstWhere(
+          (item) => item.label == 'High',
+        );
+        expect(controller.schema!.fields, hasLength(1));
+        expect(bridge.schemaCalls, [
+          'updateField default=-',
+          'upsertEnumOption -|Low|0',
+          'upsertEnumOption -|High|1',
+          'updateField default=${high.id}',
+        ]);
+        expect(labels(controller), ['Low', 'High']);
+      },
+    );
   });
 }
 

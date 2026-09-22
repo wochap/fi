@@ -228,7 +228,7 @@ void main() {
       expect(root.kind, ExpressionKindDto.divide);
       expect(root.outputScale, 2);
       expect(root.rounding, RoundingPolicyDto.halfEven);
-      expect(find.text('Result: FixedDecimal, scale 2'), findsOneWidget);
+      expect(find.text('Result: Decimal, scale 2'), findsOneWidget);
 
       await tester.tap(find.byKey(const Key(r'remove-$')));
       await tester.pumpAndSettle();

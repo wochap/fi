@@ -4,6 +4,20 @@ import 'package:flutter/material.dart';
 
 export 'package:fi/exact_format.dart' show formatScaled, parseScaled;
 
+/// The word a person reads for a field kind, wherever a kind is shown or chosen.
+///
+/// The generated identifiers (`enum_`, `fixedDecimal`, `dateTime`) are Dart spellings, not labels.
+String fieldKindLabel(FieldTypeKindDto kind) => switch (kind) {
+  FieldTypeKindDto.text => 'Text',
+  FieldTypeKindDto.integer => 'Integer',
+  FieldTypeKindDto.fixedDecimal => 'Decimal',
+  FieldTypeKindDto.boolean => 'Boolean',
+  FieldTypeKindDto.date => 'Date',
+  FieldTypeKindDto.dateTime => 'Date & time',
+  FieldTypeKindDto.duration => 'Duration',
+  FieldTypeKindDto.enum_ => 'Choice',
+};
+
 typedef FieldValueChanged = void Function(FieldValueDto value);
 
 final class FieldRendererRegistry {
