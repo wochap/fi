@@ -415,6 +415,128 @@ void main() {
       expect(bridge.opens, 2);
     },
   );
+
+  test('a batch is one bridge call and clears the selection', () async {
+    final bridge = FakeCollectionBridge();
+    final controller = CollectionsController(bridge);
+    await controller.start();
+    final collection = await controller.createCollection('Inbox');
+    await controller.selectCollection(collection);
+    for (var index = 0; index < 3; index++) {
+      await controller.createRecord(const []);
+    }
+    final ids = controller.records.map((record) => record.id).toList();
+    for (final id in ids) {
+      controller.toggleSelected(id);
+    }
+    expect(controller.selecting, isTrue);
+    expect(controller.selectedRecordIds, ids.toSet());
+
+    final affected = await controller.deleteSelected();
+    expect(affected, 3);
+    expect(bridge.batchDeleteCalls, hasLength(1), reason: 'one batch call');
+    expect(bridge.batchDeleteCalls.single.toSet(), ids.toSet());
+    expect(controller.records, isEmpty);
+    expect(controller.selectedRecordIds, isEmpty);
+    expect(controller.selecting, isFalse);
+    controller.dispose();
+  });
+
+  test('a batch field set is one bridge call', () async {
+    final bridge = FakeCollectionBridge();
+    final controller = CollectionsController(bridge);
+    await controller.start();
+    final collection = await controller.createCollection('Inbox');
+    await controller.selectCollection(collection);
+    const category = FieldDefinitionDto(
+      id: '',
+      name: 'Category',
+      fieldType: FieldTypeDto(kind: FieldTypeKindDto.text),
+      required_: false,
+      validation: ValidationMetadataDto(),
+      display: DisplayMetadataDto(multiline: false),
+      order: 0,
+      deleted: false,
+      enumOptions: [],
+    );
+    await controller.addField(category);
+    final fieldId = controller.schema!.fields.single.id;
+    for (var index = 0; index < 2; index++) {
+      await controller.createRecord(const []);
+    }
+    for (final record in controller.records) {
+      controller.toggleSelected(record.id);
+    }
+    final affected = await controller.setFieldOnSelected(
+      fieldId,
+      const FieldValueDto(kind: FieldValueKindDto.text, textValue: 'triage'),
+    );
+    expect(affected, 2);
+    expect(bridge.batchFieldCalls, hasLength(1), reason: 'one batch call');
+    expect(controller.selectedRecordIds, isEmpty);
+    for (final record in controller.records) {
+      expect(
+        record.values.single.value.textValue,
+        'triage',
+        reason: 'every selected record carries the batch value',
+      );
+    }
+    controller.dispose();
+  });
+
+  test('a rejected batch keeps selection mode and prunes it', () async {
+    final bridge = FakeCollectionBridge();
+    final controller = CollectionsController(bridge);
+    await controller.start();
+    final collection = await controller.createCollection('Inbox');
+    await controller.selectCollection(collection);
+    for (var index = 0; index < 2; index++) {
+      await controller.createRecord(const []);
+    }
+    final ids = controller.records.map((record) => record.id).toList();
+    for (final id in ids) {
+      controller.toggleSelected(id);
+    }
+    // The record vanishes the way a remote delete drops it from the projection.
+    bridge.records[collection]!.removeWhere((record) => record.id == ids.first);
+    bridge.nextBatchError = const BridgeError(
+      kind: BridgeErrorKind.validation,
+      field: 'batch',
+      message: 'member 0: record not found',
+      resetResolvable: false,
+    );
+    await expectLater(
+      controller.deleteSelected(),
+      throwsA(isA<BridgeError>()),
+    );
+    expect(controller.selecting, isTrue, reason: 'selection mode survives');
+    expect(
+      controller.selectedRecordIds,
+      {ids.last},
+      reason: 'the missing record is pruned, the rest is kept',
+    );
+    controller.dispose();
+  });
+
+  test('a refresh that drops a record prunes it from the selection', () async {
+    final bridge = FakeCollectionBridge();
+    final controller = CollectionsController(bridge);
+    await controller.start();
+    final collection = await controller.createCollection('Inbox');
+    await controller.selectCollection(collection);
+    for (var index = 0; index < 2; index++) {
+      await controller.createRecord(const []);
+    }
+    final ids = controller.records.map((record) => record.id).toList();
+    for (final id in ids) {
+      controller.toggleSelected(id);
+    }
+    bridge.records[collection]!.removeWhere((record) => record.id == ids.first);
+    await controller.refresh();
+    expect(controller.selectedRecordIds, {ids.last});
+    controller.dispose();
+  });
+
 }
 
 /// A bridge whose connection-state stream can be ended from the Rust side.

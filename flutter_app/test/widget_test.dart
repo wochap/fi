@@ -51,9 +51,9 @@ void main() {
     expect(find.text('Headaches'), findsOneWidget);
     await tester.tap(find.text('Headaches'));
     await tester.pumpAndSettle();
-    expect(find.text('Schema'), findsOneWidget);
-    expect(find.text('New record'), findsOneWidget);
-    await tester.tap(find.text('Schema'));
+    expect(find.byTooltip('Schema'), findsOneWidget);
+    expect(find.byTooltip('New record'), findsOneWidget);
+    await tester.tap(find.byTooltip('Schema'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Add field'));
     await tester.pumpAndSettle();
@@ -63,7 +63,7 @@ void main() {
     expect(find.text('Title'), findsOneWidget);
     await tester.tap(find.text('Done'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('New record'));
+    await tester.tap(find.byTooltip('New record'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextFormField).first, 'After lunch');
     await tester.tap(find.text('Save'));

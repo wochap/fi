@@ -633,3 +633,155 @@ async fn required_may_be_introduced_over_records_that_lack_the_field() {
 
     app.shutdown().await.unwrap();
 }
+
+/// Seeds `count` records carrying `Text` values in `category`, returning their IDs.
+async fn seed_batch_records(
+    app: &AppCore,
+    collection: app_core::CollectionSchemaId,
+    title: &FieldDefinition,
+    count: usize,
+) -> Vec<app_core::RecordId> {
+    let mut ids = Vec::with_capacity(count);
+    for index in 0..count {
+        ids.push(
+            app.create_record(
+                collection,
+                BTreeMap::from([(title.id, FieldValue::Text(format!("row {index}")))]),
+            )
+            .await
+            .unwrap(),
+        );
+    }
+    ids
+}
+
+#[tokio::test]
+async fn a_batch_commits_once_and_emits_one_records_event() {
+    let directory = tempfile::tempdir().unwrap();
+    let app = AppCore::open(directory.path()).await.unwrap();
+    app.create_new_dataset().await.unwrap();
+    let collection = app
+        .create_collection("Inbox".into(), String::new())
+        .await
+        .unwrap();
+    let title = field("Title", FieldType::Text, true, 0);
+    let category = field("Category", FieldType::Text, false, 1);
+    app.add_field(collection, title.clone()).await.unwrap();
+    app.add_field(collection, category.clone()).await.unwrap();
+    let ids = seed_batch_records(&app, collection, &title, 4).await;
+
+    let ProjectionState::Ready { checkpoint: before } = app.projection_state() else {
+        panic!("projection not ready");
+    };
+    let mut events = app.subscribe_data_changed();
+    app.set_records_field(
+        ids.clone(),
+        collection,
+        category.id,
+        FieldValue::Text("triage".into()),
+    )
+    .await
+    .unwrap();
+
+    let event = tokio::time::timeout(Duration::from_secs(5), events.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(event.kinds, vec![app_core::DomainKind::Records]);
+    assert_eq!(event.collection_ids, vec![collection]);
+    assert_ne!(event.checkpoint.heads, before.heads);
+    assert!(
+        tokio::time::timeout(Duration::from_millis(50), events.recv())
+            .await
+            .is_err(),
+        "a batch emits exactly one DataChanged"
+    );
+    let ProjectionState::Ready { checkpoint: after } = app.projection_state() else {
+        panic!("projection not ready");
+    };
+    assert_eq!(after, event.checkpoint, "one checkpoint advance per batch");
+
+    let records = app.records(collection).unwrap();
+    assert_eq!(records.len(), 4);
+    assert!(
+        records
+            .iter()
+            .all(|view| view.record.values[&category.id] == FieldValue::Text("triage".into()))
+    );
+
+    app.delete_records(ids, collection).await.unwrap();
+    let event = tokio::time::timeout(Duration::from_secs(5), events.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(event.collection_ids, vec![collection]);
+    assert!(
+        tokio::time::timeout(Duration::from_millis(50), events.recv())
+            .await
+            .is_err(),
+        "a batch delete emits exactly one DataChanged"
+    );
+    assert!(app.records(collection).unwrap().is_empty());
+    app.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn a_peer_never_observes_a_partially_applied_batch() {
+    let a_dir = tempfile::tempdir().unwrap();
+    let b_dir = tempfile::tempdir().unwrap();
+    let (a_network, b_network) = MemoryTransport::pair("batch-a", "batch-b", 256);
+    let a = AppCore::open_with_transport(a_dir.path(), a_network.clone())
+        .await
+        .unwrap();
+    let b = AppCore::open_with_transport(b_dir.path(), b_network.clone())
+        .await
+        .unwrap();
+    let root = a.create_new_dataset().await.unwrap();
+    let collection = a
+        .create_collection("Shared".into(), String::new())
+        .await
+        .unwrap();
+    let title = field("Title", FieldType::Text, true, 0);
+    a.add_field(collection, title.clone()).await.unwrap();
+    let ids = seed_batch_records(&a, collection, &title, 6).await;
+
+    a_network.connect().await;
+    drive_memory(&a_network, &b_network).await;
+    b.join_existing(root).await.unwrap();
+    drive_memory(&a_network, &b_network).await;
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            if matches!(
+                b.lifecycle_state(),
+                app_core::ApplicationState::Ready { .. }
+            ) && b.records(collection).map(|rows| rows.len()).unwrap_or(0) == 6
+            {
+                break;
+            }
+            drive_memory(&a_network, &b_network).await;
+        }
+    })
+    .await
+    .unwrap();
+
+    a.delete_records(ids, collection).await.unwrap();
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let remaining = b.records(collection).unwrap().len();
+            assert!(
+                remaining == 6 || remaining == 0,
+                "peer observed a strict subset of the batch: {remaining} of 6"
+            );
+            if remaining == 0 {
+                break;
+            }
+            drive_memory(&a_network, &b_network).await;
+        }
+    })
+    .await
+    .unwrap();
+
+    assert_eq!(a.records(collection).unwrap().len(), 0);
+    a.shutdown().await.unwrap();
+    b.shutdown().await.unwrap();
+}

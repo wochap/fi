@@ -63,6 +63,18 @@ abstract interface class CollectionBridge {
     FieldValueDto value,
   );
   Future<void> deleteRecord(String recordId, String collectionId);
+
+  /// Deletes every record in one atomic batch. Rust rejects the whole batch if
+  /// any member is invalid, so the list is all-or-nothing.
+  Future<void> deleteRecords(List<String> recordIds, String collectionId);
+
+  /// Sets one field to one value on every record in one atomic batch.
+  Future<void> setRecordsField(
+    List<String> recordIds,
+    String collectionId,
+    String fieldId,
+    FieldValueDto value,
+  );
   Future<List<RecordDto>> listRecords(String collectionId);
   Future<RecordDto?> getRecord(String id);
   Future<String> createComputedField(ComputedFieldDefinitionDto definition);
@@ -291,6 +303,24 @@ final class RustCollectionBridge implements CollectionBridge {
   @override
   Future<void> deleteRecord(String recordId, String collectionId) =>
       collections.deleteRecord(recordId: recordId, collectionId: collectionId);
+  @override
+  Future<void> deleteRecords(List<String> recordIds, String collectionId) =>
+      collections.deleteRecords(
+        recordIds: recordIds,
+        collectionId: collectionId,
+      );
+  @override
+  Future<void> setRecordsField(
+    List<String> recordIds,
+    String collectionId,
+    String fieldId,
+    FieldValueDto value,
+  ) => collections.setRecordsField(
+    recordIds: recordIds,
+    collectionId: collectionId,
+    fieldId: fieldId,
+    value: value,
+  );
   @override
   Future<List<RecordDto>> listRecords(String collectionId) =>
       collections.listRecords(collectionId: collectionId);

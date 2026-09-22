@@ -127,6 +127,11 @@ final class CollectionsController extends ChangeNotifier {
   );
   String? errorMessage;
   String? widgetErrorMessage;
+
+  /// Records picked in selection mode, keyed by stable record ID so a refresh
+  /// that reorders or drops rows never shifts the selection onto other records.
+  final Set<String> selectedRecordIds = <String>{};
+  bool _selectionRequested = false;
   bool loading = true;
   bool _disposed = false;
   StreamSubscription<DataChangedDto>? _dataSubscription;
@@ -198,6 +203,7 @@ final class CollectionsController extends ChangeNotifier {
         widgetDefinitions = const [];
         widgetEvaluations = const [];
       }
+      _pruneSelection();
       errorMessage = null;
     } catch (error) {
       errorMessage = bridgeMessage(error);
@@ -372,6 +378,76 @@ final class CollectionsController extends ChangeNotifier {
   Future<void> deleteRecord(String id) async {
     await bridge.deleteRecord(id, selectedCollectionId!);
     await refresh();
+  }
+
+  /// True while the screen is in selection mode: either a record is selected,
+  /// or the header's Select action opened an empty selection.
+  bool get selecting => _selectionRequested || selectedRecordIds.isNotEmpty;
+
+  /// Opens selection mode with nothing selected yet, for the header action.
+  void startSelection() {
+    if (_selectionRequested) return;
+    _selectionRequested = true;
+    notifyListeners();
+  }
+
+  void toggleSelected(String recordId) {
+    if (!selectedRecordIds.remove(recordId)) selectedRecordIds.add(recordId);
+    notifyListeners();
+  }
+
+  void clearSelection() {
+    if (!selecting) return;
+    _selectionRequested = false;
+    selectedRecordIds.clear();
+    notifyListeners();
+  }
+
+  /// Drops selected IDs that are no longer in the projected list, which is how
+  /// a record deleted on another device leaves the selection.
+  void _pruneSelection() {
+    if (selectedRecordIds.isEmpty) return;
+    final present = {for (final record in records) record.id};
+    selectedRecordIds.removeWhere((id) => !present.contains(id));
+  }
+
+  /// Deletes the selection in one atomic batch and returns how many records the
+  /// batch carried. On failure the selection is pruned, not cleared, so the
+  /// user can retry from what is still there.
+  Future<int> deleteSelected() async {
+    final ids = selectedRecordIds.toList(growable: false);
+    try {
+      await bridge.deleteRecords(ids, selectedCollectionId!);
+    } catch (failure) {
+      await _reportBatchFailure(failure);
+      rethrow;
+    }
+    await refresh();
+    clearSelection();
+    return ids.length;
+  }
+
+  /// A rejected batch wrote nothing, so the list is refreshed only to prune the
+  /// selection; the typed error then replaces the message that refresh cleared.
+  Future<void> _reportBatchFailure(Object failure) async {
+    await refresh();
+    errorMessage = bridgeMessage(failure);
+    notifyListeners();
+  }
+
+  /// Sets one field to one value across the selection in one atomic batch and
+  /// returns how many records the batch carried.
+  Future<int> setFieldOnSelected(String fieldId, FieldValueDto value) async {
+    final ids = selectedRecordIds.toList(growable: false);
+    try {
+      await bridge.setRecordsField(ids, selectedCollectionId!, fieldId, value);
+    } catch (failure) {
+      await _reportBatchFailure(failure);
+      rethrow;
+    }
+    await refresh();
+    clearSelection();
+    return ids.length;
   }
 
   @override

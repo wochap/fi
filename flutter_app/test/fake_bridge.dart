@@ -383,6 +383,46 @@ final class FakeCollectionBridge implements CollectionBridge {
     changed(collectionId);
   }
 
+  /// One entry per batch call, so a test can assert a batch is one bridge call
+  /// rather than a loop of single-record calls.
+  final List<List<String>> batchDeleteCalls = [];
+  final List<List<String>> batchFieldCalls = [];
+
+  /// When set, the next batch call throws it and mutates nothing, the way Rust
+  /// rejects a batch before any write.
+  Object? nextBatchError;
+
+  @override
+  Future<void> deleteRecords(
+    List<String> recordIds,
+    String collectionId,
+  ) async {
+    batchDeleteCalls.add(List.of(recordIds));
+    _failBatch();
+    records[collectionId]?.removeWhere((item) => recordIds.contains(item.id));
+    changed(collectionId);
+  }
+
+  @override
+  Future<void> setRecordsField(
+    List<String> recordIds,
+    String collectionId,
+    String fieldId,
+    FieldValueDto value,
+  ) async {
+    batchFieldCalls.add(List.of(recordIds));
+    _failBatch();
+    for (final recordId in recordIds) {
+      await updateRecordField(recordId, collectionId, fieldId, value);
+    }
+  }
+
+  void _failBatch() {
+    final error = nextBatchError;
+    nextBatchError = null;
+    if (error != null) throw error;
+  }
+
   @override
   Future<List<RecordDto>> listRecords(String collectionId) async {
     _fail();

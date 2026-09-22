@@ -7,7 +7,7 @@ import '../frb_generated.dart';
 import 'models.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `core_error`, `parse_collection`, `parse_field`, `parse_record`
+// These functions are ignored because they are not marked as `pub`: `core_error`, `parse_collection`, `parse_field`, `parse_record`, `parse_records`
 
 Future<BootstrapDto> createNewDataset() =>
     RustLib.instance.api.crateApiCollectionsCreateNewDataset();
@@ -113,6 +113,26 @@ Future<void> deleteRecord({
 }) => RustLib.instance.api.crateApiCollectionsDeleteRecord(
   recordId: recordId,
   collectionId: collectionId,
+);
+
+Future<void> deleteRecords({
+  required List<String> recordIds,
+  required String collectionId,
+}) => RustLib.instance.api.crateApiCollectionsDeleteRecords(
+  recordIds: recordIds,
+  collectionId: collectionId,
+);
+
+Future<void> setRecordsField({
+  required List<String> recordIds,
+  required String collectionId,
+  required String fieldId,
+  required FieldValueDto value,
+}) => RustLib.instance.api.crateApiCollectionsSetRecordsField(
+  recordIds: recordIds,
+  collectionId: collectionId,
+  fieldId: fieldId,
+  value: value,
 );
 
 Future<List<RecordDto>> listRecords({required String collectionId}) => RustLib

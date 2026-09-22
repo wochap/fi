@@ -79,66 +79,86 @@ class CollectionsPage extends StatelessWidget {
       children: [
         Padding(
           padding: const EdgeInsets.all(12),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              // Narrow Android widths cannot fit three labelled buttons next to the title, so the
-              // same actions collapse to icons and stay reachable.
-              final wide = constraints.maxWidth >= 620;
-              return Row(
-                children: [
-                  IconButton(
-                    tooltip: 'Back to collections',
-                    onPressed: () =>
-                        unawaited(controller.selectCollection(null)),
-                    icon: const Icon(Icons.arrow_back),
-                  ),
-                  Expanded(
-                    child: Text(
-                      schema.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.headlineSmall,
-                    ),
-                  ),
-                  if (wide) ...[
-                    OutlinedButton.icon(
-                      onPressed: () => _schemaEditor(context, schema),
-                      icon: const Icon(Icons.tune),
-                      label: const Text('Schema'),
-                    ),
-                    const SizedBox(width: 8),
-                    OutlinedButton.icon(
-                      onPressed: () => _queryEditor(context, schema),
-                      icon: const Icon(Icons.query_stats),
-                      label: const Text('Queries'),
-                    ),
-                    const SizedBox(width: 8),
-                    FilledButton.icon(
-                      onPressed: () => _recordEditor(context, schema),
-                      icon: const Icon(Icons.add),
-                      label: const Text('New record'),
-                    ),
-                  ] else ...[
-                    IconButton(
-                      tooltip: 'Schema',
-                      onPressed: () => _schemaEditor(context, schema),
-                      icon: const Icon(Icons.tune),
-                    ),
-                    IconButton(
-                      tooltip: 'Queries',
-                      onPressed: () => _queryEditor(context, schema),
-                      icon: const Icon(Icons.query_stats),
-                    ),
-                    IconButton(
-                      tooltip: 'New record',
-                      onPressed: () => _recordEditor(context, schema),
-                      icon: const Icon(Icons.add),
-                    ),
-                  ],
-                ],
-              );
-            },
-          ),
+          child: controller.selecting
+              ? _selectionHeader(context, schema)
+              : LayoutBuilder(
+                  builder: (context, constraints) {
+                    // Narrow widths cannot fit four labelled buttons next to
+                    // the title, so the same actions collapse to icons and
+                    // stay reachable.
+                    final wide = constraints.maxWidth >= 760;
+                    return Row(
+                      children: [
+                        IconButton(
+                          tooltip: 'Back to collections',
+                          onPressed: () =>
+                              unawaited(controller.selectCollection(null)),
+                          icon: const Icon(Icons.arrow_back),
+                        ),
+                        Expanded(
+                          child: Text(
+                            schema.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.headlineSmall,
+                          ),
+                        ),
+                        if (wide) ...[
+                          OutlinedButton.icon(
+                            onPressed: () => _schemaEditor(context, schema),
+                            icon: const Icon(Icons.tune),
+                            label: const Text('Schema'),
+                          ),
+                          const SizedBox(width: 8),
+                          OutlinedButton.icon(
+                            onPressed: () => _queryEditor(context, schema),
+                            icon: const Icon(Icons.query_stats),
+                            label: const Text('Queries'),
+                          ),
+                          const SizedBox(width: 8),
+                          OutlinedButton.icon(
+                            key: const Key('select-records'),
+                            onPressed: controller.records.isEmpty
+                                ? null
+                                : controller.startSelection,
+                            icon: const Icon(Icons.checklist),
+                            label: const Text('Select'),
+                          ),
+                          const SizedBox(width: 8),
+                          FilledButton.icon(
+                            onPressed: () => _recordEditor(context, schema),
+                            icon: const Icon(Icons.add),
+                            label: const Text('New record'),
+                          ),
+                        ] else ...[
+                          IconButton(
+                            tooltip: 'Schema',
+                            onPressed: () => _schemaEditor(context, schema),
+                            icon: const Icon(Icons.tune),
+                          ),
+                          IconButton(
+                            tooltip: 'Queries',
+                            onPressed: () => _queryEditor(context, schema),
+                            icon: const Icon(Icons.query_stats),
+                          ),
+                          IconButton(
+                            key: const Key('select-records'),
+                            tooltip: 'Select',
+                            onPressed: controller.records.isEmpty
+                                ? null
+                                : controller.startSelection,
+                            icon: const Icon(Icons.checklist),
+                          ),
+                          IconButton(
+                            tooltip: 'New record',
+                            onPressed: () => _recordEditor(context, schema),
+                            icon: const Icon(Icons.add),
+                          ),
+                        ],
+                      ],
+                    );
+                  },
+                ),
         ),
         if (controller.errorMessage case final error?)
           MaterialBanner(
@@ -167,13 +187,24 @@ class CollectionsPage extends StatelessWidget {
                           ..sort(_fieldOrder);
                     final primary = fields.isEmpty ? null : fields.first;
                     final secondary = fields.length < 2 ? null : fields[1];
+                    final selecting = controller.selecting;
+                    final selected = controller.selectedRecordIds.contains(
+                      record.id,
+                    );
                     return ListTile(
                       key: ValueKey(record.id),
-                      leading: Icon(
-                        record.valid
-                            ? Icons.description_outlined
-                            : Icons.warning_amber,
-                      ),
+                      selected: selecting && selected,
+                      leading: selecting
+                          ? Checkbox(
+                              value: selected,
+                              onChanged: (_) =>
+                                  controller.toggleSelected(record.id),
+                            )
+                          : Icon(
+                              record.valid
+                                  ? Icons.description_outlined
+                                  : Icons.warning_amber,
+                            ),
                       title: primary == null
                           ? Text(record.id)
                           : FieldRendererRegistry().display(
@@ -192,13 +223,22 @@ class CollectionsPage extends StatelessWidget {
                               secondary,
                               _recordValue(record, secondary.id),
                             ),
-                      onTap: () => _recordEditor(context, schema, record),
-                      trailing: IconButton(
-                        tooltip: 'Delete record',
-                        icon: const Icon(Icons.delete_outline),
-                        onPressed: () =>
-                            unawaited(controller.deleteRecord(record.id)),
-                      ),
+                      // Long press is the way into selection mode; once in it,
+                      // a tap toggles instead of opening the editor.
+                      onLongPress: () => controller.toggleSelected(record.id),
+                      onTap: selecting
+                          ? () => controller.toggleSelected(record.id)
+                          : () => _recordEditor(context, schema, record),
+                      // The two delete affordances never coexist: single delete
+                      // is immediate, the batch one is confirmed.
+                      trailing: selecting
+                          ? null
+                          : IconButton(
+                              tooltip: 'Delete record',
+                              icon: const Icon(Icons.delete_outline),
+                              onPressed: () =>
+                                  unawaited(controller.deleteRecord(record.id)),
+                            ),
                     );
                   },
                 ),
@@ -633,18 +673,14 @@ class CollectionsPage extends StatelessWidget {
               enumOptions: enumOptions,
             ),
             value,
-            (typed) => onChanged(
-              typed.kind == FieldValueKindDto.null_ ? null : typed,
-            ),
+            (typed) =>
+                onChanged(typed.kind == FieldValueKindDto.null_ ? null : typed),
             label: label,
             allowClear: true,
           ),
         ),
       ),
-      Padding(
-        padding: const EdgeInsets.only(top: 8),
-        child: HelpButton(help),
-      ),
+      Padding(padding: const EdgeInsets.only(top: 8), child: HelpButton(help)),
     ],
   );
 
@@ -811,9 +847,8 @@ class CollectionsPage extends StatelessWidget {
                             scale: scale,
                             enumOptions: existing?.enumOptions ?? const [],
                             value: _boundValue(minimum, kind, scale),
-                            onChanged: (value) => setState(
-                              () => minimum = value?.integerValue,
-                            ),
+                            onChanged: (value) =>
+                                setState(() => minimum = value?.integerValue),
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -826,9 +861,8 @@ class CollectionsPage extends StatelessWidget {
                             scale: scale,
                             enumOptions: existing?.enumOptions ?? const [],
                             value: _boundValue(maximum, kind, scale),
-                            onChanged: (value) => setState(
-                              () => maximum = value?.integerValue,
-                            ),
+                            onChanged: (value) =>
+                                setState(() => maximum = value?.integerValue),
                           ),
                         ),
                       ],
@@ -1039,6 +1073,175 @@ class CollectionsPage extends StatelessWidget {
     );
   }
 
+  /// Replaces the collection header while records are being selected.
+  Widget _selectionHeader(BuildContext context, CollectionSchemaDto schema) {
+    final count = controller.selectedRecordIds.length;
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            '$count selected',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+        ),
+        IconButton(
+          key: const Key('batch-edit'),
+          tooltip: 'Edit field',
+          onPressed: count == 0
+              ? null
+              : () => unawaited(_batchEdit(context, schema)),
+          icon: const Icon(Icons.edit_outlined),
+        ),
+        IconButton(
+          key: const Key('batch-delete'),
+          tooltip: 'Delete',
+          onPressed: count == 0 ? null : () => unawaited(_batchDelete(context)),
+          icon: const Icon(Icons.delete_outline),
+        ),
+        TextButton(
+          key: const Key('cancel-selection'),
+          onPressed: controller.clearSelection,
+          child: const Text('Cancel'),
+        ),
+      ],
+    );
+  }
+
+  /// Confirms, then deletes the whole selection in one batch. Dismissing the
+  /// dialog sends no command and leaves the selection intact.
+  Future<void> _batchDelete(BuildContext context) async {
+    final count = controller.selectedRecordIds.length;
+    final messenger = ScaffoldMessenger.of(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: Text('Delete $count records?'),
+        content: const Text('Every selected record is deleted in one step.'),
+        actions: [
+          TextButton(
+            key: const Key('dismiss-batch-delete'),
+            onPressed: () => Navigator.pop(dialog, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            key: const Key('confirm-batch-delete'),
+            onPressed: () => Navigator.pop(dialog, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      final affected = await controller.deleteSelected();
+      messenger.showSnackBar(
+        SnackBar(content: Text('$affected records deleted')),
+      );
+    } catch (_) {
+      // The typed error is already on the controller's banner and the
+      // selection has been pruned, so the user can retry from what is left.
+    }
+  }
+
+  /// Picks one active field and one value, confirms, then sets it across the
+  /// whole selection in one batch.
+  Future<void> _batchEdit(
+    BuildContext context,
+    CollectionSchemaDto schema,
+  ) async {
+    final fields = schema.fields.where((field) => !field.deleted).toList()
+      ..sort(_fieldOrder);
+    if (fields.isEmpty) return;
+    final count = controller.selectedRecordIds.length;
+    final messenger = ScaffoldMessenger.of(context);
+    var field = fields.first;
+    FieldValueDto? value;
+    final chosen = await showDialog<bool>(
+      context: context,
+      builder: (dialog) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: Text('Edit field on $count records'),
+          content: SizedBox(
+            width: 480,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  DropdownButtonFormField<String>(
+                    key: const Key('batch-field'),
+                    initialValue: field.id,
+                    decoration: const InputDecoration(labelText: 'Field'),
+                    items: [
+                      for (final item in fields)
+                        DropdownMenuItem(
+                          value: item.id,
+                          child: Text(item.name),
+                        ),
+                    ],
+                    onChanged: (id) => setState(() {
+                      field = fields.firstWhere((item) => item.id == id);
+                      value = null;
+                    }),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: const FieldRendererRegistry().editor(
+                      field,
+                      value,
+                      (updated) => value = updated,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialog, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              key: const Key('batch-edit-continue'),
+              onPressed: () => Navigator.pop(dialog, true),
+              child: const Text('Continue'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (chosen != true || !context.mounted) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: Text('Set ${field.name} on $count records?'),
+        content: const Text('Every selected record is updated in one step.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialog, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            key: const Key('confirm-batch-edit'),
+            onPressed: () => Navigator.pop(dialog, true),
+            child: const Text('Set'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      final affected = await controller.setFieldOnSelected(
+        field.id,
+        value ?? const FieldValueDto(kind: FieldValueKindDto.null_),
+      );
+      messenger.showSnackBar(
+        SnackBar(content: Text('$affected records updated')),
+      );
+    } catch (_) {
+      // Left on the banner, as in _batchDelete.
+    }
+  }
+
   Future<void> _recordEditor(
     BuildContext context,
     CollectionSchemaDto schema, [
@@ -1177,4 +1380,3 @@ ValueTypeDto _queryValueType(FieldTypeDto type) => switch (type.kind) {
   ),
   FieldTypeKindDto.enum_ => const ValueTypeDto(kind: ValueTypeKindDto.enum_),
 };
-

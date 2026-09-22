@@ -180,6 +180,35 @@ pub async fn delete_record(record_id: String, collection_id: String) -> Result<(
         .await
         .map_err(Into::into)
 }
+pub async fn delete_records(
+    record_ids: Vec<String>,
+    collection_id: String,
+) -> Result<(), BridgeError> {
+    let record_ids = parse_records(&record_ids)?;
+    core()
+        .await?
+        .delete_records(record_ids, parse_collection(&collection_id)?)
+        .await
+        .map_err(Into::into)
+}
+pub async fn set_records_field(
+    record_ids: Vec<String>,
+    collection_id: String,
+    field_id: String,
+    value: FieldValueDto,
+) -> Result<(), BridgeError> {
+    let record_ids = parse_records(&record_ids)?;
+    core()
+        .await?
+        .set_records_field(
+            record_ids,
+            parse_collection(&collection_id)?,
+            parse_field(&field_id)?,
+            FieldValueDto::into_core(value)?,
+        )
+        .await
+        .map_err(Into::into)
+}
 pub async fn list_records(collection_id: String) -> Result<Vec<RecordDto>, BridgeError> {
     core()
         .await?
@@ -195,6 +224,9 @@ pub async fn get_record(id: String) -> Result<Option<RecordDto>, BridgeError> {
         .map_err(Into::into)
 }
 
+fn parse_records(values: &[String]) -> Result<Vec<RecordId>, BridgeError> {
+    values.iter().map(|value| parse_record(value)).collect()
+}
 fn parse_collection(value: &str) -> Result<CollectionSchemaId, BridgeError> {
     CollectionSchemaId::from_str(value).map_err(core_error)
 }

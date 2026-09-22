@@ -138,6 +138,10 @@ pub enum GenericCommand {
         collection_id: CollectionSchemaId,
         ids: Vec<WidgetId>,
     },
+    /// Record-scoped members applied atomically under one stamp. Members are
+    /// restricted to `UpdateRecordField` and `DeleteRecord` over distinct
+    /// records of one collection; see `validate_against`.
+    Batch(Vec<GenericCommand>),
 }
 
 impl GenericCommand {
@@ -412,9 +416,76 @@ impl GenericCommand {
                     "widget_ids",
                 )?;
             }
+            Self::Batch(members) => {
+                if members.is_empty() {
+                    return Err(invalid("batch", "must contain at least one member"));
+                }
+                let mut seen: HashSet<RecordId> = HashSet::new();
+                let mut target_collection: Option<CollectionSchemaId> = None;
+                for (index, member) in members.iter().enumerate() {
+                    let record_id = batch_member_record(member).ok_or_else(|| {
+                        invalid(
+                            "batch",
+                            format!(
+                                "member {index}: only record field updates and record deletions \
+                                 may appear in a batch"
+                            ),
+                        )
+                    })?;
+                    if !seen.insert(record_id) {
+                        return Err(batch_invalid(index, record_id, "duplicate record"));
+                    }
+                    let collection_id = record(snapshot, record_id)
+                        .map_err(|error| batch_error(index, record_id, error))?
+                        .collection_id;
+                    match target_collection {
+                        None => {
+                            active_collection(snapshot, collection_id)
+                                .map_err(|error| batch_error(index, record_id, error))?;
+                            target_collection = Some(collection_id);
+                        }
+                        Some(expected) if expected == collection_id => {}
+                        Some(_) => {
+                            return Err(batch_invalid(
+                                index,
+                                record_id,
+                                "all members must target one collection",
+                            ));
+                        }
+                    }
+                }
+                for (index, member) in members.iter_mut().enumerate() {
+                    let record_id =
+                        batch_member_record(member).expect("member shape checked above");
+                    member
+                        .validate_against(snapshot)
+                        .map_err(|error| batch_error(index, record_id, error))?;
+                }
+            }
         }
         Ok(())
     }
+}
+
+/// The record a batch member targets, or `None` when the command is not a legal
+/// batch member (nested batches, schema commands, record creation, ...).
+fn batch_member_record(command: &GenericCommand) -> Option<RecordId> {
+    match command {
+        GenericCommand::UpdateRecordField { record_id, .. } => Some(*record_id),
+        GenericCommand::DeleteRecord(record_id) => Some(*record_id),
+        _ => None,
+    }
+}
+
+fn batch_error(index: usize, record_id: RecordId, error: DomainError) -> DomainError {
+    batch_invalid(index, record_id, error.to_string())
+}
+
+fn batch_invalid(index: usize, record_id: RecordId, message: impl Into<String>) -> DomainError {
+    invalid(
+        "batch",
+        format!("member {index} (record {record_id}): {}", message.into()),
+    )
 }
 
 /// Checks that a widget's referenced query exists, decodes, and produces a result shape the
@@ -612,6 +683,11 @@ pub fn apply_generic_command(
         GenericCommand::DeleteRecord(id) => {
             let record = object(tx, &records, &id.to_string()).map_err(repo_change)?;
             write_lww_register(tx, &record, "deleted", &FieldValue::Boolean(true), stamp)?;
+        }
+        GenericCommand::Batch(members) => {
+            for member in members {
+                apply_generic_command(tx, member, stamp)?;
+            }
         }
         GenericCommand::CreateComputedField(definition)
         | GenericCommand::UpdateComputedField(definition) => write_definition(
@@ -2338,5 +2414,237 @@ mod tests {
             "an unimplemented widget type is not an error: {:?}",
             projected.diagnostics
         );
+    }
+
+    fn batch_schema() -> CollectionSchema {
+        let mut schema = schema();
+        schema.fields.push(FieldDefinition {
+            id: FieldId::new(),
+            name: "Note".into(),
+            field_type: FieldType::Text,
+            required: false,
+            default: None,
+            validation: ValidationMetadata::default(),
+            display: DisplayMetadata::default(),
+            order: 1,
+            deleted: false,
+            enum_options: vec![],
+        });
+        schema
+    }
+
+    fn seed_record(
+        tx: &mut AutomergeTransaction<'_>,
+        schema: &CollectionSchema,
+        stamp: HlcStamp,
+    ) -> RecordId {
+        let id = RecordId::new();
+        apply_generic_command(
+            tx,
+            &GenericCommand::CreateRecord(GenericRecord {
+                id,
+                collection_id: schema.id,
+                values: BTreeMap::from([(schema.fields[0].id, FieldValue::Integer(5))]),
+                stamps: BTreeMap::new(),
+                deleted: false,
+            }),
+            stamp,
+        )
+        .unwrap();
+        id
+    }
+
+    /// One collection with `count` records, all written under `stamp(2)`.
+    fn seeded(schema: &CollectionSchema, count: usize) -> (Automerge, Vec<RecordId>) {
+        let mut doc = initialized();
+        let mut ids = Vec::with_capacity(count);
+        let mut tx = doc.transaction();
+        apply_generic_command(
+            &mut tx,
+            &GenericCommand::CreateCollection(schema.clone()),
+            stamp(1),
+        )
+        .unwrap();
+        for _ in 0..count {
+            ids.push(seed_record(&mut tx, schema, stamp(2)));
+        }
+        tx.commit();
+        (doc, ids)
+    }
+
+    fn deleted_stamp(doc: &Automerge, record_id: RecordId) -> Option<HlcStamp> {
+        let (_, app) = doc.get(ROOT, "application").unwrap().unwrap();
+        let (_, records) = doc.get(&app, "records").unwrap().unwrap();
+        let (_, record) = doc.get(&records, record_id.to_string()).unwrap().unwrap();
+        read_lww_winner(doc, &record, "deleted")
+            .unwrap()
+            .map(|winner| winner.stamp)
+    }
+
+    #[test]
+    fn batch_delete_tombstones_every_member_under_one_stamp() {
+        let schema = batch_schema();
+        let (mut doc, ids) = seeded(&schema, 12);
+        let mut command = GenericCommand::Batch(
+            ids.iter()
+                .copied()
+                .map(GenericCommand::DeleteRecord)
+                .collect(),
+        );
+        command
+            .validate_against(&decode_generic(&doc).unwrap())
+            .unwrap();
+        let before = doc.get_heads();
+        {
+            let mut tx = doc.transaction();
+            apply_generic_command(&mut tx, &command, stamp(9)).unwrap();
+            tx.commit();
+        }
+        assert_eq!(doc.get_changes(&before).len(), 1, "batch is one change");
+        let decoded = decode_generic(&doc).unwrap();
+        assert_eq!(decoded.records.len(), 12);
+        assert!(decoded.records.iter().all(|record| record.deleted));
+        for id in &ids {
+            assert_eq!(deleted_stamp(&doc, *id), Some(stamp(9)));
+        }
+    }
+
+    #[test]
+    fn batch_field_set_writes_one_register_per_record() {
+        let schema = batch_schema();
+        let (mut doc, ids) = seeded(&schema, 5);
+        let intensity = schema.fields[0].id;
+        let note = schema.fields[1].id;
+        let mut command = GenericCommand::Batch(
+            ids.iter()
+                .copied()
+                .map(|record_id| GenericCommand::UpdateRecordField {
+                    record_id,
+                    field_id: note,
+                    value: FieldValue::Text("triage".into()),
+                })
+                .collect(),
+        );
+        command
+            .validate_against(&decode_generic(&doc).unwrap())
+            .unwrap();
+        {
+            let mut tx = doc.transaction();
+            apply_generic_command(&mut tx, &command, stamp(9)).unwrap();
+            tx.commit();
+        }
+        let decoded = decode_generic(&doc).unwrap();
+        assert_eq!(decoded.records.len(), 5);
+        for record in &decoded.records {
+            assert_eq!(record.values[&note], FieldValue::Text("triage".into()));
+            assert_eq!(record.stamps[&note], stamp(9));
+            assert_eq!(record.values[&intensity], FieldValue::Integer(5));
+            assert_eq!(record.stamps[&intensity], stamp(2));
+            assert!(!record.deleted);
+            assert_eq!(deleted_stamp(&doc, record.id), Some(stamp(2)));
+        }
+    }
+
+    #[test]
+    fn batch_setting_a_required_field_to_null_rejects_every_member() {
+        let schema = batch_schema();
+        let (doc, ids) = seeded(&schema, 3);
+        let before = doc.get_heads();
+        let mut command = GenericCommand::Batch(
+            ids.iter()
+                .copied()
+                .map(|record_id| GenericCommand::UpdateRecordField {
+                    record_id,
+                    field_id: schema.fields[0].id,
+                    value: FieldValue::Null,
+                })
+                .collect(),
+        );
+        let error = command
+            .validate_against(&decode_generic(&doc).unwrap())
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("member 0"), "{error}");
+        assert!(error.contains(&ids[0].to_string()), "{error}");
+        assert_eq!(doc.get_heads(), before);
+        let decoded = decode_generic(&doc).unwrap();
+        assert!(
+            decoded
+                .records
+                .iter()
+                .all(|record| record.values[&schema.fields[0].id] == FieldValue::Integer(5))
+        );
+    }
+
+    #[test]
+    fn malformed_batches_are_rejected_before_any_write() {
+        let schema = batch_schema();
+        let (mut doc, ids) = seeded(&schema, 2);
+        let other = batch_schema();
+        let other_record = {
+            let mut tx = doc.transaction();
+            apply_generic_command(
+                &mut tx,
+                &GenericCommand::CreateCollection(other.clone()),
+                stamp(3),
+            )
+            .unwrap();
+            let id = seed_record(&mut tx, &other, stamp(3));
+            tx.commit();
+            id
+        };
+        let before = doc.get_heads();
+        let snapshot = decode_generic(&doc).unwrap();
+        let mut cases = vec![
+            ("empty", GenericCommand::Batch(vec![])),
+            (
+                "nested",
+                GenericCommand::Batch(vec![GenericCommand::Batch(vec![
+                    GenericCommand::DeleteRecord(ids[0]),
+                ])]),
+            ),
+            (
+                "schema member",
+                GenericCommand::Batch(vec![
+                    GenericCommand::DeleteRecord(ids[0]),
+                    GenericCommand::DeleteCollection(schema.id),
+                ]),
+            ),
+            (
+                "record creation member",
+                GenericCommand::Batch(vec![GenericCommand::CreateRecord(GenericRecord {
+                    id: RecordId::new(),
+                    collection_id: schema.id,
+                    values: BTreeMap::from([(schema.fields[0].id, FieldValue::Integer(5))]),
+                    stamps: BTreeMap::new(),
+                    deleted: false,
+                })]),
+            ),
+            (
+                "duplicate record",
+                GenericCommand::Batch(vec![
+                    GenericCommand::DeleteRecord(ids[0]),
+                    GenericCommand::DeleteRecord(ids[0]),
+                ]),
+            ),
+            (
+                "cross collection",
+                GenericCommand::Batch(vec![
+                    GenericCommand::DeleteRecord(ids[0]),
+                    GenericCommand::DeleteRecord(other_record),
+                ]),
+            ),
+            (
+                "unknown record",
+                GenericCommand::Batch(vec![GenericCommand::DeleteRecord(RecordId::new())]),
+            ),
+        ];
+        for (label, case) in &mut cases {
+            assert!(
+                case.validate_against(&snapshot).is_err(),
+                "{label} batch should be rejected"
+            );
+        }
+        assert_eq!(doc.get_heads(), before);
     }
 }

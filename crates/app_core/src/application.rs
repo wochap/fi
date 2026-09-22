@@ -1140,6 +1140,51 @@ impl AppCore {
         .await
     }
 
+    /// Deletes every record in one atomic batch: one snapshot, one stamp, one
+    /// change, one projection pass, one `DataChanged`.
+    pub async fn delete_records(
+        &self,
+        record_ids: Vec<RecordId>,
+        collection_id: CollectionSchemaId,
+    ) -> Result<()> {
+        self.generic(
+            GenericCommand::Batch(
+                record_ids
+                    .into_iter()
+                    .map(GenericCommand::DeleteRecord)
+                    .collect(),
+            ),
+            vec![DomainKind::Records],
+            vec![collection_id],
+        )
+        .await
+    }
+
+    /// Sets one field to one value on every record in one atomic batch.
+    pub async fn set_records_field(
+        &self,
+        record_ids: Vec<RecordId>,
+        collection_id: CollectionSchemaId,
+        field_id: FieldId,
+        value: FieldValue,
+    ) -> Result<()> {
+        self.generic(
+            GenericCommand::Batch(
+                record_ids
+                    .into_iter()
+                    .map(|record_id| GenericCommand::UpdateRecordField {
+                        record_id,
+                        field_id,
+                        value: value.clone(),
+                    })
+                    .collect(),
+            ),
+            vec![DomainKind::Records],
+            vec![collection_id],
+        )
+        .await
+    }
+
     pub async fn create_computed_field(&self, definition: ComputedFieldDefinition) -> Result<()> {
         let collection_id = definition.collection_id;
         self.generic(
@@ -1816,7 +1861,7 @@ impl Owner {
         Ok(())
     }
 
-    #[instrument(skip_all, fields(command = command_name(&command)))]
+    #[instrument(skip_all, fields(command = command_name(&command), len = command_len(&command)))]
     async fn generic(
         &mut self,
         mut command: GenericCommand,
@@ -1961,6 +2006,16 @@ fn command_name(command: &GenericCommand) -> &'static str {
         GenericCommand::UpdateWidget(_) => "update_widget",
         GenericCommand::RemoveWidget { .. } => "remove_widget",
         GenericCommand::ReorderWidgets { .. } => "reorder_widgets",
+        GenericCommand::Batch(_) => "batch",
+    }
+}
+
+/// Member count for the `Owner::generic` tracing span. Non-batch commands are a
+/// batch of one so the field is always meaningful.
+fn command_len(command: &GenericCommand) -> usize {
+    match command {
+        GenericCommand::Batch(members) => members.len(),
+        _ => 1,
     }
 }
 
