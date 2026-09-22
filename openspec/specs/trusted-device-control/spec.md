@@ -5,7 +5,7 @@ Define durable local trusted-device control records, whole-repository authorizat
 ## Requirements
 
 ### Requirement: Persistent trusted-device records
-`control.sqlite` SHALL store each known peer's DeviceId, exact permanent public key, friendly display name, paired timestamp, last-seen timestamp, last-sync timestamp, and status of `trusted` or `revoked`.
+`control.sqlite` SHALL store each known peer's DeviceId, exact permanent public key, friendly display name, paired timestamp, last-seen timestamp, last-sync timestamp, and status of `trusted` or `revoked`. The last-seen timestamp SHALL be refreshed when an authenticated session with the peer is established, and the last-sync timestamp SHALL be recorded when the peer reaches the synced state, through an update that touches only those timestamps so it cannot overwrite a concurrent rename or revocation. Timestamp writes caused by repeated convergence SHALL be throttled per peer so a burst of synchronization produces a bounded number of writes.
 
 #### Scenario: Pairing commits
 - **WHEN** bilateral pairing commit succeeds
@@ -14,6 +14,18 @@ Define durable local trusted-device control records, whole-repository authorizat
 #### Scenario: Application restarts
 - **WHEN** the application reopens after successful pairing
 - **THEN** the peer remains trusted with its friendly name and recorded timestamps
+
+#### Scenario: Peer converges
+- **WHEN** a trusted peer transitions into the synced state
+- **THEN** its record's last-sync timestamp is set to the current time before the synced state is published, and the last-seen timestamp is no older than the session's establishment
+
+#### Scenario: Convergence repeats quickly
+- **WHEN** a peer leaves and re-enters the synced state several times within the throttle window
+- **THEN** at most one last-sync write occurs for that peer in that window
+
+#### Scenario: Timestamp write races a rename
+- **WHEN** a last-sync write and a friendly-name change for the same device are applied concurrently
+- **THEN** both the new name and the new timestamp persist
 
 ### Requirement: Local trust authorizes complete Repo access
 A locally trusted peer with a compatible root SHALL synchronize every Repo document, while unknown or locally revoked peers SHALL synchronize none; document-level ACLs MUST NOT be introduced.
@@ -62,7 +74,6 @@ identify which stage failed.
 - **WHEN** the trusted-device list is queried after a revocation whose later stage failed
 - **THEN** the device is presented as revoked, consistent with its durable record, and is not
   presented as trusted or merely hidden
-
 
 ### Requirement: Trust records are root-scoped
 Trusted-peer and trusted-device records, the pairing journal, the discovery epoch, and the discovery-group secret SHALL be treated as state of the root this installation holds, and a dataset reset SHALL remove all of them.

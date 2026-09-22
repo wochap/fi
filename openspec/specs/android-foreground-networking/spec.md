@@ -5,14 +5,14 @@ TBD: Define foreground-only Android LAN networking, required platform permission
 ## Requirements
 
 ### Requirement: Foreground Android LAN guarantee
-While the Android application is foregrounded with required permissions and LAN connectivity, Rust orchestration SHALL run immediate mDNS discovery/advertising and Quinn synchronization; the MVP makes no background execution guarantee.
+While the Android application is foregrounded with required permissions and LAN connectivity, Rust orchestration SHALL run immediate mDNS discovery/advertising and Quinn synchronization; the MVP makes no background execution guarantee. Stopping discovery and closing peer sessions on background lifecycle SHALL apply only under the Android lifecycle policy; it MUST NOT be applied to desktop targets merely because the same lifecycle report is delivered there.
 
 #### Scenario: Activity resumes
 - **WHEN** Flutter reports foreground lifecycle and networking is enabled
-- **THEN** Rust activates the required discovery and connection tasks without waiting for background scheduling
+- **THEN** Rust activates the required discovery and connection tasks without waiting for background scheduling, and attempts to reconnect trusted peers that still have eligible endpoints
 
 #### Scenario: Activity pauses
-- **WHEN** Flutter reports background lifecycle
+- **WHEN** Flutter reports background lifecycle on Android
 - **THEN** Rust stops foreground-only discovery work and releases platform multicast capability while preserving durable state
 
 ### Requirement: Android network permissions
@@ -53,3 +53,22 @@ The MVP SHALL NOT add WorkManager, a foreground service, or another persistent b
 #### Scenario: Application remains backgrounded
 - **WHEN** Android suspends or stops the application
 - **THEN** the system makes no claim that discovery or synchronization continues
+
+### Requirement: Platform lifecycle networking policy
+The Rust core SHALL own a lifecycle networking policy selected per platform: `SuspendInBackground` on Android, and `KeepNetworkingInBackground` on desktop targets. Flutter SHALL report lifecycle state on every platform; the policy, not the reporter, SHALL decide whether background stops discovery and closes sessions. Under `KeepNetworkingInBackground`, focus loss, window inactivity, and window hiding SHALL NOT stop discovery or disconnect any peer; only explicit shutdown SHALL tear networking down. The policy SHALL be overridable through core configuration so both behaviours are testable on one host.
+
+#### Scenario: Desktop window loses focus
+- **WHEN** the desktop application reports an inactive or hidden lifecycle state while peers are connected
+- **THEN** discovery keeps running, every peer session stays open, and no offline transition is emitted
+
+#### Scenario: Desktop application shuts down
+- **WHEN** the desktop application performs its shutdown
+- **THEN** discovery stops and peer sessions close as before
+
+#### Scenario: Android policy is unchanged
+- **WHEN** the Android application reports background lifecycle
+- **THEN** discovery stops and peers disconnect exactly as required by the foreground guarantee
+
+#### Scenario: Policy is selected by configuration in tests
+- **WHEN** the core is opened with an explicit `SuspendInBackground` policy on a desktop host
+- **THEN** a background report stops discovery and disconnects peers, and with `KeepNetworkingInBackground` the same report leaves them untouched

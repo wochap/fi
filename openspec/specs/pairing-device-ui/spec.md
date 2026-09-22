@@ -31,11 +31,15 @@ Flutter SHALL display the zero-padded six-digit SAS supplied by Rust for the cur
 - **THEN** Flutter invokes Rust rejection and displays the resulting non-trusted terminal state
 
 ### Requirement: Trusted-device list
-The devices screen SHALL list locally trusted and revoked device records with friendly name, DeviceId presentation, connectivity, last seen, last sync, and status obtained through Rust queries/events.
+The devices screen SHALL list locally trusted and revoked device records with friendly name, DeviceId presentation, connectivity, last seen, last sync, and status obtained through Rust queries/events. Last sync SHALL reflect the most recent time the peer reached the synced state, not only the pairing time, and SHALL be carried by the same connection-state emission that reports the synced state so the row never shows synced connectivity alongside a never-synced timestamp.
 
 #### Scenario: Device connects and syncs
 - **WHEN** Rust advances a trusted peer from connected through syncing to synced
 - **THEN** the corresponding row and global status update without UI timing heuristics
+
+#### Scenario: Synced row shows a sync time
+- **WHEN** the row for a peer reports synced connectivity
+- **THEN** its last-sync value is a timestamp rather than "never", and it is no earlier than the transition that produced the synced state
 
 ### Requirement: Device rename and revoke actions
 Flutter SHALL expose friendly-name editing and confirmed revoke/unpair actions that delegate to Rust and refresh persisted device state.
