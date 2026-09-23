@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Android 13+ themed icon layer: single colour, launcher tints it. -->
+<!-- Android 13+ themed icon layer: single colour, launcher tints it. Same geometry as the
+     foreground; the dimmed last row keeps its contrast through alpha. -->
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
-  <g transform="translate(512 512) scale(0.9) translate(-512 -512)">
-    <g fill="none" stroke="#ffffff" stroke-width="96" stroke-linecap="round" stroke-linejoin="round" transform="translate(12 8)">
-      <path d="M 545 320 A 120 120 0 0 0 425 440 V 740"/>
-      <path d="M 340 520 H 560"/>
-      <path d="M 660 520 V 740"/>
-    </g>
-    <rect x="618" y="322" width="108" height="108" rx="30" fill="#ffffff"/>
+  <g transform="translate(313 313) scale(6.22)" fill="#ffffff">
+    <rect x="12" y="12" width="7" height="40" rx="3.5"/>
+    <rect x="24" y="12" width="28" height="7" rx="3.5"/>
+    <rect x="24" y="28.5" width="16" height="7" rx="3.5"/>
+    <rect x="24" y="45" width="10" height="7" rx="3.5" fill-opacity="0.5"/>
+    <circle cx="48.5" cy="32" r="4"/>
   </g>
 </svg>

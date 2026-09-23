@@ -1,20 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Android adaptive icon background layer (full bleed, the launcher masks it). -->
+<!-- Android adaptive icon background layer (full bleed, the launcher masks it).
+     Flat surface, as in the design's round Android icon for mark 3b. -->
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#2dd4bf"/>
-      <stop offset="1" stop-color="#0f766e"/>
-    </linearGradient>
-    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#ffffff" stop-opacity="0.18"/>
-      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
-    </linearGradient>
-  </defs>
-  <rect width="1024" height="1024" fill="url(#bg)"/>
-  <rect width="1024" height="1024" fill="url(#sheen)"/>
-  <g fill="#ffffff" fill-opacity="0.10" transform="translate(512 512) scale(0.9) translate(-536 -536)">
-    <rect x="232" y="236" width="608" height="600" rx="72" transform="rotate(-8 536 536)"/>
-    <rect x="232" y="236" width="608" height="600" rx="72" transform="rotate(4 536 536)"/>
-  </g>
+  <rect width="1024" height="1024" fill="#232532"/>
 </svg>
