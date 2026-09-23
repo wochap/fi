@@ -4,6 +4,8 @@ import 'package:fi/controllers.dart';
 import 'package:fi/help_button.dart';
 import 'package:fi/help_copy.dart';
 import 'package:fi/src/rust/api/models.dart';
+import 'package:fi/theme/nocturne.dart';
+import 'package:fi/theme/nocturne_widgets.dart';
 import 'package:fi/widgets/query_builder.dart';
 import 'package:fi/widgets/query_editor_dialog.dart';
 import 'package:fi/widgets/widget_renderers.dart';
@@ -30,108 +32,142 @@ final class CollectionDashboard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final definitions = controller.widgetDefinitions;
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
+    final schema = controller.schema;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Expanded(child: SectionLabel('Dashboard')),
+            if (controller.widgetErrorMessage case final message?)
               Expanded(
-                child: Text('Dashboard', style: theme.textTheme.titleSmall),
-              ),
-              if (controller.widgetErrorMessage case final message?)
-                Expanded(
-                  child: Text(
-                    message,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.error,
-                    ),
-                  ),
-                ),
-              TextButton.icon(
-                key: const Key('reorder-widgets'),
-                onPressed: definitions.length < 2
-                    ? null
-                    : () => unawaited(showWidgetReorder(context, controller)),
-                icon: const Icon(Icons.swap_vert),
-                label: const Text('Reorder'),
-              ),
-              FilledButton.tonalIcon(
-                key: const Key('add-widget'),
-                onPressed: () =>
-                    unawaited(showWidgetEditor(context, controller)),
-                icon: const Icon(Icons.add_chart),
-                label: const Text('Add widget'),
-              ),
-            ],
-          ),
-          if (definitions.isEmpty)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Text(
-                'No widgets yet. Add one to summarize this collection.',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
+                child: Text(
+                  message,
+                  style: const TextStyle(fontSize: 12, color: Nocturne.error),
                 ),
               ),
-            )
-          else
-            LayoutBuilder(
-              builder: (context, constraints) {
-                // One breakpoint keeps narrow Android and wide Linux windows usable with the same
-                // deterministic order and the same structured sizing hints.
-                final wide = constraints.maxWidth >= 720;
-                final labels = enumLabelsFor(controller.schema);
-                return Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  children: [
-                    for (final definition in definitions)
-                      SizedBox(
-                        key: ValueKey('widget-${definition.id}'),
-                        width: _tileWidth(
-                          definition.layout.size,
-                          constraints.maxWidth,
-                          wide,
+            TextButton.icon(
+              key: const Key('reorder-widgets'),
+              style: TextButton.styleFrom(foregroundColor: Nocturne.muted(.6)),
+              onPressed: definitions.length < 2
+                  ? null
+                  : () => unawaited(showWidgetReorder(context, controller)),
+              icon: const Icon(Icons.swap_vert),
+              label: const Text('Reorder'),
+            ),
+            TextButton.icon(
+              key: const Key('add-widget'),
+              onPressed: () => unawaited(showWidgetEditor(context, controller)),
+              icon: const Icon(Icons.add_box_outlined),
+              label: const Text('Add widget'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        if (definitions.isEmpty)
+          Text(
+            'No widgets yet. Add one to summarize this collection.',
+            style: TextStyle(fontSize: 12, color: Nocturne.muted(.55)),
+          )
+        else
+          LayoutBuilder(
+            builder: (context, constraints) {
+              // One breakpoint keeps narrow Android and wide Linux windows usable with the same
+              // deterministic order and the same structured sizing hints.
+              final wide = constraints.maxWidth >= 720;
+              final labels = enumLabelsFor(schema);
+              final available = constraints.maxWidth;
+              return Wrap(
+                spacing: _gap,
+                runSpacing: _gap,
+                children: [
+                  for (final definition in definitions)
+                    SizedBox(
+                      key: ValueKey('widget-${definition.id}'),
+                      width: _tileWidth(
+                        definition.layout.size,
+                        available,
+                        wide,
+                      ),
+                      height: _tileHeight(definition.layout.size),
+                      child: NocturneCard(
+                        padding: EdgeInsets.zero,
+                        // The glow marks a headline number; charts keep a flat ground.
+                        gradient:
+                            definition.widgetType == 'core.aggregate-number'
+                            ? nocturneGlow()
+                            : null,
+                        onTap: () => unawaited(
+                          showWidgetEditor(context, controller, definition),
                         ),
-                        height: _tileHeight(definition.layout.size),
-                        child: Card(
-                          clipBehavior: Clip.antiAlias,
-                          child: InkWell(
-                            onTap: () => unawaited(
-                              showWidgetEditor(context, controller, definition),
-                            ),
-                            child: _registry.build(
-                              WidgetRenderContext(
-                                definition: definition,
-                                evaluation: controller.evaluationFor(
-                                  definition.id,
-                                ),
-                                enumLabels: labels,
-                              ),
-                            ),
+                        child: _registry.build(
+                          WidgetRenderContext(
+                            definition: definition,
+                            evaluation: controller.evaluationFor(definition.id),
+                            enumLabels: labels,
+                            summary: _summary(definition, schema),
                           ),
                         ),
                       ),
-                  ],
-                );
-              },
-            ),
-        ],
-      ),
+                    ),
+                  SizedBox(
+                    width: wide
+                        ? _tileWidth(WidgetSizeDto.small, available, true)
+                        : available,
+                    height: wide ? _tileHeight(WidgetSizeDto.small) : 48,
+                    child: DashedSlot(
+                      onTap: () =>
+                          unawaited(showWidgetEditor(context, controller)),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.add),
+                          SizedBox(width: 8),
+                          Text('Add widget'),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+      ],
     );
+  }
+
+  /// The query in words for the tile's meta line, e.g. `Sum of Amount · all records`.
+  String? _summary(
+    WidgetDefinitionDto definition,
+    CollectionSchemaDto? schema,
+  ) {
+    if (schema == null) return null;
+    final query = controller.queryDefinitions
+        .where((item) => item.id == definition.queryId)
+        .firstOrNull;
+    if (query == null) return null;
+    final description = describeQuery(query, schema);
+    return query.query?.filter == null
+        ? '$description · all records'
+        : description;
   }
 }
 
-double _tileWidth(WidgetSizeDto size, double available, bool wide) =>
-    switch (size) {
-      WidgetSizeDto.small => wide ? available / 4 - 9 : available / 2 - 6,
-      WidgetSizeDto.medium => wide ? available / 2 - 6 : available,
-      WidgetSizeDto.large => wide ? available * 3 / 4 - 3 : available,
-      WidgetSizeDto.full => available,
-    };
+const double _gap = 12;
+
+/// Three columns on a wide screen: small and medium tiles take one, large two, full the row.
+/// A phone stacks full-width tiles with small ones in pairs.
+double _tileWidth(WidgetSizeDto size, double available, bool wide) {
+  if (!wide) {
+    return size == WidgetSizeDto.small ? (available - _gap) / 2 : available;
+  }
+  final column = (available - 2 * _gap) / 3;
+  return switch (size) {
+    WidgetSizeDto.small || WidgetSizeDto.medium => column,
+    WidgetSizeDto.large => 2 * column + _gap,
+    WidgetSizeDto.full => available,
+  };
+}
 
 double _tileHeight(WidgetSizeDto size) => switch (size) {
   WidgetSizeDto.small => 118,
@@ -293,160 +329,274 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
   @override
   Widget build(BuildContext context) {
     final schema = controller.schema;
-    return AlertDialog(
-      title: Text(existing == null ? 'Add widget' : 'Edit widget'),
-      content: SizedBox(
-        width: 520,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (supported) ...[
-                DropdownButtonFormField<String>(
-                  key: const Key('widget-type'),
-                  initialValue: widgetType,
-                  decoration: labelWithHelp('Widget type', HelpId.widgetType),
-                  items: [
-                    for (final descriptor in controller.widgetDescriptors)
-                      DropdownMenuItem(
-                        value: descriptor.widgetType,
-                        child: Text(descriptor.label),
-                      ),
-                  ],
-                  onChanged: (value) => setState(() {
-                    query = query.copyWith(
-                      widgetType: value!,
-                      bucket: value == 'core.scatter-plot'
-                          ? null
-                          : query.bucket,
-                    );
-                  }),
-                ),
-              ] else ...[
-                // An unsupported widget keeps its type; only safe metadata is editable.
-                Text('Widget type: ${existing?.widgetType}'),
-                Text(
-                  'This build cannot render this widget. Title, query, size, and order stay '
-                  'editable and its configuration is preserved untouched.',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
-              TextField(
-                key: const Key('widget-title'),
-                controller: title,
-                decoration: const InputDecoration(labelText: 'Title'),
-                onChanged: (_) => setState(() {}),
-              ),
-              const SizedBox(height: 12),
-              SwitchListTile(
-                key: const Key('reuse-query'),
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Use a saved query'),
-                secondary: const HelpButton(HelpId.widgetUseSavedQuery),
-                value: reuseQuery,
-                onChanged: (value) => setState(() => reuseQuery = value),
-              ),
-              if (reuseQuery) ...[
-                DropdownButtonFormField<String>(
-                  key: const Key('saved-query'),
-                  initialValue:
-                      controller.queryDefinitions.any(
-                        (item) => item.id == savedQueryId,
-                      )
-                      ? savedQueryId
-                      : null,
-                  decoration: const InputDecoration(labelText: 'Saved query'),
-                  items: [
-                    for (final query in controller.queryDefinitions)
-                      DropdownMenuItem(
-                        value: query.id,
-                        child: Text(query.name),
-                      ),
-                  ],
-                  onChanged: (value) => setState(() => savedQueryId = value),
-                ),
-                if (_selectedQuery case final selected? when schema != null)
-                  ..._savedQueryActions(schema, selected),
-              ] else if (schema != null)
-                QueryBuilder(
-                  schema: schema,
-                  state: query,
-                  onChanged: (next) => setState(() => query = next),
-                ),
-              const Divider(height: 28),
-              Text(
-                'Presentation',
-                style: Theme.of(context).textTheme.titleSmall,
-              ),
-              if (supported)
-                ..._presentationFields()
-              else
-                Text(
-                  'Configuration version ${existing?.configuration.version} is preserved as is.',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              const Divider(height: 28),
-              DropdownButtonFormField<WidgetSizeDto>(
-                key: const Key('widget-size'),
-                initialValue: size,
-                decoration: const InputDecoration(labelText: 'Size'),
-                items: const [
-                  DropdownMenuItem(
-                    value: WidgetSizeDto.small,
-                    child: Text('Small'),
-                  ),
-                  DropdownMenuItem(
-                    value: WidgetSizeDto.medium,
-                    child: Text('Medium'),
-                  ),
-                  DropdownMenuItem(
-                    value: WidgetSizeDto.large,
-                    child: Text('Large'),
-                  ),
-                  DropdownMenuItem(
-                    value: WidgetSizeDto.full,
-                    child: Text('Full'),
-                  ),
-                ],
-                onChanged: (value) => setState(() => size = value ?? size),
-              ),
-              if (error case final message?)
-                Padding(
-                  padding: const EdgeInsets.only(top: 12),
-                  child: Text(
-                    message,
-                    key: const Key('widget-editor-error'),
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                    ),
-                  ),
+    final dialogTitle = Text(existing == null ? 'Add widget' : 'Edit widget');
+    final form = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      spacing: 14,
+      children: [
+        if (supported) ...[
+          DropdownButtonFormField<String>(
+            key: const Key('widget-type'),
+            initialValue: widgetType,
+            decoration: labelWithHelp('Widget type', HelpId.widgetType),
+            items: [
+              for (final descriptor in controller.widgetDescriptors)
+                DropdownMenuItem(
+                  value: descriptor.widgetType,
+                  child: Text(descriptor.label),
                 ),
             ],
+            onChanged: (value) => setState(() {
+              query = query.copyWith(
+                widgetType: value!,
+                bucket: value == 'core.scatter-plot' ? null : query.bucket,
+              );
+            }),
           ),
+        ] else ...[
+          // An unsupported widget keeps its type; only safe metadata is editable.
+          Text('Widget type: ${existing?.widgetType}'),
+          Text(
+            'This build cannot render this widget. Title, query, size, and order stay '
+            'editable and its configuration is preserved untouched.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
+        TextField(
+          key: const Key('widget-title'),
+          controller: title,
+          decoration: const InputDecoration(labelText: 'Title'),
+          onChanged: (_) => setState(() {}),
+        ),
+        SwitchListTile(
+          key: const Key('reuse-query'),
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Use a saved query'),
+          secondary: const HelpButton(HelpId.widgetUseSavedQuery),
+          value: reuseQuery,
+          onChanged: (value) => setState(() => reuseQuery = value),
+        ),
+        if (reuseQuery) ...[
+          DropdownButtonFormField<String>(
+            key: const Key('saved-query'),
+            initialValue:
+                controller.queryDefinitions.any(
+                  (item) => item.id == savedQueryId,
+                )
+                ? savedQueryId
+                : null,
+            decoration: const InputDecoration(labelText: 'Saved query'),
+            items: [
+              for (final query in controller.queryDefinitions)
+                DropdownMenuItem(value: query.id, child: Text(query.name)),
+            ],
+            onChanged: (value) => setState(() => savedQueryId = value),
+          ),
+          if (_selectedQuery case final selected? when schema != null)
+            ..._savedQueryActions(schema, selected),
+        ] else if (schema != null)
+          QueryBuilder(
+            schema: schema,
+            state: query,
+            onChanged: (next) => setState(() => query = next),
+          ),
+        const Divider(height: 8),
+        Text('Presentation', style: Theme.of(context).textTheme.titleSmall),
+        if (supported)
+          ..._presentationFields()
+        else
+          Text(
+            'Configuration version ${existing?.configuration.version} is preserved as is.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        const Divider(height: 8),
+        Text('Size', style: TextStyle(fontSize: 12, color: Nocturne.muted(.7))),
+        const SizedBox(height: 5),
+        SegmentedButton<WidgetSizeDto>(
+          key: const Key('widget-size'),
+          showSelectedIcon: false,
+          segments: const [
+            ButtonSegment(value: WidgetSizeDto.small, label: Text('S')),
+            ButtonSegment(value: WidgetSizeDto.medium, label: Text('M')),
+            ButtonSegment(value: WidgetSizeDto.large, label: Text('L')),
+            ButtonSegment(value: WidgetSizeDto.full, label: Text('Full')),
+          ],
+          selected: {size},
+          onSelectionChanged: (value) => setState(() => size = value.single),
+        ),
+        if (error case final message?)
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: Text(
+              message,
+              key: const Key('widget-editor-error'),
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+          ),
+      ],
+    );
+    final actions = [
+      if (existing != null)
+        TextButton(
+          key: const Key('remove-widget'),
+          onPressed: () async {
+            // Capture the navigator before the await so no BuildContext crosses the gap.
+            final navigator = Navigator.of(context);
+            await controller.removeWidget(existing!.id);
+            navigator.pop();
+          },
+          child: const Text('Remove'),
+        ),
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Cancel'),
+      ),
+      FilledButton(
+        key: const Key('save-widget'),
+        onPressed: _blocker == null ? _save : null,
+        child: const Text('Save'),
+      ),
+    ];
+    final screen = MediaQuery.sizeOf(context);
+    if (screen.width < 820) {
+      return AlertDialog(
+        title: dialogTitle,
+        content: SizedBox(
+          width: 520,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.only(top: 8),
+            child: form,
+          ),
+        ),
+        actions: actions,
+      );
+    }
+    // Wide screens get the form beside a live preview of the tile (mock 2d).
+    return Dialog(
+      clipBehavior: Clip.antiAlias,
+      child: SizedBox(
+        width: 820,
+        height: screen.height - 96 < 900 ? screen.height - 96 : 900,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(22, 22, 22, 14),
+                    child: DefaultTextStyle.merge(
+                      style: Theme.of(context).textTheme.titleLarge,
+                      child: dialogTitle,
+                    ),
+                  ),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      // Room above the first field so its floating label is not clipped.
+                      padding: const EdgeInsets.fromLTRB(22, 8, 22, 8),
+                      child: form,
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(22, 14, 22, 20),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      spacing: 8,
+                      children: actions,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              width: 280,
+              color: Nocturne.bg,
+              padding: const EdgeInsets.all(22),
+              child: _preview(schema),
+            ),
+          ],
         ),
       ),
-      actions: [
-        if (existing != null)
-          TextButton(
-            key: const Key('remove-widget'),
-            onPressed: () async {
-              // Capture the navigator before the await so no BuildContext crosses the gap.
-              final navigator = Navigator.of(context);
-              await controller.removeWidget(existing!.id);
-              navigator.pop();
-            },
-            child: const Text('Remove'),
+    );
+  }
+
+  /// What the tile will look like: the saved evaluation for an existing widget, the title and
+  /// query in words for a new one, and what the chosen size spans.
+  Widget _preview(CollectionSchemaDto? schema) {
+    final source = reuseQuery
+        ? _selectedQuery
+        : schema == null || query.blocker != null
+        ? null
+        : query.toDefinition(schema, title.text.trim(), 0);
+    final summary = source == null || schema == null
+        ? null
+        : describeQuery(source, schema);
+    final definition = existing;
+    final heading = title.text.trim().isEmpty ? 'Untitled' : title.text.trim();
+    final evaluation = definition == null
+        ? null
+        : controller.evaluationFor(definition.id);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SectionLabel('Preview'),
+        const SizedBox(height: 10),
+        SizedBox(
+          height: _tileHeight(size).clamp(118, 220),
+          child: NocturneCard(
+            padding: EdgeInsets.zero,
+            gradient: widgetType == 'core.aggregate-number'
+                ? nocturneGlow()
+                : null,
+            child: definition != null && evaluation != null && supported
+                ? CollectionDashboard._registry.build(
+                    WidgetRenderContext(
+                      definition: definition,
+                      evaluation: evaluation,
+                      enumLabels: enumLabelsFor(schema),
+                      summary: summary,
+                    ),
+                  )
+                : WidgetTile(
+                    title: heading,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: Icon(
+                              _typeIcon(widgetType),
+                              size: 32,
+                              color: Nocturne.muted(.35),
+                            ),
+                          ),
+                        ),
+                        Text(
+                          summary ?? 'Choose the data to show',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Nocturne.muted(.5),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
           ),
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
         ),
-        FilledButton(
-          key: const Key('save-widget'),
-          onPressed: _blocker == null ? _save : null,
-          child: const Text('Save'),
-        ),
+        const SizedBox(height: 10),
+        Text(switch (size) {
+          WidgetSizeDto.small =>
+            'Small spans one of three dashboard columns at its lowest height.',
+          WidgetSizeDto.medium =>
+            'Medium spans one of three dashboard columns.',
+          WidgetSizeDto.large => 'Large spans two of three dashboard columns.',
+          WidgetSizeDto.full => 'Full spans the whole dashboard row.',
+        }, style: TextStyle(fontSize: 12, color: Nocturne.muted(.5))),
       ],
     );
   }
@@ -683,6 +833,14 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
   WidgetConfigurationDto _emptyConfiguration() =>
       WidgetConfigurationDto(version: 1, body: _emptyStructuredMap());
 }
+
+IconData _typeIcon(String widgetType) => switch (widgetType) {
+  'core.aggregate-number' => Icons.tag,
+  'core.line-chart' => Icons.show_chart,
+  'core.bar-chart' => Icons.bar_chart,
+  'core.scatter-plot' => Icons.scatter_plot_outlined,
+  _ => Icons.widgets_outlined,
+};
 
 StructuredValueDto _emptyStructuredMap() => _structuredMap(const {});
 

@@ -39,7 +39,7 @@ final class Ledger {
 }
 
 /// A ledger with a required scale-2 `Amount` and an optional scale-3 `Rate`, with the page shown
-/// and the "Computed fields and queries" dialog open.
+/// and the "Computed fields & queries" sheet open.
 Future<Ledger> openDialog(
   WidgetTester tester, {
   Future<void> Function(Ledger)? seed,
@@ -270,6 +270,6 @@ void main() {
     expect(find.text(helpCopy[HelpId.computedFields]!.body), findsOneWidget);
     await tester.tap(find.byKey(const Key('help-close')));
     await tester.pumpAndSettle();
-    expect(find.text('Computed fields and queries'), findsOneWidget);
+    expect(find.text('Computed fields & queries'), findsOneWidget);
   });
 }

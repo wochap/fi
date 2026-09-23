@@ -1,5 +1,6 @@
 import 'package:fi/controllers.dart';
 import 'package:fi/src/rust/api/models.dart';
+import 'package:fi/theme/nocturne.dart';
 import 'package:fi/widgets/query_builder.dart';
 import 'package:flutter/material.dart';
 
@@ -83,10 +84,11 @@ class _QueryEditorDialogState extends State<QueryEditorDialog> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(widget.heading),
+          const SizedBox(height: 2),
           Text(
             _usage,
             key: const Key('query-editor-usage'),
-            style: Theme.of(context).textTheme.bodySmall,
+            style: TextStyle(fontSize: 12, color: Nocturne.muted(.55)),
           ),
         ],
       ),

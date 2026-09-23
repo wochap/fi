@@ -207,7 +207,7 @@ void main() {
       );
       await pumpPage(tester, seeded.controller);
 
-      expect(find.text('Dashboard'), findsOneWidget);
+      expect(find.text('DASHBOARD'), findsOneWidget);
       expect(find.text('First'), findsOneWidget);
       expect(find.text('Second'), findsOneWidget);
       // Deterministic order: the first widget precedes the second.
@@ -260,14 +260,14 @@ void main() {
     // Narrow Android: a medium tile fills the row and the two tiles stack vertically.
     final (narrowWidth, narrowFirstTop, narrowSecondTop) =
         await layoutTwoMediumTiles(const Size(420, 1200));
-    expect(narrowWidth, closeTo(396, 1));
+    expect(narrowWidth, closeTo(388, 1));
     expect(narrowSecondTop, greaterThan(narrowFirstTop));
 
-    // Wide Linux Wayland window: the same hint yields half the row and the tiles sit side by side.
+    // Wide Linux Wayland window: the same hint yields one of three columns, side by side.
     final (wideWidth, wideFirstTop, wideSecondTop) = await layoutTwoMediumTiles(
       const Size(1400, 1200),
     );
-    expect(wideWidth, closeTo(682, 1));
+    expect(wideWidth, closeTo((1400 - 64 - 24) / 3, 1));
     expect(wideFirstTop, wideSecondTop);
     expect(wideWidth, greaterThan(narrowWidth));
 
@@ -754,6 +754,8 @@ void main() {
 
     await tester.tap(find.text('Queries'));
     await pumpUntilFound(tester, find.text('Made elsewhere'));
+    // The sheet slides in; wait for it to rest before tapping inside it.
+    await tester.pumpAndSettle();
     final unreadable = seeded.controller.queryDefinitions
         .firstWhere((item) => item.name == 'Made elsewhere')
         .id;

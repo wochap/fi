@@ -112,10 +112,10 @@ void main() {
     tester.view.physicalSize = const Size(500, 800);
     await tester.pumpWidget(app(bridge));
     await pumpUntilFound(tester, find.byType(NavigationBar));
-    expect(find.byType(NavigationRail), findsNothing);
+    expect(find.byKey(const Key('sidebar')), findsNothing);
     tester.view.physicalSize = const Size(1000, 800);
     await tester.pumpAndSettle();
-    expect(find.byType(NavigationRail), findsOneWidget);
+    expect(find.byKey(const Key('sidebar')), findsOneWidget);
     expect(find.byType(NavigationBar), findsNothing);
   });
 }

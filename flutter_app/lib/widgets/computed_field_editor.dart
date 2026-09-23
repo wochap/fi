@@ -86,24 +86,38 @@ class _ComputedFieldEditorState extends State<ComputedFieldEditor> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
-          child: Text(
-            widget.existing == null
-                ? 'New computed field'
-                : 'Edit computed field',
-            style: theme.textTheme.headlineSmall,
+          padding: const EdgeInsets.fromLTRB(22, 16, 12, 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  widget.existing == null
+                      ? 'New computed field'
+                      : 'Edit computed field',
+                  style: theme.textTheme.titleLarge,
+                ),
+              ),
+              IconButton(
+                tooltip: 'Close',
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.close),
+              ),
+            ],
           ),
         ),
         Expanded(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
+            padding: const EdgeInsets.fromLTRB(22, 8, 22, 0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 TextField(
                   key: const Key('computed-name'),
                   controller: name,
-                  decoration: const InputDecoration(labelText: 'Name'),
+                  decoration: const InputDecoration(
+                    labelText: 'Name',
+                    hintText: 'e.g. difference',
+                  ),
                   onChanged: (_) => setState(() {}),
                 ),
                 const SizedBox(height: 16),
@@ -128,7 +142,7 @@ class _ComputedFieldEditorState extends State<ComputedFieldEditor> {
           ),
         ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
+          padding: const EdgeInsets.fromLTRB(22, 12, 22, 20),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [

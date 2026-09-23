@@ -5,6 +5,8 @@ import 'package:fi/exact_format.dart';
 import 'package:fi/help_button.dart';
 import 'package:fi/help_copy.dart';
 import 'package:fi/src/rust/api/models.dart';
+import 'package:fi/theme/nocturne.dart';
+import 'package:fi/theme/nocturne_widgets.dart';
 import 'package:flutter/material.dart';
 
 /// The deepest nesting of operator nodes the builder offers. Core has no limit; this only keeps
@@ -522,23 +524,101 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
     crossAxisAlignment: CrossAxisAlignment.stretch,
     mainAxisSize: MainAxisSize.min,
     children: [
+      _formulaStrip(),
+      const SizedBox(height: 12),
       _card(context, root, r'$', parentIsAbs: false),
       const SizedBox(height: 12),
       _resultLine(context),
     ],
   );
 
+  /// The whole expression as one line of formula, so the tree of cards below reads as an edit of
+  /// something visible (mock 2b). Unfinished leaves show as dashed slots.
+  Widget _formulaStrip() {
+    const paren = TextStyle(color: Nocturne.accent300);
+    Widget symbol(String text, [TextStyle? style]) => Text(text, style: style);
+    Widget slot(String text) => Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 1),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(Nocturne.radiusSm),
+        border: Border.all(color: Nocturne.accent),
+      ),
+      child: Text(
+        text,
+        style: const TextStyle(
+          fontFamily: Nocturne.fontFamily,
+          fontSize: 12,
+          color: Nocturne.accent300,
+        ),
+      ),
+    );
+    List<Widget> pieces(ExprNode node, {required bool nested}) =>
+        switch (node) {
+          FieldLeaf(:final fieldId) => [
+            switch (_field(fieldId)) {
+              final field? => Tag(field.name),
+              null => slot('field?'),
+            },
+          ],
+          ConstantLeaf(:final text) =>
+            text.trim().isEmpty ? [slot('number?')] : [symbol(text.trim())],
+          BinaryNode(:final operator, :final left, :final right) => [
+            if (nested) symbol('(', paren),
+            ...pieces(left, nested: true),
+            symbol(operator.symbol),
+            ...pieces(right, nested: true),
+            if (nested) symbol(')', paren),
+          ],
+          AbsNode(:final child) => [
+            symbol('abs(', paren),
+            ...pieces(child, nested: false),
+            symbol(')', paren),
+          ],
+        };
+    return Container(
+      key: const Key('computed-formula'),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: Nocturne.bg,
+        borderRadius: BorderRadius.circular(Nocturne.radius),
+      ),
+      child: DefaultTextStyle.merge(
+        style: const TextStyle(
+          fontFamily: Nocturne.monoFamily,
+          fontSize: 14,
+          color: Nocturne.text,
+        ),
+        child: Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: pieces(root, nested: false),
+        ),
+      ),
+    );
+  }
+
   Widget _resultLine(BuildContext context) {
     final theme = Theme.of(context);
     final (text, isError) = _resultText();
+    final missing = incompleteNodes(root).length;
     return Row(
       children: [
+        if (missing > 0) ...[
+          const Icon(Icons.error_outline, size: 16, color: Nocturne.accent300),
+          const SizedBox(width: 6),
+        ],
         Expanded(
           child: Text(
             text,
             key: const Key('computed-result'),
             style: theme.textTheme.bodyMedium?.copyWith(
-              color: isError ? theme.colorScheme.error : null,
+              fontSize: missing > 0 ? 12 : 13,
+              color: isError
+                  ? theme.colorScheme.error
+                  : missing > 0
+                  ? Nocturne.accent300
+                  : Nocturne.muted(.7),
             ),
           ),
         ),
@@ -548,8 +628,14 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
   }
 
   (String, bool) _resultText() {
-    if (incompleteNodes(root).isNotEmpty) {
-      return ('Result: finish the marked parts', false);
+    final missing = incompleteNodes(root).length;
+    if (missing > 0) {
+      return (
+        missing == 1
+            ? '1 term still needs a value'
+            : '$missing terms still need a value',
+        false,
+      );
     }
     if (_resultError case final error?) return (error, true);
     if (_errorMessage != null) {
@@ -584,18 +670,19 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
       BinaryNode() => _binary(context, node, path),
       AbsNode() => _abs(context, node, path),
     };
+    // A term hangs off a single accent line rather than sitting in a box, so nesting reads as
+    // indentation (mock 2b); an error thickens the line in the error color.
     return Container(
       key: Key('expr-node-$path'),
-      margin: const EdgeInsets.symmetric(vertical: 4),
-      padding: const EdgeInsets.all(8),
+      margin: const EdgeInsets.symmetric(vertical: 3),
+      padding: const EdgeInsets.fromLTRB(12, 4, 0, 4),
       decoration: BoxDecoration(
-        border: Border.all(
-          color: highlighted
-              ? theme.colorScheme.error
-              : theme.colorScheme.outlineVariant,
-          width: highlighted ? 2 : 1,
+        border: Border(
+          left: BorderSide(
+            color: highlighted ? theme.colorScheme.error : Nocturne.accent700,
+            width: highlighted ? 2 : 1,
+          ),
         ),
-        borderRadius: BorderRadius.circular(8),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -675,7 +762,7 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
           ),
         ),
         if (node case FieldLeaf(:final fieldId))
-          SizedBox(
+          _Boxed(
             width: 220,
             child: DropdownButton<String>(
               key: Key('field-$path'),
@@ -708,19 +795,21 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
               ),
             ),
           ),
-          DropdownButton<int?>(
-            key: Key('constant-scale-$path'),
-            value: scale,
-            items: [
-              const DropdownMenuItem<int?>(value: null, child: Text('Whole')),
-              for (var i = 0; i <= 18; i++)
-                DropdownMenuItem<int?>(
-                  value: i,
-                  child: Text('Decimal, scale $i'),
-                ),
-            ],
-            onChanged: (next) => _update(
-              replaceAt(root, path, ConstantLeaf(text: text, scale: next)),
+          _Boxed(
+            child: DropdownButton<int?>(
+              key: Key('constant-scale-$path'),
+              value: scale,
+              items: [
+                const DropdownMenuItem<int?>(value: null, child: Text('Whole')),
+                for (var i = 0; i <= 18; i++)
+                  DropdownMenuItem<int?>(
+                    value: i,
+                    child: Text('Decimal, scale $i'),
+                  ),
+              ],
+              onChanged: (next) => _update(
+                replaceAt(root, path, ConstantLeaf(text: text, scale: next)),
+              ),
             ),
           ),
         ],
@@ -737,17 +826,25 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
         spacing: 8,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          DropdownButton<ExprOperator>(
-            key: Key('operator-$path'),
-            value: node.operator,
-            items: [
-              for (final operator in ExprOperator.values)
-                DropdownMenuItem(value: operator, child: Text(operator.symbol)),
-            ],
-            onChanged: (operator) {
-              if (operator == null) return;
-              _update(replaceAt(root, path, node.copyWith(operator: operator)));
-            },
+          _Boxed(
+            width: 64,
+            child: DropdownButton<ExprOperator>(
+              key: Key('operator-$path'),
+              value: node.operator,
+              items: [
+                for (final operator in ExprOperator.values)
+                  DropdownMenuItem(
+                    value: operator,
+                    child: Text(operator.symbol),
+                  ),
+              ],
+              onChanged: (operator) {
+                if (operator == null) return;
+                _update(
+                  replaceAt(root, path, node.copyWith(operator: operator)),
+                );
+              },
+            ),
           ),
           if (node.operator == ExprOperator.divide)
             ..._divideControls(node, path),
@@ -800,23 +897,25 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
         ),
       ],
     ),
-    DropdownButton<RoundingPolicyDto>(
-      key: Key('rounding-$path'),
-      value: node.rounding,
-      items: const [
-        DropdownMenuItem(
-          value: RoundingPolicyDto.halfEven,
-          child: Text('Round half to even'),
-        ),
-        DropdownMenuItem(
-          value: RoundingPolicyDto.rejectInexact,
-          child: Text('Reject inexact'),
-        ),
-      ],
-      onChanged: (rounding) {
-        if (rounding == null) return;
-        _update(replaceAt(root, path, node.copyWith(rounding: rounding)));
-      },
+    _Boxed(
+      child: DropdownButton<RoundingPolicyDto>(
+        key: Key('rounding-$path'),
+        value: node.rounding,
+        items: const [
+          DropdownMenuItem(
+            value: RoundingPolicyDto.halfEven,
+            child: Text('Round half to even'),
+          ),
+          DropdownMenuItem(
+            value: RoundingPolicyDto.rejectInexact,
+            child: Text('Reject inexact'),
+          ),
+        ],
+        onChanged: (rounding) {
+          if (rounding == null) return;
+          _update(replaceAt(root, path, node.copyWith(rounding: rounding)));
+        },
+      ),
     ),
   ];
 
@@ -826,7 +925,31 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
     children: [
       Row(
         children: [
-          const Expanded(child: Text('Absolute value of')),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: Nocturne.accent),
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.functions, size: 12, color: Nocturne.accent),
+                SizedBox(width: 4),
+                Text(
+                  'Absolute value',
+                  style: TextStyle(fontSize: 11, color: Nocturne.accent),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'of',
+              style: TextStyle(fontSize: 13, color: Nocturne.muted(.55)),
+            ),
+          ),
           IconButton(
             key: Key('unabs-$path'),
             tooltip: 'Remove absolute value',
@@ -838,5 +961,27 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
       ),
       _card(context, node.child, '$path.expression', parentIsAbs: true),
     ],
+  );
+}
+
+/// A bare dropdown drawn as a Nocturne input box, so the builder's compact pickers match the
+/// outlined fields around them.
+class _Boxed extends StatelessWidget {
+  const _Boxed({required this.child, this.width});
+
+  final Widget child;
+  final double? width;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: width,
+    height: 36,
+    padding: const EdgeInsets.symmetric(horizontal: 10),
+    decoration: BoxDecoration(
+      color: Nocturne.surface,
+      borderRadius: BorderRadius.circular(Nocturne.radius),
+      border: Border.all(color: Nocturne.divider),
+    ),
+    child: DropdownButtonHideUnderline(child: child),
   );
 }

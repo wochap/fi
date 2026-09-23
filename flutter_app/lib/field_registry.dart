@@ -47,9 +47,43 @@ final class FieldRendererRegistry {
     allowClear: allowClear,
   );
 
+  /// A stored value as text. [human] reads dates as `Sep 22, 2026 · 14:05` for tables and lists,
+  /// [short] drops the year; without it the value keeps the sortable form editors use.
+  /// Returns null when there is no value.
+  String? displayText(
+    FieldDefinitionDto field,
+    FieldValueDto? value, {
+    bool human = false,
+    bool short = false,
+  }) {
+    if (value == null || value.kind == FieldValueKindDto.null_) return null;
+    if (human) {
+      switch (value.kind) {
+        case FieldValueKindDto.dateTime:
+          return formatDateTimeHuman(value.integerValue ?? 0, short: short);
+        case FieldValueKindDto.date:
+          return formatDateHuman(value.integerValue ?? 0, short: short);
+        case FieldValueKindDto.duration:
+          return formatDuration(value.integerValue ?? 0);
+        default:
+      }
+    }
+    final text = _text(field, value);
+    return text == '—' ? null : text;
+  }
+
   Widget display(FieldDefinitionDto field, FieldValueDto? value) {
     if (value == null) return const Text('—');
-    final text = switch (value.kind) {
+    final text = _text(field, value);
+    return Text(
+      text,
+      maxLines: field.display.multiline ? null : 1,
+      overflow: field.display.multiline ? null : TextOverflow.ellipsis,
+    );
+  }
+
+  String _text(FieldDefinitionDto field, FieldValueDto value) {
+    return switch (value.kind) {
       FieldValueKindDto.null_ => '—',
       FieldValueKindDto.text => value.textValue ?? '—',
       FieldValueKindDto.enum_ =>
@@ -75,11 +109,6 @@ final class FieldRendererRegistry {
       FieldValueKindDto.duration => '${value.integerValue ?? 0} ms',
       FieldValueKindDto.integer => '${value.integerValue ?? 0}',
     };
-    return Text(
-      text,
-      maxLines: field.display.multiline ? null : 1,
-      overflow: field.display.multiline ? null : TextOverflow.ellipsis,
-    );
   }
 }
 

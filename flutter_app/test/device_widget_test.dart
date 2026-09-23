@@ -94,6 +94,8 @@ void main() {
     bridge.pairingController.add(
       pairingState(PairingKindDto.failed, message: 'Pairing timed out.'),
     );
+    // The stream event lands after the frame; no ink animation keeps another frame queued.
+    await tester.pump();
     await tester.pump();
     expect(find.text('Pairing timed out.'), findsOneWidget);
   });

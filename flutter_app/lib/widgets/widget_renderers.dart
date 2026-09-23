@@ -1,5 +1,6 @@
 import 'package:fi/exact_format.dart';
 import 'package:fi/src/rust/api/models.dart';
+import 'package:fi/theme/nocturne.dart';
 import 'package:fi/widgets/chart_renderers.dart';
 import 'package:flutter/material.dart';
 
@@ -13,6 +14,7 @@ final class WidgetRenderContext {
     required this.definition,
     required this.evaluation,
     this.enumLabels = const {},
+    this.summary,
   });
 
   final WidgetDefinitionDto definition;
@@ -22,6 +24,9 @@ final class WidgetRenderContext {
 
   /// Enum option id to label, so category axes stay readable while values stay exact.
   final Map<String, String> enumLabels;
+
+  /// The query in words, shown under a headline number. Null when the query is not known here.
+  final String? summary;
 
   /// The decoded presentation body. Unknown keys stay present and are ignored.
   StructuredValueDto get configuration => definition.configuration.body;
@@ -128,21 +133,34 @@ Widget renderAggregateNumber(WidgetRenderContext context) {
   return WidgetTile(
     title: context.definition.title,
     child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(
-          suffix == null || suffix.isEmpty
-              ? value.label
-              : '${value.label} $suffix',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            fontSize: 28,
-            fontWeight: FontWeight.w600,
-            fontFeatures: [FontFeature.tabularFigures()],
+        Expanded(
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              suffix == null || suffix.isEmpty
+                  ? value.label
+                  : '${value.label} $suffix',
+              maxLines: 1,
+              style: const TextStyle(
+                fontSize: 40,
+                fontWeight: FontWeight.w500,
+                letterSpacing: -.8,
+                height: 1.1,
+                fontFeatures: Nocturne.tabular,
+              ),
+            ),
           ),
         ),
+        if (context.summary case final summary?)
+          Text(
+            summary,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 11, color: Nocturne.muted(.5)),
+          ),
       ],
     ),
   );
@@ -166,53 +184,56 @@ final class UnsupportedWidgetPlaceholder extends StatelessWidget {
         : const <String>[];
     return WidgetTile(
       title: definition.title.isEmpty ? 'Untitled widget' : definition.title,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            children: [
-              Icon(
-                Icons.widgets_outlined,
-                size: 18,
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  'Unsupported widget',
-                  style: theme.textTheme.labelLarge?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
+      // Long explanations scroll inside the tile rather than overflowing it.
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.widgets_outlined,
+                  size: 18,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'Unsupported widget',
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            // The exact synchronized type stays visible so the user can tell what is missing.
+            SelectableText(
+              definition.widgetType,
+              style: theme.textTheme.bodySmall?.copyWith(
+                fontFamily: Nocturne.monoFamily,
+                color: theme.colorScheme.onSurfaceVariant,
               ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          // The exact synchronized type stays visible so the user can tell what is missing.
-          SelectableText(
-            definition.widgetType,
-            style: theme.textTheme.bodySmall?.copyWith(
-              fontFamily: 'monospace',
-              color: theme.colorScheme.onSurfaceVariant,
             ),
-          ),
-          Text(
-            'Version ${definition.configuration.version} · '
-            '${unknownKeys.isEmpty ? 'no configuration keys' : '${unknownKeys.length} configuration keys'}',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
+            Text(
+              'Version ${definition.configuration.version} · '
+              '${unknownKeys.isEmpty ? 'no configuration keys' : '${unknownKeys.length} configuration keys'}',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
             ),
-          ),
-          Text(
-            'This widget was created by another device or a newer version. '
-            'Its configuration is preserved and can be renamed, reordered, or removed.',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
+            Text(
+              'This widget was created by another device or a newer version. '
+              'Its configuration is preserved and can be renamed, reordered, or removed.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -226,20 +247,31 @@ final class WidgetTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return Padding(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.fromLTRB(18, 14, 14, 14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (title.isNotEmpty)
-            Text(
-              title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.titleSmall,
-            ),
-          const SizedBox(height: 8),
+          Row(
+            children: [
+              // The kicker keeps the title's own case so it reads as the name it was given.
+              Expanded(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    letterSpacing: 1.1,
+                    color: Nocturne.accent,
+                    height: 1.4,
+                  ),
+                ),
+              ),
+              Icon(Icons.more_horiz, size: 16, color: Nocturne.muted(.6)),
+            ],
+          ),
+          const SizedBox(height: 4),
           Expanded(child: child),
         ],
       ),
@@ -305,33 +337,36 @@ final class WidgetFailureCard extends StatelessWidget {
     final theme = Theme.of(context);
     return WidgetTile(
       title: title,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            children: [
-              Icon(_icon, size: 18, color: theme.colorScheme.error),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  _headline,
-                  style: theme.textTheme.labelLarge?.copyWith(
-                    color: theme.colorScheme.error,
+      // Long explanations scroll inside the tile rather than overflowing it.
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Icon(_icon, size: 18, color: theme.colorScheme.error),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    _headline,
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      color: theme.colorScheme.error,
+                    ),
                   ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(
-            message,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
+              ],
             ),
-          ),
-        ],
+            const SizedBox(height: 4),
+            Text(
+              message,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -8,6 +8,8 @@ import 'package:fi/collections_page.dart';
 import 'package:fi/pairing_card.dart';
 import 'package:fi/reset_dialog.dart';
 import 'package:fi/status_time.dart';
+import 'package:fi/theme/nocturne.dart';
+import 'package:fi/theme/nocturne_widgets.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -141,10 +143,8 @@ class _CollectionAppState extends State<CollectionApp>
   @override
   Widget build(BuildContext context) => MaterialApp(
     title: 'Fi',
-    theme: ThemeData(
-      colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
-      useMaterial3: true,
-    ),
+    debugShowCheckedModeBanner: false,
+    theme: nocturneTheme(),
     home: ListenableBuilder(
       listenable: controller,
       builder: (context, _) {
@@ -573,97 +573,286 @@ class _CollectionShellState extends State<CollectionShell> {
     super.dispose();
   }
 
+  void _select(int value) => setState(() => selected = value);
+
   @override
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: Listenable.merge([controller, devices]),
-    builder: (context, _) => Scaffold(
-      appBar: AppBar(
-        title: const Text('Fi'),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Center(
-              child: LayoutBuilder(
-                // The full label does not fit a phone-width app bar, so the icon carries the
-                // status there and the label stays reachable as the tooltip.
-                builder: (context, _) {
-                  final wide = MediaQuery.sizeOf(context).width >= 600;
-                  final label = _statusText(devices.syncStatus);
-                  return Tooltip(
-                    message: label,
-                    child: Row(
-                      key: const Key('app-bar-sync-status'),
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(_statusIcon(devices.syncStatus), size: 18),
-                        if (wide) ...[const SizedBox(width: 6), Text(label)],
-                      ],
-                    ),
-                  );
-                },
+    builder: (context, _) {
+      final page = IndexedStack(
+        index: selected,
+        children: [
+          CollectionsPage(controller: controller),
+          DevicesPage(
+            controller: devices,
+            onResetDataset: widget.onResetDataset,
+          ),
+        ],
+      );
+      if (MediaQuery.sizeOf(context).width >= 720) {
+        return Scaffold(
+          body: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _Sidebar(
+                selected: selected,
+                onSelected: _select,
+                devices: devices,
               ),
+              Expanded(child: page),
+            ],
+          ),
+        );
+      }
+      // The slim brand row belongs to the top-level lists; a collection brings its own header
+      // with a back button, and the devices page states the sync status itself.
+      final topRow = switch (selected) {
+        0 when controller.selectedCollectionId == null => _MobileTopRow(
+          status: devices.syncStatus,
+        ),
+        1 => const _MobileTopRow(),
+        _ => null,
+      };
+      return Scaffold(
+        body: SafeArea(
+          bottom: false,
+          child: Column(
+            children: [
+              ?topRow,
+              Expanded(child: page),
+            ],
+          ),
+        ),
+        bottomNavigationBar: DecoratedBox(
+          decoration: const BoxDecoration(
+            border: Border(top: BorderSide(color: Nocturne.divider)),
+          ),
+          child: NavigationBar(
+            selectedIndex: selected,
+            onDestinationSelected: _select,
+            destinations: const [
+              NavigationDestination(
+                icon: Icon(Icons.grid_view_outlined),
+                label: 'Collections',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.devices_outlined),
+                label: 'Devices',
+              ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
+}
+
+/// The wide-layout navigation: brand, destinations, and the aggregate sync status at the foot.
+class _Sidebar extends StatelessWidget {
+  const _Sidebar({
+    required this.selected,
+    required this.onSelected,
+    required this.devices,
+  });
+
+  final int selected;
+  final ValueChanged<int> onSelected;
+  final DevicesController devices;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    key: const Key('sidebar'),
+    width: 216,
+    padding: const EdgeInsets.fromLTRB(12, 18, 12, 18),
+    decoration: const BoxDecoration(
+      gradient: LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [Nocturne.surface, Nocturne.bg],
+      ),
+      border: Border(right: BorderSide(color: Nocturne.divider)),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Padding(
+          padding: EdgeInsets.fromLTRB(8, 2, 8, 20),
+          child: Row(
+            children: [
+              FiLogoTile(),
+              SizedBox(width: 10),
+              Text(
+                'Fi',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+              ),
+            ],
+          ),
+        ),
+        _NavRow(
+          icon: Icons.grid_view_outlined,
+          label: 'Collections',
+          selected: selected == 0,
+          onTap: () => onSelected(0),
+        ),
+        const SizedBox(height: 4),
+        _NavRow(
+          icon: Icons.devices_outlined,
+          label: 'Devices',
+          selected: selected == 1,
+          onTap: () => onSelected(1),
+        ),
+        const Spacer(),
+        _SidebarStatus(devices: devices),
+      ],
+    ),
+  );
+}
+
+class _NavRow extends StatelessWidget {
+  const _NavRow({
+    required this.icon,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = selected ? Nocturne.accent200 : Nocturne.muted(.7);
+    return Material(
+      color: selected ? Nocturne.accent900 : Colors.transparent,
+      borderRadius: BorderRadius.circular(Nocturne.radius),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(Nocturne.radius),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          child: Row(
+            children: [
+              Icon(icon, size: 18, color: color),
+              const SizedBox(width: 10),
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 14, color: color),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SidebarStatus extends StatelessWidget {
+  const _SidebarStatus({required this.devices});
+  final DevicesController devices;
+
+  @override
+  Widget build(BuildContext context) {
+    final trusted = devices.devices.where((device) => !device.revoked);
+    final reachable = trusted
+        .where(
+          (device) =>
+              device.connection == PeerConnectionKindDto.connected ||
+              device.connection == PeerConnectionKindDto.syncing ||
+              device.connection == PeerConnectionKindDto.synced,
+        )
+        .length;
+    return Container(
+      key: const Key('app-bar-sync-status'),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(Nocturne.radius),
+        border: Border.all(color: Nocturne.neutral800),
+      ),
+      child: Row(
+        children: [
+          _StatusDot(status: devices.syncStatus),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _statusText(devices.syncStatus),
+                  style: const TextStyle(fontSize: 12, height: 1.35),
+                ),
+                Text(
+                  '${trusted.length} paired · '
+                  '${reachable == 0 ? 'none nearby' : '$reachable connected'}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    height: 1.35,
+                    color: Nocturne.muted(.55),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
       ),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          final page = IndexedStack(
-            index: selected,
+    );
+  }
+}
+
+/// The aggregate status as a dot: lit while the device is reaching peers, dim when offline.
+class _StatusDot extends StatelessWidget {
+  const _StatusDot({required this.status, this.size = 8, this.ring = true});
+  final SyncStatusDto status;
+  final double size;
+  final bool ring;
+
+  @override
+  Widget build(BuildContext context) => switch (status) {
+    SyncStatusDto.offline => GlowDot(
+      size: size,
+      ring: false,
+      color: Nocturne.neutral600,
+    ),
+    SyncStatusDto.error => GlowDot(
+      size: size,
+      ring: false,
+      color: Nocturne.error,
+    ),
+    _ => GlowDot(size: size, ring: ring),
+  };
+}
+
+/// The phone-width brand row, with the aggregate status when [status] is given.
+class _MobileTopRow extends StatelessWidget {
+  const _MobileTopRow({this.status});
+  final SyncStatusDto? status;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(18, 18, 18, 8),
+    child: Row(
+      children: [
+        const FiLogoTile(),
+        const Spacer(),
+        if (status case final status?)
+          Row(
+            key: const Key('app-bar-sync-status'),
+            mainAxisSize: MainAxisSize.min,
             children: [
-              CollectionsPage(controller: controller),
-              DevicesPage(
-                controller: devices,
-                onResetDataset: widget.onResetDataset,
+              _StatusDot(status: status, size: 7, ring: false),
+              const SizedBox(width: 6),
+              Text(
+                _statusText(status),
+                style: TextStyle(fontSize: 12, color: Nocturne.muted(.6)),
               ),
             ],
-          );
-          if (constraints.maxWidth >= 720) {
-            return Row(
-              children: [
-                NavigationRail(
-                  selectedIndex: selected,
-                  onDestinationSelected: (value) {
-                    setState(() => selected = value);
-                  },
-                  labelType: NavigationRailLabelType.all,
-                  destinations: const [
-                    NavigationRailDestination(
-                      icon: Icon(Icons.dataset_outlined),
-                      label: Text('Collections'),
-                    ),
-                    NavigationRailDestination(
-                      icon: Icon(Icons.devices),
-                      label: Text('Devices'),
-                    ),
-                  ],
-                ),
-                const VerticalDivider(width: 1),
-                Expanded(child: page),
-              ],
-            );
-          }
-          return page;
-        },
-      ),
-      bottomNavigationBar: MediaQuery.sizeOf(context).width < 720
-          ? NavigationBar(
-              selectedIndex: selected,
-              onDestinationSelected: (value) {
-                setState(() => selected = value);
-              },
-              destinations: const [
-                NavigationDestination(
-                  icon: Icon(Icons.dataset_outlined),
-                  label: 'Collections',
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.devices),
-                  label: 'Devices',
-                ),
-              ],
-            )
-          : null,
+          ),
+      ],
     ),
   );
 }
@@ -725,99 +914,242 @@ class _DevicesPageState extends State<DevicesPage> {
   Widget build(BuildContext context) {
     // `clock` rather than `DateTime.now()` so widget tests can advance time.
     final now = clock.now();
+    final phone = MediaQuery.sizeOf(context).width < 720;
+    final theme = Theme.of(context);
+    final trusted = controller.devices;
+    final info = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          "Reset this device's data",
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          'Abandon the dataset here to create a new one or join '
+          "another device's. Your device identity is kept.",
+          style: TextStyle(fontSize: 13, color: Nocturne.muted(.6)),
+        ),
+      ],
+    );
+    final button = OutlinedButton.icon(
+      key: const Key('reset-dataset'),
+      onPressed: controller.busy ? null : () => _resetDataset(context),
+      icon: const Icon(Icons.restart_alt),
+      label: const Text('Reset data…'),
+    );
     return ListView(
       key: const Key('devices-page'),
-      padding: const EdgeInsets.all(16),
+      padding: phone
+          ? const EdgeInsets.fromLTRB(16, 12, 16, 24)
+          : const EdgeInsets.fromLTRB(32, 22, 32, 32),
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                'Devices',
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-            ),
-            _SyncChip(status: controller.syncStatus),
-          ],
-        ),
-        const SizedBox(height: 16),
-        if (controller.errorMessage case final error?) _ErrorBanner(error),
-        if (controller.rotationError case final error?)
-          MaterialBanner(
-            key: const Key('rotation-error'),
-            content: Text(
-              'The device was revoked, but the discovery secret could not be '
-              'rotated: $error',
-            ),
-            actions: [
-              TextButton(
-                key: const Key('retry-rotation'),
-                onPressed: controller.busy ? null : controller.retryRotation,
-                child: const Text('Retry rotation'),
-              ),
-            ],
-          ),
-        PairingCard(controller: controller, onResetDataset: onResetDataset),
-        const SizedBox(height: 24),
-        Text('Trusted devices', style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: 8),
-        if (controller.devices.isEmpty)
-          const Text('No devices have been paired yet.')
-        else
-          ...controller.devices.map(
-            (device) => Card(
-              key: Key('device-${device.deviceId}'),
-              child: ListTile(
-                leading: Icon(
-                  device.revoked ? Icons.block : Icons.devices_other,
+        Align(
+          alignment: Alignment.topLeft,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 816),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Devices',
+                  style: phone
+                      ? theme.textTheme.headlineSmall
+                      : theme.textTheme.headlineMedium,
                 ),
-                title: Text(device.friendlyName),
-                subtitle: Text(
-                  '${_shortDeviceId(device.deviceId)} · '
-                  '${device.revoked ? 'Revoked' : _connectionText(device.connection)}\n'
-                  'Last seen ${formatStatusTime(device.lastSeenMs, now: now)} · '
-                  'Last sync ${formatStatusTime(device.lastSyncMs, now: now)}',
-                ),
-                isThreeLine: true,
-                trailing: PopupMenuButton<String>(
-                  onSelected: (action) {
-                    if (action == 'rename') _renameDevice(context, device);
-                    if (action == 'revoke') _revokeDevice(context, device);
-                  },
-                  itemBuilder: (_) => [
-                    const PopupMenuItem(value: 'rename', child: Text('Rename')),
-                    if (!device.revoked)
-                      const PopupMenuItem(
-                        value: 'revoke',
-                        child: Text('Revoke / unpair'),
+                const SizedBox(height: 6),
+                if (!phone)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text(
+                      'Devices you trust sync this dataset directly with each other.',
+                      style: TextStyle(fontSize: 13, color: Nocturne.muted(.6)),
+                    ),
+                  ),
+                _SyncChip(status: controller.syncStatus),
+                const SizedBox(height: 22),
+                if (controller.errorMessage case final error?)
+                  _ErrorBanner(error),
+                if (controller.rotationError case final error?)
+                  MaterialBanner(
+                    key: const Key('rotation-error'),
+                    content: Text(
+                      'The device was revoked, but the discovery secret could not be '
+                      'rotated: $error',
+                    ),
+                    actions: [
+                      TextButton(
+                        key: const Key('retry-rotation'),
+                        onPressed: controller.busy
+                            ? null
+                            : controller.retryRotation,
+                        child: const Text('Retry rotation'),
                       ),
+                    ],
+                  ),
+                PairingCard(
+                  controller: controller,
+                  onResetDataset: onResetDataset,
+                ),
+                const SizedBox(height: 26),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    const SectionLabel('Trusted devices'),
+                    const SizedBox(width: 10),
+                    Text(
+                      '${trusted.length}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Nocturne.muted(.45),
+                      ),
+                    ),
                   ],
                 ),
-              ),
+                const SizedBox(height: 10),
+                if (trusted.isEmpty)
+                  Text(
+                    'No devices have been paired yet.',
+                    style: TextStyle(fontSize: 13, color: Nocturne.muted(.6)),
+                  )
+                else
+                  NocturneCard(
+                    padding: EdgeInsets.zero,
+                    child: Column(
+                      children: [
+                        for (final (index, device) in trusted.indexed) ...[
+                          if (index > 0) const FadedRule(indent: 16),
+                          _deviceRow(context, device, now, phone: phone),
+                        ],
+                      ],
+                    ),
+                  ),
+                if (onResetDataset != null) ...[
+                  const SizedBox(height: 26),
+                  const SectionLabel('This device'),
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(Nocturne.radius),
+                      border: Border.all(color: Nocturne.divider),
+                    ),
+                    child: phone
+                        ? Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              info,
+                              const SizedBox(height: 12),
+                              button,
+                            ],
+                          )
+                        : Row(
+                            children: [
+                              Expanded(child: info),
+                              const SizedBox(width: 16),
+                              button,
+                            ],
+                          ),
+                  ),
+                ],
+              ],
             ),
           ),
-        if (onResetDataset != null) ...[
-          const SizedBox(height: 32),
-          Text('This device', style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 8),
-          const Text(
-            'Abandon the dataset on this device to create a new one or join '
-            "another device's. Your device identity is kept.",
-          ),
-          const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: OutlinedButton.icon(
-              key: const Key('reset-dataset'),
-              onPressed: controller.busy ? null : () => _resetDataset(context),
-              icon: const Icon(Icons.restart_alt),
-              label: const Text("Reset this device's data"),
-            ),
-          ),
-        ],
+        ),
       ],
     );
   }
+
+  /// One trusted device (mocks 1b, 2i): kind tile, name with its connection tag, the id in mono
+  /// with when it was last seen and synced, and its actions.
+  Widget _deviceRow(
+    BuildContext context,
+    TrustedDeviceDto device,
+    DateTime now, {
+    required bool phone,
+  }) => Padding(
+    key: Key('device-${device.deviceId}'),
+    padding: const EdgeInsets.fromLTRB(16, 12, 6, 12),
+    child: Row(
+      children: [
+        IconTile(
+          device.revoked ? Icons.block : Icons.devices_other,
+          fill: Nocturne.neutral800,
+          color: Nocturne.text,
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      device.friendlyName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  switch ((device.revoked, device.connection)) {
+                    (true, _) => const Tag.neutral('Revoked'),
+                    (
+                      _,
+                      PeerConnectionKindDto.offline ||
+                          PeerConnectionKindDto.error,
+                    ) =>
+                      Tag.neutral(_connectionText(device.connection)),
+                    _ => Tag(_connectionText(device.connection)),
+                  },
+                ],
+              ),
+              const SizedBox(height: 2),
+              Text.rich(
+                TextSpan(
+                  children: [
+                    if (!phone) ...[
+                      TextSpan(
+                        text: _shortDeviceId(device.deviceId),
+                        style: const TextStyle(fontFamily: Nocturne.monoFamily),
+                      ),
+                      const TextSpan(text: ' · '),
+                    ],
+                    TextSpan(
+                      text:
+                          'Last seen ${formatStatusTime(device.lastSeenMs, now: now)} · '
+                          'Last sync ${formatStatusTime(device.lastSyncMs, now: now)}',
+                    ),
+                  ],
+                ),
+                style: TextStyle(fontSize: 12, color: Nocturne.muted(.55)),
+              ),
+            ],
+          ),
+        ),
+        PopupMenuButton<String>(
+          icon: const Icon(Icons.more_vert),
+          onSelected: (action) {
+            if (action == 'rename') _renameDevice(context, device);
+            if (action == 'revoke') _revokeDevice(context, device);
+          },
+          itemBuilder: (_) => [
+            const PopupMenuItem(value: 'rename', child: Text('Rename')),
+            if (!device.revoked)
+              const PopupMenuItem(
+                value: 'revoke',
+                child: Text('Revoke / unpair'),
+              ),
+          ],
+        ),
+      ],
+    ),
+  );
 
   Future<void> _resetDataset(BuildContext context) async {
     final action = onResetDataset;
@@ -900,10 +1232,19 @@ class _SyncChip extends StatelessWidget {
   const _SyncChip({required this.status});
   final SyncStatusDto status;
   @override
-  Widget build(BuildContext context) => Chip(
+  Widget build(BuildContext context) => Row(
     key: const Key('sync-status'),
-    avatar: Icon(_statusIcon(status), size: 18),
-    label: Text(_statusText(status)),
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Icon(_statusIcon(status), size: 14, color: Nocturne.accent),
+      const SizedBox(width: 6),
+      Flexible(
+        child: Text(
+          _statusText(status),
+          style: TextStyle(fontSize: 12, color: Nocturne.muted(.6)),
+        ),
+      ),
+    ],
   );
 }
 

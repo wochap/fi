@@ -722,6 +722,8 @@ class _QueryBuilderState extends State<QueryBuilder> {
   Widget build(BuildContext context) => Column(
     mainAxisSize: MainAxisSize.min,
     crossAxisAlignment: CrossAxisAlignment.start,
+    // Outlined inputs need air between them; the labels sit on their top edges.
+    spacing: 14,
     children: [
       Text('Query', style: Theme.of(context).textTheme.titleSmall),
       if (widget.showPresets &&

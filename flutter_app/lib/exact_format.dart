@@ -174,6 +174,21 @@ String formatDateTime(int epochMs) => DateFormat(
   'yyyy-MM-dd HH:mm',
 ).format(DateTime.fromMillisecondsSinceEpoch(epochMs, isUtc: true));
 
+/// A record timestamp for reading rather than editing: `Sep 22, 2026 · 14:05` in local time, or
+/// `Sep 22 · 14:05` when [short]. Editors keep [formatDateTime]'s sortable form.
+String formatDateTimeHuman(int epochMs, {bool short = false}) => DateFormat(
+  short ? 'MMM d · HH:mm' : 'MMM d, y · HH:mm',
+).format(DateTime.fromMillisecondsSinceEpoch(epochMs, isUtc: true).toLocal());
+
+/// A calendar day for reading: `Sep 22, 2026`, or `Sep 22` when [short].
+String formatDateHuman(int epochDays, {bool short = false}) =>
+    DateFormat(short ? 'MMM d' : 'MMM d, y').format(
+      DateTime.fromMillisecondsSinceEpoch(
+        epochDays * Duration.millisecondsPerDay,
+        isUtc: true,
+      ),
+    );
+
 String formatDuration(int milliseconds) {
   final sign = milliseconds < 0 ? '-' : '';
   final absolute = Duration(milliseconds: milliseconds).abs();

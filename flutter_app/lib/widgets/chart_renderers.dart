@@ -1,5 +1,6 @@
 import 'package:fi/exact_format.dart';
 import 'package:fi/src/rust/api/models.dart';
+import 'package:fi/theme/nocturne.dart';
 import 'package:fi/widgets/widget_renderers.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
@@ -11,6 +12,10 @@ import 'package:flutter/material.dart';
 /// ticks that need not coincide with any observation, and labelling those from a double would put
 /// an inexact value on screen. Taking labels from real data points keeps them exact and unique.
 const int _maxAxisLabels = 4;
+
+/// Grid lines are the divider token, never a series color.
+FlLine _gridLine(double _) =>
+    const FlLine(color: Nocturne.divider, strokeWidth: 1, dashArray: [3, 4]);
 
 final class _ChartPoint {
   const _ChartPoint({required this.x, required this.y});
@@ -261,11 +266,35 @@ Widget renderLineChart(WidgetRenderContext context) {
               spots: plot.spots,
               isCurved: false,
               barWidth: 2,
-              dotData: FlDotData(show: config.booleanAt('show_points')),
+              color: Nocturne.accent,
+              belowBarData: BarAreaData(
+                show: true,
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Nocturne.accent.withValues(alpha: .18),
+                    Nocturne.accent.withValues(alpha: 0),
+                  ],
+                ),
+              ),
+              dotData: FlDotData(
+                show: config.booleanAt('show_points'),
+                getDotPainter: (spot, percent, bar, index) =>
+                    FlDotCirclePainter(
+                      radius: 3,
+                      color: Nocturne.accent,
+                      strokeWidth: 2,
+                      strokeColor: Nocturne.surface,
+                    ),
+              ),
             ),
           ],
           titlesData: const FlTitlesData(),
-          gridData: const FlGridData(drawVerticalLine: false),
+          gridData: const FlGridData(
+            drawVerticalLine: false,
+            getDrawingHorizontalLine: _gridLine,
+          ),
           borderData: FlBorderData(show: false),
           lineTouchData: LineTouchData(enabled: false),
         ),
@@ -312,12 +341,19 @@ Widget renderBarChart(WidgetRenderContext context) {
                   BarChartRodData(
                     toY: plot.points[i].y.coordinate,
                     width: width == null ? 8 : width.toDouble(),
+                    color: Nocturne.accent,
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(Nocturne.radiusSm / 2),
+                    ),
                   ),
                 ],
               ),
           ],
           titlesData: const FlTitlesData(),
-          gridData: const FlGridData(drawVerticalLine: false),
+          gridData: const FlGridData(
+            drawVerticalLine: false,
+            getDrawingHorizontalLine: _gridLine,
+          ),
           borderData: FlBorderData(show: false),
           barTouchData: BarTouchData(enabled: false),
         ),
@@ -365,11 +401,16 @@ Widget renderScatterPlot(WidgetRenderContext context) {
                 spot.y,
                 dotPainter: FlDotCirclePainter(
                   radius: radius == null ? 5 : radius.toDouble(),
+                  color: Nocturne.accent.withValues(alpha: .85),
+                  strokeWidth: 0,
                 ),
               ),
           ],
           titlesData: const FlTitlesData(),
-          gridData: const FlGridData(),
+          gridData: const FlGridData(
+            getDrawingHorizontalLine: _gridLine,
+            getDrawingVerticalLine: _gridLine,
+          ),
           borderData: FlBorderData(show: false),
           scatterTouchData: ScatterTouchData(enabled: false),
         ),
