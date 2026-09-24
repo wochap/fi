@@ -204,3 +204,29 @@ The computed-field section and editor SHALL include an on-demand explainer, open
 #### Scenario: Open the explainer
 - **WHEN** the user taps the "?" next to "Computed fields"
 - **THEN** a dismissible popup shows the explanation and the numeric rules without leaving the dialog
+
+### Requirement: Date and DateTime quick fill
+The registered Date editor SHALL offer a "Today" action and the registered DateTime editor SHALL offer a "Now" action wherever a record value is entered: the new-record form, the edit-record form, and the batch field editor. "Today" SHALL fill the device's local calendar day. "Now" SHALL fill the current instant truncated to the minute. Either action SHALL update the input text and emit the typed value exactly as a picker selection would, so validation timing and draft validation behave the same. The actions MUST NOT appear in schema metadata slots (field default, minimum, maximum), where they would freeze the moment the schema was edited.
+
+#### Scenario: Today on a new record
+- **WHEN** the device's local date is 2026-09-24 at 23:30 in UTC-5 and the user taps "Today" on a Date field in the new-record form
+- **THEN** the input shows 2026-09-24 and the submitted value is the day count of 2026-09-24, not 2026-09-25
+
+#### Scenario: Now on a DateTime field
+- **WHEN** the user taps "Now" on a DateTime field at local 14:05:37
+- **THEN** the input shows today's date with 14:05, and the submitted value is that local minute converted to UTC epoch milliseconds with zero seconds
+
+#### Scenario: Not offered for a default
+- **WHEN** the user edits the default, minimum, or maximum of a Date or DateTime field in the schema editor
+- **THEN** no "Today" or "Now" action is shown and the picker remains the only way to choose a value
+
+#### Scenario: Replacing an existing value
+- **WHEN** a record already has a DateTime value and the user taps "Now" while editing it
+- **THEN** the input shows the new time and saving submits a field update for that field only
+
+### Requirement: Local DateTime editor text
+The DateTime editor SHALL show its current value as local time in the sortable form `yyyy-MM-dd HH:mm`, both when opened with an existing value and after a picker or "Now" selection.
+
+#### Scenario: Opening an existing value
+- **WHEN** a record stores the instant 2026-09-25 04:00 UTC and the device is in UTC-5
+- **THEN** the editor shows `2026-09-24 23:00`

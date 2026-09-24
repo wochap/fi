@@ -76,3 +76,14 @@ Collection deletion SHALL set a monotonic tombstone, SHALL hide the collection a
 #### Scenario: Delete populated collection
 - **WHEN** a user deletes a collection containing records
 - **THEN** the collection disappears from active lists while its authoritative schema and records remain tombstoned and reconstructible
+
+### Requirement: Temporal value semantics
+A Date value SHALL be a calendar day without a timezone, stored as a signed count of days since 1970-01-01, and MUST NOT be shifted by any timezone when stored, read, or displayed. A DateTime value SHALL be an instant, stored as signed milliseconds since the Unix epoch in UTC; clients SHALL display it in the device's local timezone and convert local input to UTC before submitting it. Query grouping of these values remains governed by the query's persisted timezone policy.
+
+#### Scenario: Date is the same day everywhere
+- **WHEN** a record's Date field is set to 2026-09-24 on a device in UTC-5 and read on a device in UTC+9
+- **THEN** both devices show September 24, 2026 and the stored value is the same day count
+
+#### Scenario: DateTime follows the viewer's timezone
+- **WHEN** a DateTime field is set to 2026-09-24 23:00 on a device in UTC-5
+- **THEN** the stored value is the instant 2026-09-25 04:00 UTC, and a device in UTC+9 shows 2026-09-25 13:00
