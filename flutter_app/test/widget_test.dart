@@ -98,6 +98,41 @@ void main() {
     expect(find.text('Name is required.'), findsOneWidget);
   });
 
+  testWidgets('create forms are sheets on a phone and dialogs on desktop', (
+    tester,
+  ) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    final bridge = FakeCollectionBridge()
+      ..bootstrap = const BootstrapDto(
+        kind: BootstrapKindDto.ready,
+        rootId: 'root',
+      );
+    await tester.pumpWidget(app(bridge));
+    await pumpUntilFound(tester, find.text('New'));
+    await tester.tap(find.text('New'));
+    await tester.pumpAndSettle();
+    expect(find.byType(BottomSheet), findsOneWidget);
+    expect(find.byType(Dialog), findsNothing);
+    await tester.enterText(find.byKey(const Key('collection-name')), 'Gym');
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(find.byType(BottomSheet), findsNothing);
+
+    tester.view.physicalSize = const Size(1280, 800);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Gym'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('New record'));
+    await tester.pumpAndSettle();
+    expect(find.byType(Dialog), findsOneWidget);
+    expect(find.byType(BottomSheet), findsNothing);
+    expect(find.widgetWithText(TextButton, 'Cancel'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Save'), findsOneWidget);
+  });
+
   testWidgets('navigation switches between compact and wide layouts', (
     tester,
   ) async {

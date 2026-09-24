@@ -4,6 +4,7 @@ import 'package:fi/controllers.dart';
 import 'package:fi/help_button.dart';
 import 'package:fi/help_copy.dart';
 import 'package:fi/src/rust/api/models.dart';
+import 'package:fi/theme/form_surface.dart';
 import 'package:fi/theme/nocturne.dart';
 import 'package:fi/theme/nocturne_widgets.dart';
 import 'package:fi/widgets/query_builder.dart';
@@ -235,9 +236,9 @@ Future<void> showWidgetEditor(
   CollectionsController controller, [
   WidgetDefinitionDto? existing,
 ]) async {
-  await showDialog<void>(
-    context: context,
-    builder: (dialog) =>
+  await showFormSurface<void>(
+    context,
+    builder: (route) =>
         _WidgetEditor(controller: controller, existing: existing),
   );
 }
@@ -329,7 +330,6 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
   @override
   Widget build(BuildContext context) {
     final schema = controller.schema;
-    final dialogTitle = Text(existing == null ? 'Add widget' : 'Edit widget');
     final form = Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -425,106 +425,44 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
           selected: {size},
           onSelectionChanged: (value) => setState(() => size = value.single),
         ),
-        if (error case final message?)
-          Padding(
-            padding: const EdgeInsets.only(top: 12),
-            child: Text(
-              message,
-              key: const Key('widget-editor-error'),
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
-            ),
-          ),
       ],
     );
-    final actions = [
-      if (existing != null)
-        TextButton(
-          key: const Key('remove-widget'),
-          onPressed: () async {
-            // Capture the navigator before the await so no BuildContext crosses the gap.
-            final navigator = Navigator.of(context);
-            await controller.removeWidget(existing!.id);
-            navigator.pop();
-          },
-          child: const Text('Remove'),
-        ),
-      TextButton(
-        onPressed: () => Navigator.pop(context),
-        child: const Text('Cancel'),
-      ),
-      FilledButton(
-        key: const Key('save-widget'),
-        onPressed: _blocker == null ? _save : null,
-        child: const Text('Save'),
-      ),
-    ];
-    final screen = MediaQuery.sizeOf(context);
-    if (screen.width < 820) {
-      return AlertDialog(
-        title: dialogTitle,
-        content: SizedBox(
-          width: 520,
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.only(top: 8),
-            child: form,
+    // Wide screens get the form beside a live preview of the tile (mock 2d); narrower ones pin
+    // a compact preview above the buttons.
+    return FormSurface(
+      title: existing == null ? 'Add widget' : 'Edit widget',
+      width: 520,
+      body: form,
+      aside: _preview(schema),
+      pinnedAside: _preview(schema, compact: true),
+      message: error == null
+          ? null
+          : Text(error!, key: const Key('widget-editor-error')),
+      headerActions: [
+        if (existing != null)
+          FormHeaderAction(
+            key: const Key('remove-widget'),
+            icon: Icons.delete_outline,
+            label: 'Remove',
+            tooltip: 'Remove widget',
+            onPressed: () async {
+              // Capture the navigator before the await so no BuildContext crosses the gap.
+              final navigator = Navigator.of(context);
+              await controller.removeWidget(existing!.id);
+              navigator.pop();
+            },
           ),
-        ),
-        actions: actions,
-      );
-    }
-    // Wide screens get the form beside a live preview of the tile (mock 2d).
-    return Dialog(
-      clipBehavior: Clip.antiAlias,
-      child: SizedBox(
-        width: 820,
-        height: screen.height - 96 < 900 ? screen.height - 96 : 900,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(22, 22, 22, 14),
-                    child: DefaultTextStyle.merge(
-                      style: Theme.of(context).textTheme.titleLarge,
-                      child: dialogTitle,
-                    ),
-                  ),
-                  Expanded(
-                    child: SingleChildScrollView(
-                      // Room above the first field so its floating label is not clipped.
-                      padding: const EdgeInsets.fromLTRB(22, 8, 22, 8),
-                      child: form,
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(22, 14, 22, 20),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      spacing: 8,
-                      children: actions,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Container(
-              width: 280,
-              color: Nocturne.bg,
-              padding: const EdgeInsets.all(22),
-              child: _preview(schema),
-            ),
-          ],
-        ),
-      ),
+      ],
+      primaryKey: const Key('save-widget'),
+      primaryLabel: 'Save',
+      onPrimary: _blocker == null ? _save : null,
     );
   }
 
   /// What the tile will look like: the saved evaluation for an existing widget, the title and
-  /// query in words for a new one, and what the chosen size spans.
-  Widget _preview(CollectionSchemaDto? schema) {
+  /// query in words for a new one, and what the chosen size spans. [compact] keeps only the
+  /// label and a short tile, for pinning above the buttons on a narrow screen.
+  Widget _preview(CollectionSchemaDto? schema, {bool compact = false}) {
     final source = reuseQuery
         ? _selectedQuery
         : schema == null || query.blocker != null
@@ -542,9 +480,9 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const SectionLabel('Preview'),
-        const SizedBox(height: 10),
+        SizedBox(height: compact ? 6 : 10),
         SizedBox(
-          height: _tileHeight(size).clamp(118, 220),
+          height: compact ? 118 : _tileHeight(size).clamp(118, 220),
           child: NocturneCard(
             padding: EdgeInsets.zero,
             gradient: widgetType == 'core.aggregate-number'
@@ -588,15 +526,18 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
                   ),
           ),
         ),
-        const SizedBox(height: 10),
-        Text(switch (size) {
-          WidgetSizeDto.small =>
-            'Small spans one of three dashboard columns at its lowest height.',
-          WidgetSizeDto.medium =>
-            'Medium spans one of three dashboard columns.',
-          WidgetSizeDto.large => 'Large spans two of three dashboard columns.',
-          WidgetSizeDto.full => 'Full spans the whole dashboard row.',
-        }, style: TextStyle(fontSize: 12, color: Nocturne.muted(.5))),
+        if (!compact) ...[
+          const SizedBox(height: 10),
+          Text(switch (size) {
+            WidgetSizeDto.small =>
+              'Small spans one of three dashboard columns at its lowest height.',
+            WidgetSizeDto.medium =>
+              'Medium spans one of three dashboard columns.',
+            WidgetSizeDto.large =>
+              'Large spans two of three dashboard columns.',
+            WidgetSizeDto.full => 'Full spans the whole dashboard row.',
+          }, style: TextStyle(fontSize: 12, color: Nocturne.muted(.5))),
+        ],
       ],
     );
   }
@@ -626,7 +567,8 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
         key: const Key('saved-query-usage'),
         style: Theme.of(context).textTheme.bodySmall,
       ),
-      Row(
+      // Wraps so both fit in a phone sheet.
+      Wrap(
         children: [
           TextButton(
             key: const Key('edit-saved-query'),

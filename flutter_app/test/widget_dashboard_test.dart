@@ -799,4 +799,96 @@ void main() {
     expect(query.query!.grouping?.period, BucketPeriodDto.day);
     expect(query.query!.shape.aggregation?.kind, AggregationKindDto.sum);
   });
+
+  testWidgets('on a phone the widget editor is a bottom sheet with a preview', (
+    tester,
+  ) async {
+    final seeded = await seed(tester, size: const Size(390, 844));
+    await pumpPage(tester, seeded.controller);
+
+    await tester.tap(find.byKey(const Key('add-widget')));
+    await tester.pumpAndSettle();
+    expect(find.byType(BottomSheet), findsOneWidget);
+    expect(find.byType(Dialog), findsNothing);
+    // The compact preview is pinned above the buttons and follows the title.
+    expect(find.text('PREVIEW'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.text('PREVIEW')).dy,
+      lessThan(tester.getTopLeft(find.byKey(const Key('save-widget'))).dy),
+    );
+    await tester.enterText(find.byKey(const Key('widget-title')), 'Pain');
+    await tester.pump();
+    expect(find.text('Pain'), findsWidgets);
+    // Cancel (1 part) beside the primary (2 parts), both 48px tall.
+    final cancel = tester.getSize(
+      find.widgetWithText(OutlinedButton, 'Cancel'),
+    );
+    final save = tester.getSize(find.byKey(const Key('save-widget')));
+    expect(cancel.height, 48);
+    expect(save.height, 48);
+    expect(save.width, closeTo(cancel.width * 2 + 10, 12));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('on a phone Remove is an icon button in the sheet title row', (
+    tester,
+  ) async {
+    final seeded = await seed(tester, size: const Size(390, 844));
+    await seeded.controller.createWidget(
+      _widget(
+        collectionId: seeded.collectionId,
+        queryId: seeded.queryId,
+        title: 'Alpha',
+      ),
+    );
+    await pumpPage(tester, seeded.controller);
+
+    await tester.tap(find.text('Alpha'));
+    await tester.pumpAndSettle();
+    final remove = find.byKey(const Key('remove-widget'));
+    expect(remove, findsOneWidget);
+    expect(tester.widget(remove), isA<IconButton>());
+    expect(find.byTooltip('Remove widget'), findsOneWidget);
+    // Same row as the title, above the body.
+    expect(
+      tester.getCenter(remove).dy,
+      closeTo(tester.getCenter(find.text('Edit widget')).dy, 12),
+    );
+    expect(find.widgetWithText(TextButton, 'Remove'), findsNothing);
+
+    await tester.tap(remove);
+    await tester.pumpAndSettle();
+    expect(seeded.controller.widgetDefinitions, isEmpty);
+  });
+
+  testWidgets('on a wide screen the widget editor is two panes', (
+    tester,
+  ) async {
+    final seeded = await seed(tester, size: const Size(1280, 800));
+    await seeded.controller.createWidget(
+      _widget(
+        collectionId: seeded.collectionId,
+        queryId: seeded.queryId,
+        title: 'Alpha',
+      ),
+    );
+    await pumpPage(tester, seeded.controller);
+
+    await tester.tap(find.text('Alpha'));
+    await tester.pumpAndSettle();
+    expect(find.byType(Dialog), findsOneWidget);
+    expect(find.byType(BottomSheet), findsNothing);
+    // The preview pane sits beside the form, not below it.
+    final preview = tester.getRect(find.text('PREVIEW'));
+    final title = tester.getRect(find.byKey(const Key('widget-title')));
+    expect(preview.left, greaterThan(title.right));
+    expect(
+      tester.widget(find.byKey(const Key('remove-widget'))),
+      isA<TextButton>(),
+    );
+    expect(
+      tester.getTopLeft(find.byKey(const Key('remove-widget'))).dx,
+      lessThan(tester.getTopLeft(find.widgetWithText(TextButton, 'Cancel')).dx),
+    );
+  });
 }

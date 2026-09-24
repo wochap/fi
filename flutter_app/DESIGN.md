@@ -11,6 +11,7 @@ glow, never as a flood of color. Follow these rules so new screens match the exi
 | `lib/theme/nocturne.dart` | `Nocturne` tokens (colors, radii, shadows, fonts) and `nocturneTheme()`, the only `ThemeData` |
 | `lib/theme/nocturne_widgets.dart` | Shared pieces: `FadedRule`, `Kicker`, `SectionLabel`, `GlowDot`, `IconTile`, `Tag`, `NocturneCard`, `nocturneGlow()`, `DashedSlot`, `FiLogoMark`, `FiLogoTile` |
 | `lib/theme/side_sheet.dart` | `showSideSheet()`: a 480px sheet from the right, or a bottom sheet on a phone |
+| `lib/theme/form_surface.dart` | `showFormSurface()` + `FormSurface`: every create/edit form, a bottom sheet on a phone and a dialog (optionally two-pane with an aside) otherwise |
 | `assets/fonts/` | Inter (400, 500) and JetBrains Mono (400), with OFL licences |
 
 Before building something new, look for an existing piece that already does it. Add a new shared
@@ -80,9 +81,9 @@ must write one, use these sizes:
 
 | Where | Breakpoint | Behavior |
 | --- | --- | --- |
-| Screen width (`MediaQuery`) | 720 | ≥720: 216px sidebar (`_Sidebar` in `app.dart`). <720: slim logo row plus `NavigationBar`, bottom sheets instead of side sheets, larger touch targets (44–48px), the "New record" bottom sheet |
+| Screen width (`MediaQuery`) | 720 | ≥720: 216px sidebar (`_Sidebar` in `app.dart`). <720: slim logo row plus `NavigationBar`, bottom sheets instead of side sheets, larger touch targets (44–48px), create/edit forms as bottom sheets |
 | Collection content width (`LayoutBuilder`) | 760 | ≥760: records table and labelled header buttons. <760: record card list, icon buttons, floating "+ Record" button |
-| Widget editor screen width | 820 | ≥820: two panes, the form beside a 280px preview |
+| Form surface screen width | 820 | ≥820: a form with an aside (the widget editor's preview) shows it as a 280px pane beside the form; below, the aside is pinned above the buttons |
 
 - Page padding: desktop 32 horizontal / 22 top; phone 16–18 horizontal. Layouts are left-aligned
   and asymmetric: content hugs the left, and reading-width pages cap near 816–880px
@@ -100,8 +101,20 @@ must write one, use these sizes:
   panel, which has an `accent700` border).
 - **Dialogs** are for focused edits and confirmations. The title is 20/500, and actions are
   Cancel (`TextButton`) then the primary (`FilledButton`), right-aligned.
-- **On a phone, create forms are bottom sheets** with a drag handle, title plus context
-  ("in <collection>"), 48px inputs, and Cancel (1 part) beside the primary (2 parts).
+- **Create and edit forms use `FormSurface`**, opened with `showFormSurface()`. Don't build a
+  form out of `AlertDialog` or an inline `showModalBottomSheet`. The surface picks the
+  presentation from the screen width:
+  - On a phone (<720) it is a bottom sheet with a drag handle, title plus context
+    (`contextLabel: 'in <collection>'`), 48px inputs, and Cancel (1 part) beside the primary
+    (2 parts).
+  - Otherwise it is a dialog, and with an `aside` at ≥820 a two-pane dialog.
+  - `headerActions` (such as Remove) are icon buttons in the sheet's title row, and text buttons
+    before Cancel in a dialog. Give each a `Key`; it is applied in both modes.
+  - An `aside` (a live preview) is pinned between the body and the footer when there is no room
+    for a pane, capped at 160px (pass a compact `pinnedAside`), and hidden while the keyboard is up.
+  - `message` is the form-level slot directly above the buttons, drawn in the error color, for
+    errors that belong to no single input.
+  - Confirmations stay `AlertDialog`s.
 - **Wrap bottom sheet content in `BottomSheetInsets`** (`lib/theme/side_sheet.dart`) so it clears
   both the keyboard and Android's navigation bar. `useSafeArea` alone leaves the bottom uncovered.
 - **Selection mode** swaps the header for an `accent900` action bar with an `accent700` border.

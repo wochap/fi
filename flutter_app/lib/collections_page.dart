@@ -5,6 +5,7 @@ import 'package:fi/field_registry.dart';
 import 'package:fi/help_button.dart';
 import 'package:fi/help_copy.dart';
 import 'package:fi/src/rust/api/models.dart';
+import 'package:fi/theme/form_surface.dart';
 import 'package:fi/theme/nocturne.dart';
 import 'package:fi/theme/nocturne_widgets.dart';
 import 'package:fi/theme/side_sheet.dart';
@@ -731,61 +732,46 @@ class CollectionsPage extends StatelessWidget {
     final name = TextEditingController(text: collection?.name);
     final description = TextEditingController(text: collection?.description);
     String? error;
-    await showDialog<void>(
-      context: context,
-      builder: (dialog) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: Text(
-            collection == null ? 'New collection' : 'Rename collection',
-          ),
-          content: SizedBox(
-            width: 420,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  key: const Key('collection-name'),
-                  controller: name,
-                  autofocus: true,
-                  decoration: InputDecoration(
-                    labelText: 'Name',
-                    errorText: error,
-                  ),
+    await showFormSurface<void>(
+      context,
+      builder: (route) => StatefulBuilder(
+        builder: (context, setState) => FormSurface(
+          title: collection == null ? 'New collection' : 'Rename collection',
+          width: 420,
+          body: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            spacing: 14,
+            children: [
+              TextField(
+                key: const Key('collection-name'),
+                controller: name,
+                autofocus: true,
+                decoration: InputDecoration(
+                  labelText: 'Name',
+                  errorText: error,
                 ),
-                if (collection == null) ...[
-                  const SizedBox(height: 14),
-                  TextField(
-                    controller: description,
-                    decoration: const InputDecoration(labelText: 'Description'),
-                  ),
-                ],
-              ],
-            ),
+              ),
+              if (collection == null)
+                TextField(
+                  controller: description,
+                  decoration: const InputDecoration(labelText: 'Description'),
+                ),
+            ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialog),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () async {
-                try {
-                  if (collection == null) {
-                    await controller.createCollection(
-                      name.text,
-                      description.text,
-                    );
-                  } else {
-                    await controller.renameCollection(collection.id, name.text);
-                  }
-                  if (dialog.mounted) Navigator.pop(dialog);
-                } catch (failure) {
-                  setState(() => error = bridgeMessage(failure));
-                }
-              },
-              child: const Text('Save'),
-            ),
-          ],
+          primaryLabel: 'Save',
+          onPrimary: () async {
+            try {
+              if (collection == null) {
+                await controller.createCollection(name.text, description.text);
+              } else {
+                await controller.renameCollection(collection.id, name.text);
+              }
+              if (route.mounted) Navigator.pop(route);
+            } catch (failure) {
+              setState(() => error = bridgeMessage(failure));
+            }
+          },
         ),
       ),
     );
@@ -1265,56 +1251,40 @@ class CollectionsPage extends StatelessWidget {
     final messenger = ScaffoldMessenger.of(context);
     var field = fields.first;
     FieldValueDto? value;
-    final chosen = await showDialog<bool>(
-      context: context,
-      builder: (dialog) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: Text('Edit field on $count records'),
-          content: SizedBox(
-            width: 480,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  DropdownButtonFormField<String>(
-                    key: const Key('batch-field'),
-                    initialValue: field.id,
-                    decoration: const InputDecoration(labelText: 'Field'),
-                    items: [
-                      for (final item in fields)
-                        DropdownMenuItem(
-                          value: item.id,
-                          child: Text(item.name),
-                        ),
-                    ],
-                    onChanged: (id) => setState(() {
-                      field = fields.firstWhere((item) => item.id == id);
-                      value = null;
-                    }),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.only(top: 14),
-                    child: const FieldRendererRegistry().editor(
-                      field,
-                      value,
-                      (updated) => value = updated,
-                    ),
-                  ),
+    final chosen = await showFormSurface<bool>(
+      context,
+      builder: (route) => StatefulBuilder(
+        builder: (context, setState) => FormSurface(
+          title: 'Edit field on $count records',
+          body: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            spacing: 14,
+            children: [
+              DropdownButtonFormField<String>(
+                key: const Key('batch-field'),
+                initialValue: field.id,
+                decoration: const InputDecoration(labelText: 'Field'),
+                items: [
+                  for (final item in fields)
+                    DropdownMenuItem(value: item.id, child: Text(item.name)),
                 ],
+                onChanged: (id) => setState(() {
+                  field = fields.firstWhere((item) => item.id == id);
+                  value = null;
+                }),
               ),
-            ),
+              const FieldRendererRegistry().editor(
+                field,
+                value,
+                (updated) => value = updated,
+              ),
+            ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialog, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              key: const Key('batch-edit-continue'),
-              onPressed: () => Navigator.pop(dialog, true),
-              child: const Text('Continue'),
-            ),
-          ],
+          onCancel: () => Navigator.pop(route, false),
+          primaryKey: const Key('batch-edit-continue'),
+          primaryLabel: 'Continue',
+          onPrimary: () => Navigator.pop(route, true),
         ),
       ),
     );
@@ -1364,8 +1334,6 @@ class CollectionsPage extends StatelessWidget {
     String? error;
     final fields = schema.fields.where((field) => !field.deleted).toList()
       ..sort(_fieldOrder);
-    final phone = MediaQuery.sizeOf(context).width < _phoneScreen;
-    final title = existing == null ? 'New record' : 'Edit record';
 
     Future<void> save(BuildContext route, StateSetter setState) async {
       try {
@@ -1385,128 +1353,34 @@ class CollectionsPage extends StatelessWidget {
       }
     }
 
-    List<Widget> editors(BuildContext context) => [
-      for (final field in fields)
-        Padding(
-          padding: const EdgeInsets.only(bottom: 14),
-          child: const FieldRendererRegistry().editor(
-            field,
-            values[field.id],
-            (value) => values[field.id] = value,
-            // A record opened from the list because it is invalid should say which
-            // field is at fault, not leave the user hunting for it.
-            errorText: _diagnosticFor(existing, field.id),
-          ),
-        ),
-      if (error != null)
-        Text(error!, style: const TextStyle(color: Nocturne.error)),
-    ];
-
-    if (phone) {
-      await showModalBottomSheet<void>(
-        context: context,
-        isScrollControlled: true,
-        useSafeArea: true,
-        builder: (sheet) => StatefulBuilder(
-          builder: (context, setState) => BottomSheetInsets(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(18, 0, 18, 24),
-              child: Theme(
-                data: Theme.of(context).copyWith(
-                  inputDecorationTheme: Theme.of(context).inputDecorationTheme
-                      .copyWith(
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 16,
-                        ),
-                      ),
+    await showFormSurface<void>(
+      context,
+      builder: (route) => StatefulBuilder(
+        builder: (context, setState) => FormSurface(
+          title: existing == null ? 'New record' : 'Edit record',
+          contextLabel: 'in ${schema.name}',
+          body: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            spacing: 14,
+            children: [
+              for (final field in fields)
+                const FieldRendererRegistry().editor(
+                  field,
+                  values[field.id],
+                  (value) => values[field.id] = value,
+                  // A record opened from the list because it is invalid should say which
+                  // field is at fault, not leave the user hunting for it.
+                  errorText: _diagnosticFor(existing, field.id),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.baseline,
-                      textBaseline: TextBaseline.alphabetic,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            title,
-                            style: Theme.of(context).textTheme.titleLarge,
-                          ),
-                        ),
-                        Text(
-                          'in ${schema.name}',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Nocturne.muted(.55),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 18),
-                    ...editors(context),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            style: OutlinedButton.styleFrom(
-                              minimumSize: const Size(0, 48),
-                            ),
-                            onPressed: () => Navigator.pop(sheet),
-                            child: const Text('Cancel'),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          flex: 2,
-                          child: FilledButton(
-                            style: FilledButton.styleFrom(
-                              minimumSize: const Size(0, 48),
-                            ),
-                            onPressed: () => save(sheet, setState),
-                            child: const Text('Save record'),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
+            ],
           ),
-        ),
-      );
-      return;
-    }
-
-    await showDialog<void>(
-      context: context,
-      builder: (dialog) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: Text(title),
-          content: SizedBox(
-            width: 480,
-            child: SingleChildScrollView(
-              child: Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: editors(context),
-                ),
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialog),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => save(dialog, setState),
-              child: const Text('Save'),
-            ),
-          ],
+          message: error == null ? null : Text(error!),
+          primaryLabel:
+              FormSurfaceScope.modeOf(context) == FormSurfaceMode.sheet
+              ? 'Save record'
+              : 'Save',
+          onPrimary: () => save(route, setState),
         ),
       ),
     );
