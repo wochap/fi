@@ -200,110 +200,99 @@ class FormSurface extends StatelessWidget {
   Widget _sheet(BuildContext context) {
     final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
     final theme = Theme.of(context);
+    // Inputs take their phone height from the shared input tokens (`inputs.dart`).
     return BottomSheetInsets(
-      child: Theme(
-        // Phone inputs grow to 48px so they are easy to hit.
-        data: theme.copyWith(
-          inputDecorationTheme: theme.inputDecorationTheme.copyWith(
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 14,
-              vertical: 16,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              18,
+              0,
+              headerActions.isEmpty ? 18 : 8,
+              10,
             ),
-          ),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: EdgeInsets.fromLTRB(
-                18,
-                0,
-                headerActions.isEmpty ? 18 : 8,
-                10,
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.baseline,
-                      textBaseline: TextBaseline.alphabetic,
-                      children: [
-                        Expanded(
+            child: Row(
+              children: [
+                Expanded(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.titleLarge,
+                        ),
+                      ),
+                      if (contextLabel case final label?)
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 160),
                           child: Text(
-                            title,
+                            label,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.titleLarge,
-                          ),
-                        ),
-                        if (contextLabel case final label?)
-                          ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 160),
-                            child: Text(
-                              label,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Nocturne.muted(.55),
-                              ),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Nocturne.muted(.55),
                             ),
                           ),
-                      ],
-                    ),
+                        ),
+                    ],
                   ),
-                  for (final action in headerActions)
-                    IconButton(
-                      key: action.key,
-                      tooltip: action.tooltip ?? action.label,
-                      onPressed: action.onPressed,
-                      icon: Icon(action.icon),
-                    ),
-                ],
-              ),
-            ),
-            ?_legend(const EdgeInsets.fromLTRB(18, 0, 18, 4)),
-            Flexible(
-              child: SingleChildScrollView(
-                // Room above the first field so its floating label is not clipped.
-                padding: const EdgeInsets.fromLTRB(18, 8, 18, 8),
-                child: body,
-              ),
-            ),
-            if (!keyboardOpen)
-              ?_pinned(const EdgeInsets.fromLTRB(18, 8, 18, 0)),
-            ?_message(context, const EdgeInsets.fromLTRB(18, 10, 18, 0)),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(18, 14, 18, 16),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      style: OutlinedButton.styleFrom(
-                        minimumSize: const Size(0, 48),
-                      ),
-                      onPressed: () => _cancel(context),
-                      child: Text(cancelLabel),
-                    ),
+                ),
+                for (final action in headerActions)
+                  IconButton(
+                    key: action.key,
+                    tooltip: action.tooltip ?? action.label,
+                    onPressed: action.onPressed,
+                    icon: Icon(action.icon),
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    flex: 2,
-                    child: FilledButton(
-                      key: primaryKey,
-                      style: FilledButton.styleFrom(
-                        minimumSize: const Size(0, 48),
-                      ),
-                      onPressed: onPrimary,
-                      child: Text(primaryLabel),
-                    ),
-                  ),
-                ],
-              ),
+              ],
             ),
-          ],
-        ),
+          ),
+          ?_legend(const EdgeInsets.fromLTRB(18, 0, 18, 4)),
+          Flexible(
+            child: SingleChildScrollView(
+              // Room above the first field so its floating label is not clipped.
+              padding: const EdgeInsets.fromLTRB(18, 8, 18, 8),
+              child: body,
+            ),
+          ),
+          if (!keyboardOpen) ?_pinned(const EdgeInsets.fromLTRB(18, 8, 18, 0)),
+          ?_message(context, const EdgeInsets.fromLTRB(18, 10, 18, 0)),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 14, 18, 16),
+            child: Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(0, 48),
+                    ),
+                    onPressed: () => _cancel(context),
+                    child: Text(cancelLabel),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  flex: 2,
+                  child: FilledButton(
+                    key: primaryKey,
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size(0, 48),
+                    ),
+                    onPressed: onPrimary,
+                    child: Text(primaryLabel),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

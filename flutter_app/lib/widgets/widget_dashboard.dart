@@ -6,6 +6,7 @@ import 'package:fi/help_copy.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/theme/form_errors.dart';
 import 'package:fi/theme/form_surface.dart';
+import 'package:fi/theme/inputs.dart';
 import 'package:fi/theme/nocturne.dart';
 import 'package:fi/theme/nocturne_widgets.dart';
 import 'package:fi/widgets/query_builder.dart';
@@ -378,10 +379,11 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
       spacing: 14,
       children: [
         if (supported) ...[
-          DropdownButtonFormField<String>(
+          FiSelect<String>(
             key: const Key('widget-type'),
-            initialValue: widgetType,
-            decoration: labelWithHelp('Widget type', HelpId.widgetType),
+            value: widgetType,
+            label: 'Widget type',
+            suffixIcon: const HelpButton(HelpId.widgetType),
             items: [
               for (final descriptor in controller.widgetDescriptors)
                 DropdownMenuItem(
@@ -405,14 +407,12 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
             style: Theme.of(context).textTheme.bodySmall,
           ),
         ],
-        TextField(
+        FiTextInput(
           key: const Key('widget-title'),
           controller: title,
-          decoration: InputDecoration(
-            label: requiredLabel('Title'),
-            errorText: errorTextOf(shown.of('title')),
-            errorMaxLines: errorLinesOf(shown.of('title')),
-          ),
+          label: 'Title',
+          required: true,
+          errors: shown.of('title'),
           onChanged: (_) => setState(() => _edited('title')),
         ),
         SwitchListTile(
@@ -427,19 +427,17 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
           }),
         ),
         if (reuseQuery) ...[
-          DropdownButtonFormField<String>(
+          FiSelect<String>(
             key: const Key('saved-query'),
-            initialValue:
+            value:
                 controller.queryDefinitions.any(
                   (item) => item.id == savedQueryId,
                 )
                 ? savedQueryId
                 : null,
-            decoration: InputDecoration(
-              label: requiredLabel('Saved query'),
-              errorText: errorTextOf(shown.of('query')),
-              errorMaxLines: errorLinesOf(shown.of('query')),
-            ),
+            label: 'Saved query',
+            required: true,
+            errors: shown.of('query'),
             items: [
               for (final query in controller.queryDefinitions)
                 DropdownMenuItem(value: query.id, child: Text(query.name)),
@@ -678,14 +676,12 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
 
   List<Widget> _presentationFields() => switch (widgetType) {
     'core.aggregate-number' => [
-      TextField(
+      FiTextInput(
         key: const Key('config-suffix'),
         controller: suffix,
-        decoration: labelWithHelp(
-          'Unit suffix (optional)',
-          HelpId.widgetUnitSuffix,
-          helperText: 'Shown after the exact value, for example "EUR".',
-        ),
+        label: 'Unit suffix (optional)',
+        suffixIcon: const HelpButton(HelpId.widgetUnitSuffix),
+        helperText: 'Shown after the exact value, for example "EUR".',
       ),
     ],
     'core.line-chart' => [
@@ -697,53 +693,43 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
         value: showPoints,
         onChanged: (value) => setState(() => showPoints = value),
       ),
-      TextField(
+      FiTextInput(
         key: const Key('config-axis-label'),
         controller: axisLabel,
-        decoration: labelWithHelp(
-          'Y axis label (optional)',
-          HelpId.widgetAxisLabel,
-        ),
+        label: 'Y axis label (optional)',
+        suffixIcon: const HelpButton(HelpId.widgetAxisLabel),
       ),
     ],
     'core.bar-chart' => [
-      TextFormField(
+      FiTextInput(
         key: const Key('config-bar-width'),
         initialValue: barWidth?.toString() ?? '',
         keyboardType: TextInputType.number,
-        decoration: labelWithHelp(
-          'Bar width (optional)',
-          HelpId.widgetBarWidth,
-        ),
+        label: 'Bar width (optional)',
+        suffixIcon: const HelpButton(HelpId.widgetBarWidth),
         onChanged: (value) => setState(() => barWidth = int.tryParse(value)),
       ),
-      TextField(
+      FiTextInput(
         key: const Key('config-axis-label'),
         controller: axisLabel,
-        decoration: labelWithHelp(
-          'Y axis label (optional)',
-          HelpId.widgetAxisLabel,
-        ),
+        label: 'Y axis label (optional)',
+        suffixIcon: const HelpButton(HelpId.widgetAxisLabel),
       ),
     ],
     'core.scatter-plot' => [
-      TextFormField(
+      FiTextInput(
         key: const Key('config-point-radius'),
         initialValue: pointRadius?.toString() ?? '',
         keyboardType: TextInputType.number,
-        decoration: labelWithHelp(
-          'Point radius (optional)',
-          HelpId.widgetPointRadius,
-        ),
+        label: 'Point radius (optional)',
+        suffixIcon: const HelpButton(HelpId.widgetPointRadius),
         onChanged: (value) => setState(() => pointRadius = int.tryParse(value)),
       ),
-      TextField(
+      FiTextInput(
         key: const Key('config-axis-label'),
         controller: axisLabel,
-        decoration: labelWithHelp(
-          'Y axis label (optional)',
-          HelpId.widgetAxisLabel,
-        ),
+        label: 'Y axis label (optional)',
+        suffixIcon: const HelpButton(HelpId.widgetAxisLabel),
       ),
     ],
     _ => const [],

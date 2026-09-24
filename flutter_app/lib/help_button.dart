@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:fi/help_copy.dart';
-import 'package:fi/theme/form_errors.dart';
 import 'package:flutter/material.dart';
 
 /// The one help affordance: a `?` beside a control that opens the registry copy for it.
@@ -55,24 +54,3 @@ Future<void> showHelp(BuildContext context, HelpId id) async {
     ),
   );
 }
-
-/// An [InputDecoration] carrying the label and the `?` for [id] as its suffix, so attaching help
-/// to a text field or dropdown is a one-line change at the call site.
-///
-/// A `SwitchListTile` has no decoration; there the button goes in `trailing: HelpButton(id)`.
-///
-/// [errors] show below the input one per line; [required] marks the label with an `*`.
-InputDecoration labelWithHelp(
-  String label,
-  HelpId id, {
-  String? helperText,
-  List<String> errors = const [],
-  bool required = false,
-}) => InputDecoration(
-  labelText: required ? null : label,
-  label: required ? requiredLabel(label) : null,
-  helperText: helperText,
-  errorText: errorTextOf(errors),
-  errorMaxLines: errorLinesOf(errors),
-  suffixIcon: HelpButton(id),
-);

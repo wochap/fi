@@ -5,6 +5,7 @@ import 'package:fi/exact_format.dart';
 import 'package:fi/help_button.dart';
 import 'package:fi/help_copy.dart';
 import 'package:fi/src/rust/api/models.dart';
+import 'package:fi/theme/inputs.dart';
 import 'package:fi/theme/nocturne.dart';
 import 'package:fi/theme/nocturne_widgets.dart';
 import 'package:flutter/material.dart';
@@ -761,13 +762,12 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
           ),
         ),
         if (node case FieldLeaf(:final fieldId))
-          _Boxed(
+          SizedBox(
             width: 220,
-            child: DropdownButton<String>(
+            child: FiSelect<String>.compact(
               key: Key('field-$path'),
               value: _field(fieldId)?.id,
-              isExpanded: true,
-              hint: const Text('Pick a field'),
+              hint: 'Pick a field',
               items: [
                 for (final field in _fields)
                   DropdownMenuItem(value: field.id, child: Text(field.name)),
@@ -778,7 +778,7 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
         if (node case ConstantLeaf(:final text, :final scale)) ...[
           SizedBox(
             width: 140,
-            child: TextField(
+            child: FiTextInput.compact(
               key: Key('constant-$path'),
               controller: _constantText.putIfAbsent(
                 path,
@@ -788,14 +788,15 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
                 signed: true,
                 decimal: true,
               ),
-              decoration: const InputDecoration(labelText: 'Number'),
+              label: 'Number',
               onChanged: (value) => _update(
                 replaceAt(root, path, ConstantLeaf(text: value, scale: scale)),
               ),
             ),
           ),
-          _Boxed(
-            child: DropdownButton<int?>(
+          SizedBox(
+            width: 190,
+            child: FiSelect<int?>.compact(
               key: Key('constant-scale-$path'),
               value: scale,
               items: [
@@ -825,9 +826,9 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
         spacing: 8,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          _Boxed(
-            width: 64,
-            child: DropdownButton<ExprOperator>(
+          SizedBox(
+            width: 72,
+            child: FiSelect<ExprOperator>.compact(
               key: Key('operator-$path'),
               value: node.operator,
               items: [
@@ -896,8 +897,9 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
         ),
       ],
     ),
-    _Boxed(
-      child: DropdownButton<RoundingPolicyDto>(
+    SizedBox(
+      width: 210,
+      child: FiSelect<RoundingPolicyDto>.compact(
         key: Key('rounding-$path'),
         value: node.rounding,
         items: const [
@@ -960,27 +962,5 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
       ),
       _card(context, node.child, '$path.expression', parentIsAbs: true),
     ],
-  );
-}
-
-/// A bare dropdown drawn as a Nocturne input box, so the builder's compact pickers match the
-/// outlined fields around them.
-class _Boxed extends StatelessWidget {
-  const _Boxed({required this.child, this.width});
-
-  final Widget child;
-  final double? width;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    width: width,
-    height: 36,
-    padding: const EdgeInsets.symmetric(horizontal: 10),
-    decoration: BoxDecoration(
-      color: Nocturne.surface,
-      borderRadius: BorderRadius.circular(Nocturne.radius),
-      border: Border.all(color: Nocturne.divider),
-    ),
-    child: DropdownButtonHideUnderline(child: child),
   );
 }

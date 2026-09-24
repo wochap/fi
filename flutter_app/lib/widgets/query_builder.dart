@@ -2,6 +2,7 @@ import 'package:fi/exact_format.dart';
 import 'package:fi/help_button.dart';
 import 'package:fi/help_copy.dart';
 import 'package:fi/src/rust/api/models.dart';
+import 'package:fi/theme/inputs.dart';
 import 'package:flutter/material.dart';
 
 /// Sentinel so `copyWith` can distinguish "leave this alone" from "set this to null".
@@ -745,10 +746,11 @@ class _QueryBuilderState extends State<QueryBuilder> {
         ),
       // Group by comes first: a user thinks "per day, sum of amount", not the other way round.
       if (state.isChart && !state.isScatter) ...[
-        DropdownButtonFormField<BucketPeriodDto?>(
+        FiSelect<BucketPeriodDto?>(
           key: const Key('bucket-period'),
-          initialValue: state.bucket,
-          decoration: labelWithHelp('Group by', HelpId.widgetGroupBy),
+          value: state.bucket,
+          label: 'Group by',
+          suffixIcon: const HelpButton(HelpId.widgetGroupBy),
           items: const [
             DropdownMenuItem(value: null, child: Text('None')),
             DropdownMenuItem(value: BucketPeriodDto.day, child: Text('Day')),
@@ -782,16 +784,14 @@ class _QueryBuilderState extends State<QueryBuilder> {
         ),
       ],
       if (state.showsAggregation) ...[
-        DropdownButtonFormField<AggregationKindDto>(
+        FiSelect<AggregationKindDto>(
           key: const Key('aggregation'),
-          initialValue: state.aggregation,
-          decoration: labelWithHelp(
-            'Aggregation',
-            HelpId.widgetAggregation,
-            helperText: state.aggregationDisabled
-                ? 'Choose a Group by period to aggregate'
-                : null,
-          ),
+          value: state.aggregation,
+          label: 'Aggregation',
+          suffixIcon: const HelpButton(HelpId.widgetAggregation),
+          helperText: state.aggregationDisabled
+              ? 'Choose a Group by period to aggregate'
+              : null,
           items: const [
             DropdownMenuItem(
               value: AggregationKindDto.count,
@@ -830,22 +830,24 @@ class _QueryBuilderState extends State<QueryBuilder> {
           ),
         // An exact numeric policy is mandatory for Average so no implicit rounding is invented.
         if (state.aggregation == AggregationKindDto.average) ...[
-          TextFormField(
+          FiTextInput(
             key: const Key('output-scale'),
             initialValue: '${state.outputScale}',
             enabled: !state.aggregationDisabled,
             keyboardType: TextInputType.number,
-            decoration: labelWithHelp('Output scale', HelpId.widgetOutputScale),
+            label: 'Output scale',
+            suffixIcon: const HelpButton(HelpId.widgetOutputScale),
             onChanged: (value) => _emit(
               state.copyWith(
                 outputScale: int.tryParse(value) ?? state.outputScale,
               ),
             ),
           ),
-          DropdownButtonFormField<RoundingPolicyDto>(
+          FiSelect<RoundingPolicyDto>(
             key: const Key('rounding'),
-            initialValue: state.rounding,
-            decoration: labelWithHelp('Rounding policy', HelpId.widgetRounding),
+            value: state.rounding,
+            label: 'Rounding policy',
+            suffixIcon: const HelpButton(HelpId.widgetRounding),
             items: const [
               DropdownMenuItem(
                 value: RoundingPolicyDto.halfEven,
@@ -892,45 +894,56 @@ class _QueryBuilderState extends State<QueryBuilder> {
         onChanged: (value) => _emit(state.copyWith(filterFieldId: value)),
       ),
       if (state.filterFieldId != null) ...[
-        DropdownButtonFormField<ComparisonOperatorDto>(
-          key: const Key('filter-operator'),
-          initialValue: state.filterOperator,
-          decoration: const InputDecoration(labelText: 'Filter operator'),
-          items: const [
-            DropdownMenuItem(
-              value: ComparisonOperatorDto.equal,
-              child: Text('equals'),
+        // The condition is one inline row: operator beside value.
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          spacing: 8,
+          children: [
+            Expanded(
+              child: FiSelect<ComparisonOperatorDto>.compact(
+                key: const Key('filter-operator'),
+                value: state.filterOperator,
+                label: 'Filter operator',
+                items: const [
+                  DropdownMenuItem(
+                    value: ComparisonOperatorDto.equal,
+                    child: Text('equals'),
+                  ),
+                  DropdownMenuItem(
+                    value: ComparisonOperatorDto.notEqual,
+                    child: Text('is not'),
+                  ),
+                  DropdownMenuItem(
+                    value: ComparisonOperatorDto.greaterThan,
+                    child: Text('greater than'),
+                  ),
+                  DropdownMenuItem(
+                    value: ComparisonOperatorDto.greaterThanOrEqual,
+                    child: Text('at least'),
+                  ),
+                  DropdownMenuItem(
+                    value: ComparisonOperatorDto.lessThan,
+                    child: Text('less than'),
+                  ),
+                  DropdownMenuItem(
+                    value: ComparisonOperatorDto.lessThanOrEqual,
+                    child: Text('at most'),
+                  ),
+                ],
+                onChanged: (value) => _emit(
+                  state.copyWith(filterOperator: value ?? state.filterOperator),
+                ),
+              ),
             ),
-            DropdownMenuItem(
-              value: ComparisonOperatorDto.notEqual,
-              child: Text('is not'),
-            ),
-            DropdownMenuItem(
-              value: ComparisonOperatorDto.greaterThan,
-              child: Text('greater than'),
-            ),
-            DropdownMenuItem(
-              value: ComparisonOperatorDto.greaterThanOrEqual,
-              child: Text('at least'),
-            ),
-            DropdownMenuItem(
-              value: ComparisonOperatorDto.lessThan,
-              child: Text('less than'),
-            ),
-            DropdownMenuItem(
-              value: ComparisonOperatorDto.lessThanOrEqual,
-              child: Text('at most'),
+            Expanded(
+              child: FiTextInput.compact(
+                key: const Key('filter-value'),
+                controller: filterValue,
+                label: 'Filter value',
+                onChanged: (value) => _emit(state.copyWith(filterValue: value)),
+              ),
             ),
           ],
-          onChanged: (value) => _emit(
-            state.copyWith(filterOperator: value ?? state.filterOperator),
-          ),
-        ),
-        TextField(
-          key: const Key('filter-value'),
-          controller: filterValue,
-          decoration: const InputDecoration(labelText: 'Filter value'),
-          onChanged: (value) => _emit(state.copyWith(filterValue: value)),
         ),
       ],
     ],
@@ -947,10 +960,11 @@ class _QueryBuilderState extends State<QueryBuilder> {
     bool enabled = true,
   }) {
     final current = fields.any((field) => field.id == value) ? value : null;
-    return DropdownButtonFormField<String>(
+    return FiSelect<String>(
       key: key,
-      initialValue: current,
-      decoration: labelWithHelp(label, help),
+      value: current,
+      label: label,
+      suffixIcon: HelpButton(help),
       items: [
         if (allowClear)
           const DropdownMenuItem<String>(value: null, child: Text('None')),

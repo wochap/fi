@@ -2,6 +2,7 @@ import 'package:fi/collections_page.dart';
 import 'package:fi/controllers.dart';
 import 'package:fi/field_registry.dart';
 import 'package:fi/src/rust/api/models.dart';
+import 'package:fi/theme/nocturne.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -79,10 +80,12 @@ Future<Seeded> seed(WidgetTester tester, {int recordsWithNotes = 0}) async {
 
 Future<void> pumpPage(
   WidgetTester tester,
-  CollectionsController controller,
-) async {
+  CollectionsController controller, {
+  ThemeData? theme,
+}) async {
   await tester.pumpWidget(
     MaterialApp(
+      theme: theme,
       home: Scaffold(
         body: ListenableBuilder(
           listenable: controller,
@@ -690,5 +693,25 @@ void main() {
     // 42 meant an integer; it must not survive as the text "42" or as a stale bound.
     expect(field.defaultValue, isNull);
     expect(field.validation.minInteger, isNull);
+  });
+
+  testWidgets('the New field panel lines up Name and Type', (tester) async {
+    final seeded = await seed(tester);
+    await pumpPage(tester, seeded.controller, theme: nocturneTheme());
+    await tester.tap(find.text('Schema'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add field'));
+    await tester.pumpAndSettle();
+
+    Rect box(Finder input) => tester.getRect(
+      find.descendant(of: input, matching: find.byType(InputDecorator)).first,
+    );
+    final name = box(find.byKey(const Key('field-name')));
+    final type = box(
+      find.widgetWithText(DropdownButtonFormField<FieldTypeKindDto>, 'Type'),
+    );
+    expect(name.height, 40);
+    expect(type.height, 40);
+    expect(name.top, type.top);
   });
 }

@@ -2,6 +2,7 @@ import 'package:fi/collections_page.dart';
 import 'package:fi/controllers.dart';
 import 'package:fi/help_copy.dart';
 import 'package:fi/src/rust/api/models.dart';
+import 'package:fi/theme/nocturne.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -43,11 +44,12 @@ final class Ledger {
 Future<Ledger> openDialog(
   WidgetTester tester, {
   Future<void> Function(Ledger)? seed,
+  Size size = const Size(1200, 1000),
 }) async {
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
   tester.view.devicePixelRatio = 1;
-  tester.view.physicalSize = const Size(1200, 1000);
+  tester.view.physicalSize = size;
   final bridge = FakeCollectionBridge()
     ..bootstrap = const BootstrapDto(
       kind: BootstrapKindDto.ready,
@@ -75,6 +77,7 @@ Future<Ledger> openDialog(
   await controller.refresh();
   await tester.pumpWidget(
     MaterialApp(
+      theme: nocturneTheme(),
       home: Scaffold(
         body: ListenableBuilder(
           listenable: controller,
@@ -84,10 +87,26 @@ Future<Ledger> openDialog(
     ),
   );
   await tester.pump();
-  await tester.tap(find.text('Queries'));
+  // Wide layouts label the button; narrow ones show an icon with the same tooltip.
+  final queries = find.text('Queries');
+  await tester.tap(
+    queries.evaluate().isEmpty ? find.byTooltip('Queries') : queries,
+  );
   await settle(tester);
   return ledger;
 }
+
+/// The outlined box height of the input keyed [key].
+double boxHeight(WidgetTester tester, Key key) => tester
+    .getSize(
+      find
+          .descendant(
+            of: find.byKey(key),
+            matching: find.byType(InputDecorator),
+          )
+          .first,
+    )
+    .height;
 
 /// Lets the inference debounce fire and the fake answer land.
 Future<void> settle(WidgetTester tester) async {
@@ -271,5 +290,71 @@ void main() {
     await tester.tap(find.byKey(const Key('help-close')));
     await tester.pumpAndSettle();
     expect(find.text('Computed fields & queries'), findsOneWidget);
+  });
+
+  testWidgets('on a phone the editor is a form-surface bottom sheet', (
+    tester,
+  ) async {
+    await openDialog(tester, size: const Size(390, 844));
+    await tester.tap(find.byKey(const Key('add-computed-field')));
+    await settle(tester);
+
+    final editor = find.byKey(const Key('computed-editor'));
+    expect(editor, findsOneWidget);
+    expect(
+      find.ancestor(of: editor, matching: find.byType(BottomSheet)),
+      findsOneWidget,
+    );
+    expect(find.byType(Dialog), findsNothing);
+    expect(find.text('New computed field'), findsOneWidget);
+    expect(find.text('in Ledger'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: editor,
+        matching: find.widgetWithText(OutlinedButton, 'Cancel'),
+      ),
+      findsOneWidget,
+    );
+    expect(tester.getSize(find.byKey(const Key('save-computed'))).height, 48);
+    // Phone inputs take their height from the tokens: normal 48, small 40.
+    expect(boxHeight(tester, const Key('computed-name')), 48);
+    expect(boxHeight(tester, const Key(r'field-$')), 40);
+  });
+
+  testWidgets('on desktop editing opens a form-surface dialog', (tester) async {
+    late String id;
+    await openDialog(
+      tester,
+      size: const Size(1280, 900),
+      seed: (ledger) async => id = await seedMagnitude(ledger),
+    );
+    await tester.tap(find.byKey(ValueKey('computed-$id')));
+    await settle(tester);
+
+    final editor = find.byKey(const Key('computed-editor'));
+    expect(
+      find.descendant(of: editor, matching: find.byType(Dialog)),
+      findsOneWidget,
+    );
+    expect(find.text('Edit computed field'), findsOneWidget);
+    final cancel = find.descendant(
+      of: editor,
+      matching: find.widgetWithText(TextButton, 'Cancel'),
+    );
+    final save = find.byKey(const Key('save-computed'));
+    expect(cancel, findsOneWidget);
+    // Cancel then Save, right-aligned.
+    expect(
+      tester.getTopRight(save).dx,
+      greaterThan(tester.getTopRight(cancel).dx),
+    );
+    expect(
+      tester.getTopRight(save).dx,
+      // Flush with the inputs' right edge.
+      tester.getTopRight(find.byKey(const Key('computed-name'))).dx,
+    );
+    // Name is a normal input; the node's select is small.
+    expect(boxHeight(tester, const Key('computed-name')), 40);
+    expect(boxHeight(tester, const Key(r'field-$.expression')), 32);
   });
 }

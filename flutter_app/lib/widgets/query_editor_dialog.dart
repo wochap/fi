@@ -1,6 +1,7 @@
 import 'package:fi/controllers.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/theme/form_errors.dart';
+import 'package:fi/theme/inputs.dart';
 import 'package:fi/theme/nocturne.dart';
 import 'package:fi/widgets/query_builder.dart';
 import 'package:flutter/material.dart';
@@ -103,14 +104,12 @@ class _QueryEditorDialogState extends State<QueryEditorDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              TextField(
+              FiTextInput(
                 key: const Key('query-name'),
                 controller: name,
-                decoration: InputDecoration(
-                  label: requiredLabel('Query name'),
-                  errorText: errorTextOf(issues.of('name')),
-                  errorMaxLines: errorLinesOf(issues.of('name')),
-                ),
+                label: 'Query name',
+                required: true,
+                errors: issues.of('name'),
                 onChanged: (_) =>
                     setState(() => issues = issues.without('name')),
               ),

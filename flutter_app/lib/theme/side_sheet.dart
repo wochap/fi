@@ -5,7 +5,7 @@ import 'package:fi/theme/nocturne_widgets.dart';
 import 'package:flutter/material.dart';
 
 /// Below this screen width a side sheet becomes a bottom sheet.
-const double sideSheetBreakpoint = 720;
+const double sideSheetBreakpoint = Nocturne.phoneBreakpoint;
 
 /// Opens a 480px sheet sliding in from the right, or a bottom sheet on a phone.
 ///

@@ -8,6 +8,7 @@ import 'package:fi/collections_page.dart';
 import 'package:fi/pairing_card.dart';
 import 'package:fi/reset_dialog.dart';
 import 'package:fi/status_time.dart';
+import 'package:fi/theme/inputs.dart';
 import 'package:fi/theme/nocturne.dart';
 import 'package:fi/theme/nocturne_widgets.dart';
 import 'package:flutter/foundation.dart';
@@ -1176,12 +1177,12 @@ class _DevicesPageState extends State<DevicesPage> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Rename device'),
-        content: TextFormField(
+        content: FiTextInput(
           key: const Key('device-name'),
           initialValue: name,
           onChanged: (value) => name = value,
           autofocus: true,
-          decoration: const InputDecoration(labelText: 'Friendly name'),
+          label: 'Friendly name',
         ),
         actions: [
           TextButton(

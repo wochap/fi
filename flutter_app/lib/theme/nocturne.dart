@@ -62,7 +62,24 @@ abstract final class Nocturne {
   ];
 
   static const tabular = [FontFeature.tabularFigures()];
+
+  /// Below this screen width the app is laid out for a phone.
+  static const phoneBreakpoint = 720.0;
+
+  /// The box height of a shared input (`lib/theme/inputs.dart`) of [size] on this screen:
+  /// small is 32 (40 on a phone), normal is 40 (48 on a phone).
+  static double inputHeight(BuildContext context, InputSize size) {
+    final phone = MediaQuery.sizeOf(context).width < phoneBreakpoint;
+    return switch (size) {
+      InputSize.small => phone ? 40 : 32,
+      InputSize.normal => phone ? 48 : 40,
+    };
+  }
 }
+
+/// The two input heights: [normal] for form fields, [small] for inline builder rows
+/// (expression builder nodes, query builder conditions).
+enum InputSize { small, normal }
 
 /// The one app theme. Dark only: the design has no light variant.
 ThemeData nocturneTheme() {

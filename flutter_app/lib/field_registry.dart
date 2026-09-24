@@ -2,6 +2,7 @@ import 'package:clock/clock.dart';
 import 'package:fi/exact_format.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/theme/form_errors.dart';
+import 'package:fi/theme/inputs.dart';
 import 'package:flutter/material.dart';
 
 export 'package:fi/exact_format.dart' show formatScaled, parseScaled;
@@ -190,17 +191,6 @@ final class _FieldEditorState extends State<_FieldEditor> {
   bool get _required =>
       !widget.allowClear && FieldRendererRegistry.marksRequired(widget.field);
 
-  /// The label, errors and [suffixIcon]/[helperText] every decorated editor shares.
-  InputDecoration _decoration({Widget? suffixIcon, String? helperText}) =>
-      InputDecoration(
-        labelText: _required ? null : _label,
-        label: _required ? requiredLabel(_label) : null,
-        errorText: errorTextOf(widget.errors),
-        errorMaxLines: errorLinesOf(widget.errors),
-        helperText: helperText,
-        suffixIcon: suffixIcon,
-      );
-
   /// Reports "no value", which [_FieldEditor.allowClear] callers read as leaving the slot unset.
   void _clear() {
     text.clear();
@@ -235,33 +225,29 @@ final class _FieldEditorState extends State<_FieldEditor> {
     );
   }
 
-  /// The picker suffix: clear when [_FieldEditor.allowClear] has a value to clear, else [icon],
-  /// preceded by the quick-fill [action] when the caller asked for one.
-  Widget _pickerSuffix(IconData icon, String action, VoidCallback fill) {
-    final trailing = widget.allowClear && text.text.isNotEmpty
-        ? IconButton(
-            tooltip: 'Clear',
-            icon: const Icon(Icons.clear),
-            onPressed: () => setState(_clear),
-          )
-        : Icon(icon);
-    if (!widget.quickFill) return trailing;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        TextButton(
-          key: ValueKey('field-${widget.field.id}-${action.toLowerCase()}'),
-          style: TextButton.styleFrom(
-            visualDensity: VisualDensity.compact,
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          ),
-          onPressed: fill,
-          child: Text(action),
+  /// The clear button a picker shows in place of its icon when [_FieldEditor.allowClear] has a
+  /// value to clear.
+  Widget? get _clearButton => widget.allowClear && text.text.isNotEmpty
+      ? IconButton(
+          tooltip: 'Clear',
+          icon: const Icon(Icons.clear),
+          onPressed: () => setState(_clear),
+        )
+      : null;
+
+  /// The quick-fill [action] ("Today" / "Now") when the caller asked for one.
+  List<Widget> _quickFill(String action, VoidCallback fill) => [
+    if (widget.quickFill)
+      TextButton(
+        key: ValueKey('field-${widget.field.id}-${action.toLowerCase()}'),
+        style: TextButton.styleFrom(
+          visualDensity: VisualDensity.compact,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
         ),
-        Padding(padding: const EdgeInsets.only(right: 12), child: trailing),
-      ],
-    );
-  }
+        onPressed: fill,
+        child: Text(action),
+      ),
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -269,11 +255,13 @@ final class _FieldEditorState extends State<_FieldEditor> {
     if (field.fieldType.kind == FieldTypeKindDto.boolean) {
       if (widget.allowClear) {
         // Three states, because a switch cannot say "no value".
-        return DropdownButtonFormField<bool?>(
-          initialValue: widget.initial?.kind == FieldValueKindDto.boolean
+        return FiSelect<bool?>(
+          value: widget.initial?.kind == FieldValueKindDto.boolean
               ? widget.initial!.booleanValue
               : null,
-          decoration: _decoration(),
+          label: _label,
+          required: _required,
+          errors: widget.errors,
           items: const [
             DropdownMenuItem<bool?>(value: null, child: Text('None')),
             DropdownMenuItem<bool?>(value: true, child: Text('True')),
@@ -308,11 +296,13 @@ final class _FieldEditorState extends State<_FieldEditor> {
               final order = a.order.compareTo(b.order);
               return order == 0 ? a.id.compareTo(b.id) : order;
             });
-      return DropdownButtonFormField<String>(
-        initialValue: active.any((option) => option.id == text.text)
+      return FiSelect<String>(
+        value: active.any((option) => option.id == text.text)
             ? text.text
             : null,
-        decoration: _decoration(),
+        label: _label,
+        required: _required,
+        errors: widget.errors,
         items: [
           if (widget.allowClear)
             const DropdownMenuItem<String>(value: null, child: Text('None')),
@@ -334,16 +324,14 @@ final class _FieldEditorState extends State<_FieldEditor> {
       );
     }
     if (field.fieldType.kind == FieldTypeKindDto.date) {
-      return TextFormField(
+      return FiPickerInput(
         controller: text,
-        readOnly: true,
-        decoration: _decoration(
-          suffixIcon: _pickerSuffix(
-            Icons.calendar_today,
-            'Today',
-            () => _setDate(clock.now()),
-          ),
-        ),
+        label: _label,
+        required: _required,
+        errors: widget.errors,
+        icon: Icons.calendar_today,
+        actions: _quickFill('Today', () => _setDate(clock.now())),
+        replaceIcon: _clearButton,
         onTap: () async {
           final initial = widget.initial?.integerValue == null
               ? DateTime.now()
@@ -360,16 +348,14 @@ final class _FieldEditorState extends State<_FieldEditor> {
       );
     }
     if (field.fieldType.kind == FieldTypeKindDto.dateTime) {
-      return TextFormField(
+      return FiPickerInput(
         controller: text,
-        readOnly: true,
-        decoration: _decoration(
-          suffixIcon: _pickerSuffix(
-            Icons.event,
-            'Now',
-            () => _setDateTime(clock.now()),
-          ),
-        ),
+        label: _label,
+        required: _required,
+        errors: widget.errors,
+        icon: Icons.event,
+        actions: _quickFill('Now', () => _setDateTime(clock.now())),
+        replaceIcon: _clearButton,
         onTap: () async {
           final initial = widget.initial?.integerValue == null
               ? DateTime.now()
@@ -395,16 +381,21 @@ final class _FieldEditorState extends State<_FieldEditor> {
         },
       );
     }
-    return TextFormField(
+    final multiline =
+        field.fieldType.kind == FieldTypeKindDto.text &&
+        field.display.multiline;
+    return FiTextInput(
       controller: text,
-      minLines: field.display.multiline ? 3 : 1,
-      maxLines: field.display.multiline ? 6 : 1,
-      keyboardType: field.fieldType.kind == FieldTypeKindDto.text
-          ? TextInputType.text
-          : const TextInputType.numberWithOptions(signed: true, decimal: true),
-      decoration: _decoration(
-        helperText: _unitHelp(field.fieldType.kind, field.fieldType.scale),
-      ),
+      maxLines: multiline ? 6 : 1,
+      keyboardType: field.fieldType.kind != FieldTypeKindDto.text
+          ? const TextInputType.numberWithOptions(signed: true, decimal: true)
+          : multiline
+          ? TextInputType.multiline
+          : TextInputType.text,
+      label: _label,
+      required: _required,
+      errors: widget.errors,
+      helperText: _unitHelp(field.fieldType.kind, field.fieldType.scale),
       onChanged: (raw) {
         if (raw.isEmpty && (widget.allowClear || !field.required_)) {
           widget.onChanged(const FieldValueDto(kind: FieldValueKindDto.null_));

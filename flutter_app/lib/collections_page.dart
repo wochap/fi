@@ -7,6 +7,7 @@ import 'package:fi/help_copy.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/theme/form_errors.dart';
 import 'package:fi/theme/form_surface.dart';
+import 'package:fi/theme/inputs.dart';
 import 'package:fi/theme/nocturne.dart';
 import 'package:fi/theme/nocturne_widgets.dart';
 import 'package:fi/theme/side_sheet.dart';
@@ -747,15 +748,13 @@ class CollectionsPage extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             spacing: 14,
             children: [
-              TextField(
+              FiTextInput(
                 key: const Key('collection-name'),
                 controller: name,
                 autofocus: true,
-                decoration: InputDecoration(
-                  label: requiredLabel('Name'),
-                  errorText: errorTextOf(issues.of('name')),
-                  errorMaxLines: errorLinesOf(issues.of('name')),
-                ),
+                label: 'Name',
+                required: true,
+                errors: issues.of('name'),
                 // The shown issue is about the old text, so it goes as soon as the name changes.
                 onChanged: (_) {
                   if (issues.of('name').isEmpty) return;
@@ -763,10 +762,7 @@ class CollectionsPage extends StatelessWidget {
                 },
               ),
               if (collection == null)
-                TextField(
-                  controller: description,
-                  decoration: const InputDecoration(labelText: 'Description'),
-                ),
+                FiTextInput(controller: description, label: 'Description'),
             ],
           ),
           errors: issues.form,
@@ -1327,10 +1323,10 @@ class CollectionsPage extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             spacing: 14,
             children: [
-              DropdownButtonFormField<String>(
+              FiSelect<String>(
                 key: const Key('batch-field'),
-                initialValue: field.id,
-                decoration: const InputDecoration(labelText: 'Field'),
+                value: field.id,
+                label: 'Field',
                 items: [
                   for (final item in fields)
                     DropdownMenuItem(value: item.id, child: Text(item.name)),
@@ -1817,22 +1813,19 @@ class _FieldEditorFormState extends State<_FieldEditorForm> {
   @override
   Widget build(BuildContext context) {
     const gap = SizedBox(height: 14);
-    final nameField = TextField(
+    final nameField = FiTextInput(
       key: const Key('field-name'),
       controller: name,
       autofocus: widget.inline,
-      decoration: InputDecoration(
-        label: requiredLabel('Name'),
-        hintText: 'e.g. note',
-        errorText: errorTextOf(issues.of('name')),
-        errorMaxLines: errorLinesOf(issues.of('name')),
-      ),
+      label: 'Name',
+      required: true,
+      hint: 'e.g. note',
+      errors: issues.of('name'),
       onChanged: (_) => setState(() => _edited('name')),
     );
-    final typeField = DropdownButtonFormField<FieldTypeKindDto>(
-      initialValue: kind,
-      isExpanded: true,
-      decoration: const InputDecoration(labelText: 'Type'),
+    final typeField = FiSelect<FieldTypeKindDto>(
+      value: kind,
+      label: 'Type',
       items: FieldTypeKindDto.values
           .map(
             (value) => DropdownMenuItem(
@@ -1910,14 +1903,12 @@ class _FieldEditorFormState extends State<_FieldEditorForm> {
         ),
         if (kind == FieldTypeKindDto.fixedDecimal) ...[
           gap,
-          TextFormField(
+          FiTextInput(
             initialValue: '$scale',
             keyboardType: TextInputType.number,
-            decoration: labelWithHelp(
-              'Decimal scale',
-              HelpId.fieldDecimalScale,
-              errors: issues.of('scale'),
-            ),
+            label: 'Decimal scale',
+            suffixIcon: const HelpButton(HelpId.fieldDecimalScale),
+            errors: issues.of('scale'),
             // The scale decides what the stored integer means, so a change to it
             // cannot leave a default or a bound behind reading as something else.
             onChanged: (value) => setState(() {
@@ -1951,26 +1942,22 @@ class _FieldEditorFormState extends State<_FieldEditorForm> {
           Row(
             children: [
               Expanded(
-                child: TextField(
+                child: FiTextInput(
                   controller: minLength,
                   keyboardType: TextInputType.number,
-                  decoration: labelWithHelp(
-                    'Minimum length',
-                    HelpId.fieldMinMaxLength,
-                  ),
+                  label: 'Minimum length',
+                  suffixIcon: const HelpButton(HelpId.fieldMinMaxLength),
                   onChanged: (_) => setState(() => _edited('max-length')),
                 ),
               ),
               const SizedBox(width: 10),
               Expanded(
-                child: TextField(
+                child: FiTextInput(
                   controller: maxLength,
                   keyboardType: TextInputType.number,
-                  decoration: labelWithHelp(
-                    'Maximum length',
-                    HelpId.fieldMinMaxLength,
-                    errors: issues.of('max-length'),
-                  ),
+                  label: 'Maximum length',
+                  suffixIcon: const HelpButton(HelpId.fieldMinMaxLength),
+                  errors: issues.of('max-length'),
                   onChanged: (_) => setState(() => _edited('max-length')),
                 ),
               ),
@@ -2124,13 +2111,13 @@ class _FieldEditorFormState extends State<_FieldEditorForm> {
                   ),
                 ),
                 Expanded(
-                  child: TextField(
+                  child: FiTextInput(
                     key: ValueKey('option-label-${option.id}'),
                     controller: option.label,
                     // A freshly added row is where the user is about to type.
                     autofocus:
                         isTempOptionId(option.id) && option.label.text.isEmpty,
-                    decoration: const InputDecoration(hintText: 'Option label'),
+                    hint: 'Option label',
                     onChanged: (_) => setState(() {}),
                   ),
                 ),

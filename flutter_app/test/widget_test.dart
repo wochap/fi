@@ -104,7 +104,10 @@ void main() {
     expect(find.text('Name is required.'), findsOneWidget);
     // The `name` issue sits under the Name input, which is marked required.
     final name = tester.widget<TextField>(
-      find.byKey(const Key('collection-name')),
+      find.descendant(
+        of: find.byKey(const Key('collection-name')),
+        matching: find.byType(TextField),
+      ),
     );
     expect(name.decoration?.errorText, 'Name is required.');
     expect(find.text('* required'), findsOneWidget);

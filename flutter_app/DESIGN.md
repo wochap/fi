@@ -8,10 +8,11 @@ glow, never as a flood of color. Follow these rules so new screens match the exi
 
 | File | What it holds |
 | --- | --- |
-| `lib/theme/nocturne.dart` | `Nocturne` tokens (colors, radii, shadows, fonts) and `nocturneTheme()`, the only `ThemeData` |
+| `lib/theme/nocturne.dart` | `Nocturne` tokens (colors, radii, shadows, fonts, input heights via `Nocturne.inputHeight`) and `nocturneTheme()`, the only `ThemeData` |
 | `lib/theme/nocturne_widgets.dart` | Shared pieces: `FadedRule`, `Kicker`, `SectionLabel`, `GlowDot`, `IconTile`, `Tag`, `NocturneCard`, `nocturneGlow()`, `DashedSlot`, `FiLogoMark`, `FiLogoTile` |
 | `lib/theme/side_sheet.dart` | `showSideSheet()`: a 480px sheet from the right, or a bottom sheet on a phone |
 | `lib/theme/form_surface.dart` | `showFormSurface()` + `FormSurface`: every create/edit form, a bottom sheet on a phone and a dialog (optionally two-pane with an aside) otherwise |
+| `lib/theme/inputs.dart` | `FiTextInput`, `FiSelect`, `FiPickerInput`: every text, number, search, select and picker input, at the small or normal height token |
 | `lib/theme/form_errors.dart` | `FieldErrorLines`, `FormErrorLines`, `RequiredLegend`, `requiredLabel()`, `errorTextOf()` / `errorLinesOf()`: how forms show errors and required inputs |
 | `assets/fonts/` | Inter (400, 500) and JetBrains Mono (400), with OFL licences |
 
@@ -44,6 +45,27 @@ widget to `nocturne_widgets.dart` only when a second screen needs it.
 7. **Dark only.** There is no light theme; don't add `brightness` branches.
 8. **Use Material icons** (outlined variants where they exist). The design system mentions
    Phosphor icons; this app deliberately uses Material instead.
+9. **Inputs come from the shared widgets.** Build text, integer, decimal, search, select and
+   Date / Date & time / time inputs with `FiTextInput`, `FiSelect` and `FiPickerInput`
+   (`lib/theme/inputs.dart`), never a raw `TextField`, `TextFormField`, `DropdownButton` or
+   `DropdownButtonFormField` in feature code. Pass `label`, `required` and `errors` to them
+   rather than building an `InputDecoration`. Switches, checkboxes and buttons are not inputs
+   here.
+
+## Input sizes
+
+Every shared input of one size has the same box height on a screen, whatever its kind, label,
+prefix or suffix. Error and helper lines go below the box and never change its height; a
+multiline input starts at the box height and grows by whole lines.
+
+| Size | Desktop (≥720) | Phone (<720) | Use |
+| --- | --- | --- | --- |
+| normal (default) | 40 | 48 | Form fields |
+| small (`.compact`) | 32 | 40 | Inline builder rows: expression builder nodes, query builder conditions |
+
+The height comes from padding derived from the token, not from `InputDecoration.constraints`
+(which would squeeze the box when errors appear). Don't override `contentPadding` or wrap an input
+in a fixed-height box; if a size looks wrong, change the token.
 
 ## Type scale
 
@@ -106,8 +128,8 @@ must write one, use these sizes:
   form out of `AlertDialog` or an inline `showModalBottomSheet`. The surface picks the
   presentation from the screen width:
   - On a phone (<720) it is a bottom sheet with a drag handle, title plus context
-    (`contextLabel: 'in <collection>'`), 48px inputs, and Cancel (1 part) beside the primary
-    (2 parts).
+    (`contextLabel: 'in <collection>'`), and Cancel (1 part) beside the primary (2 parts). Its
+    inputs are 48px from the input tokens; the surface doesn't restyle them.
   - Otherwise it is a dialog, and with an `aside` at ≥820 a two-pane dialog.
   - `headerActions` (such as Remove) are icon buttons in the sheet's title row, and text buttons
     before Cancel in a dialog. Give each a `Key`; it is applied in both modes.
@@ -120,8 +142,8 @@ must write one, use these sizes:
 - **Form errors** follow one model, `FormIssues` (`controllers.dart`), built from a `BridgeError`
   with `FormIssues.from(error)` or from a list of issues:
   - An issue that names exactly one field (or form key) shows directly under that input, in the
-    error color. Use `errorText: errorTextOf(lines)` with `errorMaxLines: errorLinesOf(lines)` so
-    each issue is its own line; inputs without an `InputDecoration` (switch rows, pickers) use
+    error color. Pass the lines as `errors:` to the shared input, which applies
+    `errorTextOf` / `errorLinesOf` so each issue is its own line; switch rows use
     `FieldErrorLines`. Several issues on one field are several lines, in Rust's order, with no
     bullets.
   - An issue that names no field or several, and any non-validation failure, goes in the
@@ -138,8 +160,8 @@ must write one, use these sizes:
   input's issues when it changes and recompute client blockers). A record opened because the list
   marks it invalid starts in the attempted state.
 - **Required inputs** get an `*` after the label in `accent300`, never the error color, via
-  `requiredLabel(name)` (use it as `InputDecoration.label`; it reads "name, required" to screen
-  readers). A form with any marked input shows one `RequiredLegend` ("* required") line. A
+  `requiredLabel(name)` (the shared inputs apply it with `required: true`; a switch row uses it as
+  its title; it reads "name, required" to screen readers). A form with any marked input shows one `RequiredLegend` ("* required") line. A
   required schema field with a default is not marked (`FieldRendererRegistry.marksRequired`).
 - **Date and Date & time record editors offer Today / Now.** Pass `quickFill: true` to
   `FieldRendererRegistry.editor` wherever a record value is entered (new, edit, batch edit); it
@@ -172,7 +194,11 @@ chart-package ticks.
 
 - Keep widget types stable where tests find them by type: `FilledButton` (Save / primary),
   `TextButton` (Cancel), `SwitchListTile`, `DropdownButtonFormField`, `Checkbox`,
-  `PopupMenuButton<String>`. Note that `FilledButton.icon` has a different runtime type, so
+  `PopupMenuButton<String>`. `FiSelect<T>` builds a `DropdownButtonFormField<T>` (which contains
+  a `DropdownButton<T>`), and `FiTextInput` / `FiPickerInput` build a `TextFormField` (which
+  contains a `TextField`). A `Key` given to a shared input sits on the wrapper, so look the
+  `TextField` up with `find.descendant` when a test reads its decoration.
+- `test/inputs_test.dart` guards the input heights: add a case there for any new input kind. Note that `FilledButton.icon` has a different runtime type, so
   `find.widgetWithText(FilledButton, …)` won't match it. Use plain `FilledButton` where tests look
   it up.
 - Tests render with a wide placeholder font. Any `Text` inside a `Row` needs
@@ -192,4 +218,5 @@ chart-package ticks.
 - Android launcher icon from the 3b mark (needs a PNG / adaptive icon set).
 - Swipe-to-delete on phone record rows.
 - A segmented aggregation picker in the query editor (tests currently drive the dropdown).
+- Buttons beside inputs are not sized to the input tokens yet.
 - A "Current result" line in the query editor (no API evaluates a saved query outside a widget).
