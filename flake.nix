@@ -39,8 +39,86 @@
 
         androidSdk = androidComposition.androidsdk;
 
+        # Rust side of the app (flutter_rust_bridge). Built on its own so the
+        # Flutter build does not have to run cargokit inside the Nix sandbox.
+        appBridge = pkgs.rustPlatform.buildRustPackage {
+          pname = "app_bridge";
+          version = "0.1.0";
+
+          src = pkgs.lib.fileset.toSource {
+            root = ./.;
+            fileset = pkgs.lib.fileset.unions [
+              ./Cargo.toml
+              ./Cargo.lock
+              ./crates
+            ];
+          };
+
+          cargoLock.lockFile = ./Cargo.lock;
+          cargoBuildFlags = [
+            "-p"
+            "app_bridge"
+          ];
+          doCheck = false;
+
+          # Only the cdylib is needed by the Flutter bundle.
+          installPhase = ''
+            runHook preInstall
+            install -Dm644 target/*/release/libapp_bridge.so -t $out/lib
+            runHook postInstall
+          '';
+        };
+
+        fi = pkgs.flutter.buildFlutterApplication {
+          pname = "fi";
+          version = "1.0.0";
+
+          src = ./flutter_app;
+
+          # pubspec.lock is YAML; convert it to JSON at eval time (IFD).
+          pubspecLock = pkgs.lib.importJSON (
+            pkgs.runCommand "fi-pubspec.lock.json" { nativeBuildInputs = [ pkgs.yq ]; } ''
+              yq . ${./flutter_app/pubspec.lock} > $out
+            ''
+          );
+
+          # Replace the cargokit build of the app_bridge plugin with the
+          # prebuilt library; it is bundled into lib/ next to the binary.
+          postPatch = ''
+            cat > rust_builder/linux/CMakeLists.txt <<EOF
+            cmake_minimum_required(VERSION 3.10)
+            project(app_bridge LANGUAGES CXX)
+            set(app_bridge_bundled_libraries "${appBridge}/lib/libapp_bridge.so" PARENT_SCOPE)
+            EOF
+          '';
+
+          postInstall = ''
+            install -Dm644 linux/com.wochap.fi.desktop -t $out/share/applications
+            install -Dm644 assets/icon/icon.svg $out/share/icons/hicolor/scalable/apps/com.wochap.fi.svg
+            install -Dm644 assets/icon/icon.png $out/share/icons/hicolor/1024x1024/apps/com.wochap.fi.png
+          '';
+
+          meta = {
+            description = "Local-first schema-driven collections application";
+            license = pkgs.lib.licenses.mit;
+            mainProgram = "fi";
+            platforms = pkgs.lib.platforms.linux;
+          };
+        };
+
       in
       {
+        packages = {
+          inherit fi;
+          app-bridge = appBridge;
+          default = fi;
+        };
+
+        apps.default = {
+          type = "app";
+          program = pkgs.lib.getExe fi;
+        };
+
         devShells.default = pkgs.mkShell {
           packages = with pkgs; [
             # Flutter / Dart
