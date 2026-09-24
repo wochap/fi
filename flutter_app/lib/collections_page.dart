@@ -145,7 +145,7 @@ class CollectionsPage extends StatelessWidget {
                   if (action == 'rename') {
                     _editCollection(context, item);
                   } else {
-                    unawaited(controller.deleteCollection(item.id));
+                    unawaited(_confirmDeleteCollection(context, item));
                   }
                 },
                 itemBuilder: (_) => const [
@@ -157,6 +157,47 @@ class CollectionsPage extends StatelessWidget {
           ),
         ),
       );
+
+  /// Confirms before deleting a collection, stating what goes with it. Counts
+  /// load while the dialog is open; until then, or if loading fails, a generic
+  /// sentence stands in and Delete stays usable. Dismissing sends no command.
+  Future<void> _confirmDeleteCollection(
+    BuildContext context,
+    CollectionDto item,
+  ) async {
+    // Ignored here so a failed count never surfaces as an unhandled error;
+    // the FutureBuilder still sees it and keeps the generic sentence.
+    final contents = controller.contentsOf(item.id)..ignore();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: Text('Delete "${item.name}"?'),
+        content: FutureBuilder<CollectionContents>(
+          future: contents,
+          builder: (context, snapshot) => Text(
+            snapshot.hasData
+                ? collectionContentsSentence(snapshot.requireData)
+                : 'Its records, widgets and saved queries are deleted with it.',
+            style: const TextStyle(fontFeatures: Nocturne.tabular),
+          ),
+        ),
+        actions: [
+          TextButton(
+            key: const Key('dismiss-delete-collection'),
+            onPressed: () => Navigator.pop(dialog, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            key: const Key('confirm-delete-collection'),
+            onPressed: () => Navigator.pop(dialog, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await controller.deleteCollection(item.id);
+  }
 
   Widget _collection(BuildContext context) {
     final schema = controller.schema;
@@ -2186,4 +2227,22 @@ int _optionOrder(EnumOptionDto left, EnumOptionDto right) {
 int _fieldOrder(FieldDefinitionDto left, FieldDefinitionDto right) {
   final order = left.order.compareTo(right.order);
   return order == 0 ? left.id.compareTo(right.id) : order;
+}
+
+/// States what deleting a collection takes with it, leaving out zero counts:
+/// "142 records, 3 widgets and 2 saved queries are deleted with it."
+String collectionContentsSentence(CollectionContents contents) {
+  String count(int n, String one, String many) => '$n ${n == 1 ? one : many}';
+  final parts = [
+    if (contents.records > 0) count(contents.records, 'record', 'records'),
+    if (contents.widgets > 0) count(contents.widgets, 'widget', 'widgets'),
+    if (contents.savedQueries > 0)
+      count(contents.savedQueries, 'saved query', 'saved queries'),
+  ];
+  if (parts.isEmpty) return 'This collection is empty.';
+  final list = parts.length == 1
+      ? parts.single
+      : '${parts.sublist(0, parts.length - 1).join(', ')} and ${parts.last}';
+  final total = contents.records + contents.widgets + contents.savedQueries;
+  return '$list ${total == 1 ? 'is' : 'are'} deleted with it.';
 }

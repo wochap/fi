@@ -192,6 +192,19 @@ FieldDefinitionDto _fieldWith(
   enumOptions: enumOptions,
 );
 
+/// What a collection holds, as shown before deleting it.
+final class CollectionContents {
+  const CollectionContents({
+    required this.records,
+    required this.widgets,
+    required this.savedQueries,
+  });
+
+  final int records;
+  final int widgets;
+  final int savedQueries;
+}
+
 final class CollectionsController extends ChangeNotifier {
   CollectionsController(this.bridge);
 
@@ -409,6 +422,21 @@ final class CollectionsController extends ChangeNotifier {
   Future<void> renameCollection(String id, String name) async {
     await bridge.renameCollection(id, name);
     await refresh();
+  }
+
+  /// Counts what deleting [collectionId] takes with it: its active records, widgets and saved
+  /// queries. Reads run in parallel and are independent of the selected collection.
+  Future<CollectionContents> contentsOf(String collectionId) async {
+    final (records, widgets, queries) = await (
+      bridge.listRecords(collectionId),
+      bridge.listWidgets(collectionId),
+      bridge.listQueryDefinitions(collectionId),
+    ).wait;
+    return CollectionContents(
+      records: records.length,
+      widgets: widgets.where((item) => !item.deleted).length,
+      savedQueries: queries.where((item) => !item.deleted).length,
+    );
   }
 
   Future<void> deleteCollection(String id) async {
