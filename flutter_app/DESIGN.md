@@ -141,6 +141,12 @@ must write one, use these sizes:
   `requiredLabel(name)` (use it as `InputDecoration.label`; it reads "name, required" to screen
   readers). A form with any marked input shows one `RequiredLegend` ("* required") line. A
   required schema field with a default is not marked (`FieldRendererRegistry.marksRequired`).
+- **Date and Date & time record editors offer Today / Now.** Pass `quickFill: true` to
+  `FieldRendererRegistry.editor` wherever a record value is entered (new, edit, batch edit); it
+  adds a compact text action before the picker icon. Today fills the local calendar day; Now fills
+  the current local minute. Schema metadata slots (default, minimum, maximum) and query inputs
+  never pass it, because a quick fill there would freeze the moment the schema was edited. The
+  Date & time editor always shows local time as `yyyy-MM-dd HH:mm` (`formatDateTime`).
 - **Wrap bottom sheet content in `BottomSheetInsets`** (`lib/theme/side_sheet.dart`) so it clears
   both the keyboard and Android's navigation bar. `useSafeArea` alone leaves the bottom uncovered.
 - **Selection mode** swaps the header for an `accent900` action bar with an `accent700` border.

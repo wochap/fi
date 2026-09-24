@@ -1,3 +1,4 @@
+import 'package:clock/clock.dart';
 import 'package:fi/exact_format.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/theme/form_errors.dart';
@@ -37,6 +38,9 @@ final class FieldRendererRegistry {
   /// record does not need but schema metadata does: a default and a range bound are each optional
   /// even on a required field. With it, a boolean becomes a three-way choice and a date gains a
   /// clear action, because neither a switch nor a filled picker can otherwise say "unset".
+  ///
+  /// [quickFill] adds "Today" to a date and "Now" to a date and time. Only record values ask for
+  /// it: in a schema default or range bound it would freeze the moment the schema was edited.
   Widget editor(
     FieldDefinitionDto field,
     FieldValueDto? initial,
@@ -44,6 +48,7 @@ final class FieldRendererRegistry {
     List<String> errors = const [],
     String? label,
     bool allowClear = false,
+    bool quickFill = false,
   }) => _FieldEditor(
     key: ValueKey(field.id),
     field: field,
@@ -52,6 +57,7 @@ final class FieldRendererRegistry {
     errors: errors,
     label: label,
     allowClear: allowClear,
+    quickFill: quickFill,
   );
 
   /// A stored value as text. [human] reads dates as `Sep 22, 2026 · 14:05` for tables and lists,
@@ -128,6 +134,7 @@ final class _FieldEditor extends StatefulWidget {
     this.errors = const [],
     this.label,
     this.allowClear = false,
+    this.quickFill = false,
   });
   final FieldDefinitionDto field;
   final FieldValueDto? initial;
@@ -135,6 +142,7 @@ final class _FieldEditor extends StatefulWidget {
   final List<String> errors;
   final String? label;
   final bool allowClear;
+  final bool quickFill;
   @override
   State<_FieldEditor> createState() => _FieldEditorState();
 }
@@ -165,12 +173,7 @@ final class _FieldEditorState extends State<_FieldEditor> {
                   value.integerValue ?? 0,
                 ).toIso8601String().split('T').first,
         FieldTypeKindDto.dateTime =>
-          value == null
-              ? ''
-              : DateTime.fromMillisecondsSinceEpoch(
-                  value.integerValue ?? 0,
-                  isUtc: true,
-                ).toLocal().toString(),
+          value == null ? '' : formatDateTime(value.integerValue ?? 0),
         _ => value?.integerValue?.toString() ?? '',
       },
     );
@@ -202,6 +205,62 @@ final class _FieldEditorState extends State<_FieldEditor> {
   void _clear() {
     text.clear();
     widget.onChanged(const FieldValueDto(kind: FieldValueKindDto.null_));
+  }
+
+  /// Fills a local calendar day, from the picker or "Today", as a timezone-free epoch day.
+  void _setDate(DateTime local) {
+    final utc = DateTime.utc(local.year, local.month, local.day);
+    setState(() => text.text = utc.toIso8601String().split('T').first);
+    widget.onChanged(
+      FieldValueDto(
+        kind: FieldValueKindDto.date,
+        integerValue: utc.millisecondsSinceEpoch ~/ Duration.millisecondsPerDay,
+      ),
+    );
+  }
+
+  /// Fills a local minute, from the picker or "Now", as UTC epoch milliseconds.
+  void _setDateTime(DateTime local) {
+    final minute = DateTime(
+      local.year,
+      local.month,
+      local.day,
+      local.hour,
+      local.minute,
+    );
+    final epochMs = minute.toUtc().millisecondsSinceEpoch;
+    setState(() => text.text = formatDateTime(epochMs));
+    widget.onChanged(
+      FieldValueDto(kind: FieldValueKindDto.dateTime, integerValue: epochMs),
+    );
+  }
+
+  /// The picker suffix: clear when [_FieldEditor.allowClear] has a value to clear, else [icon],
+  /// preceded by the quick-fill [action] when the caller asked for one.
+  Widget _pickerSuffix(IconData icon, String action, VoidCallback fill) {
+    final trailing = widget.allowClear && text.text.isNotEmpty
+        ? IconButton(
+            tooltip: 'Clear',
+            icon: const Icon(Icons.clear),
+            onPressed: () => setState(_clear),
+          )
+        : Icon(icon);
+    if (!widget.quickFill) return trailing;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        TextButton(
+          key: ValueKey('field-${widget.field.id}-${action.toLowerCase()}'),
+          style: TextButton.styleFrom(
+            visualDensity: VisualDensity.compact,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+          onPressed: fill,
+          child: Text(action),
+        ),
+        Padding(padding: const EdgeInsets.only(right: 12), child: trailing),
+      ],
+    );
   }
 
   @override
@@ -279,13 +338,11 @@ final class _FieldEditorState extends State<_FieldEditor> {
         controller: text,
         readOnly: true,
         decoration: _decoration(
-          suffixIcon: widget.allowClear && text.text.isNotEmpty
-              ? IconButton(
-                  tooltip: 'Clear',
-                  icon: const Icon(Icons.clear),
-                  onPressed: () => setState(_clear),
-                )
-              : const Icon(Icons.calendar_today),
+          suffixIcon: _pickerSuffix(
+            Icons.calendar_today,
+            'Today',
+            () => _setDate(clock.now()),
+          ),
         ),
         onTap: () async {
           final initial = widget.initial?.integerValue == null
@@ -298,15 +355,7 @@ final class _FieldEditorState extends State<_FieldEditor> {
             lastDate: DateTime.utc(9999, 12, 31),
           );
           if (selected == null) return;
-          final utc = DateTime.utc(selected.year, selected.month, selected.day);
-          setState(() => text.text = utc.toIso8601String().split('T').first);
-          widget.onChanged(
-            FieldValueDto(
-              kind: FieldValueKindDto.date,
-              integerValue:
-                  utc.millisecondsSinceEpoch ~/ Duration.millisecondsPerDay,
-            ),
-          );
+          _setDate(selected);
         },
       );
     }
@@ -315,13 +364,11 @@ final class _FieldEditorState extends State<_FieldEditor> {
         controller: text,
         readOnly: true,
         decoration: _decoration(
-          suffixIcon: widget.allowClear && text.text.isNotEmpty
-              ? IconButton(
-                  tooltip: 'Clear',
-                  icon: const Icon(Icons.clear),
-                  onPressed: () => setState(_clear),
-                )
-              : const Icon(Icons.event),
+          suffixIcon: _pickerSuffix(
+            Icons.event,
+            'Now',
+            () => _setDateTime(clock.now()),
+          ),
         ),
         onTap: () async {
           final initial = widget.initial?.integerValue == null
@@ -342,19 +389,8 @@ final class _FieldEditorState extends State<_FieldEditor> {
             initialTime: TimeOfDay.fromDateTime(initial),
           );
           if (time == null) return;
-          final selected = DateTime(
-            day.year,
-            day.month,
-            day.day,
-            time.hour,
-            time.minute,
-          );
-          setState(() => text.text = selected.toString());
-          widget.onChanged(
-            FieldValueDto(
-              kind: FieldValueKindDto.dateTime,
-              integerValue: selected.toUtc().millisecondsSinceEpoch,
-            ),
+          _setDateTime(
+            DateTime(day.year, day.month, day.day, time.hour, time.minute),
           );
         },
       );

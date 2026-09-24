@@ -1349,6 +1349,7 @@ class CollectionsPage extends StatelessWidget {
                   issues = issues.without(field.id);
                 }),
                 errors: [...issues.of(field.id), if (attempted) ?blocker()],
+                quickFill: true,
               ),
             ],
           ),
@@ -1498,6 +1499,7 @@ class _RecordEditorFormState extends State<_RecordEditorForm> {
             values[field.id],
             (value) => _changed(field.id, value),
             errors: issues.of(field.id),
+            quickFill: true,
           ),
       ],
     ),

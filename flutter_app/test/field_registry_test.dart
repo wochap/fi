@@ -1,3 +1,5 @@
+import 'package:clock/clock.dart';
+import 'package:fi/exact_format.dart';
 import 'package:fi/field_registry.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:flutter/material.dart';
@@ -131,5 +133,140 @@ void main() {
       );
       expect(find.text(definition.name), findsOneWidget);
     }
+  });
+
+  group('quick fill', () {
+    /// Local 23:30:37.250, late enough that the UTC day is often already the next one.
+    final lateEvening = DateTime(2026, 9, 24, 23, 30, 37, 250);
+
+    Future<List<FieldValueDto>> pumpEditor(
+      WidgetTester tester,
+      FieldDefinitionDto definition, {
+      FieldValueDto? initial,
+      bool quickFill = true,
+    }) async {
+      final emitted = <FieldValueDto>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: const FieldRendererRegistry().editor(
+              definition,
+              initial,
+              emitted.add,
+              quickFill: quickFill,
+            ),
+          ),
+        ),
+      );
+      return emitted;
+    }
+
+    String inputText(WidgetTester tester) =>
+        tester.widget<EditableText>(find.byType(EditableText)).controller.text;
+
+    testWidgets('Today fills the local calendar day, not the UTC one', (
+      tester,
+    ) async {
+      final emitted = await pumpEditor(
+        tester,
+        field('onset', FieldTypeKindDto.date),
+      );
+      await withClock(Clock.fixed(lateEvening), () async {
+        await tester.tap(find.byKey(const ValueKey('field-onset-today')));
+      });
+      await tester.pump();
+
+      final expected =
+          DateTime.utc(2026, 9, 24).millisecondsSinceEpoch ~/
+          Duration.millisecondsPerDay;
+      expect(emitted.single.kind, FieldValueKindDto.date);
+      expect(emitted.single.integerValue, expected);
+      expect(inputText(tester), '2026-09-24');
+    });
+
+    testWidgets('Now fills the local minute as UTC milliseconds', (
+      tester,
+    ) async {
+      final emitted = await pumpEditor(
+        tester,
+        field('seen', FieldTypeKindDto.dateTime),
+      );
+      await withClock(Clock.fixed(lateEvening), () async {
+        await tester.tap(find.byKey(const ValueKey('field-seen-now')));
+      });
+      await tester.pump();
+
+      final expected = DateTime(
+        2026,
+        9,
+        24,
+        23,
+        30,
+      ).toUtc().millisecondsSinceEpoch;
+      expect(emitted.single.kind, FieldValueKindDto.dateTime);
+      expect(emitted.single.integerValue, expected);
+      expect(emitted.single.integerValue! % 60000, 0);
+      expect(inputText(tester), '2026-09-24 23:30');
+    });
+
+    testWidgets('Now replaces an existing value', (tester) async {
+      final emitted = await pumpEditor(
+        tester,
+        field('seen', FieldTypeKindDto.dateTime),
+        initial: FieldValueDto(
+          kind: FieldValueKindDto.dateTime,
+          integerValue: DateTime(
+            2020,
+            1,
+            2,
+            3,
+            4,
+          ).toUtc().millisecondsSinceEpoch,
+        ),
+      );
+      expect(inputText(tester), '2020-01-02 03:04');
+      await withClock(Clock.fixed(lateEvening), () async {
+        await tester.tap(find.byKey(const ValueKey('field-seen-now')));
+      });
+      await tester.pump();
+      expect(inputText(tester), '2026-09-24 23:30');
+      expect(emitted, hasLength(1));
+    });
+
+    testWidgets('an existing DateTime opens as local yyyy-MM-dd HH:mm', (
+      tester,
+    ) async {
+      final instant = DateTime(2026, 9, 24, 23, 0).toUtc();
+      await pumpEditor(
+        tester,
+        field('seen', FieldTypeKindDto.dateTime),
+        initial: FieldValueDto(
+          kind: FieldValueKindDto.dateTime,
+          integerValue: instant.millisecondsSinceEpoch,
+        ),
+      );
+      expect(inputText(tester), '2026-09-24 23:00');
+      expect(
+        formatDateTime(instant.millisecondsSinceEpoch),
+        '2026-09-24 23:00',
+      );
+    });
+
+    testWidgets('editors without quick fill offer neither action', (
+      tester,
+    ) async {
+      await pumpEditor(
+        tester,
+        field('onset', FieldTypeKindDto.date),
+        quickFill: false,
+      );
+      expect(find.text('Today'), findsNothing);
+      await pumpEditor(
+        tester,
+        field('seen', FieldTypeKindDto.dateTime),
+        quickFill: false,
+      );
+      expect(find.text('Now'), findsNothing);
+    });
   });
 }

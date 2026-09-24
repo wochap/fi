@@ -170,9 +170,10 @@ String formatDate(int epochDays) => DateFormat('yyyy-MM-dd').format(
   ),
 );
 
+/// An instant in the sortable form editors use, `2026-09-24 14:05`, in local time.
 String formatDateTime(int epochMs) => DateFormat(
   'yyyy-MM-dd HH:mm',
-).format(DateTime.fromMillisecondsSinceEpoch(epochMs, isUtc: true));
+).format(DateTime.fromMillisecondsSinceEpoch(epochMs, isUtc: true).toLocal());
 
 /// A record timestamp for reading rather than editing: `Sep 22, 2026 · 14:05` in local time, or
 /// `Sep 22 · 14:05` when [short]. Editors keep [formatDateTime]'s sortable form.

@@ -397,6 +397,29 @@ void main() {
     expect(field.defaultValue, isNull);
   });
 
+  for (final kind in [FieldTypeKindDto.date, FieldTypeKindDto.dateTime]) {
+    testWidgets(
+      '${fieldKindLabel(kind)} default and range slots offer no Today or Now',
+      (tester) async {
+        final seeded = await seed(tester);
+        await pumpPage(tester, seeded.controller);
+        await addFieldOfKind(tester, 'Onset', kind);
+
+        for (final slot in [
+          'field-default',
+          'field-minimum',
+          'field-maximum',
+        ]) {
+          expect(find.byKey(Key(slot)), findsOneWidget);
+          expect(find.byKey(ValueKey('$slot-today')), findsNothing);
+          expect(find.byKey(ValueKey('$slot-now')), findsNothing);
+        }
+        expect(find.text('Today'), findsNothing);
+        expect(find.text('Now'), findsNothing);
+      },
+    );
+  }
+
   testWidgets('a fixed-decimal default and range are stored exactly, scaled', (
     tester,
   ) async {
