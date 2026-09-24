@@ -11,6 +11,33 @@ The Flutter application SHALL show active user-defined collections and open a ge
 - **WHEN** the user selects the Headache collection
 - **THEN** the screen is constructed from its synchronized schema without a Headache-specific page
 
+### Requirement: Confirmed collection deletion
+Deleting a collection from the collection list SHALL require confirmation in a dialog before any delete command is sent. The dialog SHALL name the collection and state what is deleted with it, including the counts of its active records, widgets and saved queries when they are available, omitting zero counts. Cancelling or dismissing the dialog SHALL send no command.
+
+#### Scenario: Confirm with counts
+- **WHEN** the user chooses Delete on the "Gym" collection, which has 142 records, 3 widgets and 2 saved queries
+- **THEN** a dialog titled "Delete "Gym"?" states that 142 records, 3 widgets and 2 saved queries are deleted with it, with Cancel and Delete actions
+
+#### Scenario: Zero counts omitted
+- **WHEN** the collection has 5 records, no widgets and no saved queries
+- **THEN** the dialog mentions only the 5 records
+
+#### Scenario: Empty collection
+- **WHEN** the collection has no records, widgets or saved queries
+- **THEN** the dialog states that the collection is empty
+
+#### Scenario: Counts unavailable
+- **WHEN** the counts are still loading or failed to load
+- **THEN** the dialog states generically that its records, widgets and saved queries are deleted with it, and Delete remains usable
+
+#### Scenario: Cancel
+- **WHEN** the user presses Cancel or dismisses the dialog
+- **THEN** no delete command is sent and the collection remains listed
+
+#### Scenario: Confirm
+- **WHEN** the user presses Delete in the dialog
+- **THEN** Flutter sends the collection delete command and the collection leaves the list after the projection refreshes
+
 ### Requirement: Functional schema editor
 Flutter SHALL provide create, rename, logical-delete, add-field, edit-field, remove-field, and reorder workflows for supported schema metadata, while Rust remains the authoritative validator. Enum option maintenance SHALL be part of the field editor rather than a separate workflow. When the field editor has Required on, no default, and the collection contains active records lacking the field, the editor SHALL show an inline warning stating how many records will become invalid, and the save action SHALL open a confirmation dialog stating that count before the schema command is submitted. The count SHALL be derived from the projected record list already loaded for the collection.
 
