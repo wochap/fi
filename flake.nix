@@ -84,13 +84,26 @@
 
           # Replace the cargokit build of the app_bridge plugin with the
           # prebuilt library; it is bundled into lib/ next to the binary.
-          postPatch = ''
-            cat > rust_builder/linux/CMakeLists.txt <<EOF
-            cmake_minimum_required(VERSION 3.10)
-            project(app_bridge LANGUAGES CXX)
-            set(app_bridge_bundled_libraries "${appBridge}/lib/libapp_bridge.so" PARENT_SCOPE)
-            EOF
-          '';
+          # The path dependency is copied to its own store path, so it has
+          # to be patched here rather than in postPatch.
+          customSourceBuilders.app_bridge =
+            { version, src, ... }:
+            pkgs.stdenvNoCC.mkDerivation {
+              pname = "app_bridge";
+              inherit version src;
+              inherit (src) passthru;
+              dontBuild = true;
+              installPhase = ''
+                runHook preInstall
+                cp -r . $out
+                cat > $out/rust_builder/linux/CMakeLists.txt <<EOF
+                cmake_minimum_required(VERSION 3.10)
+                project(app_bridge LANGUAGES CXX)
+                set(app_bridge_bundled_libraries "${appBridge}/lib/libapp_bridge.so" PARENT_SCOPE)
+                EOF
+                runHook postInstall
+              '';
+            };
 
           postInstall = ''
             install -Dm644 linux/com.wochap.fi.desktop -t $out/share/applications
