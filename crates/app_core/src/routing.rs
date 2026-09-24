@@ -668,6 +668,14 @@ impl ConnectionManager {
                     return Ok(generation);
                 }
                 Err(error) => {
+                    tracing::info!(
+                        event = "peer_dial_failed",
+                        device_id = %peer,
+                        endpoint = %endpoint.address,
+                        source = ?endpoint.source,
+                        error = %error,
+                        "dial to peer endpoint failed"
+                    );
                     if let Ok(mut registry) = self.registry.lock()
                         && let Some(route) = registry.endpoint_mut(peer, endpoint.address)
                     {

@@ -2039,6 +2039,12 @@ fn spawn_discovery_bridge(
                 expires_at_ms,
             } = event;
             let now = current_time_ms();
+            tracing::info!(
+                event = "peer_endpoint_discovered",
+                device_id = %peer,
+                address = %address,
+                "discovered trusted peer endpoint"
+            );
             if let Ok(mut endpoints) = endpoints.lock() {
                 // Accumulate: a peer with several routable addresses keeps them
                 // all for ranking, instead of the last resolved one winning.
