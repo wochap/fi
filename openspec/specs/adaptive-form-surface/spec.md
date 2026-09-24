@@ -5,7 +5,7 @@ TBD: Define the shared Flutter form surface that presents create and edit forms 
 ## Requirements
 
 ### Requirement: Adaptive form presentation
-Flutter SHALL present create and edit forms through one shared form surface. When the screen width is below 720 logical pixels the surface SHALL be a bottom sheet; otherwise it SHALL be a dialog. The record editor, widget editor, collection create/rename form, and batch field editor MUST use this surface.
+Flutter SHALL present create and edit forms through one shared form surface. When the screen width is below 720 logical pixels the surface SHALL be a bottom sheet; otherwise it SHALL be a dialog. The record editor, widget editor, collection create/rename form, batch field editor, and computed-field editor MUST use this surface.
 
 #### Scenario: Phone opens a create form
 - **WHEN** the screen is 390px wide and the user taps "Add widget"
@@ -19,8 +19,16 @@ Flutter SHALL present create and edit forms through one shared form surface. Whe
 - **WHEN** the screen is 390px wide and the user starts "New collection" or "Rename collection"
 - **THEN** the form opens as a bottom sheet
 
+#### Scenario: Computed-field editor on a phone
+- **WHEN** the screen is 390px wide and the user opens "New computed field"
+- **THEN** the editor opens as a bottom sheet with the drag handle, title, and Cancel / Save footer of the form surface, not as a full-screen dialog
+
+#### Scenario: Computed-field editor on desktop
+- **WHEN** the screen is 1280px wide and the user edits an existing computed field
+- **THEN** the editor opens as a form-surface dialog with Cancel and Save right-aligned
+
 ### Requirement: Phone sheet layout
-On a phone, the form surface SHALL show a drag handle, the form title with an optional context line (for example "in Gym") on the same row, a scrollable body with 48px-tall inputs, and a footer with Cancel (one part width) beside the primary action (two parts width). The sheet MUST clear both the on-screen keyboard and the system navigation bar.
+On a phone, the form surface SHALL show a drag handle, the form title with an optional context line (for example "in Gym") on the same row, a scrollable body, and a footer with Cancel (one part width) beside the primary action (two parts width). Inputs in the body SHALL take their height from the shared input size tokens (normal is 48px on a phone); the surface MUST NOT override input padding. The sheet MUST clear both the on-screen keyboard and the system navigation bar.
 
 #### Scenario: Footer proportions
 - **WHEN** a form surface is shown as a bottom sheet
@@ -29,6 +37,10 @@ On a phone, the form surface SHALL show a drag handle, the form title with an op
 #### Scenario: Keyboard open
 - **WHEN** the user focuses an input in the sheet and the keyboard opens
 - **THEN** the focused input and the footer remain visible above the keyboard
+
+#### Scenario: Phone inputs from tokens
+- **WHEN** a record form with a text input and a select opens as a bottom sheet on a 390px-wide screen
+- **THEN** both input boxes are 48px tall
 
 ### Requirement: Header actions
 The form surface SHALL accept secondary actions for the header. On a phone these SHALL render as icon buttons with tooltips in the title row; on a dialog they SHALL render as text buttons before Cancel in the footer.
