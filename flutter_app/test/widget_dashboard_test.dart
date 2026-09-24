@@ -291,17 +291,23 @@ void main() {
 
     await tester.tap(find.byKey(const Key('add-widget')));
     await pumpUntilFound(tester, find.byKey(const Key('widget-type')));
-    await tester.enterText(
-      find.byKey(const Key('widget-title')),
-      'Headache count',
-    );
-    // The query starts unselected, so Save is blocked until the guided choices are complete.
+    // Save stays enabled; nothing shows until it is pressed, then the blocker sits under the
+    // input it belongs to and clears as soon as it is fixed.
+    expect(find.text('Give the widget a title.'), findsNothing);
     await tester.tap(find.byKey(const Key('save-widget')));
     await tester.pumpAndSettle();
+    expect(find.text('Give the widget a title.'), findsOneWidget);
+    expect(find.byKey(const Key('widget-editor-error')), findsNothing);
     expect(
       seeded.bridge.widgetDefinitions[seeded.collectionId] ?? const [],
       isEmpty,
     );
+    await tester.enterText(
+      find.byKey(const Key('widget-title')),
+      'Headache count',
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Give the widget a title.'), findsNothing);
 
     // A count aggregation needs no operand field, so the form is already complete.
     expect(find.byKey(const Key('aggregation')), findsOneWidget);
@@ -415,17 +421,31 @@ void main() {
     await tester.pumpAndSettle();
     seeded.bridge.nextError = const BridgeError(
       kind: BridgeErrorKind.validation,
-      field: 'query_id',
+      issues: [
+        BridgeIssueDto(
+          fields: ['query_id'],
+          code: 'invalid',
+          message:
+              'returns a record set result but core.aggregate-number accepts scalar',
+        ),
+      ],
       message:
-          'query_id: returns a record set result but core.aggregate-number accepts scalar',
+          'returns a record set result but core.aggregate-number accepts scalar',
       resetResolvable: false,
     );
     await tester.tap(find.byKey(const Key('save-widget')));
-    await pumpUntilFound(tester, find.byKey(const Key('widget-editor-error')));
+    final message = find.textContaining('core.aggregate-number accepts scalar');
+    await pumpUntilFound(tester, message);
+    expect(message, findsOneWidget);
+    // The issue names the query, so it sits under the saved-query selector, not the form slot.
     expect(
-      find.textContaining('core.aggregate-number accepts scalar'),
+      find.descendant(
+        of: find.byKey(const Key('saved-query')),
+        matching: message,
+      ),
       findsOneWidget,
     );
+    expect(find.byKey(const Key('widget-editor-error')), findsNothing);
     // The dialog stays open and nothing was written.
     expect(find.byKey(const Key('widget-title')), findsOneWidget);
     expect(

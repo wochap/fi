@@ -213,6 +213,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   BridgeErrorKind dco_decode_bridge_error_kind(dynamic raw);
 
   @protected
+  BridgeIssueDto dco_decode_bridge_issue_dto(dynamic raw);
+
+  @protected
   BucketPeriodDto dco_decode_bucket_period_dto(dynamic raw);
 
   @protected
@@ -310,6 +313,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<StructuredValueDto> dco_decode_list_box_structured_value_dto(
     dynamic raw,
   );
+
+  @protected
+  List<BridgeIssueDto> dco_decode_list_bridge_issue_dto(dynamic raw);
 
   @protected
   List<CategoryPointDto> dco_decode_list_category_point_dto(dynamic raw);
@@ -902,6 +908,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   BridgeErrorKind sse_decode_bridge_error_kind(SseDeserializer deserializer);
 
   @protected
+  BridgeIssueDto sse_decode_bridge_issue_dto(SseDeserializer deserializer);
+
+  @protected
   BucketPeriodDto sse_decode_bucket_period_dto(SseDeserializer deserializer);
 
   @protected
@@ -1021,6 +1030,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<StructuredValueDto> sse_decode_list_box_structured_value_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<BridgeIssueDto> sse_decode_list_bridge_issue_dto(
     SseDeserializer deserializer,
   );
 
@@ -1775,6 +1789,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_bridge_issue_dto(
+    BridgeIssueDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_bucket_period_dto(
     BucketPeriodDto self,
     SseSerializer serializer,
@@ -1924,6 +1944,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_list_box_structured_value_dto(
     List<StructuredValueDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_bridge_issue_dto(
+    List<BridgeIssueDto> self,
     SseSerializer serializer,
   );
 

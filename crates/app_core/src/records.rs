@@ -13,7 +13,7 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use crate::{
-    error::DomainError,
+    error::{DomainError, IssueCode, ValidationIssue, summarize_issues},
     hlc::{HlcNodeId, HlcStamp},
     schema::{CollectionSchema, CollectionSchemaId, FieldId},
     values::FieldValue,
@@ -80,14 +80,57 @@ pub enum RecordValidationError {
     InvalidId,
     #[error("record belongs to a different collection")]
     WrongCollection,
-    #[error("field {0} was not found or is removed")]
-    FieldUnavailable(FieldId),
-    #[error("required field {0} is missing")]
-    MissingRequired(FieldId),
-    #[error("field {field}: {message}")]
-    InvalidValue { field: FieldId, message: String },
+    /// Every field problem found, in schema order. Never empty.
+    #[error("{}", summarize_issues(&.0.iter().map(RecordFieldIssue::issue).collect::<Vec<_>>()))]
+    Fields(Vec<RecordFieldIssue>),
 }
 
+/// One field-level record problem with an id-free message.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RecordFieldIssue {
+    pub field: FieldId,
+    pub code: IssueCode,
+    pub message: String,
+}
+
+impl RecordFieldIssue {
+    fn new(field: FieldId, issue: ValidationIssue) -> Self {
+        Self {
+            field,
+            code: issue.code,
+            message: issue.message,
+        }
+    }
+
+    #[must_use]
+    pub fn issue(&self) -> ValidationIssue {
+        ValidationIssue {
+            fields: vec![self.field.to_string()],
+            code: self.code,
+            message: self.message.clone(),
+        }
+    }
+}
+
+impl RecordValidationError {
+    /// Validation issues with field context, for the bridge.
+    #[must_use]
+    pub fn issues(&self) -> Vec<ValidationIssue> {
+        match self {
+            Self::Fields(issues) => issues.iter().map(RecordFieldIssue::issue).collect(),
+            other => vec![ValidationIssue::new(IssueCode::Invalid, other.to_string())],
+        }
+    }
+}
+
+impl From<RecordValidationError> for DomainError {
+    fn from(error: RecordValidationError) -> Self {
+        Self::InvalidMany(error.issues())
+    }
+}
+
+/// Validates a record against its schema, reporting every field issue found.
+/// A wrong collection is an early exit; nothing else is meaningful then.
 pub fn validate_record(
     record: &mut GenericRecord,
     schema: &CollectionSchema,
@@ -102,9 +145,16 @@ pub fn validate_record(
         .filter(|field| !field.deleted)
         .map(|field| field.id)
         .collect();
-    if let Some(id) = record.values.keys().find(|id| !active.contains(id)) {
-        return Err(RecordValidationError::FieldUnavailable(*id));
-    }
+    let mut issues: Vec<_> = record
+        .values
+        .keys()
+        .filter(|id| !active.contains(id))
+        .map(|id| RecordFieldIssue {
+            field: *id,
+            code: IssueCode::FieldUnavailable,
+            message: "This field is no longer available".into(),
+        })
+        .collect();
     for field in schema.fields.iter().filter(|field| !field.deleted) {
         if !record.values.contains_key(&field.id)
             && apply_defaults
@@ -116,18 +166,25 @@ pub fn validate_record(
             // A default satisfies requiredness even on the projection path, where defaults are not
             // inserted: the field reads as its default everywhere, so the record is not missing it.
             None if field.required && field.default.is_none() => {
-                return Err(RecordValidationError::MissingRequired(field.id));
-            }
-            Some(value) => field.validate_value(value, false).map_err(|error| {
-                RecordValidationError::InvalidValue {
+                issues.push(RecordFieldIssue {
                     field: field.id,
-                    message: error.to_string(),
+                    code: IssueCode::Required,
+                    message: "Required".into(),
+                });
+            }
+            Some(value) => {
+                if let Err(issue) = field.validate_value(value) {
+                    issues.push(RecordFieldIssue::new(field.id, issue));
                 }
-            })?,
+            }
             None => {}
         }
     }
-    Ok(())
+    if issues.is_empty() {
+        Ok(())
+    } else {
+        Err(RecordValidationError::Fields(issues))
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -353,8 +410,94 @@ mod tests {
         record.values.clear();
         assert_eq!(
             validate_record(&mut record, &schema, false),
-            Err(RecordValidationError::MissingRequired(field_id))
+            Err(RecordValidationError::Fields(vec![RecordFieldIssue {
+                field: field_id,
+                code: IssueCode::Required,
+                message: "Required".into(),
+            }]))
         );
+    }
+
+    fn field(name: &str, field_type: FieldType, required: bool) -> FieldDefinition {
+        FieldDefinition {
+            id: FieldId::new(),
+            name: name.into(),
+            field_type,
+            required,
+            default: None,
+            validation: ValidationMetadata::default(),
+            display: DisplayMetadata::default(),
+            order: 0,
+            deleted: false,
+            enum_options: vec![],
+        }
+    }
+
+    #[test]
+    fn every_field_issue_is_reported_with_its_field_and_no_ids_in_messages() {
+        let collection_id = CollectionSchemaId::new();
+        let title = FieldDefinition {
+            validation: ValidationMetadata {
+                min_length: Some(1),
+                max_length: Some(40),
+                ..ValidationMetadata::default()
+            },
+            ..field("Title", FieldType::Text, true)
+        };
+        let intensity = FieldDefinition {
+            validation: ValidationMetadata {
+                min_integer: Some(1),
+                max_integer: Some(10),
+                ..ValidationMetadata::default()
+            },
+            ..field("Intensity", FieldType::Integer, false)
+        };
+        let note = field("Note", FieldType::Text, true);
+        let schema = CollectionSchema {
+            id: collection_id,
+            name: "Headaches".into(),
+            description: String::new(),
+            deleted: false,
+            fields: vec![title.clone(), intensity.clone(), note.clone()],
+        };
+        let mut record = GenericRecord {
+            id: RecordId::new(),
+            collection_id,
+            values: BTreeMap::from([
+                (title.id, FieldValue::Text("x".repeat(41))),
+                (intensity.id, FieldValue::Integer(11)),
+            ]),
+            stamps: BTreeMap::new(),
+            deleted: false,
+        };
+        let Err(RecordValidationError::Fields(issues)) =
+            validate_record(&mut record, &schema, true)
+        else {
+            panic!("expected field issues");
+        };
+        assert_eq!(
+            issues
+                .iter()
+                .map(|issue| (issue.field, issue.code, issue.message.as_str()))
+                .collect::<Vec<_>>(),
+            vec![
+                (title.id, IssueCode::Length, "Must be 1–40 characters"),
+                (
+                    intensity.id,
+                    IssueCode::OutOfRange,
+                    "Must be between 1 and 10"
+                ),
+                (note.id, IssueCode::Required, "Required"),
+            ]
+        );
+        let error = RecordValidationError::Fields(issues);
+        for issue in error.issues() {
+            for id in [title.id, intensity.id, note.id] {
+                assert!(!issue.message.contains(&id.to_string()));
+            }
+            assert_eq!(issue.fields.len(), 1);
+        }
+        assert_eq!(error.to_string(), "3 problems need attention");
     }
 
     #[test]

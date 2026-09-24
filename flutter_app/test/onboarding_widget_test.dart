@@ -71,6 +71,7 @@ final class RootlessBridge implements CollectionBridge {
     rejected.add(invocation.memberName.toString());
     throw const BridgeError(
       kind: BridgeErrorKind.lifecycle,
+      issues: [],
       message: 'A local dataset is required.',
       resetResolvable: false,
     );

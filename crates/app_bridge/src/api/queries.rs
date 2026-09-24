@@ -1085,7 +1085,7 @@ mod tests {
         .map_err(inference_error)
         .unwrap_err();
         assert_eq!(error.kind, crate::api::models::BridgeErrorKind::Validation);
-        assert_eq!(error.field.as_deref(), Some("$.right"));
+        assert_eq!(error.issues[0].fields, vec!["$.right".to_owned()]);
         assert_eq!(error.message, "arithmetic operands are incompatible");
     }
 }

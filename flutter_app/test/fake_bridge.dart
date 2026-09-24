@@ -412,6 +412,53 @@ final class FakeCollectionBridge implements CollectionBridge {
     return id;
   }
 
+  /// Every draft handed to [validateRecordDraft], newest last.
+  final List<List<RecordValueDto>> draftValidations = [];
+
+  /// Stands in for Rust's record rules in [validateRecordDraft]. The default reports a missing
+  /// or null required field without a default; tests replace it for other issues.
+  List<BridgeIssueDto> Function(
+    String collectionId,
+    String? recordId,
+    List<RecordValueDto> values,
+  )?
+  draftIssues;
+
+  @override
+  Future<List<BridgeIssueDto>> validateRecordDraft(
+    String collectionId,
+    String? recordId,
+    List<RecordValueDto> values,
+  ) async {
+    draftValidations.add(values);
+    if (draftIssues case final issues?) {
+      return issues(collectionId, recordId, values);
+    }
+    final existing = recordId == null
+        ? const <RecordValueDto>[]
+        : records[collectionId]!
+              .firstWhere((item) => item.id == recordId)
+              .values;
+    final merged = {
+      for (final item in existing) item.fieldId: item.value,
+      for (final item in values) item.fieldId: item.value,
+    };
+    return [
+      for (final field
+          in schemas[collectionId]?.fields ?? const <FieldDefinitionDto>[])
+        if (!field.deleted &&
+            field.required_ &&
+            field.defaultValue == null &&
+            (merged[field.id]?.kind ?? FieldValueKindDto.null_) ==
+                FieldValueKindDto.null_)
+          BridgeIssueDto(
+            fields: [field.id],
+            code: 'required',
+            message: 'Required',
+          ),
+    ];
+  }
+
   @override
   Future<void> updateRecordField(
     String recordId,
@@ -778,6 +825,7 @@ final class FakeCollectionBridge implements CollectionBridge {
     if (definition == null) {
       throw BridgeError(
         kind: BridgeErrorKind.validation,
+        issues: [],
         message: 'The selected widget no longer exists.',
         resetResolvable: false,
       );
@@ -969,7 +1017,9 @@ final class _FakeInference {
 
   static BridgeError _error(String path, String message) => BridgeError(
     kind: BridgeErrorKind.validation,
-    field: path,
+    issues: [
+      BridgeIssueDto(fields: [path], code: 'invalid', message: message),
+    ],
     message: message,
     resetResolvable: false,
   );

@@ -618,6 +618,13 @@ final class CollectionsController extends ChangeNotifier {
     await refresh();
   }
 
+  /// Dry-run record validation in Rust with the same rules as create (no [recordId]) or update.
+  /// Commits nothing; returns every issue, empty when the draft is valid.
+  Future<List<BridgeIssueDto>> validateRecordDraft(
+    List<RecordValueDto> values, {
+    String? recordId,
+  }) => bridge.validateRecordDraft(selectedCollectionId!, recordId, values);
+
   Future<void> deleteRecord(String id) async {
     await bridge.deleteRecord(id, selectedCollectionId!);
     await refresh();
@@ -960,3 +967,81 @@ String bridgeMessage(Object error) => switch (error) {
   BridgeError(:final message) => message,
   _ => 'The local collection service encountered an unexpected error.',
 };
+
+/// Validation problems split by where a form shows them: an issue naming exactly one field goes
+/// under that input ([byField], one line per issue), anything else in the form-level slot above
+/// the buttons ([form]).
+final class FormIssues {
+  const FormIssues({this.byField = const {}, this.form = const []});
+
+  /// Splits Rust issues by field count, keeping Rust's order.
+  factory FormIssues.fromIssues(List<BridgeIssueDto> issues) {
+    final byField = <String, List<String>>{};
+    final form = <String>[];
+    for (final issue in issues) {
+      if (issue.fields case [final field]) {
+        byField.putIfAbsent(field, () => []).add(issue.message);
+      } else {
+        form.add(issue.message);
+      }
+    }
+    return FormIssues(byField: byField, form: form);
+  }
+
+  /// A failure as form issues: a validation error splits by field; anything else (or a
+  /// validation error without issues) is one form-level line.
+  factory FormIssues.from(Object error) => switch (error) {
+    BridgeError(:final issues) when issues.isNotEmpty => FormIssues.fromIssues(
+      issues,
+    ),
+    _ => FormIssues(form: [bridgeMessage(error)]),
+  };
+
+  static const none = FormIssues();
+
+  final Map<String, List<String>> byField;
+  final List<String> form;
+
+  bool get isEmpty => form.isEmpty && byField.values.every((l) => l.isEmpty);
+
+  /// The lines for [key]; empty when it has none.
+  List<String> of(String key) => byField[key] ?? const [];
+
+  /// Renames each key through [inputs] (issue key to input key) and moves every key without an
+  /// input into the form slot, so no issue is lost when a form has no input for it.
+  FormIssues keyed(Map<String, String> inputs) {
+    final byField = <String, List<String>>{};
+    final form = [...this.form];
+    for (final MapEntry(:key, :value) in this.byField.entries) {
+      if (inputs[key] case final input?) {
+        byField.putIfAbsent(input, () => []).addAll(value);
+      } else {
+        form.addAll(value);
+      }
+    }
+    return FormIssues(byField: byField, form: form);
+  }
+
+  /// Keeps the keys in [known] and moves the rest into the form slot.
+  FormIssues restrictTo(Set<String> known) =>
+      keyed({for (final key in known) key: key});
+
+  /// These issues without any under [key], for when that input changes.
+  FormIssues without(String key) =>
+      FormIssues(byField: {...byField}..remove(key), form: form);
+
+  /// These issues plus one form-level [line], or unchanged when [line] is null.
+  FormIssues withForm(String? line) =>
+      line == null ? this : FormIssues(byField: byField, form: [...form, line]);
+
+  /// These issues plus one [line] under [key], or unchanged when [line] is null.
+  FormIssues withField(String key, String? line) => line == null
+      ? this
+      : FormIssues(
+          byField: {
+            ...byField,
+            key: [...of(key), line],
+          },
+          form: form,
+        );
+}

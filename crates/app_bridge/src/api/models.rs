@@ -1,7 +1,7 @@
 use app_core::{
     AppCore, AppError, ApplicationState, DataChanged, DomainError, DomainKind, ErrorEvent,
-    NetworkingDeferredReason, ProjectionState, RecoveryOutcome, RecoveryReason, RecoveryRecord,
-    RepositoryBootstrapError,
+    IssueCode, NetworkingDeferredReason, ProjectionState, RecoveryOutcome, RecoveryReason,
+    RecoveryRecord, RepositoryBootstrapError, ValidationIssue, summarize_issues,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -601,7 +601,10 @@ pub enum BridgeErrorKind {
 #[error("{message}")]
 pub struct BridgeError {
     pub kind: BridgeErrorKind,
-    pub field: Option<String>,
+    /// Validation issues, each naming the field ids or form keys it concerns.
+    /// Empty for non-validation failures.
+    pub issues: Vec<BridgeIssueDto>,
+    /// One-line summary for banners: the only issue's message, or a count.
     pub message: String,
     /// True when a deliberate dataset reset would resolve this error (an
     /// unsupported application schema, a genuinely inconsistent bootstrap
@@ -609,6 +612,25 @@ pub struct BridgeError {
     /// I/O failures are never marked, so the shell offers a retry rather than
     /// a destructive action for them.
     pub reset_resolvable: bool,
+}
+
+/// One validation problem. `fields` holds zero, one, or several field ids or
+/// form keys; `code` is stable; `message` is safe and never contains ids.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct BridgeIssueDto {
+    pub fields: Vec<String>,
+    pub code: String,
+    pub message: String,
+}
+
+impl From<ValidationIssue> for BridgeIssueDto {
+    fn from(value: ValidationIssue) -> Self {
+        Self {
+            fields: value.fields,
+            code: value.code.as_str().into(),
+            message: value.message,
+        }
+    }
 }
 
 /// Why peer networking is not running on a core that was opened in networked
@@ -1255,12 +1277,10 @@ impl From<AppError> for BridgeError {
             )
         } else {
             match value {
-                AppError::Domain(DomainError::Invalid { field, message }) => Self {
-                    kind: BridgeErrorKind::Validation,
-                    field: Some(field.into()),
-                    message,
-                    reset_resolvable: false,
-                },
+                AppError::Domain(DomainError::Invalid { field, message }) => {
+                    Self::validation(field, message)
+                }
+                AppError::Domain(DomainError::InvalidMany(issues)) => Self::issues(issues),
                 AppError::Domain(DomainError::NotFound { kind, .. }) => Self::safe(
                     BridgeErrorKind::Validation,
                     format!("The selected {kind} no longer exists."),
@@ -1316,10 +1336,16 @@ impl From<AppError> for BridgeError {
 
 impl BridgeError {
     pub(crate) fn validation(field: impl Into<String>, message: impl Into<String>) -> Self {
+        Self::issues(vec![
+            ValidationIssue::new(IssueCode::Invalid, message.into()).on(field.into()),
+        ])
+    }
+
+    pub(crate) fn issues(issues: Vec<ValidationIssue>) -> Self {
         Self {
             kind: BridgeErrorKind::Validation,
-            field: Some(field.into()),
-            message: message.into(),
+            message: summarize_issues(&issues),
+            issues: issues.into_iter().map(Into::into).collect(),
             reset_resolvable: false,
         }
     }
@@ -1334,7 +1360,7 @@ impl BridgeError {
     fn safe(kind: BridgeErrorKind, message: impl Into<String>) -> Self {
         Self {
             kind,
-            field: None,
+            issues: Vec::new(),
             message: message.into(),
             reset_resolvable: false,
         }
@@ -1485,7 +1511,26 @@ mod tests {
             message: "must be non-zero".into(),
         }));
         assert_eq!(validation.kind, BridgeErrorKind::Validation);
-        assert_eq!(validation.field.as_deref(), Some("amount_minor"));
+        assert_eq!(validation.issues.len(), 1);
+        assert_eq!(validation.issues[0].fields, vec!["amount_minor".to_owned()]);
+        assert_eq!(validation.message, "must be non-zero");
+
+        let many = BridgeError::from(AppError::Domain(DomainError::InvalidMany(vec![
+            app_core::ValidationIssue::new(app_core::IssueCode::Required, "Required").on("a"),
+            app_core::ValidationIssue::new(app_core::IssueCode::OutOfRange, "Too big").on("b"),
+        ])));
+        assert_eq!(many.kind, BridgeErrorKind::Validation);
+        assert_eq!(
+            many.issues
+                .iter()
+                .map(|issue| (issue.fields.clone(), issue.code.as_str()))
+                .collect::<Vec<_>>(),
+            vec![
+                (vec!["a".to_owned()], "required"),
+                (vec!["b".to_owned()], "out_of_range"),
+            ]
+        );
+        assert_eq!(many.message, "2 problems need attention");
 
         let storage = BridgeError::from(AppError::Storage(
             "/private/path/control.sqlite: disk failure".into(),
@@ -1493,6 +1538,7 @@ mod tests {
         assert_eq!(storage.kind, BridgeErrorKind::Persistence);
         assert!(!storage.message.contains("/private/path"));
         assert!(!storage.message.contains("sqlite"));
+        assert!(storage.issues.is_empty());
         assert!(!storage.reset_resolvable);
     }
 

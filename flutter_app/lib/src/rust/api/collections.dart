@@ -7,7 +7,7 @@ import '../frb_generated.dart';
 import 'models.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `core_error`, `parse_collection`, `parse_field`, `parse_record`, `parse_records`
+// These functions are ignored because they are not marked as `pub`: `core_error`, `parse_collection`, `parse_field`, `parse_record`, `parse_records`, `parse_values`
 
 Future<BootstrapDto> createNewDataset() =>
     RustLib.instance.api.crateApiCollectionsCreateNewDataset();
@@ -92,6 +92,19 @@ Future<String> createRecord({
   required List<RecordValueDto> values,
 }) => RustLib.instance.api.crateApiCollectionsCreateRecord(
   collectionId: collectionId,
+  values: values,
+);
+
+/// Dry-run record validation with create (no `record_id`) or merged-update
+/// semantics. Returns every issue; empty when the draft is valid. Commits
+/// nothing. Errs only for non-validation failures.
+Future<List<BridgeIssueDto>> validateRecordDraft({
+  required String collectionId,
+  String? recordId,
+  required List<RecordValueDto> values,
+}) => RustLib.instance.api.crateApiCollectionsValidateRecordDraft(
+  collectionId: collectionId,
+  recordId: recordId,
   values: values,
 );
 

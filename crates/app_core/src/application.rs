@@ -1634,6 +1634,61 @@ impl AppCore {
         ensure_query_ready(self.lifecycle_state())?;
         self.read_model.record(id)
     }
+    /// Validates a draft record with the same rules as record create
+    /// (defaults applied) or, given `record_id`, update (the draft merged over
+    /// the existing values). Read-only: nothing is stamped or recorded.
+    pub fn validate_record_draft(
+        &self,
+        collection_id: CollectionSchemaId,
+        record_id: Option<RecordId>,
+        values: std::collections::BTreeMap<FieldId, FieldValue>,
+    ) -> Result<Vec<crate::ValidationIssue>> {
+        ensure_query_ready(self.lifecycle_state())?;
+        let schema = self
+            .read_model
+            .schema(collection_id)?
+            .filter(|schema| !schema.deleted)
+            .ok_or_else(|| crate::DomainError::NotFound {
+                kind: "collection",
+                id: collection_id.to_string(),
+            })?;
+        let mut record = GenericRecord {
+            id: record_id.unwrap_or_default(),
+            collection_id,
+            values,
+            stamps: std::collections::BTreeMap::new(),
+            deleted: false,
+        };
+        if let Some(record_id) = record_id {
+            let existing = self
+                .read_model
+                .record(record_id)?
+                .filter(|view| view.record.collection_id == collection_id)
+                .ok_or_else(|| crate::DomainError::NotFound {
+                    kind: "record",
+                    id: record_id.to_string(),
+                })?;
+            // Updates only touch active fields, so stale values for removed
+            // fields are not the draft's problem.
+            let active: std::collections::HashSet<_> = schema
+                .fields
+                .iter()
+                .filter(|field| !field.deleted)
+                .map(|field| field.id)
+                .collect();
+            for (field_id, value) in existing.record.values {
+                if active.contains(&field_id) {
+                    record.values.entry(field_id).or_insert(value);
+                }
+            }
+        }
+        Ok(
+            match crate::records::validate_record(&mut record, &schema, record_id.is_none()) {
+                Ok(()) => Vec::new(),
+                Err(error) => error.issues(),
+            },
+        )
+    }
     pub fn computed_fields(
         &self,
         collection_id: CollectionSchemaId,

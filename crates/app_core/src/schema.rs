@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    error::DomainError,
+    error::{DomainError, IssueCode, ValidationIssue},
     values::{FieldValue, MAX_DECIMAL_SCALE},
 };
 
@@ -188,19 +188,18 @@ impl FieldDefinition {
             return Err(invalid("enum_options", "are valid only for Enum fields"));
         }
         if let Some(default) = &self.default {
-            self.validate_value(default, true)?;
+            self.validate_value(default)
+                .map_err(|issue| invalid("default", issue.message))?;
         }
         Ok(())
     }
 
-    pub fn validate_value(
-        &self,
-        value: &FieldValue,
-        default_context: bool,
-    ) -> Result<(), DomainError> {
+    /// Checks one value against this field. The returned issue carries a
+    /// specific, id-free message and no field context; callers attach it.
+    pub fn validate_value(&self, value: &FieldValue) -> Result<(), ValidationIssue> {
         if matches!(value, FieldValue::Null) {
             return if self.required {
-                Err(invalid("value", "required fields cannot be null"))
+                Err(ValidationIssue::new(IssueCode::Required, "Required"))
             } else {
                 Ok(())
             };
@@ -217,18 +216,26 @@ impl FieldDefinition {
                 | (FieldType::Enum, FieldValue::Enum(_))
         );
         if !type_matches {
-            return Err(invalid(
-                if default_context { "default" } else { "value" },
-                "type does not match field definition",
+            return Err(ValidationIssue::new(
+                IssueCode::TypeMismatch,
+                "Value does not match this field's type",
             ));
         }
         match value {
             FieldValue::Text(text) => {
-                let length = text.chars().count() as u32;
-                if self.validation.min_length.is_some_and(|min| length < min)
-                    || self.validation.max_length.is_some_and(|max| length > max)
+                let length = u32::try_from(text.chars().count()).unwrap_or(u32::MAX);
+                let ValidationMetadata {
+                    min_length,
+                    max_length,
+                    ..
+                } = self.validation;
+                if min_length.is_some_and(|min| length < min)
+                    || max_length.is_some_and(|max| length > max)
                 {
-                    return Err(invalid("value", "text length is outside the allowed range"));
+                    return Err(ValidationIssue::new(
+                        IssueCode::Length,
+                        length_message(min_length, max_length),
+                    ));
                 }
             }
             FieldValue::Integer(number)
@@ -236,10 +243,21 @@ impl FieldDefinition {
             | FieldValue::Date(number)
             | FieldValue::DateTime(number)
             | FieldValue::Duration(number) => {
-                if self.validation.min_integer.is_some_and(|min| *number < min)
-                    || self.validation.max_integer.is_some_and(|max| *number > max)
+                let ValidationMetadata {
+                    min_integer,
+                    max_integer,
+                    ..
+                } = self.validation;
+                if min_integer.is_some_and(|min| *number < min)
+                    || max_integer.is_some_and(|max| *number > max)
                 {
-                    return Err(invalid("value", "number is outside the allowed range"));
+                    return Err(ValidationIssue::new(
+                        IssueCode::OutOfRange,
+                        range_message(
+                            min_integer.map(|min| self.format_bound(min)),
+                            max_integer.map(|max| self.format_bound(max)),
+                        ),
+                    ));
                 }
             }
             FieldValue::Enum(id) => {
@@ -248,12 +266,23 @@ impl FieldDefinition {
                     .iter()
                     .any(|option| option.id == *id && !option.deleted)
                 {
-                    return Err(invalid("value", "enum option is not an active member"));
+                    return Err(ValidationIssue::new(
+                        IssueCode::InactiveOption,
+                        "Pick an active option",
+                    ));
                 }
             }
             FieldValue::Null | FieldValue::Boolean(_) => {}
         }
         Ok(())
+    }
+
+    fn format_bound(&self, bound: i64) -> String {
+        match self.field_type {
+            FieldType::FixedDecimal { scale } => crate::values::FixedDecimal::new(bound, scale)
+                .map_or_else(|_| bound.to_string(), |decimal| decimal.to_string()),
+            _ => bound.to_string(),
+        }
     }
 
     #[must_use]
@@ -265,6 +294,33 @@ impl FieldDefinition {
             .collect();
         options.sort_by_key(|option| (option.order, option.id));
         options
+    }
+}
+
+fn characters(count: u32) -> String {
+    if count == 1 {
+        "1 character".into()
+    } else {
+        format!("{count} characters")
+    }
+}
+
+fn length_message(min: Option<u32>, max: Option<u32>) -> String {
+    match (min, max) {
+        (Some(min), Some(max)) if min == max => format!("Must be exactly {}", characters(min)),
+        (Some(min), Some(max)) => format!("Must be {min}–{max} characters"),
+        (Some(min), None) => format!("Must be at least {}", characters(min)),
+        (None, Some(max)) => format!("Must be at most {}", characters(max)),
+        (None, None) => "Length is not allowed".into(),
+    }
+}
+
+fn range_message(min: Option<String>, max: Option<String>) -> String {
+    match (min, max) {
+        (Some(min), Some(max)) => format!("Must be between {min} and {max}"),
+        (Some(min), None) => format!("Must be at least {min}"),
+        (None, Some(max)) => format!("Must be at most {max}"),
+        (None, None) => "Value is out of range".into(),
     }
 }
 

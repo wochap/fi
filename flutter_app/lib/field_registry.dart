@@ -1,5 +1,6 @@
 import 'package:fi/exact_format.dart';
 import 'package:fi/src/rust/api/models.dart';
+import 'package:fi/theme/form_errors.dart';
 import 'package:flutter/material.dart';
 
 export 'package:fi/exact_format.dart' show formatScaled, parseScaled;
@@ -23,8 +24,14 @@ typedef FieldValueChanged = void Function(FieldValueDto value);
 final class FieldRendererRegistry {
   const FieldRendererRegistry();
 
-  /// [errorText], when supplied, is the projected diagnostic for this field, so a record opened
-  /// from the list shows which value is missing rather than only that something is.
+  /// Whether a record editor for [field] marks it required: required and without a default,
+  /// because a default already satisfies it. Callers use it to decide on the form's legend.
+  static bool marksRequired(FieldDefinitionDto field) =>
+      field.required_ && field.defaultValue == null;
+
+  /// [errors] are this field's issues, shown below the input one per line (for example the
+  /// projected diagnostic, so a record opened from the list shows which value is at fault).
+  /// A field that [marksRequired] gets an `*` after its label unless [allowClear] is set.
   ///
   /// [label] replaces the field name, and [allowClear] adds the "no value at all" state that a
   /// record does not need but schema metadata does: a default and a range bound are each optional
@@ -34,7 +41,7 @@ final class FieldRendererRegistry {
     FieldDefinitionDto field,
     FieldValueDto? initial,
     FieldValueChanged onChanged, {
-    String? errorText,
+    List<String> errors = const [],
     String? label,
     bool allowClear = false,
   }) => _FieldEditor(
@@ -42,7 +49,7 @@ final class FieldRendererRegistry {
     field: field,
     initial: initial,
     onChanged: onChanged,
-    errorText: errorText,
+    errors: errors,
     label: label,
     allowClear: allowClear,
   );
@@ -118,14 +125,14 @@ final class _FieldEditor extends StatefulWidget {
     required this.field,
     required this.initial,
     required this.onChanged,
-    this.errorText,
+    this.errors = const [],
     this.label,
     this.allowClear = false,
   });
   final FieldDefinitionDto field;
   final FieldValueDto? initial;
   final FieldValueChanged onChanged;
-  final String? errorText;
+  final List<String> errors;
   final String? label;
   final bool allowClear;
   @override
@@ -177,6 +184,20 @@ final class _FieldEditorState extends State<_FieldEditor> {
 
   String get _label => widget.label ?? widget.field.name;
 
+  bool get _required =>
+      !widget.allowClear && FieldRendererRegistry.marksRequired(widget.field);
+
+  /// The label, errors and [suffixIcon]/[helperText] every decorated editor shares.
+  InputDecoration _decoration({Widget? suffixIcon, String? helperText}) =>
+      InputDecoration(
+        labelText: _required ? null : _label,
+        label: _required ? requiredLabel(_label) : null,
+        errorText: errorTextOf(widget.errors),
+        errorMaxLines: errorLinesOf(widget.errors),
+        helperText: helperText,
+        suffixIcon: suffixIcon,
+      );
+
   /// Reports "no value", which [_FieldEditor.allowClear] callers read as leaving the slot unset.
   void _clear() {
     text.clear();
@@ -193,10 +214,7 @@ final class _FieldEditorState extends State<_FieldEditor> {
           initialValue: widget.initial?.kind == FieldValueKindDto.boolean
               ? widget.initial!.booleanValue
               : null,
-          decoration: InputDecoration(
-            labelText: _label,
-            errorText: widget.errorText,
-          ),
+          decoration: _decoration(),
           items: const [
             DropdownMenuItem<bool?>(value: null, child: Text('None')),
             DropdownMenuItem<bool?>(value: true, child: Text('True')),
@@ -213,13 +231,8 @@ final class _FieldEditorState extends State<_FieldEditor> {
         );
       }
       return SwitchListTile(
-        title: Text(_label),
-        subtitle: widget.errorText == null
-            ? null
-            : Text(
-                widget.errorText!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
+        title: _required ? requiredLabel(_label) : Text(_label),
+        subtitle: widget.errors.isEmpty ? null : FieldErrorLines(widget.errors),
         value: boolean,
         onChanged: (value) {
           setState(() => boolean = value);
@@ -240,10 +253,7 @@ final class _FieldEditorState extends State<_FieldEditor> {
         initialValue: active.any((option) => option.id == text.text)
             ? text.text
             : null,
-        decoration: InputDecoration(
-          labelText: _label,
-          errorText: widget.errorText,
-        ),
+        decoration: _decoration(),
         items: [
           if (widget.allowClear)
             const DropdownMenuItem<String>(value: null, child: Text('None')),
@@ -268,9 +278,7 @@ final class _FieldEditorState extends State<_FieldEditor> {
       return TextFormField(
         controller: text,
         readOnly: true,
-        decoration: InputDecoration(
-          labelText: _label,
-          errorText: widget.errorText,
+        decoration: _decoration(
           suffixIcon: widget.allowClear && text.text.isNotEmpty
               ? IconButton(
                   tooltip: 'Clear',
@@ -306,9 +314,7 @@ final class _FieldEditorState extends State<_FieldEditor> {
       return TextFormField(
         controller: text,
         readOnly: true,
-        decoration: InputDecoration(
-          labelText: _label,
-          errorText: widget.errorText,
+        decoration: _decoration(
           suffixIcon: widget.allowClear && text.text.isNotEmpty
               ? IconButton(
                   tooltip: 'Clear',
@@ -360,9 +366,7 @@ final class _FieldEditorState extends State<_FieldEditor> {
       keyboardType: field.fieldType.kind == FieldTypeKindDto.text
           ? TextInputType.text
           : const TextInputType.numberWithOptions(signed: true, decimal: true),
-      decoration: InputDecoration(
-        labelText: _label,
-        errorText: widget.errorText,
+      decoration: _decoration(
         helperText: _unitHelp(field.fieldType.kind, field.fieldType.scale),
       ),
       onChanged: (raw) {

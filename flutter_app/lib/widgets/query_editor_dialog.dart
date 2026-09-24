@@ -1,5 +1,6 @@
 import 'package:fi/controllers.dart';
 import 'package:fi/src/rust/api/models.dart';
+import 'package:fi/theme/form_errors.dart';
 import 'package:fi/theme/nocturne.dart';
 import 'package:fi/widgets/query_builder.dart';
 import 'package:flutter/material.dart';
@@ -48,7 +49,10 @@ final class QueryEditorDialog extends StatefulWidget {
 class _QueryEditorDialogState extends State<QueryEditorDialog> {
   final name = TextEditingController();
   late QueryBuilderState? query = widget.initialState;
-  String? error;
+
+  /// What the last save was refused for: a `name` issue under the name, the rest above the
+  /// actions.
+  FormIssues issues = FormIssues.none;
   bool saving = false;
 
   @override
@@ -102,8 +106,13 @@ class _QueryEditorDialogState extends State<QueryEditorDialog> {
               TextField(
                 key: const Key('query-name'),
                 controller: name,
-                decoration: const InputDecoration(labelText: 'Query name'),
-                onChanged: (_) => setState(() {}),
+                decoration: InputDecoration(
+                  label: requiredLabel('Query name'),
+                  errorText: errorTextOf(issues.of('name')),
+                  errorMaxLines: errorLinesOf(issues.of('name')),
+                ),
+                onChanged: (_) =>
+                    setState(() => issues = issues.without('name')),
               ),
               const SizedBox(height: 12),
               if (state == null)
@@ -118,15 +127,12 @@ class _QueryEditorDialogState extends State<QueryEditorDialog> {
                   state: state,
                   onChanged: (next) => setState(() => query = next),
                 ),
-              if (error case final message?)
+              if (issues.form.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(top: 12),
-                  child: Text(
-                    message,
+                  child: FormErrorLines(
+                    issues.form,
                     key: const Key('query-editor-error'),
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                    ),
                   ),
                 ),
             ],
@@ -153,7 +159,7 @@ class _QueryEditorDialogState extends State<QueryEditorDialog> {
     if (state == null) return;
     setState(() {
       saving = true;
-      error = null;
+      issues = FormIssues.none;
     });
     final existing = widget.existing;
     final definition = state.toDefinition(
@@ -170,7 +176,7 @@ class _QueryEditorDialogState extends State<QueryEditorDialog> {
       if (mounted) {
         setState(() {
           saving = false;
-          error = bridgeMessage(failure);
+          issues = FormIssues.from(failure).keyed(const {'name': 'name'});
         });
       }
     }

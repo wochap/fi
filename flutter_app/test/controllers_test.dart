@@ -28,7 +28,13 @@ void main() {
     await controller.start();
     bridge.nextError = const BridgeError(
       kind: BridgeErrorKind.validation,
-      field: 'name',
+      issues: [
+        BridgeIssueDto(
+          fields: ['name'],
+          code: 'invalid',
+          message: 'Name is required.',
+        ),
+      ],
       message: 'Name is required.',
       resetResolvable: false,
     );
@@ -251,7 +257,13 @@ void main() {
 
       bridge.nextError = const BridgeError(
         kind: BridgeErrorKind.validation,
-        field: 'declared_type',
+        issues: [
+          BridgeIssueDto(
+            fields: ['declared_type'],
+            code: 'invalid',
+            message: 'does not match inferred expression type',
+          ),
+        ],
         message: 'does not match inferred expression type',
         resetResolvable: false,
       );
@@ -424,6 +436,7 @@ void main() {
     // The widget layer fails while records keep loading.
     bridge.nextError = const BridgeError(
       kind: BridgeErrorKind.projection,
+      issues: [],
       message: 'projection is not ready',
       resetResolvable: false,
     );
@@ -462,6 +475,7 @@ void main() {
     // A later refresh where only evaluation fails keeps definitions and records intact.
     bridge.nextError = const BridgeError(
       kind: BridgeErrorKind.projection,
+      issues: [],
       message: 'evaluation unavailable',
       resetResolvable: false,
     );
@@ -593,7 +607,13 @@ void main() {
     bridge.records[collection]!.removeWhere((record) => record.id == ids.first);
     bridge.nextBatchError = const BridgeError(
       kind: BridgeErrorKind.validation,
-      field: 'batch',
+      issues: [
+        BridgeIssueDto(
+          fields: ['batch'],
+          code: 'invalid',
+          message: 'member 0: record not found',
+        ),
+      ],
       message: 'member 0: record not found',
       resetResolvable: false,
     );
@@ -743,7 +763,13 @@ void main() {
         final field = choiceField(value: choice(tempOptionId(2)));
         bridge.nextOptionError = const BridgeError(
           kind: BridgeErrorKind.validation,
-          field: 'enum_option_label',
+          issues: [
+            BridgeIssueDto(
+              fields: ['enum_option_label'],
+              code: 'invalid',
+              message: 'Label is required.',
+            ),
+          ],
           message: 'Label is required.',
           resetResolvable: false,
         );

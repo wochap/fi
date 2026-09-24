@@ -12,6 +12,7 @@ glow, never as a flood of color. Follow these rules so new screens match the exi
 | `lib/theme/nocturne_widgets.dart` | Shared pieces: `FadedRule`, `Kicker`, `SectionLabel`, `GlowDot`, `IconTile`, `Tag`, `NocturneCard`, `nocturneGlow()`, `DashedSlot`, `FiLogoMark`, `FiLogoTile` |
 | `lib/theme/side_sheet.dart` | `showSideSheet()`: a 480px sheet from the right, or a bottom sheet on a phone |
 | `lib/theme/form_surface.dart` | `showFormSurface()` + `FormSurface`: every create/edit form, a bottom sheet on a phone and a dialog (optionally two-pane with an aside) otherwise |
+| `lib/theme/form_errors.dart` | `FieldErrorLines`, `FormErrorLines`, `RequiredLegend`, `requiredLabel()`, `errorTextOf()` / `errorLinesOf()`: how forms show errors and required inputs |
 | `assets/fonts/` | Inter (400, 500) and JetBrains Mono (400), with OFL licences |
 
 Before building something new, look for an existing piece that already does it. Add a new shared
@@ -112,9 +113,34 @@ must write one, use these sizes:
     before Cancel in a dialog. Give each a `Key`; it is applied in both modes.
   - An `aside` (a live preview) is pinned between the body and the footer when there is no room
     for a pane, capped at 160px (pass a compact `pinnedAside`), and hidden while the keyboard is up.
-  - `message` is the form-level slot directly above the buttons, drawn in the error color, for
-    errors that belong to no single input.
+  - `message` / `errors` is the form-level slot directly above the buttons, drawn in the error
+    color, for errors that belong to no single input.
+  - `showRequiredLegend` adds the single "* required" line under the title.
   - Confirmations stay `AlertDialog`s.
+- **Form errors** follow one model, `FormIssues` (`controllers.dart`), built from a `BridgeError`
+  with `FormIssues.from(error)` or from a list of issues:
+  - An issue that names exactly one field (or form key) shows directly under that input, in the
+    error color. Use `errorText: errorTextOf(lines)` with `errorMaxLines: errorLinesOf(lines)` so
+    each issue is its own line; inputs without an `InputDecoration` (switch rows, pickers) use
+    `FieldErrorLines`. Several issues on one field are several lines, in Rust's order, with no
+    bullets.
+  - An issue that names no field or several, and any non-validation failure, goes in the
+    form-level slot above Cancel / primary (`FormSurface.errors`, or `FormErrorLines` placed just
+    before a custom form's actions), one line per issue.
+  - Map Rust's form keys to inputs with `FormIssues.keyed({...})` or `restrictTo({...})`; a key
+    with no input falls into the form slot so nothing is lost.
+  - Messages come from Rust and never contain ids. Don't prefix them with the field name; they sit
+    under it.
+- **Validation timing:** show nothing before the first press of the primary action. Keep the
+  primary enabled; pressing it validates and shows what is wrong. After that first attempt, every
+  edit re-validates and errors clear as soon as they are fixed (record forms re-run Rust's
+  `validateRecordDraft` dry run, debounced ~200ms, dropping stale answers; other forms clear an
+  input's issues when it changes and recompute client blockers). A record opened because the list
+  marks it invalid starts in the attempted state.
+- **Required inputs** get an `*` after the label in `accent300`, never the error color, via
+  `requiredLabel(name)` (use it as `InputDecoration.label`; it reads "name, required" to screen
+  readers). A form with any marked input shows one `RequiredLegend` ("* required") line. A
+  required schema field with a default is not marked (`FieldRendererRegistry.marksRequired`).
 - **Wrap bottom sheet content in `BottomSheetInsets`** (`lib/theme/side_sheet.dart`) so it clears
   both the keyboard and Android's navigation bar. `useSafeArea` alone leaves the bottom uncovered.
 - **Selection mode** swaps the header for an `accent900` action bar with an `accent700` border.

@@ -50,7 +50,10 @@ pub use discovery_control::{
     DiscoverySecretAck, DiscoverySecretUpdate, authorize_peer, decode_ack, decode_update,
     encode_ack, encode_update,
 };
-pub use error::{AppError, BootstrapError, DomainError, ProjectionError, Result};
+pub use error::{
+    AppError, BootstrapError, DomainError, IssueCode, ProjectionError, Result, ValidationIssue,
+    summarize_issues,
+};
 pub use events::{
     ApplicationState, DataChanged, DomainKind, ErrorEvent, ProjectionState, TransientEvent,
 };
@@ -80,7 +83,9 @@ pub use quinn_transport::{
     MemoryTrustResolver, QuinnTransport, QuinnTransportConfig, QuinnTransportError, SYNC_ALPN,
     TlsIdentity, TrustResolver, extract_public_key,
 };
-pub use records::{GenericRecord, RecordId, RecordValidationError, validate_record};
+pub use records::{
+    GenericRecord, RecordFieldIssue, RecordId, RecordValidationError, validate_record,
+};
 pub use routing::{
     ConnectionDirection, ConnectionFailure, ConnectionManager, DialTiming, EndpointRegistry,
     EndpointSource, NetworkEndpoint, PeerConnectionState, PeerConnector, SessionCandidate,

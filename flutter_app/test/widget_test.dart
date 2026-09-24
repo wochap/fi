@@ -89,13 +89,29 @@ void main() {
     await tester.enterText(find.byKey(const Key('collection-name')), 'Invalid');
     bridge.nextError = const BridgeError(
       kind: BridgeErrorKind.validation,
-      field: 'name',
+      issues: [
+        BridgeIssueDto(
+          fields: ['name'],
+          code: 'invalid',
+          message: 'Name is required.',
+        ),
+      ],
       message: 'Name is required.',
       resetResolvable: false,
     );
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
     expect(find.text('Name is required.'), findsOneWidget);
+    // The `name` issue sits under the Name input, which is marked required.
+    final name = tester.widget<TextField>(
+      find.byKey(const Key('collection-name')),
+    );
+    expect(name.decoration?.errorText, 'Name is required.');
+    expect(find.text('* required'), findsOneWidget);
+    // Editing the name drops the issue about the old text.
+    await tester.enterText(find.byKey(const Key('collection-name')), 'Better');
+    await tester.pumpAndSettle();
+    expect(find.text('Name is required.'), findsNothing);
   });
 
   testWidgets('create forms are sheets on a phone and dialogs on desktop', (

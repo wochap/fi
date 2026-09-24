@@ -5,6 +5,7 @@ import 'package:fi/field_registry.dart';
 import 'package:fi/help_button.dart';
 import 'package:fi/help_copy.dart';
 import 'package:fi/src/rust/api/models.dart';
+import 'package:fi/theme/form_errors.dart';
 import 'package:fi/theme/form_surface.dart';
 import 'package:fi/theme/nocturne.dart';
 import 'package:fi/theme/nocturne_widgets.dart';
@@ -731,13 +732,16 @@ class CollectionsPage extends StatelessWidget {
   ]) async {
     final name = TextEditingController(text: collection?.name);
     final description = TextEditingController(text: collection?.description);
-    String? error;
+    // Rust names the collection's name `name` or `collection_name`; both belong to Name.
+    const nameKeys = {'name', 'collection_name'};
+    var issues = FormIssues.none;
     await showFormSurface<void>(
       context,
       builder: (route) => StatefulBuilder(
         builder: (context, setState) => FormSurface(
           title: collection == null ? 'New collection' : 'Rename collection',
           width: 420,
+          showRequiredLegend: true,
           body: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -748,9 +752,15 @@ class CollectionsPage extends StatelessWidget {
                 controller: name,
                 autofocus: true,
                 decoration: InputDecoration(
-                  labelText: 'Name',
-                  errorText: error,
+                  label: requiredLabel('Name'),
+                  errorText: errorTextOf(issues.of('name')),
+                  errorMaxLines: errorLinesOf(issues.of('name')),
                 ),
+                // The shown issue is about the old text, so it goes as soon as the name changes.
+                onChanged: (_) {
+                  if (issues.of('name').isEmpty) return;
+                  setState(() => issues = issues.without('name'));
+                },
               ),
               if (collection == null)
                 TextField(
@@ -759,6 +769,7 @@ class CollectionsPage extends StatelessWidget {
                 ),
             ],
           ),
+          errors: issues.form,
           primaryLabel: 'Save',
           onPrimary: () async {
             try {
@@ -769,7 +780,11 @@ class CollectionsPage extends StatelessWidget {
               }
               if (route.mounted) Navigator.pop(route);
             } catch (failure) {
-              setState(() => error = bridgeMessage(failure));
+              setState(
+                () => issues = FormIssues.from(
+                  failure,
+                ).keyed({for (final key in nameKeys) key: 'name'}),
+              );
             }
           },
         ),
@@ -1251,11 +1266,62 @@ class CollectionsPage extends StatelessWidget {
     final messenger = ScaffoldMessenger.of(context);
     var field = fields.first;
     FieldValueDto? value;
-    final chosen = await showFormSurface<bool>(
+    var issues = FormIssues.none;
+    var attempted = false;
+
+    /// A required field left empty would fail every member; say so before confirming.
+    String? blocker() =>
+        FieldRendererRegistry.marksRequired(field) &&
+            (value?.kind ?? FieldValueKindDto.null_) == FieldValueKindDto.null_
+        ? 'Required'
+        : null;
+
+    Future<void> apply(BuildContext route, StateSetter setState) async {
+      setState(() => attempted = true);
+      if (blocker() != null) return;
+      final confirmed = await showDialog<bool>(
+        context: route,
+        builder: (dialog) => AlertDialog(
+          title: Text('Set ${field.name} on $count records?'),
+          content: const Text('Every selected record is updated in one step.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialog, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              key: const Key('confirm-batch-edit'),
+              onPressed: () => Navigator.pop(dialog, true),
+              child: const Text('Set'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+      try {
+        final affected = await controller.setFieldOnSelected(
+          field.id,
+          value ?? const FieldValueDto(kind: FieldValueKindDto.null_),
+        );
+        if (route.mounted) Navigator.pop(route);
+        messenger.showSnackBar(
+          SnackBar(content: Text('$affected records updated')),
+        );
+      } catch (failure) {
+        if (route.mounted) {
+          setState(
+            () => issues = FormIssues.from(failure).restrictTo({field.id}),
+          );
+        }
+      }
+    }
+
+    await showFormSurface<void>(
       context,
       builder: (route) => StatefulBuilder(
         builder: (context, setState) => FormSurface(
           title: 'Edit field on $count records',
+          showRequiredLegend: FieldRendererRegistry.marksRequired(field),
           body: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1272,53 +1338,27 @@ class CollectionsPage extends StatelessWidget {
                 onChanged: (id) => setState(() {
                   field = fields.firstWhere((item) => item.id == id);
                   value = null;
+                  issues = FormIssues.none;
                 }),
               ),
               const FieldRendererRegistry().editor(
                 field,
                 value,
-                (updated) => value = updated,
+                (updated) => setState(() {
+                  value = updated;
+                  issues = issues.without(field.id);
+                }),
+                errors: [...issues.of(field.id), if (attempted) ?blocker()],
               ),
             ],
           ),
-          onCancel: () => Navigator.pop(route, false),
+          errors: issues.form,
           primaryKey: const Key('batch-edit-continue'),
           primaryLabel: 'Continue',
-          onPrimary: () => Navigator.pop(route, true),
+          onPrimary: () => apply(route, setState),
         ),
       ),
     );
-    if (chosen != true || !context.mounted) return;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialog) => AlertDialog(
-        title: Text('Set ${field.name} on $count records?'),
-        content: const Text('Every selected record is updated in one step.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialog, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            key: const Key('confirm-batch-edit'),
-            onPressed: () => Navigator.pop(dialog, true),
-            child: const Text('Set'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    try {
-      final affected = await controller.setFieldOnSelected(
-        field.id,
-        value ?? const FieldValueDto(kind: FieldValueKindDto.null_),
-      );
-      messenger.showSnackBar(
-        SnackBar(content: Text('$affected records updated')),
-      );
-    } catch (_) {
-      // Left on the banner, as in _batchDelete.
-    }
   }
 
   /// A dialog on a wide screen; on a phone, a bottom sheet with large inputs (mock 2h).
@@ -1326,68 +1366,159 @@ class CollectionsPage extends StatelessWidget {
     BuildContext context,
     CollectionSchemaDto schema, [
     RecordDto? existing,
-  ]) async {
-    final values = <String, FieldValueDto>{
-      for (final item in existing?.values ?? const <RecordValueDto>[])
-        item.fieldId: item.value,
-    };
-    String? error;
-    final fields = schema.fields.where((field) => !field.deleted).toList()
-      ..sort(_fieldOrder);
-
-    Future<void> save(BuildContext route, StateSetter setState) async {
-      try {
-        final submitted = values.entries
-            .map(
-              (entry) => RecordValueDto(fieldId: entry.key, value: entry.value),
-            )
-            .toList();
-        if (existing == null) {
-          await controller.createRecord(submitted);
-        } else {
-          await controller.updateRecord(existing.id, submitted);
-        }
-        if (route.mounted) Navigator.pop(route);
-      } catch (failure) {
-        setState(() => error = bridgeMessage(failure));
-      }
-    }
-
-    await showFormSurface<void>(
-      context,
-      builder: (route) => StatefulBuilder(
-        builder: (context, setState) => FormSurface(
-          title: existing == null ? 'New record' : 'Edit record',
-          contextLabel: 'in ${schema.name}',
-          body: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            spacing: 14,
-            children: [
-              for (final field in fields)
-                const FieldRendererRegistry().editor(
-                  field,
-                  values[field.id],
-                  (value) => values[field.id] = value,
-                  // A record opened from the list because it is invalid should say which
-                  // field is at fault, not leave the user hunting for it.
-                  errorText: _diagnosticFor(existing, field.id),
-                ),
-            ],
-          ),
-          message: error == null ? null : Text(error!),
-          primaryLabel:
-              FormSurfaceScope.modeOf(context) == FormSurfaceMode.sheet
-              ? 'Save record'
-              : 'Save',
-          onPrimary: () => save(route, setState),
-        ),
-      ),
-    );
-  }
+  ]) => showFormSurface<void>(
+    context,
+    builder: (route) => _RecordEditorForm(
+      controller: controller,
+      schema: schema,
+      existing: existing,
+    ),
+  );
 }
 
-/// The table's column heads: field names in the `h6` style with their kind beside them.
+/// How long the record editor waits after an edit before asking Rust to re-validate the draft.
+const _draftValidationDelay = Duration(milliseconds: 200);
+
+/// Creates or edits one record. Errors stay hidden until the first Save; after it, every edit
+/// re-runs Rust's dry-run validation (debounced) so each error clears as soon as it is fixed.
+class _RecordEditorForm extends StatefulWidget {
+  const _RecordEditorForm({
+    required this.controller,
+    required this.schema,
+    this.existing,
+  });
+
+  final CollectionsController controller;
+  final CollectionSchemaDto schema;
+  final RecordDto? existing;
+
+  @override
+  State<_RecordEditorForm> createState() => _RecordEditorFormState();
+}
+
+class _RecordEditorFormState extends State<_RecordEditorForm> {
+  late final values = <String, FieldValueDto>{
+    for (final item in widget.existing?.values ?? const <RecordValueDto>[])
+      item.fieldId: item.value,
+  };
+  late final fields =
+      widget.schema.fields.where((field) => !field.deleted).toList()
+        ..sort(_fieldOrder);
+  late final _fieldIds = {for (final field in fields) field.id};
+
+  /// A record opened because the list marks it invalid shows its problems straight away.
+  late var attempted = widget.existing?.valid == false;
+  late var issues = attempted
+      ? _diagnosticIssues(widget.existing!).restrictTo(_fieldIds)
+      : FormIssues.none;
+  Timer? _debounce;
+
+  /// Bumped per validation or save, so a slower, older answer never replaces a newer one.
+  var _request = 0;
+
+  List<RecordValueDto> get _submitted => [
+    for (final MapEntry(:key, :value) in values.entries)
+      RecordValueDto(fieldId: key, value: value),
+  ];
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    super.dispose();
+  }
+
+  void _changed(String fieldId, FieldValueDto value) {
+    values[fieldId] = value;
+    if (!attempted) return;
+    _debounce?.cancel();
+    _debounce = Timer(_draftValidationDelay, () => unawaited(_validate()));
+  }
+
+  /// Asks Rust for the draft's issues; null when superseded or unmounted.
+  Future<FormIssues?> _check(int request) async {
+    FormIssues found;
+    try {
+      found = FormIssues.fromIssues(
+        await widget.controller.validateRecordDraft(
+          _submitted,
+          recordId: widget.existing?.id,
+        ),
+      );
+    } catch (failure) {
+      found = FormIssues.from(failure);
+    }
+    if (!mounted || request != _request) return null;
+    return found.restrictTo(_fieldIds);
+  }
+
+  Future<void> _validate() async {
+    final found = await _check(++_request);
+    if (found != null) setState(() => issues = found);
+  }
+
+  Future<void> _save() async {
+    _debounce?.cancel();
+    final request = ++_request;
+    setState(() => attempted = true);
+    final found = await _check(request);
+    if (found == null) return;
+    if (!found.isEmpty) {
+      setState(() => issues = found);
+      return;
+    }
+    try {
+      final existing = widget.existing;
+      if (existing == null) {
+        await widget.controller.createRecord(_submitted);
+      } else {
+        await widget.controller.updateRecord(existing.id, _submitted);
+      }
+      if (mounted) Navigator.pop(context);
+    } catch (failure) {
+      // Save is authoritative: its issues replace whatever the dry run said.
+      if (mounted && request == _request) {
+        setState(() => issues = FormIssues.from(failure).restrictTo(_fieldIds));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => FormSurface(
+    title: widget.existing == null ? 'New record' : 'Edit record',
+    contextLabel: 'in ${widget.schema.name}',
+    showRequiredLegend: fields.any(FieldRendererRegistry.marksRequired),
+    body: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: 14,
+      children: [
+        for (final field in fields)
+          const FieldRendererRegistry().editor(
+            field,
+            values[field.id],
+            (value) => _changed(field.id, value),
+            errors: issues.of(field.id),
+          ),
+      ],
+    ),
+    errors: issues.form,
+    primaryLabel: FormSurfaceScope.modeOf(context) == FormSurfaceMode.sheet
+        ? 'Save record'
+        : 'Save',
+    onPrimary: _save,
+  );
+}
+
+/// A record's projected diagnostics as form issues: those naming a field go under it.
+FormIssues _diagnosticIssues(RecordDto record) => FormIssues.fromIssues([
+  for (final item in record.diagnostics)
+    BridgeIssueDto(
+      fields: [?item.fieldId],
+      code: item.kind,
+      message: item.message,
+    ),
+]);
+
 class _TableHeader extends StatelessWidget {
   const _TableHeader({required this.fields, required this.selecting});
 
@@ -1562,7 +1693,23 @@ class _FieldEditorFormState extends State<_FieldEditorForm> {
   late final order = existing?.order ?? controller.schema?.fields.length ?? 0;
   // Survives a failed save, so retrying updates what the first attempt already created.
   final session = FieldSaveSession();
-  String? error;
+  var issues = FormIssues.none;
+
+  /// Rust's keys for field-definition problems, by the input that shows them. Anything else
+  /// lands in the slot above the buttons.
+  static const _issueInputs = {
+    'name': 'name',
+    'field_name': 'name',
+    'default': 'default',
+    'scale': 'scale',
+    'numeric_range': 'maximum',
+    'length_range': 'max-length',
+  };
+
+  /// Drops the shown issues for [input] once it changes, since they describe the old value.
+  void _edited(String input) {
+    if (issues.of(input).isNotEmpty) issues = issues.without(input);
+  }
 
   List<EnumOptionDto> draftOptions() => [
     for (final (index, option) in options.indexed)
@@ -1659,7 +1806,9 @@ class _FieldEditorFormState extends State<_FieldEditorForm> {
       );
       if (mounted) widget.onClosed();
     } catch (failure) {
-      if (mounted) setState(() => error = bridgeMessage(failure));
+      if (mounted) {
+        setState(() => issues = FormIssues.from(failure).keyed(_issueInputs));
+      }
     }
   }
 
@@ -1671,10 +1820,12 @@ class _FieldEditorFormState extends State<_FieldEditorForm> {
       controller: name,
       autofocus: widget.inline,
       decoration: InputDecoration(
-        labelText: 'Name',
+        label: requiredLabel('Name'),
         hintText: 'e.g. note',
-        errorText: error,
+        errorText: errorTextOf(issues.of('name')),
+        errorMaxLines: errorLinesOf(issues.of('name')),
       ),
+      onChanged: (_) => setState(() => _edited('name')),
     );
     final typeField = DropdownButtonFormField<FieldTypeKindDto>(
       initialValue: kind,
@@ -1715,23 +1866,36 @@ class _FieldEditorFormState extends State<_FieldEditorForm> {
                   color: Nocturne.accent,
                 ),
                 SizedBox(width: 8),
-                Text(
-                  'New field',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: Nocturne.accent200,
+                Expanded(
+                  child: Text(
+                    'New field',
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: Nocturne.accent200,
+                    ),
                   ),
                 ),
+                RequiredLegend(key: Key('required-legend')),
               ],
             ),
           )
         else
           Padding(
             padding: const EdgeInsets.only(bottom: 18),
-            child: Text(
-              existing == null ? 'Add field' : 'Edit field',
-              style: Theme.of(context).textTheme.titleLarge,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                Expanded(
+                  child: Text(
+                    existing == null ? 'Add field' : 'Edit field',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                ),
+                const RequiredLegend(key: Key('required-legend')),
+              ],
             ),
           ),
         Row(
@@ -1750,10 +1914,12 @@ class _FieldEditorFormState extends State<_FieldEditorForm> {
             decoration: labelWithHelp(
               'Decimal scale',
               HelpId.fieldDecimalScale,
+              errors: issues.of('scale'),
             ),
             // The scale decides what the stored integer means, so a change to it
             // cannot leave a default or a bound behind reading as something else.
             onChanged: (value) => setState(() {
+              _edited('scale');
               scale = int.tryParse(value) ?? 255;
               defaultValue = null;
               minimum = null;
@@ -1790,6 +1956,7 @@ class _FieldEditorFormState extends State<_FieldEditorForm> {
                     'Minimum length',
                     HelpId.fieldMinMaxLength,
                   ),
+                  onChanged: (_) => setState(() => _edited('max-length')),
                 ),
               ),
               const SizedBox(width: 10),
@@ -1800,7 +1967,9 @@ class _FieldEditorFormState extends State<_FieldEditorForm> {
                   decoration: labelWithHelp(
                     'Maximum length',
                     HelpId.fieldMinMaxLength,
+                    errors: issues.of('max-length'),
                   ),
+                  onChanged: (_) => setState(() => _edited('max-length')),
                 ),
               ),
             ],
@@ -1822,8 +1991,10 @@ class _FieldEditorFormState extends State<_FieldEditorForm> {
                   scale: scale,
                   enumOptions: existing?.enumOptions ?? const [],
                   value: _boundValue(minimum, kind, scale),
-                  onChanged: (value) =>
-                      setState(() => minimum = value?.integerValue),
+                  onChanged: (value) => setState(() {
+                    _edited('maximum');
+                    minimum = value?.integerValue;
+                  }),
                 ),
               ),
               const SizedBox(width: 10),
@@ -1836,8 +2007,11 @@ class _FieldEditorFormState extends State<_FieldEditorForm> {
                   scale: scale,
                   enumOptions: existing?.enumOptions ?? const [],
                   value: _boundValue(maximum, kind, scale),
-                  onChanged: (value) =>
-                      setState(() => maximum = value?.integerValue),
+                  errors: issues.of('maximum'),
+                  onChanged: (value) => setState(() {
+                    _edited('maximum');
+                    maximum = value?.integerValue;
+                  }),
                 ),
               ),
             ],
@@ -1853,7 +2027,11 @@ class _FieldEditorFormState extends State<_FieldEditorForm> {
           scale: scale,
           enumOptions: draftOptions(),
           value: defaultValue,
-          onChanged: (value) => setState(() => defaultValue = value),
+          errors: issues.of('default'),
+          onChanged: (value) => setState(() {
+            _edited('default');
+            defaultValue = value;
+          }),
           revision: [
             for (final option in options) '${option.id}=${option.label.text}',
           ].join('|'),
@@ -1884,6 +2062,12 @@ class _FieldEditorFormState extends State<_FieldEditorForm> {
                 ),
               ],
             ),
+          ),
+        if (issues.form.isNotEmpty)
+          Padding(
+            key: const Key('field-editor-errors'),
+            padding: const EdgeInsets.only(top: 14),
+            child: FormErrorLines(issues.form),
           ),
         const SizedBox(height: 18),
         Row(
@@ -1994,6 +2178,7 @@ Widget _metadataInput({
   required List<EnumOptionDto> enumOptions,
   required FieldValueDto? value,
   required ValueChanged<FieldValueDto?> onChanged,
+  List<String> errors = const [],
   String revision = '',
 }) => Row(
   crossAxisAlignment: CrossAxisAlignment.start,
@@ -2022,6 +2207,7 @@ Widget _metadataInput({
               onChanged(typed.kind == FieldValueKindDto.null_ ? null : typed),
           label: label,
           allowClear: true,
+          errors: errors,
         ),
       ),
     ),
@@ -2042,12 +2228,6 @@ IconData _queryIcon(QueryDefinitionDto query) => switch (query.query?.shape) {
   QueryShapeDto(kind: QueryShapeKindDto.categorySeries) => Icons.bar_chart,
   _ => Icons.query_stats,
 };
-
-/// The projected diagnostic naming [fieldId], if this record carries one.
-String? _diagnosticFor(RecordDto? record, String fieldId) => record?.diagnostics
-    .where((item) => item.fieldId == fieldId)
-    .map((item) => item.message)
-    .firstOrNull;
 
 /// A stored range bound as a typed value of the field's own kind, so the bound is edited with a
 /// date picker or a decimal box rather than as the raw integer it is compared as.

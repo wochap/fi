@@ -264,8 +264,7 @@ impl GenericCommand {
                     return Err(invalid("record_id", "already exists"));
                 }
                 let schema = active_collection(snapshot, record.collection_id)?;
-                validate_record(record, schema, true)
-                    .map_err(|error| invalid("record", error.to_string()))?;
+                validate_record(record, schema, true)?;
             }
             Self::UpdateRecordField {
                 record_id,
@@ -274,7 +273,9 @@ impl GenericCommand {
             } => {
                 let record = active_record(snapshot, *record_id)?;
                 let field = active_field(snapshot, record.collection_id, *field_id)?;
-                field.validate_value(value, false)?;
+                field
+                    .validate_value(value)
+                    .map_err(|issue| DomainError::InvalidMany(vec![issue.on(field_id)]))?;
             }
             Self::DeleteRecord(id) => {
                 record(snapshot, *id)?;
@@ -1091,20 +1092,28 @@ pub fn decode_generic(doc: &Automerge) -> Result<GenericSnapshot, DomainError> {
             continue;
         };
         let mut checked = record.clone();
-        if let Err(error) = validate_record(&mut checked, schema, false) {
-            diagnostics.push(GenericDiagnostic {
+        match validate_record(&mut checked, schema, false) {
+            Ok(()) => {}
+            // One diagnostic per field at fault, with that field's first issue.
+            Err(crate::records::RecordValidationError::Fields(issues)) => {
+                let mut seen = HashSet::new();
+                for issue in issues {
+                    if seen.insert(issue.field) {
+                        diagnostics.push(GenericDiagnostic {
+                            kind: "record_validation".into(),
+                            entity_id: record.id.to_string(),
+                            field_id: Some(issue.field),
+                            message: issue.message,
+                        });
+                    }
+                }
+            }
+            Err(error) => diagnostics.push(GenericDiagnostic {
                 kind: "record_validation".into(),
                 entity_id: record.id.to_string(),
-                field_id: match error {
-                    crate::records::RecordValidationError::FieldUnavailable(id)
-                    | crate::records::RecordValidationError::MissingRequired(id) => Some(id),
-                    crate::records::RecordValidationError::InvalidValue { field, .. } => {
-                        Some(field)
-                    }
-                    _ => None,
-                },
+                field_id: None,
                 message: error.to_string(),
-            });
+            }),
         }
     }
     for definition in &computed_fields {
@@ -1702,7 +1711,20 @@ mod tests {
     #[test]
     fn invalid_record_is_rejected_without_a_write() {
         let mut doc = initialized();
-        let schema = schema();
+        let mut schema = schema();
+        let note = FieldDefinition {
+            id: FieldId::new(),
+            name: "Note".into(),
+            field_type: FieldType::Text,
+            required: true,
+            default: None,
+            validation: ValidationMetadata::default(),
+            display: DisplayMetadata::default(),
+            order: 1,
+            deleted: false,
+            enum_options: vec![],
+        };
+        schema.fields.push(note.clone());
         {
             let mut tx = doc.transaction();
             apply_generic_command(
@@ -1721,10 +1743,23 @@ mod tests {
             stamps: BTreeMap::new(),
             deleted: false,
         });
-        assert!(
-            command
-                .validate_against(&decode_generic(&doc).unwrap())
-                .is_err()
+        let Err(DomainError::InvalidMany(issues)) =
+            command.validate_against(&decode_generic(&doc).unwrap())
+        else {
+            panic!("expected every record issue");
+        };
+        assert_eq!(
+            issues
+                .iter()
+                .map(|issue| (issue.fields.clone(), issue.message.as_str()))
+                .collect::<Vec<_>>(),
+            vec![
+                (
+                    vec![schema.fields[0].id.to_string()],
+                    "Must be between 1 and 10"
+                ),
+                (vec![note.id.to_string()], "Required"),
+            ]
         );
         assert_eq!(doc.get_heads(), before);
     }

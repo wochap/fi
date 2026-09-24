@@ -65,6 +65,14 @@ abstract interface class CollectionBridge {
     String optionId,
   );
   Future<String> createRecord(String collectionId, List<RecordValueDto> values);
+
+  /// Validates a draft with create (no [recordId]) or merged-update semantics, committing
+  /// nothing. Returns every issue; empty when the draft is valid.
+  Future<List<BridgeIssueDto>> validateRecordDraft(
+    String collectionId,
+    String? recordId,
+    List<RecordValueDto> values,
+  );
   Future<void> updateRecordField(
     String recordId,
     String collectionId,
@@ -312,6 +320,16 @@ final class RustCollectionBridge implements CollectionBridge {
     String collectionId,
     List<RecordValueDto> values,
   ) => collections.createRecord(collectionId: collectionId, values: values);
+  @override
+  Future<List<BridgeIssueDto>> validateRecordDraft(
+    String collectionId,
+    String? recordId,
+    List<RecordValueDto> values,
+  ) => collections.validateRecordDraft(
+    collectionId: collectionId,
+    recordId: recordId,
+    values: values,
+  );
   @override
   Future<void> updateRecordField(
     String recordId,

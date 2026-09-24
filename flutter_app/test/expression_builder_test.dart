@@ -273,7 +273,13 @@ void main() {
             ),
             infer: (_) async => throw const BridgeError(
               kind: BridgeErrorKind.validation,
-              field: r'$.left',
+              issues: [
+                BridgeIssueDto(
+                  fields: [r'$.left'],
+                  code: 'invalid',
+                  message: 'arithmetic operands are incompatible',
+                ),
+              ],
               message: 'arithmetic operands are incompatible',
               resetResolvable: false,
             ),

@@ -71,7 +71,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => -1422632141;
+  int get rustContentHash => 698712345;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -357,6 +357,12 @@ abstract class RustLibApi extends BaseApi {
 
   Future<void> crateApiQueriesValidateCollectionQuery({
     required CollectionQueryDto query,
+  });
+
+  Future<List<BridgeIssueDto>> crateApiCollectionsValidateRecordDraft({
+    required String collectionId,
+    String? recordId,
+    required List<RecordValueDto> values,
   });
 
   Future<ValidationMetadataDto> crateApiModelsValidationMetadataDtoDefault();
@@ -2833,6 +2839,43 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<List<BridgeIssueDto>> crateApiCollectionsValidateRecordDraft({
+    required String collectionId,
+    String? recordId,
+    required List<RecordValueDto> values,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(collectionId, serializer);
+          sse_encode_opt_String(recordId, serializer);
+          sse_encode_list_record_value_dto(values, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 77,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_bridge_issue_dto,
+          decodeErrorData: sse_decode_bridge_error,
+        ),
+        constMeta: kCrateApiCollectionsValidateRecordDraftConstMeta,
+        argValues: [collectionId, recordId, values],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiCollectionsValidateRecordDraftConstMeta =>
+      const TaskConstMeta(
+        debugName: "validate_record_draft",
+        argNames: ["collectionId", "recordId", "values"],
+      );
+
+  @override
   Future<ValidationMetadataDto> crateApiModelsValidationMetadataDtoDefault() {
     return handler.executeNormal(
       NormalTask(
@@ -2841,7 +2884,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 77,
+            funcId: 78,
             port: port_,
           );
         },
@@ -2874,7 +2917,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 78,
+            funcId: 79,
             port: port_,
           );
         },
@@ -3259,7 +3302,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
     return BridgeError(
       kind: dco_decode_bridge_error_kind(arr[0]),
-      field: dco_decode_opt_String(arr[1]),
+      issues: dco_decode_list_bridge_issue_dto(arr[1]),
       message: dco_decode_String(arr[2]),
       resetResolvable: dco_decode_bool(arr[3]),
     );
@@ -3282,6 +3325,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   BridgeErrorKind dco_decode_bridge_error_kind(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return BridgeErrorKind.values[raw as int];
+  }
+
+  @protected
+  BridgeIssueDto dco_decode_bridge_issue_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return BridgeIssueDto(
+      fields: dco_decode_list_String(arr[0]),
+      code: dco_decode_String(arr[1]),
+      message: dco_decode_String(arr[2]),
+    );
   }
 
   @protected
@@ -3628,6 +3684,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     return (raw as List<dynamic>)
         .map(dco_decode_box_structured_value_dto)
         .toList();
+  }
+
+  @protected
+  List<BridgeIssueDto> dco_decode_list_bridge_issue_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_bridge_issue_dto).toList();
   }
 
   @protected
@@ -4984,12 +5046,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   BridgeError sse_decode_bridge_error(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_kind = sse_decode_bridge_error_kind(deserializer);
-    var var_field = sse_decode_opt_String(deserializer);
+    var var_issues = sse_decode_list_bridge_issue_dto(deserializer);
     var var_message = sse_decode_String(deserializer);
     var var_resetResolvable = sse_decode_bool(deserializer);
     return BridgeError(
       kind: var_kind,
-      field: var_field,
+      issues: var_issues,
       message: var_message,
       resetResolvable: var_resetResolvable,
     );
@@ -5015,6 +5077,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var inner = sse_decode_i_32(deserializer);
     return BridgeErrorKind.values[inner];
+  }
+
+  @protected
+  BridgeIssueDto sse_decode_bridge_issue_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_fields = sse_decode_list_String(deserializer);
+    var var_code = sse_decode_String(deserializer);
+    var var_message = sse_decode_String(deserializer);
+    return BridgeIssueDto(
+      fields: var_fields,
+      code: var_code,
+      message: var_message,
+    );
   }
 
   @protected
@@ -5418,6 +5493,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var ans_ = <StructuredValueDto>[];
     for (var idx_ = 0; idx_ < len_; ++idx_) {
       ans_.add(sse_decode_box_structured_value_dto(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<BridgeIssueDto> sse_decode_list_bridge_issue_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <BridgeIssueDto>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_bridge_issue_dto(deserializer));
     }
     return ans_;
   }
@@ -7267,7 +7356,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   void sse_encode_bridge_error(BridgeError self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_bridge_error_kind(self.kind, serializer);
-    sse_encode_opt_String(self.field, serializer);
+    sse_encode_list_bridge_issue_dto(self.issues, serializer);
     sse_encode_String(self.message, serializer);
     sse_encode_bool(self.resetResolvable, serializer);
   }
@@ -7290,6 +7379,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_bridge_issue_dto(
+    BridgeIssueDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_list_String(self.fields, serializer);
+    sse_encode_String(self.code, serializer);
+    sse_encode_String(self.message, serializer);
   }
 
   @protected
@@ -7620,6 +7720,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
       sse_encode_box_structured_value_dto(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_bridge_issue_dto(
+    List<BridgeIssueDto> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_bridge_issue_dto(item, serializer);
     }
   }
 

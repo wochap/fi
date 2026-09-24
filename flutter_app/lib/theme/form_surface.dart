@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:fi/theme/form_errors.dart';
 import 'package:fi/theme/nocturne.dart';
 import 'package:fi/theme/side_sheet.dart';
 import 'package:flutter/material.dart';
@@ -102,6 +103,8 @@ class FormSurface extends StatelessWidget {
     required this.onPrimary,
     this.contextLabel,
     this.message,
+    this.errors = const [],
+    this.showRequiredLegend = false,
     this.headerActions = const [],
     this.aside,
     this.pinnedAside,
@@ -120,6 +123,13 @@ class FormSurface extends StatelessWidget {
 
   /// Shown directly above the footer in the error color, for messages no single input owns.
   final Widget? message;
+
+  /// Form-level issue lines (see `FormIssues.form`), drawn in the [message] slot one per line
+  /// after any [message].
+  final List<String> errors;
+
+  /// Adds the single "* required" legend under the title; set it when any input is marked.
+  final bool showRequiredLegend;
   final List<FormHeaderAction> headerActions;
 
   /// A 280px pane beside the form on wide screens.
@@ -152,15 +162,28 @@ class FormSurface extends StatelessWidget {
   void _cancel(BuildContext context) =>
       onCancel != null ? onCancel!() : Navigator.pop(context);
 
-  Widget? _message(BuildContext context, EdgeInsets padding) => message == null
-      ? null
-      : Padding(
+  Widget? _message(BuildContext context, EdgeInsets padding) {
+    if (message == null && errors.isEmpty) return null;
+    return Padding(
+      padding: padding,
+      child: DefaultTextStyle.merge(
+        style: TextStyle(color: Theme.of(context).colorScheme.error),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: 4,
+          children: [?message, if (errors.isNotEmpty) FormErrorLines(errors)],
+        ),
+      ),
+    );
+  }
+
+  Widget? _legend(EdgeInsets padding) => showRequiredLegend
+      ? Padding(
+          key: const Key('required-legend'),
           padding: padding,
-          child: DefaultTextStyle.merge(
-            style: TextStyle(color: Theme.of(context).colorScheme.error),
-            child: message!,
-          ),
-        );
+          child: const RequiredLegend(),
+        )
+      : null;
 
   Widget? _pinned(EdgeInsets padding) {
     final pinned = pinnedAside ?? aside;
@@ -240,6 +263,7 @@ class FormSurface extends StatelessWidget {
                 ],
               ),
             ),
+            ?_legend(const EdgeInsets.fromLTRB(18, 0, 18, 4)),
             Flexible(
               child: SingleChildScrollView(
                 // Room above the first field so its floating label is not clipped.
@@ -321,6 +345,7 @@ class FormSurface extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _title(context),
+          ?_legend(const EdgeInsets.fromLTRB(22, 0, 22, 4)),
           Flexible(
             child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(22, 8, 22, 8),
@@ -350,6 +375,7 @@ class FormSurface extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _title(context),
+                  ?_legend(const EdgeInsets.fromLTRB(22, 0, 22, 4)),
                   Expanded(
                     child: SingleChildScrollView(
                       padding: const EdgeInsets.fromLTRB(22, 8, 22, 8),

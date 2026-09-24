@@ -180,7 +180,13 @@ void main() {
     await tester.pumpAndSettle();
     bridge.nextBatchError = const BridgeError(
       kind: BridgeErrorKind.validation,
-      field: 'batch',
+      issues: [
+        BridgeIssueDto(
+          fields: ['batch'],
+          code: 'invalid',
+          message: 'member 0 (record record-0): record not found',
+        ),
+      ],
       message: 'member 0 (record record-0): record not found',
       resetResolvable: false,
     );

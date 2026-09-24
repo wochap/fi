@@ -5,8 +5,8 @@ use app_core::{CollectionSchemaId, FieldId, RecordId};
 use crate::api::{
     lifecycle::core,
     models::{
-        BootstrapDto, BridgeError, CollectionDto, CollectionSchemaDto, FieldDefinitionDto,
-        FieldValueDto, RecordDto,
+        BootstrapDto, BridgeError, BridgeIssueDto, CollectionDto, CollectionSchemaDto,
+        FieldDefinitionDto, FieldValueDto, RecordDto,
     },
 };
 
@@ -140,20 +140,28 @@ pub async fn create_record(
     collection_id: String,
     values: Vec<crate::api::models::RecordValueDto>,
 ) -> Result<String, BridgeError> {
-    let values = values
-        .into_iter()
-        .map(|item| {
-            Ok((
-                parse_field(&item.field_id)?,
-                FieldValueDto::into_core(item.value)?,
-            ))
-        })
-        .collect::<Result<BTreeMap<_, _>, BridgeError>>()?;
+    let values = parse_values(values)?;
     core()
         .await?
         .create_record(parse_collection(&collection_id)?, values)
         .await
         .map(|id| id.to_string())
+        .map_err(Into::into)
+}
+/// Dry-run record validation with create (no `record_id`) or merged-update
+/// semantics. Returns every issue; empty when the draft is valid. Commits
+/// nothing. Errs only for non-validation failures.
+pub async fn validate_record_draft(
+    collection_id: String,
+    record_id: Option<String>,
+    values: Vec<crate::api::models::RecordValueDto>,
+) -> Result<Vec<BridgeIssueDto>, BridgeError> {
+    let record_id = record_id.as_deref().map(parse_record).transpose()?;
+    let values = parse_values(values)?;
+    core()
+        .await?
+        .validate_record_draft(parse_collection(&collection_id)?, record_id, values)
+        .map(|issues| issues.into_iter().map(Into::into).collect())
         .map_err(Into::into)
 }
 pub async fn update_record_field(
@@ -224,6 +232,19 @@ pub async fn get_record(id: String) -> Result<Option<RecordDto>, BridgeError> {
         .map_err(Into::into)
 }
 
+fn parse_values(
+    values: Vec<crate::api::models::RecordValueDto>,
+) -> Result<BTreeMap<FieldId, app_core::FieldValue>, BridgeError> {
+    values
+        .into_iter()
+        .map(|item| {
+            Ok((
+                parse_field(&item.field_id)?,
+                FieldValueDto::into_core(item.value)?,
+            ))
+        })
+        .collect()
+}
 fn parse_records(values: &[String]) -> Result<Vec<RecordId>, BridgeError> {
     values.iter().map(|value| parse_record(value)).collect()
 }

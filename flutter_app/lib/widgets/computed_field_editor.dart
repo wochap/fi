@@ -1,5 +1,6 @@
 import 'package:fi/controllers.dart';
 import 'package:fi/src/rust/api/models.dart';
+import 'package:fi/theme/form_errors.dart';
 import 'package:fi/widgets/expression_builder.dart';
 import 'package:flutter/material.dart';
 
@@ -44,7 +45,10 @@ class _ComputedFieldEditorState extends State<ComputedFieldEditor> {
   final name = TextEditingController();
   late final ExprNode initial = _initialTree();
   ExpressionBuilderValue value = const ExpressionBuilderValue();
-  String? error;
+
+  /// What the last save was refused for: a `name` issue under the name, the rest above the
+  /// actions.
+  FormIssues issues = FormIssues.none;
   bool saving = false;
 
   ExprNode _initialTree() {
@@ -114,11 +118,14 @@ class _ComputedFieldEditorState extends State<ComputedFieldEditor> {
                 TextField(
                   key: const Key('computed-name'),
                   controller: name,
-                  decoration: const InputDecoration(
-                    labelText: 'Name',
+                  decoration: InputDecoration(
+                    label: requiredLabel('Name'),
                     hintText: 'e.g. difference',
+                    errorText: errorTextOf(issues.of('name')),
+                    errorMaxLines: errorLinesOf(issues.of('name')),
                   ),
-                  onChanged: (_) => setState(() {}),
+                  onChanged: (_) =>
+                      setState(() => issues = issues.without('name')),
                 ),
                 const SizedBox(height: 16),
                 ExpressionBuilder(
@@ -128,19 +135,18 @@ class _ComputedFieldEditorState extends State<ComputedFieldEditor> {
                   debounce: widget.inferenceDebounce,
                   onChanged: (next) => setState(() => value = next),
                 ),
-                if (error case final message?)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 12),
-                    child: Text(
-                      message,
-                      key: const Key('computed-editor-error'),
-                      style: TextStyle(color: theme.colorScheme.error),
-                    ),
-                  ),
               ],
             ),
           ),
         ),
+        if (issues.form.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(22, 10, 22, 0),
+            child: FormErrorLines(
+              issues.form,
+              key: const Key('computed-editor-error'),
+            ),
+          ),
         Padding(
           padding: const EdgeInsets.fromLTRB(22, 12, 22, 20),
           child: Row(
@@ -182,7 +188,7 @@ class _ComputedFieldEditorState extends State<ComputedFieldEditor> {
     if (expression == null || inferred == null) return;
     setState(() {
       saving = true;
-      error = null;
+      issues = FormIssues.none;
     });
     final existing = widget.existing;
     final definition = ComputedFieldDefinitionDto(
@@ -204,7 +210,7 @@ class _ComputedFieldEditorState extends State<ComputedFieldEditor> {
       if (mounted) {
         setState(() {
           saving = false;
-          error = bridgeMessage(failure);
+          issues = FormIssues.from(failure).keyed(const {'name': 'name'});
         });
       }
     }

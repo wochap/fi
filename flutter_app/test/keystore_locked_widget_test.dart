@@ -30,6 +30,7 @@ void main() {
     // A retry that is still locked keeps the explanation and reports why.
     bridge.nextRetryNetworkingError = const BridgeError(
       kind: BridgeErrorKind.secureStoreLocked,
+      issues: [],
       message:
           'Your login keyring is locked, so secure device networking '
           'cannot start. Unlock the keyring and retry.',
@@ -54,6 +55,7 @@ void main() {
     final bridge = FakeCollectionBridge()
       ..nextError = const BridgeError(
         kind: BridgeErrorKind.secureStoreLocked,
+        issues: [],
         message:
             'Your login keyring is locked, so secure device networking '
             'cannot start. Unlock the keyring and retry.',

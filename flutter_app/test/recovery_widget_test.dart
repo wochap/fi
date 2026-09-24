@@ -141,6 +141,7 @@ void main() {
     final bridge = FakeCollectionBridge()
       ..nextError = const BridgeError(
         kind: BridgeErrorKind.persistence,
+        issues: [],
         message: 'Local data could not be saved or loaded.',
         resetResolvable: false,
       );
@@ -158,6 +159,7 @@ void main() {
     final bridge = FakeCollectionBridge()
       ..nextError = const BridgeError(
         kind: BridgeErrorKind.bootstrap,
+        issues: [],
         message:
             "Recovering this device's dataset from your other devices failed "
             'repeatedly, so it will not be retried.',

@@ -4,6 +4,7 @@ import 'package:fi/controllers.dart';
 import 'package:fi/help_button.dart';
 import 'package:fi/help_copy.dart';
 import 'package:fi/src/rust/api/models.dart';
+import 'package:fi/theme/form_errors.dart';
 import 'package:fi/theme/form_surface.dart';
 import 'package:fi/theme/nocturne.dart';
 import 'package:fi/theme/nocturne_widgets.dart';
@@ -274,7 +275,18 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
   int? barWidth;
   int? pointRadius;
 
-  String? error;
+  /// Set by the first Save; blockers stay hidden until then.
+  bool attempted = false;
+
+  /// What Rust rejected on the last save, by input key (`title`, `query`) or form slot.
+  FormIssues saveIssues = FormIssues.none;
+
+  /// Rust's keys for widget problems, by the input that shows them.
+  static const _issueInputs = {
+    'title': 'title',
+    'widget_title': 'title',
+    'query_id': 'query',
+  };
 
   String get widgetType => query.widgetType;
 
@@ -314,13 +326,42 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
     super.dispose();
   }
 
-  /// What still has to be chosen before the form can be submitted.
-  String? get _blocker {
-    if (title.text.trim().isEmpty) return 'Give the widget a title.';
-    if (reuseQuery) {
-      return savedQueryId == null ? 'Choose a saved query.' : null;
+  /// What still has to be chosen before the form can be submitted, by where it shows: under the
+  /// title, under the saved-query selector, or (for the query builder) in the form slot.
+  FormIssues get _blockers {
+    var issues = FormIssues.none;
+    if (title.text.trim().isEmpty) {
+      issues = issues.withField('title', 'Give the widget a title.');
     }
-    return query.blocker;
+    if (reuseQuery) {
+      if (savedQueryId == null) {
+        issues = issues.withField('query', 'Choose a saved query.');
+      }
+    } else {
+      issues = issues.withForm(query.blocker);
+    }
+    return issues;
+  }
+
+  /// Blockers once the user has tried to save, then Rust's issues from that save.
+  FormIssues get _shown {
+    if (!attempted) return saveIssues;
+    final blockers = _blockers;
+    return FormIssues(
+      byField: {
+        for (final key in {
+          ...blockers.byField.keys,
+          ...saveIssues.byField.keys,
+        })
+          key: [...blockers.of(key), ...saveIssues.of(key)],
+      },
+      form: [...blockers.form, ...saveIssues.form],
+    );
+  }
+
+  /// Clears Rust's issues for [key] once the input they describe changes.
+  void _edited(String key) {
+    if (saveIssues.of(key).isNotEmpty) saveIssues = saveIssues.without(key);
   }
 
   QueryDefinitionDto? get _selectedQuery => controller.queryDefinitions
@@ -330,6 +371,7 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
   @override
   Widget build(BuildContext context) {
     final schema = controller.schema;
+    final shown = _shown;
     final form = Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -366,8 +408,12 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
         TextField(
           key: const Key('widget-title'),
           controller: title,
-          decoration: const InputDecoration(labelText: 'Title'),
-          onChanged: (_) => setState(() {}),
+          decoration: InputDecoration(
+            label: requiredLabel('Title'),
+            errorText: errorTextOf(shown.of('title')),
+            errorMaxLines: errorLinesOf(shown.of('title')),
+          ),
+          onChanged: (_) => setState(() => _edited('title')),
         ),
         SwitchListTile(
           key: const Key('reuse-query'),
@@ -375,7 +421,10 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
           title: const Text('Use a saved query'),
           secondary: const HelpButton(HelpId.widgetUseSavedQuery),
           value: reuseQuery,
-          onChanged: (value) => setState(() => reuseQuery = value),
+          onChanged: (value) => setState(() {
+            _edited('query');
+            reuseQuery = value;
+          }),
         ),
         if (reuseQuery) ...[
           DropdownButtonFormField<String>(
@@ -386,12 +435,19 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
                 )
                 ? savedQueryId
                 : null,
-            decoration: const InputDecoration(labelText: 'Saved query'),
+            decoration: InputDecoration(
+              label: requiredLabel('Saved query'),
+              errorText: errorTextOf(shown.of('query')),
+              errorMaxLines: errorLinesOf(shown.of('query')),
+            ),
             items: [
               for (final query in controller.queryDefinitions)
                 DropdownMenuItem(value: query.id, child: Text(query.name)),
             ],
-            onChanged: (value) => setState(() => savedQueryId = value),
+            onChanged: (value) => setState(() {
+              _edited('query');
+              savedQueryId = value;
+            }),
           ),
           if (_selectedQuery case final selected? when schema != null)
             ..._savedQueryActions(schema, selected),
@@ -435,9 +491,10 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
       body: form,
       aside: _preview(schema),
       pinnedAside: _preview(schema, compact: true),
-      message: error == null
+      showRequiredLegend: true,
+      message: shown.form.isEmpty
           ? null
-          : Text(error!, key: const Key('widget-editor-error')),
+          : FormErrorLines(shown.form, key: const Key('widget-editor-error')),
       headerActions: [
         if (existing != null)
           FormHeaderAction(
@@ -455,7 +512,8 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
       ],
       primaryKey: const Key('save-widget'),
       primaryLabel: 'Save',
-      onPrimary: _blocker == null ? _save : null,
+      // Save stays enabled; pressing it shows what is missing under the input it belongs to.
+      onPrimary: _save,
     );
   }
 
@@ -694,6 +752,11 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
   Future<void> _save() async {
     final schema = controller.schema;
     if (schema == null) return;
+    setState(() {
+      attempted = true;
+      saveIssues = FormIssues.none;
+    });
+    if (!_blockers.isEmpty) return;
     try {
       final queryId = reuseQuery
           ? savedQueryId!
@@ -743,7 +806,11 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
       }
       if (mounted) Navigator.pop(context);
     } catch (failure) {
-      if (mounted) setState(() => error = bridgeMessage(failure));
+      if (mounted) {
+        setState(
+          () => saveIssues = FormIssues.from(failure).keyed(_issueInputs),
+        );
+      }
     }
   }
 

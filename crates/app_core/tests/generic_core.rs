@@ -785,3 +785,89 @@ async fn a_peer_never_observes_a_partially_applied_batch() {
     a.shutdown().await.unwrap();
     b.shutdown().await.unwrap();
 }
+
+#[tokio::test]
+async fn record_draft_validation_reports_every_issue_and_commits_nothing() {
+    let directory = tempfile::tempdir().unwrap();
+    let app = AppCore::open(directory.path()).await.unwrap();
+    app.create_new_dataset().await.unwrap();
+    let collection = app
+        .create_collection("Headaches".into(), String::new())
+        .await
+        .unwrap();
+    let title = field("Title", FieldType::Text, true, 0);
+    let intensity = FieldDefinition {
+        validation: ValidationMetadata {
+            min_integer: Some(1),
+            max_integer: Some(10),
+            ..ValidationMetadata::default()
+        },
+        ..field("Intensity", FieldType::Integer, false, 1)
+    };
+    app.add_field(collection, title.clone()).await.unwrap();
+    app.add_field(collection, intensity.clone()).await.unwrap();
+    let before = app.projection_state();
+    let mut events = app.subscribe_data_changed();
+
+    let issues = app
+        .validate_record_draft(
+            collection,
+            None,
+            BTreeMap::from([(intensity.id, FieldValue::Integer(11))]),
+        )
+        .unwrap();
+    assert_eq!(
+        issues
+            .iter()
+            .map(|issue| (issue.fields.clone(), issue.code.as_str()))
+            .collect::<Vec<_>>(),
+        vec![
+            (vec![title.id.to_string()], "required"),
+            (vec![intensity.id.to_string()], "out_of_range"),
+        ]
+    );
+    assert!(
+        app.validate_record_draft(
+            collection,
+            None,
+            BTreeMap::from([(title.id, FieldValue::Text("Aura".into()))]),
+        )
+        .unwrap()
+        .is_empty()
+    );
+    assert!(app.records(collection).unwrap().is_empty());
+    assert_eq!(app.projection_state(), before);
+    assert!(
+        tokio::time::timeout(Duration::from_millis(25), events.recv())
+            .await
+            .is_err()
+    );
+
+    // Update semantics: the draft is merged over the stored values.
+    let record = app
+        .create_record(
+            collection,
+            BTreeMap::from([(title.id, FieldValue::Text("Aura".into()))]),
+        )
+        .await
+        .unwrap();
+    assert!(
+        app.validate_record_draft(
+            collection,
+            Some(record),
+            BTreeMap::from([(intensity.id, FieldValue::Integer(4))]),
+        )
+        .unwrap()
+        .is_empty()
+    );
+    let issues = app
+        .validate_record_draft(
+            collection,
+            Some(record),
+            BTreeMap::from([(title.id, FieldValue::Null)]),
+        )
+        .unwrap();
+    assert_eq!(issues.len(), 1);
+    assert_eq!(issues[0].message, "Required");
+    app.shutdown().await.unwrap();
+}

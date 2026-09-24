@@ -437,8 +437,7 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
         _pending = false;
         _inferred = inferred;
         if (failure case BridgeError(
-          field: final path?,
-          :final message,
+          issues: [BridgeIssueDto(fields: [final path], :final message)],
         ) when path.startsWith(r'$') && nodeAt(root, path) != null) {
           _errorPath = path;
           _errorMessage = message;

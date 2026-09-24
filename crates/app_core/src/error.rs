@@ -17,6 +17,72 @@ pub enum DomainError {
     UnsupportedSchema(i64),
     #[error("malformed generic application document: {0}")]
     Malformed(String),
+    /// Several validation issues found together, each naming the fields it
+    /// concerns. Used where every problem is reported at once (records).
+    #[error("{}", summarize_issues(.0))]
+    InvalidMany(Vec<ValidationIssue>),
+}
+
+/// Stable machine-readable category of a validation issue.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum IssueCode {
+    Required,
+    TypeMismatch,
+    Length,
+    OutOfRange,
+    InactiveOption,
+    FieldUnavailable,
+    Invalid,
+}
+
+impl IssueCode {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Required => "required",
+            Self::TypeMismatch => "type_mismatch",
+            Self::Length => "length",
+            Self::OutOfRange => "out_of_range",
+            Self::InactiveOption => "inactive_option",
+            Self::FieldUnavailable => "field_unavailable",
+            Self::Invalid => "invalid",
+        }
+    }
+}
+
+/// One validation problem. `fields` holds field ids or form keys (zero, one,
+/// or several); `message` is safe to show and never contains ids.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ValidationIssue {
+    pub fields: Vec<String>,
+    pub code: IssueCode,
+    pub message: String,
+}
+
+impl ValidationIssue {
+    #[must_use]
+    pub fn new(code: IssueCode, message: impl Into<String>) -> Self {
+        Self {
+            fields: Vec::new(),
+            code,
+            message: message.into(),
+        }
+    }
+
+    #[must_use]
+    pub fn on(mut self, field: impl ToString) -> Self {
+        self.fields = vec![field.to_string()];
+        self
+    }
+}
+
+/// One-line summary for banners: the only issue's message, or a count.
+#[must_use]
+pub fn summarize_issues(issues: &[ValidationIssue]) -> String {
+    match issues {
+        [only] => only.message.clone(),
+        _ => format!("{} problems need attention", issues.len()),
+    }
 }
 
 #[derive(Clone, Debug, Error, Eq, PartialEq)]

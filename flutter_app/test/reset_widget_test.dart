@@ -103,6 +103,7 @@ void main() {
     final bridge = FakeCollectionBridge()
       ..nextError = const BridgeError(
         kind: BridgeErrorKind.initialization,
+        issues: [],
         message: 'The secure key store is locked.',
         resetResolvable: false,
       );
@@ -113,6 +114,7 @@ void main() {
 
     bridge.nextError = const BridgeError(
       kind: BridgeErrorKind.bootstrap,
+      issues: [],
       message: 'Incompatible application version.',
       resetResolvable: true,
     );
