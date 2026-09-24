@@ -1,4 +1,4 @@
-package com.gean.fi
+package com.wochap.fi
 
 import android.content.Context
 import android.net.ConnectivityManager

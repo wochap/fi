@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Install the fi icon and .desktop entry into the user's XDG dirs so Wayland
 # compositors/bars (Hyprland, quickshell, ...) can resolve the app_id
-# "com.gean.fi" to an icon. Wayland has no per-window icon protocol; icons are
+# "com.wochap.fi" to an icon. Wayland has no per-window icon protocol; icons are
 # looked up by app_id in the icon theme.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SRC="$ROOT/flutter_app/assets/icon/icon.png"
-APP_ID="com.gean.fi"
+APP_ID="com.wochap.fi"
 ICON_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor"
 APP_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
 

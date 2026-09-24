@@ -37,4 +37,4 @@ if test "$status" -ne 0 && test "$status" -ne 124; then
   exit "$status"
 fi
 
-test -f "$runtime_dir/data/com.gean.fi/control.sqlite"
+test -f "$runtime_dir/data/com.wochap.fi/control.sqlite"

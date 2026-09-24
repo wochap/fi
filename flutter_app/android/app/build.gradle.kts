@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.gean.fi"
+    namespace = "com.wochap.fi"
     compileSdk = 36
     ndkVersion = "29.0.14206865"
 
@@ -20,7 +20,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.gean.fi"
+        applicationId = "com.wochap.fi"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = 24

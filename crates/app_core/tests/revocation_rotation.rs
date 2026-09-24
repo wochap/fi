@@ -215,7 +215,7 @@ async fn revocation_commits_and_reports_rotation_failure_separately() {
 /// exact condition the retention path is required to report rather than hide.
 #[tokio::test]
 async fn linux_keystore_retains_and_removes_previous_epoch() {
-    let store = LinuxSecretServiceKeyStore::new(format!("com.gean.fi.test.{}", std::process::id()));
+    let store = LinuxSecretServiceKeyStore::new(format!("com.wochap.fi.test.{}", std::process::id()));
     let probe = store.load_previous_discovery_group_secret().await;
     match probe {
         Ok(None) => {}

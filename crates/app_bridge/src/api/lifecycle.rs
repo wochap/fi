@@ -116,7 +116,7 @@ pub async fn initialize(data_dir: String) -> Result<BootstrapDto, BridgeError> {
 pub async fn initialize_desktop_networked(data_dir: String) -> Result<BootstrapDto, BridgeError> {
     initialize_with(
         data_dir,
-        OpenMode::Networked(Arc::new(LinuxSecretServiceKeyStore::new("com.gean.fi"))),
+        OpenMode::Networked(Arc::new(LinuxSecretServiceKeyStore::new("com.wochap.fi"))),
     )
     .await
 }
