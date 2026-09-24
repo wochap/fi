@@ -34,6 +34,15 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     "Debug" "Profile" "Release")
 endif()
 
+# Debug builds are a separate app: their own app_id, so Wayland resolves the
+# DEBUG-ribbon icon (scripts/install-linux-desktop.sh) and path_provider gives
+# them their own data directory instead of sharing the release dataset.
+set(WINDOW_ICON "icon.png")
+if(CMAKE_BUILD_TYPE MATCHES "Debug")
+  set(APPLICATION_ID "${APPLICATION_ID}.debug")
+  set(WINDOW_ICON "icon-debug.png")
+endif()
+
 # Compilation settings that should be applied to most targets.
 #
 # Be cautious about adding new options here, as plugins use this function by
@@ -97,8 +106,8 @@ install(TARGETS ${BINARY_NAME} RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}"
 install(FILES "${FLUTTER_ICU_DATA_FILE}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
   COMPONENT Runtime)
 
-install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/runner/icon.png" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
-  COMPONENT Runtime)
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/runner/${WINDOW_ICON}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
+  RENAME "icon.png" COMPONENT Runtime)
 
 install(FILES "${FLUTTER_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
   COMPONENT Runtime)

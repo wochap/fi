@@ -37,4 +37,5 @@ if test "$status" -ne 0 && test "$status" -ne 124; then
   exit "$status"
 fi
 
-test -f "$runtime_dir/data/com.wochap.fi/control.sqlite"
+# Debug builds use the ".debug" app_id, so path_provider resolves its data dir.
+test -f "$runtime_dir/data/com.wochap.fi.debug/control.sqlite"
