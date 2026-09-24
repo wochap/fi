@@ -1367,10 +1367,7 @@ class CollectionsPage extends StatelessWidget {
         isScrollControlled: true,
         useSafeArea: true,
         builder: (sheet) => StatefulBuilder(
-          builder: (context, setState) => Padding(
-            padding: EdgeInsets.only(
-              bottom: MediaQuery.viewInsetsOf(context).bottom,
-            ),
+          builder: (context, setState) => BottomSheetInsets(
             child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(18, 0, 18, 24),
               child: Theme(

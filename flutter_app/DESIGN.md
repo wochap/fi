@@ -102,6 +102,8 @@ must write one, use these sizes:
   Cancel (`TextButton`) then the primary (`FilledButton`), right-aligned.
 - **On a phone, create forms are bottom sheets** with a drag handle, title plus context
   ("in <collection>"), 48px inputs, and Cancel (1 part) beside the primary (2 parts).
+- **Wrap bottom sheet content in `BottomSheetInsets`** (`lib/theme/side_sheet.dart`) so it clears
+  both the keyboard and Android's navigation bar. `useSafeArea` alone leaves the bottom uncovered.
 - **Selection mode** swaps the header for an `accent900` action bar with an `accent700` border.
   The content behind it drops to 40% opacity and ignores taps.
 - **Status** is shown with `GlowDot` (lit accent while reaching peers, dim `neutral600` when

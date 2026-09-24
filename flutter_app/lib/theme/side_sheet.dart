@@ -33,8 +33,9 @@ Future<void> showSideSheet(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      builder: (sheet) =>
-          SizedBox(height: size.height * .85, child: frame(sheet)),
+      builder: (sheet) => BottomSheetInsets(
+        child: SizedBox(height: size.height * .85, child: frame(sheet)),
+      ),
     );
   }
   return showGeneralDialog<void>(
@@ -62,6 +63,23 @@ Future<void> showSideSheet(
       ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
       child: child,
     ),
+  );
+}
+
+/// Keeps bottom sheet content clear of the keyboard and the system navigation bar.
+///
+/// `useSafeArea` on `showModalBottomSheet` only avoids the top, so the bottom is padded here.
+/// Flutter subtracts the keyboard from `MediaQuery.padding`, so while the keyboard is up the
+/// navigation bar padding drops to zero and the two never stack.
+class BottomSheetInsets extends StatelessWidget {
+  const BottomSheetInsets({required this.child, super.key});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+    child: SafeArea(top: false, child: child),
   );
 }
 
