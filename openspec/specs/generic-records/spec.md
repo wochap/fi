@@ -12,7 +12,7 @@ Records SHALL use canonical UUIDv7 `RecordId` and `CollectionSchemaId` values, a
 - **THEN** both use the same generic record command, authoritative representation, projection, and query path
 
 ### Requirement: Rust-authoritative record validation
-Before authoritative mutation, Rust SHALL verify that the collection and field are active, value types match definitions, required fields are present, numeric ranges hold, enum options are active members, defaults are valid, and FixedDecimal representations use the field's scale.
+Before authoritative mutation, Rust SHALL verify that the collection and field are active, value types match definitions, required fields are present, numeric ranges hold, enum options are active members, defaults are valid, and FixedDecimal representations use the field's scale. Validation SHALL report every issue it finds rather than stopping at the first, and each issue SHALL carry the ids of the fields it concerns, a stable code, and a safe message that contains no ids.
 
 #### Scenario: Reject wrong value type
 - **WHEN** Flutter supplies Text for an Integer field
@@ -21,6 +21,14 @@ Before authoritative mutation, Rust SHALL verify that the collection and field a
 #### Scenario: Reject missing required value
 - **WHEN** a create command omits a required field without a valid default
 - **THEN** Rust rejects the complete record creation atomically
+
+#### Scenario: Report all issues
+- **WHEN** a create command omits one required field and gives another field a value outside its range
+- **THEN** Rust rejects the creation and reports two issues, each naming its own field id
+
+#### Scenario: Messages without ids
+- **WHEN** a text value is longer than the field allows
+- **THEN** the issue message states the allowed length (for example "Must be 1–40 characters") and does not contain the field id
 
 ### Requirement: Field-granular record commands
 Record creation SHALL initialize fields individually, record updates SHALL write only explicitly targeted fields, and ordinary edits MUST NOT replace the entire record object.
@@ -94,3 +102,14 @@ The generic command model SHALL provide a batch command whose members are record
 #### Scenario: Peer sees the batch whole
 - **WHEN** a device applies a batch and later synchronizes with a trusted peer
 - **THEN** the peer's projection transitions from none of the batch applied to all of it in one projection pass, never a strict subset
+
+### Requirement: Record draft validation query
+Rust SHALL expose a read-only query that validates a draft record for a collection (and optionally an existing record id) with the same rules as record create and update, returning the list of issues and committing nothing.
+
+#### Scenario: Valid draft
+- **WHEN** Flutter validates a draft whose values all satisfy the schema
+- **THEN** the query returns an empty list and no command is recorded
+
+#### Scenario: Invalid draft
+- **WHEN** Flutter validates a draft missing a required field
+- **THEN** the query returns an issue with code `required` naming that field, and no record is created

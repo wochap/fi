@@ -57,11 +57,19 @@ The bridge SHALL expose typed add, update, remove, reorder, list, get, and evalu
 - **THEN** the bridge preserves the unknown type and structured configuration unchanged
 
 ### Requirement: Typed bridge errors
-Rust initialization, validation, persistence, projection, lifecycle, and bootstrap failures SHALL cross the bridge as stable typed error categories with safe user-facing messages and stable entity/field context where applicable. A failure caused by a locked secure key store SHALL cross as its own category, distinct from generic initialization failures, so Flutter can offer an unlock-and-retry path.
+Rust initialization, validation, persistence, projection, lifecycle, and bootstrap failures SHALL cross the bridge as stable typed error categories with safe user-facing messages and stable entity/field context where applicable. Validation failures SHALL carry a list of issues, each with the list of field ids or form keys it concerns (zero, one, or several), a stable code, and a safe message. A failure caused by a locked secure key store SHALL cross as its own category, distinct from generic initialization failures, so Flutter can offer an unlock-and-retry path.
 
 #### Scenario: Invalid dynamic form submission
 - **WHEN** Rust rejects a submitted field value
-- **THEN** Flutter receives a validation category, target field ID, and safe message rather than a panic or opaque native failure
+- **THEN** Flutter receives a validation category and an issue naming the target field ID with a safe message, rather than a panic or opaque native failure
+
+#### Scenario: Several invalid values
+- **WHEN** Rust rejects a record with two invalid fields
+- **THEN** Flutter receives one validation error whose issues list contains both, each naming its field ID
+
+#### Scenario: Non-field failure
+- **WHEN** an operation fails with a persistence error
+- **THEN** Flutter receives the persistence category with a safe message and an empty issues list
 
 #### Scenario: Locked secure store
 - **WHEN** an operation fails because the desktop secure key store is locked
