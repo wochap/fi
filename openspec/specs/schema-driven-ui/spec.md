@@ -230,3 +230,44 @@ The DateTime editor SHALL show its current value as local time in the sortable f
 #### Scenario: Opening an existing value
 - **WHEN** a record stores the instant 2026-09-25 04:00 UTC and the device is in UTC-5
 - **THEN** the editor shows `2026-09-24 23:00`
+
+### Requirement: Inline collection title rename
+The collection screen SHALL let the user rename the collection by editing its title in place. A double tap (or double click) on the title SHALL replace it with a text input holding the current name, focused, with the whole name selected. Pressing Enter or moving focus away from the input SHALL submit the edit; pressing Escape SHALL cancel it and restore the title.
+
+On submit the text SHALL be trimmed of leading and trailing whitespace. When the trimmed text is empty, or equal to the current name, the edit SHALL be treated as a cancel: no rename command is sent and no error is shown. Otherwise the existing rename command SHALL be sent with the trimmed name, and the title SHALL show the new name once the projection refreshes.
+
+When the rename command is rejected, the title SHALL return to the previous name and the error SHALL be reported to the user without keeping the input open.
+
+The Rename action on the collection list card menu SHALL remain available.
+
+#### Scenario: Double tap enters edit mode
+- **WHEN** the user double taps the title "Headaches" on the collection screen
+- **THEN** the title is replaced by a focused text input containing "Headaches" with the text selected, on both the wide and the narrow header layouts
+
+#### Scenario: Enter saves the trimmed name
+- **WHEN** the user replaces the text with "  Migraines " and presses Enter
+- **THEN** a rename command is sent with "Migraines", the input closes, and the title shows "Migraines"
+
+#### Scenario: Losing focus saves
+- **WHEN** the user changes the text to "Migraines" and focus moves away from the input
+- **THEN** the rename command is sent with "Migraines" and the input closes
+
+#### Scenario: Escape cancels
+- **WHEN** the user changes the text and presses Escape
+- **THEN** no rename command is sent and the title shows the previous name
+
+#### Scenario: Empty name cancels silently
+- **WHEN** the user clears the text, or leaves only whitespace, and presses Enter or moves focus away
+- **THEN** no rename command is sent, no error is shown, and the title shows the previous name
+
+#### Scenario: Unchanged name cancels silently
+- **WHEN** the user submits the current name unchanged, with or without surrounding whitespace
+- **THEN** no rename command is sent and the input closes
+
+#### Scenario: Rejected rename restores the title
+- **WHEN** the rename command fails
+- **THEN** the input closes, the title shows the previous name, and the failure is reported in a snackbar
+
+#### Scenario: List menu rename still works
+- **WHEN** the user chooses Rename from a collection card menu on the collection list
+- **THEN** the existing Rename dialog opens as before
