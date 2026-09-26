@@ -70,6 +70,21 @@ Flutter SHALL expose friendly-name editing and confirmed revoke/unpair actions t
 - **WHEN** the user confirms revocation
 - **THEN** Rust revokes and disconnects the device and the UI presents it as revoked rather than merely hiding it
 
+### Requirement: Revoked device delete action
+The devices screen SHALL offer a "Delete" action only on rows whose record is revoked. The action SHALL require explicit confirmation that states the record will be removed and that the device can be paired again later. On confirmation Flutter SHALL delegate to Rust and refresh the device list so the row disappears. A trusted row SHALL NOT offer the delete action.
+
+#### Scenario: Delete a revoked device
+- **WHEN** the user chooses Delete on a revoked row and confirms
+- **THEN** the row is removed from the devices list and the trusted-device count is unchanged
+
+#### Scenario: Delete is cancelled
+- **WHEN** the user chooses Delete and dismisses the confirmation
+- **THEN** the row remains listed as revoked and no Rust call is made
+
+#### Scenario: Trusted row offers no delete
+- **WHEN** a row's record is trusted
+- **THEN** its menu offers rename and revoke but not delete
+
 ### Requirement: Complete sync-status vocabulary
 The application shell SHALL present the typed Rust aggregate status exactly, mapping `Offline`, `Searching`, `Connected`, `Syncing`, `Synced`, and `Error` to the labels "Offline", "Looking for paired devices", "Connected", "Syncing", "Synced", and "Error", each with a distinct icon. The label for `Searching` MUST NOT reuse the word "Searching" so it is not mistaken for pairing discovery, which keeps its own copy on the pairing card.
 

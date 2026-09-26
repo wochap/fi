@@ -92,3 +92,33 @@ A device that reset and pairs again with a peer that previously trusted or revok
 #### Scenario: Peer still trusted the device
 - **WHEN** a device resets and pairs again with a peer that still records it as trusted
 - **THEN** the peer's record is updated in place rather than duplicated
+
+### Requirement: Revoked device records can be deleted locally
+A device record in the `revoked` state SHALL be permanently removable from local control state by an explicit user action. Deletion SHALL remove the record from both the trusted-device and trusted-peer tables in one transaction, SHALL be refused for a record in the `trusted` state, SHALL report whether a record was removed, and MUST NOT notify any peer or rotate the discovery secret.
+
+#### Scenario: Revoked record is deleted
+- **WHEN** the user deletes a device whose record is revoked
+- **THEN** the trusted-device list no longer contains that DeviceId, the peer table holds no row for it, and no other device record changes
+
+#### Scenario: Trusted record cannot be deleted
+- **WHEN** deletion is requested for a device whose record is trusted
+- **THEN** the operation is refused, reports that nothing was removed, and the record remains trusted
+
+#### Scenario: Deletion of an unknown device
+- **WHEN** deletion is requested for a DeviceId with no record
+- **THEN** the operation reports that nothing was removed and does not fail
+
+#### Scenario: Deletion is local
+- **WHEN** a revoked record is deleted
+- **THEN** the discovery epoch and secret are unchanged and no message is sent to any peer
+
+### Requirement: Re-pairing after deletion creates a fresh record
+A device whose record was deleted SHALL be treated as unknown: it cannot enter the Repo transport, and pairing it again SHALL require a fresh SAS confirmation and SHALL create a new record whose paired timestamp is the time of the new pairing.
+
+#### Scenario: Deleted device connects without pairing
+- **WHEN** a device whose record was deleted attempts a normal authenticated session
+- **THEN** it is rejected exactly as an unknown device is rejected
+
+#### Scenario: Deleted device pairs again
+- **WHEN** a deleted device completes SAS-confirmed pairing
+- **THEN** the devices list shows it as trusted with a paired timestamp from the new pairing, not from the deleted record
