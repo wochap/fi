@@ -325,3 +325,18 @@ The collection list card menu SHALL offer a Duplicate action next to Rename and 
 #### Scenario: Rust rejects the name
 - **WHEN** the user clears the name and presses Save
 - **THEN** the dialog stays open and shows the typed name error under the Name input
+
+### Requirement: Collection export and import actions
+The collections list SHALL offer, per collection, "Export CSV" and "Export JSON" actions and an "Import CSV" action, and SHALL offer an "Export all" action and a multi-select "Export selected" action that produce one JSON envelope. The collections list SHALL offer an "Import JSON" action that creates new collections. Each action SHALL open the platform file dialog, then show the outcome (file written, count imported, or the abort reason including row and column for CSV) in the same surface, without leaving the current screen.
+
+#### Scenario: Export CSV from list
+- **WHEN** the user chooses "Export CSV" on "Headache" and confirms a location
+- **THEN** the CSV is written there and a message names the file
+
+#### Scenario: CSV import abort shown
+- **WHEN** the user imports a CSV whose row 12 has an invalid Date in column `Onset`
+- **THEN** a message states row 12, column `Onset`, and the reason, and the record list is unchanged
+
+#### Scenario: Import JSON adds collections
+- **WHEN** the user imports an envelope with two collections
+- **THEN** two new collections appear in the list and existing collections are unchanged

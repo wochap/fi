@@ -81,7 +81,7 @@ The application SHALL provide list and get queries backed by SQLite, exclude log
 - **THEN** record IDs, field values, validation status, and default ordering match the pre-deletion query result
 
 ### Requirement: Atomic record batch commands
-The generic command model SHALL provide a batch command whose members are record-scoped commands (`UpdateRecordField`, `DeleteRecord`) targeting distinct active records of one collection. A batch MUST be non-empty, MUST NOT contain another batch, and MUST NOT contain schema, computed-field, query, or widget commands. Every member SHALL be validated against the same pre-change snapshot before any write, and a validation failure of any member SHALL reject the whole batch with the failing member identified. An accepted batch SHALL be applied inside exactly one Automerge change carrying exactly one HLC stamp, SHALL produce exactly one projection pass, and SHALL emit exactly one `DataChanged` event naming the affected collection.
+The generic command model SHALL provide a batch command whose members are record-scoped commands (`CreateRecord`, `UpdateRecordField`, `DeleteRecord`) targeting distinct records of one active collection. A `CreateRecord` member SHALL carry a fresh record id that does not exist in the snapshot; `UpdateRecordField` and `DeleteRecord` members SHALL target active records. A batch MUST be non-empty, MUST NOT contain another batch, and MUST NOT contain schema, computed-field, query, or widget commands. Every member SHALL be validated against the same pre-change snapshot before any write, and a validation failure of any member SHALL reject the whole batch with the failing member identified. An accepted batch SHALL be applied inside exactly one Automerge change carrying exactly one HLC stamp, SHALL produce exactly one projection pass, and SHALL emit exactly one `DataChanged` event naming the affected collection.
 
 #### Scenario: Batch delete commits once
 - **WHEN** a batch of twelve `DeleteRecord` members is applied
@@ -91,12 +91,16 @@ The generic command model SHALL provide a batch command whose members are record
 - **WHEN** a batch sets field `category` to the same value on five records
 - **THEN** five field registers are replaced under their stable field ID with the same stamp, no other field of those records is written, and later single-field edits to any of them resolve by ordinary field-level LWW
 
+#### Scenario: Batch create commits once
+- **WHEN** a batch of 300 `CreateRecord` members for one collection is applied
+- **THEN** the root document gains exactly one new change, every record's field registers carry the same HLC stamp, one projection pass runs, and subscribers receive one `DataChanged` event for `Records` in that collection
+
 #### Scenario: One invalid member rejects all
-- **WHEN** a batch sets a required field to `Null` on three records, or one member targets a record that is not active
+- **WHEN** a batch sets a required field to `Null` on three records, one member targets a record that is not active, or a `CreateRecord` member fails schema validation
 - **THEN** Rust returns a typed error identifying the failing member and commits no authoritative or projected change for any member
 
 #### Scenario: Nested or mixed batch rejected
-- **WHEN** a batch contains another batch, a schema command, or two members targeting the same record
+- **WHEN** a batch contains another batch, a schema command, two members targeting the same record, or a `CreateRecord` whose id already exists
 - **THEN** validation rejects the batch before any write
 
 #### Scenario: Peer sees the batch whole
