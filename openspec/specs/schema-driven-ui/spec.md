@@ -306,3 +306,22 @@ The field editor SHALL show a "Show as slider" switch only when the kind is Inte
 #### Scenario: Slider value in the list
 - **WHEN** a record with slider value 3 is shown in the record list
 - **THEN** the cell reads 3
+
+### Requirement: Duplicate collection action
+The collection list card menu SHALL offer a Duplicate action next to Rename and Delete. Choosing it SHALL open a dialog with a Name input prefilled with the source name followed by " (copy)". Save SHALL submit the clone command with the trimmed name; Cancel or dismissing the dialog SHALL send no command. A typed name error from Rust SHALL be shown inline on the Name input and the dialog SHALL stay open. On success the dialog SHALL close and the new collection SHALL appear in the list after the projection refreshes, without navigating into it.
+
+#### Scenario: Duplicate with default name
+- **WHEN** the user chooses Duplicate on "Headache" and presses Save without editing
+- **THEN** a new collection "Headache (copy)" appears in the list with the same fields, queries and widgets and no records
+
+#### Scenario: Duplicate with custom name
+- **WHEN** the user replaces the prefilled name with "Migraine" and presses Save
+- **THEN** the new collection is named "Migraine"
+
+#### Scenario: Cancel
+- **WHEN** the user presses Cancel or dismisses the dialog
+- **THEN** no clone command is sent and the list is unchanged
+
+#### Scenario: Rust rejects the name
+- **WHEN** the user clears the name and presses Save
+- **THEN** the dialog stays open and shows the typed name error under the Name input

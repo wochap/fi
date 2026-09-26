@@ -103,3 +103,30 @@ A Date value SHALL be a calendar day without a timezone, stored as a signed coun
 #### Scenario: DateTime follows the viewer's timezone
 - **WHEN** a DateTime field is set to 2026-09-24 23:00 on a device in UTC-5
 - **THEN** the stored value is the instant 2026-09-25 04:00 UTC, and a device in UTC+9 shows 2026-09-25 13:00
+
+### Requirement: Structure-only collection cloning
+The application core SHALL provide a clone command that creates a new active collection from an existing active collection. The clone SHALL copy the source's active field definitions, active enum options, active computed fields, active saved queries and active widgets, and MUST NOT copy any record. Tombstoned fields, enum options, computed fields, queries and widgets MUST NOT be copied. The clone SHALL take the name supplied with the command, validated by the same rules as collection creation, and SHALL copy the source description. Field, enum option, computed field, query and widget order metadata SHALL be preserved.
+
+Every cloned entity SHALL receive a fresh UUIDv7 identity. Every reference inside cloned definitions SHALL be rewritten to the fresh identities: source and computed field references in expressions (filters, grouping, sorting, aggregations, series and category expressions, record-set field lists, computed-field expressions), enum option constants in expressions, enum option defaults on fields, widget query references, and the owning collection identity on computed fields, queries and widgets. The source collection MUST NOT be modified.
+
+The clone SHALL be applied as exactly one Automerge change under exactly one HLC stamp with exactly one projection pass and one data-changed notification. If validation of any cloned definition fails, or the source collection is missing or deleted, the command SHALL return a typed error and MUST NOT write to Automerge or the projection.
+
+#### Scenario: Clone a populated collection
+- **WHEN** a user clones a collection that has 3 fields, 2 computed fields, 2 saved queries, 2 widgets and 40 records, giving the name "Migraine"
+- **THEN** a new active collection named "Migraine" exists with 3 fields, 2 computed fields, 2 saved queries, 2 widgets and 0 records, and the source collection still has 40 records
+
+#### Scenario: Identities and references are fresh
+- **WHEN** a collection whose widget references a query whose filter compares an enum field to an option constant is cloned
+- **THEN** no identity in the clone equals any identity in the source, the cloned widget references the cloned query, the cloned query references the cloned field and the cloned option, and evaluating the cloned query against the clone succeeds with no dangling-reference diagnostic
+
+#### Scenario: Tombstones are skipped
+- **WHEN** the source has a removed field, a removed enum option and a removed widget
+- **THEN** the clone contains none of them and its active entities keep their relative order
+
+#### Scenario: Peer receives the clone
+- **WHEN** Device A clones a collection while Device B is connected or reconnects later
+- **THEN** Device B receives the cloned collection with the same fresh identities through ordinary synchronization
+
+#### Scenario: Invalid clone writes nothing
+- **WHEN** the clone name is empty or the source collection is deleted
+- **THEN** the command returns a typed validation error and neither Automerge nor the projection changes and no data-changed notification is emitted
