@@ -551,12 +551,34 @@ impl PairingManager {
     }
 
     async fn timeout(&self) -> Result<(), PairingError> {
+        // Publish the expiry before tearing the transport down, so a wait that
+        // sees the connection close can tell it was caused by the deadline.
+        let applied = self.apply(PairingInput::Timeout { now_ms: now_ms() });
         let _ = self.discovery.stop(&DiscoveryScope::Pairing).await;
         self.transport.stop();
         self.clear_sessions();
         self.candidates_tx.send_replace(Vec::new());
-        self.apply(PairingInput::Timeout { now_ms: now_ms() })?;
+        applied?;
         Ok(())
+    }
+
+    /// Reports a stream failure at or past the session deadline as expiry.
+    ///
+    /// At the deadline both devices tear their transport down, so the wait may
+    /// observe the close before its own timer fires. That close is the expiry,
+    /// not a transport failure. A failure before the deadline is unchanged.
+    fn at_deadline(&self, session: &ActivePairingSession, error: PairingError) -> PairingError {
+        let expired = now_ms() >= session.deadline_ms
+            || matches!(
+                self.state(),
+                PairingState::Failed {
+                    error: PairingError::Expired
+                }
+            );
+        match error {
+            PairingError::Transport(_) if expired => PairingError::Expired,
+            error => error,
+        }
     }
 
     pub fn select(
@@ -698,7 +720,8 @@ impl PairingManager {
         let remaining = session.deadline_ms.saturating_sub(now_ms());
         let message = tokio::time::timeout(Duration::from_millis(remaining), stream.receive())
             .await
-            .map_err(|_| PairingError::Expired)??;
+            .map_err(|_| PairingError::Expired)?
+            .map_err(|error| self.at_deadline(&session, error))?;
         let PairingMessage::Decision(remote) = message else {
             return Err(PairingError::Malformed("decision required"));
         };
@@ -1463,7 +1486,8 @@ impl PairingManager {
         let remaining = session.deadline_ms.saturating_sub(now_ms());
         let message = tokio::time::timeout(Duration::from_millis(remaining), stream.receive())
             .await
-            .map_err(|_| PairingError::Expired)??;
+            .map_err(|_| PairingError::Expired)?
+            .map_err(|error| self.at_deadline(&session, error))?;
         let PairingMessage::CommitAck { session_id, mac } = message else {
             return Err(PairingError::Malformed("commit acknowledgement required"));
         };
@@ -1482,7 +1506,8 @@ impl PairingManager {
         let remaining = session.deadline_ms.saturating_sub(now_ms());
         let message = tokio::time::timeout(Duration::from_millis(remaining), stream.receive())
             .await
-            .map_err(|_| PairingError::Expired)??;
+            .map_err(|_| PairingError::Expired)?
+            .map_err(|error| self.at_deadline(&session, error))?;
         let PairingMessage::Provision(envelope) = message else {
             return Err(PairingError::Malformed("provisioning envelope required"));
         };
@@ -2611,6 +2636,110 @@ mod tests {
             .unwrap();
         a.stop().await.unwrap();
         assert!(b.confirm(session).await.is_err());
+        assert!(a.trusted_devices().unwrap().is_empty());
+        assert!(b.trusted_devices().unwrap().is_empty());
+    }
+
+    /// The peer's own deadline closes the connection at the moment the local
+    /// session expires. That close is the expiry, not a transport failure.
+    #[tokio::test]
+    async fn peer_close_at_the_deadline_reports_expiry() {
+        let (a, _, _a_dir) = manager(47).await;
+        let (b, _, _b_dir) = manager(48).await;
+        let root = automerge_repo::DocumentId::new();
+        let window = Duration::from_secs(5);
+        {
+            a.set_root_state(RootState::Ready(root));
+            a.start(window, "A".into())
+        }
+        .await
+        .unwrap();
+        let b_instance = {
+            b.set_root_state(RootState::Ready(root));
+            b.start(window, "B".into())
+        }
+        .await
+        .unwrap();
+        let session = a
+            .connect(
+                PairingCandidate {
+                    instance_id: b_instance,
+                    endpoint: b.transport.local_addr().unwrap(),
+                    expires_at_ms: now_ms() + 5_000,
+                },
+                "A".into(),
+                Duration::from_millis(500),
+            )
+            .await
+            .unwrap();
+        let active = a.session(session).unwrap();
+        let deadline_ms = active.deadline_ms;
+        let lost = || PairingError::Transport("connection lost".into());
+        let peer = b.clone();
+        let close = tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(deadline_ms.saturating_sub(now_ms()))).await;
+            peer.stop().await.unwrap();
+        });
+        let error = a.confirm(session).await.unwrap_err();
+        close.await.unwrap();
+        assert_eq!(error, PairingError::Expired);
+        assert_eq!(
+            a.state(),
+            PairingState::Failed {
+                error: PairingError::Expired
+            }
+        );
+        // The classification itself does not depend on which timer won.
+        assert_eq!(a.at_deadline(&active, lost()), PairingError::Expired);
+        assert!(a.trusted_devices().unwrap().is_empty());
+        assert!(b.trusted_devices().unwrap().is_empty());
+    }
+
+    /// A connection lost well before the deadline stays a transport failure.
+    #[tokio::test]
+    async fn peer_close_before_the_deadline_reports_transport_failure() {
+        let (a, _, _a_dir) = manager(49).await;
+        let (b, _, _b_dir) = manager(50).await;
+        let root = automerge_repo::DocumentId::new();
+        let window = Duration::from_secs(5);
+        {
+            a.set_root_state(RootState::Ready(root));
+            a.start(window, "A".into())
+        }
+        .await
+        .unwrap();
+        let b_instance = {
+            b.set_root_state(RootState::Ready(root));
+            b.start(window, "B".into())
+        }
+        .await
+        .unwrap();
+        let session = a
+            .connect(
+                PairingCandidate {
+                    instance_id: b_instance,
+                    endpoint: b.transport.local_addr().unwrap(),
+                    expires_at_ms: now_ms() + 5_000,
+                },
+                "A".into(),
+                window,
+            )
+            .await
+            .unwrap();
+        let active = a.session(session).unwrap();
+        assert!(matches!(
+            a.at_deadline(&active, PairingError::Transport("connection lost".into())),
+            PairingError::Transport(_)
+        ));
+        b.stop().await.unwrap();
+        let error = a.confirm(session).await.unwrap_err();
+        assert!(matches!(error, PairingError::Transport(_)), "{error}");
+        assert!(matches!(
+            a.state(),
+            PairingState::Failed {
+                error: PairingError::Transport(_)
+            }
+        ));
         assert!(a.trusted_devices().unwrap().is_empty());
         assert!(b.trusted_devices().unwrap().is_empty());
     }

@@ -143,6 +143,14 @@ async fn the_deadline_still_expires_a_stalled_session() {
         matches!(error, app_core::AppError::Pairing(PairingError::Expired)),
         "{error}"
     );
+    // The published state agrees with the returned error, even when the
+    // transport close caused by the deadline ends the wait first.
+    assert_eq!(
+        existing.pairing_state(),
+        PairingState::Failed {
+            error: PairingError::Expired
+        }
+    );
 
     existing.shutdown().await.unwrap();
     joining.shutdown().await.unwrap();
