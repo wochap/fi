@@ -154,3 +154,18 @@ The pairing manager SHALL expose whether a connected peer is already a trusted, 
 #### Scenario: Handshake with an already-trusted peer
 - **WHEN** pairing is confirmed with a peer that is already trusted and shares the same root
 - **THEN** the session completes as already paired, the existing trust record is updated rather than duplicated, and no second provisioning is performed
+
+### Requirement: Expiry outcome is consistent with the terminal state
+When a pairing session reaches its deadline, the outcome reported to the caller of the in-flight pairing operation SHALL be expiry, and the published pairing state SHALL be failed with expiry. The transport close that the local or remote deadline itself causes MUST NOT be reported as a transport failure. A transport failure that occurs before the deadline SHALL still be reported as a transport failure.
+
+#### Scenario: Stalled session reaches its deadline
+- **WHEN** the local device has confirmed and the peer never answers before the session deadline
+- **THEN** the confirm call fails with expiry, and the pairing state is failed with expiry, regardless of whether the local deadline, the peer's deadline, or the stream timeout ends the wait first
+
+#### Scenario: Peer closes at its own deadline
+- **WHEN** the peer's pairing window expires and it closes the connection at or after the local session deadline
+- **THEN** the local in-flight operation fails with expiry, not with a transport failure
+
+#### Scenario: Connection drops before the deadline
+- **WHEN** the connection is lost while the session deadline is still in the future
+- **THEN** the in-flight operation fails with a transport failure, the pairing state is failed with that transport failure, and no trust is created
