@@ -1138,6 +1138,7 @@ class _DevicesPageState extends State<DevicesPage> {
           onSelected: (action) {
             if (action == 'rename') _renameDevice(context, device);
             if (action == 'revoke') _revokeDevice(context, device);
+            if (action == 'delete') _deleteDevice(context, device);
           },
           itemBuilder: (_) => [
             const PopupMenuItem(value: 'rename', child: Text('Rename')),
@@ -1146,6 +1147,8 @@ class _DevicesPageState extends State<DevicesPage> {
                 value: 'revoke',
                 child: Text('Revoke / unpair'),
               ),
+            if (device.revoked)
+              const PopupMenuItem(value: 'delete', child: Text('Delete')),
           ],
         ),
       ],
@@ -1226,6 +1229,33 @@ class _DevicesPageState extends State<DevicesPage> {
       ),
     );
     if (confirmed == true) await controller.revoke(device);
+  }
+
+  Future<void> _deleteDevice(
+    BuildContext context,
+    TrustedDeviceDto device,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Delete ${device.friendlyName}?'),
+        content: const Text(
+          'The revoked record will be removed from this device. '
+          'The device can be paired again later.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) await controller.delete(device);
   }
 }
 

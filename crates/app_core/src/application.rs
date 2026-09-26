@@ -1098,6 +1098,16 @@ impl AppCore {
             .rename(peer, name)
             .map_err(Into::into)
     }
+    /// Permanently deletes an already revoked device record. Returns `false`
+    /// when the record is unknown or still trusted. Local only: no peer is
+    /// notified and the discovery secret is not rotated.
+    pub fn delete_revoked_device(&self, peer: DeviceId) -> Result<bool> {
+        self.pairing
+            .as_ref()
+            .ok_or_else(|| AppError::Storage("pairing requires networked mode".into()))?
+            .delete_revoked(peer)
+            .map_err(Into::into)
+    }
     /// Revokes `peer` and then rotates the discovery secret.
     ///
     /// Revocation commits durably before rotation is attempted, so a rotation

@@ -1530,6 +1530,11 @@ impl PairingManager {
             .revoke_trusted_device(peer, now)
             .map_err(|error| PairingError::Transport(error.to_string()))
     }
+    pub fn delete_revoked(&self, peer: DeviceId) -> Result<bool, PairingError> {
+        self.control
+            .delete_revoked_device(peer)
+            .map_err(|error| PairingError::Transport(error.to_string()))
+    }
 
     fn state_is_active(&self) -> bool {
         matches!(

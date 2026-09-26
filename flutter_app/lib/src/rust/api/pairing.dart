@@ -61,6 +61,11 @@ Future<bool> renameTrustedDevice({
   name: name,
 );
 
+/// Permanently deletes a revoked device record. Returns `false` when the
+/// record is unknown or still trusted.
+Future<bool> deleteRevokedDevice({required String deviceId}) =>
+    RustLib.instance.api.crateApiPairingDeleteRevokedDevice(deviceId: deviceId);
+
 Future<RevocationOutcomeDto> revokeTrustedDevice({
   required String deviceId,
   required int nowMs,

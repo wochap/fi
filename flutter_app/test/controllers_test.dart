@@ -486,6 +486,27 @@ void main() {
     controller.dispose();
   });
 
+  test('devices controller deletes a revoked device', () async {
+    const revoked = TrustedDeviceDto(
+      deviceId: 'peer',
+      friendlyName: 'Peer',
+      pairedAtMs: 1,
+      lastSeenMs: null,
+      lastSyncMs: null,
+      revoked: true,
+      connection: PeerConnectionKindDto.offline,
+    );
+    final bridge = FakeCollectionBridge()..devices.add(revoked);
+    final controller = DevicesController(bridge);
+    await controller.refreshDevices();
+    expect(controller.devices, hasLength(1));
+    await controller.delete(revoked);
+    expect(bridge.deletedDevices, ['peer']);
+    expect(controller.devices, isEmpty);
+    expect(controller.errorMessage, isNull);
+    controller.dispose();
+  });
+
   test(
     'devices controller reopens a bridge stream that ends unexpectedly',
     () async {

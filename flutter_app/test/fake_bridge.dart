@@ -63,6 +63,7 @@ final class FakeCollectionBridge implements CollectionBridge {
   final List<String> confirmedSessions = [];
   final List<String> rejectedSessions = [];
   final List<String> revokedDevices = [];
+  final List<String> deletedDevices = [];
   PairingStateDto pairing = const PairingStateDto(
     kind: PairingKindDto.idle,
     localConfirmed: false,
@@ -967,6 +968,18 @@ final class FakeCollectionBridge implements CollectionBridge {
       revoked: true,
       rotationError: nextRotationError,
     );
+  }
+
+  @override
+  Future<bool> deleteRevokedDevice(String deviceId) async {
+    deletedDevices.add(deviceId);
+    final index = devices.indexWhere(
+      (item) => item.deviceId == deviceId && item.revoked,
+    );
+    if (index < 0) return false;
+    devices.removeAt(index);
+    devicesController.add(List.of(devices));
+    return true;
   }
 
   @override

@@ -38,6 +38,10 @@ abstract interface class CollectionBridge {
   Future<List<TrustedDeviceDto>> trustedDevices();
   Future<void> renameTrustedDevice(String deviceId, String name);
   Future<RevocationOutcomeDto> revokeTrustedDevice(String deviceId, int nowMs);
+
+  /// Permanently deletes a revoked device record. Returns false when the
+  /// record is already gone or still trusted.
+  Future<bool> deleteRevokedDevice(String deviceId);
   Future<int> rotateDiscoverySecret(int nowMs);
   Future<SyncStatusDto> syncStatus();
   Stream<PairingStateDto> pairingStateEvents();
@@ -240,6 +244,10 @@ final class RustCollectionBridge implements CollectionBridge {
     if (outcome.rotationError == null) await _persistAndroidSecret();
     return outcome;
   }
+
+  @override
+  Future<bool> deleteRevokedDevice(String deviceId) =>
+      pairing.deleteRevokedDevice(deviceId: deviceId);
 
   @override
   Future<int> rotateDiscoverySecret(int nowMs) async {

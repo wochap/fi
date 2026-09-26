@@ -899,6 +899,13 @@ final class DevicesController extends ChangeNotifier {
     await refreshDevices();
   }
 
+  /// Permanently deletes a revoked device. A `false` result means the record
+  /// is already gone, so the refresh alone brings the list up to date.
+  Future<void> delete(TrustedDeviceDto device) async {
+    await _run(() => bridge.deleteRevokedDevice(device.deviceId));
+    await refreshDevices();
+  }
+
   Future<void> retryRotation() async {
     await _run(() async {
       await bridge.rotateDiscoverySecret(DateTime.now().millisecondsSinceEpoch);

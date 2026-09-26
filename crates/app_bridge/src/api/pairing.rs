@@ -204,6 +204,18 @@ pub async fn rename_trusted_device(device_id: String, name: String) -> Result<bo
         .map_err(BridgeError::from)
 }
 
+/// Permanently deletes a revoked device record. Returns `false` when the
+/// record is unknown or still trusted.
+pub async fn delete_revoked_device(device_id: String) -> Result<bool, BridgeError> {
+    let peer: DeviceId = device_id
+        .parse()
+        .map_err(|_| BridgeError::lifecycle("The device identifier is invalid."))?;
+    core()
+        .await?
+        .delete_revoked_device(peer)
+        .map_err(BridgeError::from)
+}
+
 pub async fn revoke_trusted_device(
     device_id: String,
     now_ms: u64,

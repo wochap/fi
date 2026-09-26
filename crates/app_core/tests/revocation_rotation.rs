@@ -210,12 +210,69 @@ async fn revocation_commits_and_reports_rotation_failure_separately() {
     joining.shutdown().await.unwrap();
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn deleting_a_revoked_device_removes_it_without_rotating() {
+    let existing_dir = tempfile::tempdir().unwrap();
+    let joining_dir = tempfile::tempdir().unwrap();
+    let existing = open(
+        existing_dir.path(),
+        Arc::new(InMemorySecureKeyStore::seeded([33; 32])),
+    )
+    .await;
+    let joining = open(
+        joining_dir.path(),
+        Arc::new(InMemorySecureKeyStore::seeded([34; 32])),
+    )
+    .await;
+    existing.create_new_dataset().await.unwrap();
+    pair(&existing, &joining).await;
+    let peer = joining.device_id().unwrap();
+
+    // A trusted record cannot be deleted.
+    assert!(!existing.delete_revoked_device(peer).unwrap());
+    assert!(
+        existing
+            .trusted_devices()
+            .unwrap()
+            .iter()
+            .any(|record| record.device_id == peer && record.state == TrustState::Trusted)
+    );
+
+    assert!(
+        existing
+            .revoke_trusted_device(peer, now_ms())
+            .await
+            .unwrap()
+            .revoked
+    );
+    let after_revoke = existing.discovery_secret_for_platform().await.unwrap();
+    assert!(existing.delete_revoked_device(peer).unwrap());
+    assert!(
+        existing
+            .trusted_devices()
+            .unwrap()
+            .iter()
+            .all(|record| record.device_id != peer)
+    );
+    assert_eq!(
+        existing.discovery_secret_for_platform().await.unwrap(),
+        after_revoke,
+        "deletion is local and must not rotate the discovery secret"
+    );
+    // Deleting again reports nothing removed.
+    assert!(!existing.delete_revoked_device(peer).unwrap());
+
+    existing.shutdown().await.unwrap();
+    joining.shutdown().await.unwrap();
+}
+
 /// Round-trips previous-epoch retention through the real Secret Service.
 /// Skips when the desktop session has no usable provider, since that is the
 /// exact condition the retention path is required to report rather than hide.
 #[tokio::test]
 async fn linux_keystore_retains_and_removes_previous_epoch() {
-    let store = LinuxSecretServiceKeyStore::new(format!("com.wochap.fi.test.{}", std::process::id()));
+    let store =
+        LinuxSecretServiceKeyStore::new(format!("com.wochap.fi.test.{}", std::process::id()));
     let probe = store.load_previous_discovery_group_secret().await;
     match probe {
         Ok(None) => {}

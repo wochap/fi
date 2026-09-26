@@ -327,4 +327,64 @@ void main() {
     expect(find.text('192.0.2.9:4400'), findsNothing);
     expect(find.byKey(const Key('candidates-already-paired')), findsNothing);
   });
+
+  testWidgets('only revoked rows offer a confirmed delete', (tester) async {
+    final bridge = FakeCollectionBridge()
+      ..devices.addAll(const [
+        TrustedDeviceDto(
+          deviceId:
+              '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+          friendlyName: 'Tablet',
+          pairedAtMs: 1,
+          revoked: false,
+          connection: PeerConnectionKindDto.offline,
+        ),
+        TrustedDeviceDto(
+          deviceId:
+              'fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210',
+          friendlyName: 'Old phone',
+          pairedAtMs: 2,
+          revoked: true,
+          connection: PeerConnectionKindDto.offline,
+        ),
+      ]);
+    await openDevices(tester, bridge);
+    expect(find.textContaining('1 paired'), findsOneWidget);
+
+    // A trusted row offers rename and revoke, never delete.
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
+    await tester.pumpAndSettle();
+    expect(find.text('Rename'), findsOneWidget);
+    expect(find.text('Revoke / unpair'), findsOneWidget);
+    expect(find.text('Delete'), findsNothing);
+    await tester.tapAt(Offset.zero);
+    await tester.pumpAndSettle();
+
+    // Cancelling the confirmation makes no bridge call.
+    await tester.tap(find.byType(PopupMenuButton<String>).last);
+    await tester.pumpAndSettle();
+    expect(find.text('Revoke / unpair'), findsNothing);
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+    expect(find.text('Delete Old phone?'), findsOneWidget);
+    expect(find.textContaining('paired again'), findsOneWidget);
+    await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+    await tester.pumpAndSettle();
+    expect(bridge.deletedDevices, isEmpty);
+    expect(find.text('Old phone'), findsOneWidget);
+
+    // Confirming removes the row; the trusted count is unchanged.
+    await tester.tap(find.byType(PopupMenuButton<String>).last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+    await tester.pumpAndSettle();
+    expect(bridge.deletedDevices, [
+      'fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210',
+    ]);
+    expect(find.text('Old phone'), findsNothing);
+    expect(find.text('Tablet'), findsOneWidget);
+    expect(find.textContaining('1 paired'), findsOneWidget);
+  });
 }

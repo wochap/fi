@@ -818,6 +818,42 @@ impl SqliteControlStore {
         Ok(changed == 1)
     }
 
+    /// Permanently removes a revoked record from both trust tables. The
+    /// `trust_state='revoked'` predicate keeps a concurrently re-paired
+    /// (trusted) record from being deleted.
+    pub fn delete_revoked_device(&self, device: DeviceId) -> Result<bool, StorageError> {
+        self.ensure_open("trusted_device_delete")?;
+        let mut connection = self.connection.lock().map_err(|_| {
+            storage_error(
+                "trusted_device_delete",
+                None,
+                &self.path,
+                "connection lock poisoned",
+            )
+        })?;
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|error| storage_error("trusted_device_delete", None, &self.path, error))?;
+        let changed = transaction
+            .execute(
+                "DELETE FROM trusted_devices WHERE device_id=?1 AND trust_state='revoked'",
+                [device.to_string()],
+            )
+            .map_err(|error| storage_error("trusted_device_delete", None, &self.path, error))?;
+        if changed == 1 {
+            transaction
+                .execute(
+                    "DELETE FROM trusted_peers WHERE device_id=?1",
+                    [device.to_string()],
+                )
+                .map_err(|error| storage_error("trusted_device_delete", None, &self.path, error))?;
+        }
+        transaction
+            .commit()
+            .map_err(|error| storage_error("trusted_device_delete", None, &self.path, error))?;
+        Ok(changed == 1)
+    }
+
     pub fn store_pairing_journal(&self, record: &PairingJournalRecord) -> Result<(), StorageError> {
         self.ensure_open("pairing_journal_store")?;
         let updated = checked_timestamp(record.updated_at_ms, "pairing_journal_store", &self.path)?;
@@ -1711,6 +1747,70 @@ mod tests {
             reopened.peer_trust(device).unwrap().unwrap().state,
             TrustState::Revoked
         );
+    }
+
+    fn trusted_record(seed: u8, paired_at_ms: u64) -> TrustedDeviceRecord {
+        let key = PrivateDeviceKey::from_seed(&[seed; 32])
+            .unwrap()
+            .public_key();
+        TrustedDeviceRecord {
+            device_id: DeviceId::from_public_key(key.as_bytes()),
+            public_key: key,
+            friendly_name: format!("Device {seed}"),
+            paired_at_ms,
+            last_seen_ms: None,
+            last_sync_ms: None,
+            state: TrustState::Trusted,
+        }
+    }
+
+    #[test]
+    fn delete_revoked_device_removes_only_revoked_records() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = SqliteControlStore::open(directory.path().join("control.sqlite")).unwrap();
+        let revoked = trusted_record(31, 10);
+        let trusted = trusted_record(32, 11);
+        store.upsert_trusted_device(&revoked).unwrap();
+        store.upsert_trusted_device(&trusted).unwrap();
+        assert!(store.revoke_trusted_device(revoked.device_id, 12).unwrap());
+
+        assert!(store.delete_revoked_device(revoked.device_id).unwrap());
+        assert_eq!(store.trusted_device(revoked.device_id).unwrap(), None);
+        assert_eq!(store.peer_trust(revoked.device_id).unwrap(), None);
+
+        assert!(!store.delete_revoked_device(trusted.device_id).unwrap());
+        assert_eq!(
+            store.trusted_device(trusted.device_id).unwrap(),
+            Some(trusted.clone())
+        );
+        assert_eq!(
+            store.peer_trust(trusted.device_id).unwrap().unwrap().state,
+            TrustState::Trusted
+        );
+
+        let unknown = trusted_record(33, 13).device_id;
+        assert!(!store.delete_revoked_device(unknown).unwrap());
+        assert!(!store.delete_revoked_device(revoked.device_id).unwrap());
+        assert_eq!(store.trusted_devices().unwrap(), vec![trusted]);
+    }
+
+    #[test]
+    fn delete_revoked_device_then_repair_gets_fresh_paired_time() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = SqliteControlStore::open(directory.path().join("control.sqlite")).unwrap();
+        let original = trusted_record(34, 10);
+        store.upsert_trusted_device(&original).unwrap();
+        assert!(store.revoke_trusted_device(original.device_id, 20).unwrap());
+        assert!(store.delete_revoked_device(original.device_id).unwrap());
+
+        let repaired = TrustedDeviceRecord {
+            paired_at_ms: 500,
+            ..original.clone()
+        };
+        store.upsert_trusted_device(&repaired).unwrap();
+        let stored = store.trusted_device(original.device_id).unwrap().unwrap();
+        assert_eq!(stored.paired_at_ms, 500);
+        assert_eq!(stored.state, TrustState::Trusted);
     }
 
     #[tokio::test]
