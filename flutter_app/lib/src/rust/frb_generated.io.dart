@@ -299,6 +299,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   PlatformInt64 dco_decode_i_64(dynamic raw);
 
   @protected
+  ImportOutcomeDto dco_decode_import_outcome_dto(dynamic raw);
+
+  @protected
   InferredTypeDto dco_decode_inferred_type_dto(dynamic raw);
 
   @protected
@@ -1016,6 +1019,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   PlatformInt64 sse_decode_i_64(SseDeserializer deserializer);
+
+  @protected
+  ImportOutcomeDto sse_decode_import_outcome_dto(SseDeserializer deserializer);
 
   @protected
   InferredTypeDto sse_decode_inferred_type_dto(SseDeserializer deserializer);
@@ -1925,6 +1931,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_import_outcome_dto(
+    ImportOutcomeDto self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_inferred_type_dto(

@@ -35,6 +35,31 @@ Future<String> cloneCollection({
   name: name,
 );
 
+/// Active records of one collection as CSV text; the caller writes the file.
+Future<String> exportCollectionCsv({required String id}) =>
+    RustLib.instance.api.crateApiCollectionsExportCollectionCsv(id: id);
+
+/// The given collections as one `fi-collection` JSON document.
+Future<String> exportCollectionsJson({required List<String> ids}) =>
+    RustLib.instance.api.crateApiCollectionsExportCollectionsJson(ids: ids);
+
+/// Every active collection as one `fi-collection` JSON document.
+Future<String> exportAllJson() =>
+    RustLib.instance.api.crateApiCollectionsExportAllJson();
+
+/// Adds every row of `text` as a new record; a rejected file writes nothing.
+Future<ImportOutcomeDto> importCollectionCsv({
+  required String collectionId,
+  required String text,
+}) => RustLib.instance.api.crateApiCollectionsImportCollectionCsv(
+  collectionId: collectionId,
+  text: text,
+);
+
+/// Creates new collections from a `fi-collection` document; a rejected document writes nothing.
+Future<ImportOutcomeDto> importCollectionsJson({required String text}) =>
+    RustLib.instance.api.crateApiCollectionsImportCollectionsJson(text: text);
+
 Future<void> deleteCollection({required String id}) =>
     RustLib.instance.api.crateApiCollectionsDeleteCollection(id: id);
 

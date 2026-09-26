@@ -25,11 +25,12 @@ use crate::{
     error::{AppError, BootstrapError, Result},
     events::{ApplicationState, DataChanged, DomainKind, ErrorEvent, ProjectionState},
     generic::{
-        CollectionView, GenericCommand, RecordView, apply_generic_command, decode_generic,
-        initialize_generic,
+        CollectionView, GenericCommand, GenericSnapshot, RecordView, apply_generic_command,
+        decode_generic, initialize_generic, validate_import,
     },
     hlc::{HlcNodeId, HybridLogicalClock, SystemWallTime, WallTime},
     identity::{DeviceId, DeviceIdentity, IdentityError, SecureKeyStore},
+    import_export::{Envelope, ExportedCollection, ImportAbort, ImportOutcome, prepare_import},
     pairing::{
         PairingCandidate, PairingEvent, PairingSessionId, PairingState, ProvisioningData,
         RootCompatibility, RootState,
@@ -1655,6 +1656,168 @@ impl AppCore {
         receive.await.map_err(|_| AppError::OwnerStopped)?
     }
 
+    /// The active data of each collection as one `fi-collection` JSON document, in the given
+    /// order. Tombstones and HLC stamps are never exported.
+    pub fn export_collections_json(&self, ids: Vec<CollectionSchemaId>) -> Result<String> {
+        ensure_query_ready(self.lifecycle_state())?;
+        let collections = ids
+            .into_iter()
+            .map(|id| self.exported_collection(id))
+            .collect::<Result<Vec<_>>>()?;
+        Ok(Envelope::new(collections).to_json()?)
+    }
+
+    /// Every active collection, in list order, as one JSON document.
+    pub fn export_all_json(&self) -> Result<String> {
+        let ids = self
+            .collections()?
+            .into_iter()
+            .map(|item| item.id)
+            .collect();
+        self.export_collections_json(ids)
+    }
+
+    fn exported_collection(&self, id: CollectionSchemaId) -> Result<ExportedCollection> {
+        let schema = self.active_schema(id)?;
+        let records: Vec<_> = self
+            .read_model
+            .records(id)?
+            .into_iter()
+            .map(|view| view.record)
+            .collect();
+        Ok(ExportedCollection::from_active(
+            &schema,
+            &self.read_model.computed_fields(id)?,
+            &self.read_model.query_definitions(id)?,
+            &self.read_model.widgets(id)?,
+            &records,
+        ))
+    }
+
+    fn active_schema(&self, id: CollectionSchemaId) -> Result<CollectionSchema> {
+        Ok(self
+            .read_model
+            .schema(id)?
+            .filter(|schema| !schema.deleted)
+            .ok_or_else(|| crate::DomainError::NotFound {
+                kind: "collection",
+                id: id.to_string(),
+            })?)
+    }
+
+    /// The active records of one collection as CSV, computed columns evaluated now.
+    pub fn export_collection_csv(&self, id: CollectionSchemaId) -> Result<String> {
+        ensure_query_ready(self.lifecycle_state())?;
+        let schema = self.active_schema(id)?;
+        let records: Vec<_> = self
+            .read_model
+            .records(id)?
+            .into_iter()
+            .map(|view| view.record)
+            .collect();
+        let now = i64::try_from(current_time_ms()).unwrap_or(i64::MAX);
+        Ok(crate::import_export::csv::export_csv(
+            &schema,
+            &self.read_model.computed_fields(id)?,
+            &records,
+            now,
+        )?)
+    }
+
+    /// Adds every CSV row as a new record of `collection_id`. Every row is parsed and validated
+    /// first; the first bad row aborts with nothing written. Accepted rows are one batch: one
+    /// change, one stamp, one projection pass, one `DataChanged`.
+    pub async fn import_collection_csv(
+        &self,
+        collection_id: CollectionSchemaId,
+        text: String,
+    ) -> Result<ImportOutcome> {
+        ensure_query_ready(self.lifecycle_state())?;
+        let schema = self.active_schema(collection_id)?;
+        let computed = self.read_model.computed_fields(collection_id)?;
+        let records = match crate::import_export::csv::parse_csv(&text, &schema, &computed) {
+            Ok(records) => records,
+            Err(abort) => return Ok(ImportOutcome::Aborted(abort)),
+        };
+        let count = records.len();
+        if count > 0 {
+            let submitted = self
+                .generic(
+                    GenericCommand::Batch(
+                        records
+                            .into_iter()
+                            .map(GenericCommand::CreateRecord)
+                            .collect(),
+                    ),
+                    vec![DomainKind::Records],
+                    vec![collection_id],
+                )
+                .await;
+            // The schema can change between parsing and the owner's snapshot.
+            if let Err(AppError::Domain(error)) = submitted {
+                return Ok(ImportOutcome::Aborted(ImportAbort::Csv {
+                    row: 0,
+                    column: String::new(),
+                    reason: error.to_string(),
+                }));
+            }
+            submitted?;
+        }
+        Ok(ImportOutcome::Imported {
+            collections: vec![],
+            records: count,
+        })
+    }
+
+    /// Creates a new collection for every entry of a `fi-collection` document, with fresh ids for
+    /// everything and internal references remapped. Existing collections are never touched. The
+    /// whole document is one change; any invalid item aborts it with nothing written.
+    pub async fn import_collections_json(&self, text: String) -> Result<ImportOutcome> {
+        ensure_query_ready(self.lifecycle_state())?;
+        let prepared = Envelope::parse(&text).and_then(|envelope| prepare_import(&envelope));
+        let mut items = match prepared {
+            Ok(items) => items,
+            Err(abort) => return Ok(ImportOutcome::Aborted(abort)),
+        };
+        // Imported items only reference each other, so a structured item-level report needs no
+        // dataset; the owner re-validates against its snapshot before writing.
+        if let Err(error) = validate_import(&GenericSnapshot::empty(), &mut items) {
+            return Ok(ImportOutcome::Aborted(ImportAbort::Json {
+                collection_index: Some(u32::try_from(error.collection_index).unwrap_or(u32::MAX)),
+                item: error.item,
+                reason: error.reason,
+            }));
+        }
+        let ids: Vec<_> = items.iter().map(|item| item.plan.schema.id).collect();
+        let records = items.iter().map(|item| item.records.len()).sum();
+        let submitted = self
+            .generic(
+                GenericCommand::ImportCollections(items),
+                vec![
+                    DomainKind::Collections,
+                    DomainKind::Schemas,
+                    DomainKind::Records,
+                    DomainKind::ComputedFields,
+                    DomainKind::Queries,
+                    DomainKind::Widgets,
+                ],
+                ids.clone(),
+            )
+            .await;
+        if let Err(AppError::Domain(error)) = submitted {
+            return Ok(ImportOutcome::Aborted(ImportAbort::Json {
+                collection_index: None,
+                item: "import".into(),
+                reason: error.to_string(),
+            }));
+        }
+        submitted?;
+        Ok(ImportOutcome::Imported {
+            collections: ids,
+            records,
+        })
+    }
+
     pub fn collections(&self) -> Result<Vec<CollectionView>> {
         ensure_query_ready(self.lifecycle_state())?;
         self.read_model.collections()
@@ -2530,6 +2693,7 @@ fn command_name(command: &GenericCommand) -> &'static str {
         GenericCommand::RenameCollection { .. } => "rename_collection",
         GenericCommand::DeleteCollection(_) => "delete_collection",
         GenericCommand::CloneCollection { .. } => "clone_collection",
+        GenericCommand::ImportCollections(_) => "import_collections",
         GenericCommand::AddField { .. } => "add_field",
         GenericCommand::UpdateField { .. } => "update_field",
         GenericCommand::RemoveField { .. } => "remove_field",

@@ -76,6 +76,80 @@ pub struct CollectionDto {
     pub description: String,
 }
 
+/// Result of a CSV or JSON import. When `imported` is false the file was rejected and nothing
+/// was written; the abort fields say where and why.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ImportOutcomeDto {
+    pub imported: bool,
+    pub record_count: u32,
+    pub collection_ids: Vec<String>,
+    /// CSV abort: 1-based data row, 0 for the header row.
+    pub row: Option<u32>,
+    /// CSV abort: column name; empty when the problem is the row itself.
+    pub column: Option<String>,
+    /// JSON abort: 0-based collection entry; `None` for the document itself.
+    pub collection_index: Option<u32>,
+    /// JSON abort: the failing item, e.g. `record 3` or `widget "Total"`.
+    pub item: Option<String>,
+    pub reason: Option<String>,
+    /// One-line abort description for display; empty on success.
+    pub message: String,
+}
+
+impl From<app_core::ImportOutcome> for ImportOutcomeDto {
+    fn from(value: app_core::ImportOutcome) -> Self {
+        let empty = Self {
+            imported: false,
+            record_count: 0,
+            collection_ids: vec![],
+            row: None,
+            column: None,
+            collection_index: None,
+            item: None,
+            reason: None,
+            message: String::new(),
+        };
+        match value {
+            app_core::ImportOutcome::Imported {
+                collections,
+                records,
+            } => Self {
+                imported: true,
+                record_count: u32::try_from(records).unwrap_or(u32::MAX),
+                collection_ids: collections.iter().map(ToString::to_string).collect(),
+                ..empty
+            },
+            app_core::ImportOutcome::Aborted(abort) => {
+                let message = abort.to_string();
+                match abort {
+                    app_core::ImportAbort::Csv {
+                        row,
+                        column,
+                        reason,
+                    } => Self {
+                        row: Some(row),
+                        column: Some(column),
+                        reason: Some(reason),
+                        message,
+                        ..empty
+                    },
+                    app_core::ImportAbort::Json {
+                        collection_index,
+                        item,
+                        reason,
+                    } => Self {
+                        collection_index,
+                        item: Some(item),
+                        reason: Some(reason),
+                        message,
+                        ..empty
+                    },
+                }
+            }
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CollectionSchemaDto {
     pub id: String,

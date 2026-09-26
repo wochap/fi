@@ -58,6 +58,33 @@ class CollectionsPage extends StatelessWidget {
                           : theme.textTheme.headlineMedium,
                     ),
                   ),
+                  PopupMenuButton<String>(
+                    key: const Key('collections-transfer-menu'),
+                    tooltip: 'Import and export',
+                    icon: Icon(Icons.import_export, color: Nocturne.muted(.7)),
+                    onSelected: (action) => unawaited(switch (action) {
+                      'import-json' => _importJson(context),
+                      'export-all' => _exportAll(context),
+                      _ => _exportSelected(context),
+                    }),
+                    itemBuilder: (_) => [
+                      const PopupMenuItem(
+                        value: 'import-json',
+                        child: Text('Import JSON'),
+                      ),
+                      PopupMenuItem(
+                        value: 'export-all',
+                        enabled: controller.collections.isNotEmpty,
+                        child: const Text('Export all'),
+                      ),
+                      PopupMenuItem(
+                        value: 'export-selected',
+                        enabled: controller.collections.isNotEmpty,
+                        child: const Text('Export selected'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(width: 8),
                   FilledButton.icon(
                     style: phone
                         ? FilledButton.styleFrom(minimumSize: const Size(0, 44))
@@ -106,64 +133,171 @@ class CollectionsPage extends StatelessWidget {
     );
   }
 
-  Widget _collectionCard(BuildContext context, CollectionDto item) =>
-      NocturneCard(
-        key: ValueKey(item.id),
-        padding: const EdgeInsets.fromLTRB(14, 12, 4, 12),
-        onTap: () => unawaited(controller.selectCollection(item.id)),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 36),
-          child: Row(
-            children: [
-              const IconTile(Icons.grid_view_outlined),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      item.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    if (item.description.isNotEmpty)
-                      Text(
-                        item.description,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Nocturne.muted(.55),
-                        ),
-                      ),
-                  ],
+  Widget _collectionCard(
+    BuildContext context,
+    CollectionDto item,
+  ) => NocturneCard(
+    key: ValueKey(item.id),
+    padding: const EdgeInsets.fromLTRB(14, 12, 4, 12),
+    onTap: () => unawaited(controller.selectCollection(item.id)),
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 36),
+      child: Row(
+        children: [
+          const IconTile(Icons.grid_view_outlined),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
-              ),
-              PopupMenuButton<String>(
-                icon: Icon(Icons.more_vert, color: Nocturne.muted(.7)),
-                onSelected: (action) {
-                  if (action == 'rename') {
-                    _editCollection(context, item);
-                  } else if (action == 'duplicate') {
-                    unawaited(_duplicateCollection(context, item));
-                  } else {
-                    unawaited(_confirmDeleteCollection(context, item));
-                  }
-                },
-                itemBuilder: (_) => const [
-                  PopupMenuItem(value: 'rename', child: Text('Rename')),
-                  PopupMenuItem(value: 'duplicate', child: Text('Duplicate')),
-                  PopupMenuItem(value: 'delete', child: Text('Delete')),
-                ],
-              ),
+                if (item.description.isNotEmpty)
+                  Text(
+                    item.description,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 12, color: Nocturne.muted(.55)),
+                  ),
+              ],
+            ),
+          ),
+          PopupMenuButton<String>(
+            icon: Icon(Icons.more_vert, color: Nocturne.muted(.7)),
+            onSelected: (action) {
+              switch (action) {
+                case 'rename':
+                  _editCollection(context, item);
+                case 'duplicate':
+                  unawaited(_duplicateCollection(context, item));
+                case 'export-csv':
+                  unawaited(_export(context, () => controller.exportCsv(item)));
+                case 'export-json':
+                  unawaited(
+                    _export(context, () => controller.exportJson([item])),
+                  );
+                case 'import-csv':
+                  unawaited(_importCsv(context, item));
+                default:
+                  unawaited(_confirmDeleteCollection(context, item));
+              }
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'rename', child: Text('Rename')),
+              PopupMenuItem(value: 'duplicate', child: Text('Duplicate')),
+              PopupMenuItem(value: 'export-csv', child: Text('Export CSV')),
+              PopupMenuItem(value: 'export-json', child: Text('Export JSON')),
+              PopupMenuItem(value: 'import-csv', child: Text('Import CSV')),
+              PopupMenuItem(value: 'delete', child: Text('Delete')),
             ],
           ),
+        ],
+      ),
+    ),
+  );
+
+  /// Runs one export and reports the written file. A dismissed save dialog reports nothing; a
+  /// failed export (for example two columns sharing a name) reports Rust's reason.
+  Future<void> _export(
+    BuildContext context,
+    Future<String?> Function() export,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final name = await export();
+      if (name != null) {
+        messenger.showSnackBar(SnackBar(content: Text('Exported to $name')));
+      }
+    } catch (failure) {
+      messenger.showSnackBar(SnackBar(content: Text(bridgeMessage(failure))));
+    }
+  }
+
+  Future<void> _exportAll(BuildContext context) =>
+      _export(context, controller.exportAll);
+
+  /// Picks several collections, then exports them as one JSON document. Dismissing the picker
+  /// or choosing none exports nothing.
+  Future<void> _exportSelected(BuildContext context) async {
+    final chosen = <String>{};
+    final picked = await showDialog<List<CollectionDto>>(
+      context: context,
+      builder: (dialog) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Export collections'),
+          content: SizedBox(
+            width: 360,
+            child: ListView(
+              shrinkWrap: true,
+              children: [
+                for (final item in controller.collections)
+                  CheckboxListTile(
+                    key: Key('export-pick-${item.id}'),
+                    value: chosen.contains(item.id),
+                    title: Text(item.name),
+                    onChanged: (value) => setState(
+                      () => value == true
+                          ? chosen.add(item.id)
+                          : chosen.remove(item.id),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialog),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              key: const Key('confirm-export-selected'),
+              onPressed: chosen.isEmpty
+                  ? null
+                  : () => Navigator.pop(dialog, [
+                      for (final item in controller.collections)
+                        if (chosen.contains(item.id)) item,
+                    ]),
+              child: const Text('Export'),
+            ),
+          ],
         ),
+      ),
+    );
+    if (picked == null || picked.isEmpty || !context.mounted) return;
+    await _export(context, () => controller.exportJson(picked));
+  }
+
+  /// Imports a CSV file into [item] and reports the count, or the row, column and reason that
+  /// stopped it. A dismissed open dialog reports nothing.
+  Future<void> _importCsv(BuildContext context, CollectionDto item) =>
+      _import(context, () => controller.importCsv(item.id), csv: true);
+
+  Future<void> _importJson(BuildContext context) =>
+      _import(context, controller.importJson, csv: false);
+
+  Future<void> _import(
+    BuildContext context,
+    Future<ImportOutcomeDto?> Function() run, {
+    required bool csv,
+  }) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final outcome = await run();
+      if (outcome == null) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text(importOutcomeMessage(outcome, csv: csv))),
       );
+    } catch (failure) {
+      messenger.showSnackBar(SnackBar(content: Text(bridgeMessage(failure))));
+    }
+  }
 
   /// Confirms before deleting a collection, stating what goes with it. Counts
   /// load while the dialog is open; until then, or if loading fails, a generic

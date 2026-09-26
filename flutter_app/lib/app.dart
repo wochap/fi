@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:clock/clock.dart';
 import 'package:fi/bridge/collection_bridge.dart';
 import 'package:fi/controllers.dart';
+import 'package:fi/file_dialogs.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/collections_page.dart';
 import 'package:fi/pairing_card.dart';
@@ -21,6 +22,7 @@ class CollectionApp extends StatefulWidget {
     required this.initializeRust,
     required this.dataDirProvider,
     this.setPlatformForeground,
+    this.fileDialogs = const PlatformFileDialogs(),
     super.key,
   });
 
@@ -28,6 +30,9 @@ class CollectionApp extends StatefulWidget {
   final Future<void> Function() initializeRust;
   final Future<String> Function() dataDirProvider;
   final Future<void> Function(bool foreground)? setPlatformForeground;
+
+  /// Save and open dialogs for export and import; replaced in tests.
+  final FileDialogs fileDialogs;
 
   @override
   State<CollectionApp> createState() => _CollectionAppState();
@@ -193,6 +198,7 @@ class _CollectionAppState extends State<CollectionApp>
         final surface = switch (controller.state?.kind) {
           BootstrapKindDto.ready => CollectionShell(
             bridge: widget.bridge,
+            fileDialogs: widget.fileDialogs,
             devices: devices,
             onResetDataset: _resetDataset,
           ),
@@ -546,9 +552,11 @@ class CollectionShell extends StatefulWidget {
     required this.bridge,
     required this.devices,
     this.onResetDataset,
+    this.fileDialogs = const PlatformFileDialogs(),
     super.key,
   });
   final CollectionBridge bridge;
+  final FileDialogs fileDialogs;
   final DevicesController devices;
   final ResetDatasetAction? onResetDataset;
 
@@ -564,7 +572,10 @@ class _CollectionShellState extends State<CollectionShell> {
   @override
   void initState() {
     super.initState();
-    controller = CollectionsController(widget.bridge);
+    controller = CollectionsController(
+      widget.bridge,
+      fileDialogs: widget.fileDialogs,
+    );
     unawaited(controller.start());
   }
 

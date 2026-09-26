@@ -6,7 +6,7 @@
 //! Every `match` below is exhaustive so a new expression variant or query shape fails to compile
 //! until its references are handled here.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use crate::{
     error::DomainError,
@@ -112,6 +112,20 @@ pub fn clone_plan(
     widgets: &[WidgetDefinition],
 ) -> Result<ClonePlan, DomainError> {
     let remap = IdRemap::for_collection(source.id, target, &source.fields, computed, queries);
+    plan_with_remap(source, &remap, name, computed, queries, widgets)
+}
+
+/// [`clone_plan`] with a caller-built table, so the caller can reuse it for further references
+/// (imported record values).
+pub fn plan_with_remap(
+    source: &CollectionSchema,
+    remap: &IdRemap,
+    name: &str,
+    computed: &[ComputedFieldDefinition],
+    queries: &[QueryDefinition],
+    widgets: &[WidgetDefinition],
+) -> Result<ClonePlan, DomainError> {
+    let target = remap.collection_id(source.id)?;
     let owned_active =
         |collection_id: CollectionSchemaId, deleted: bool| collection_id == source.id && !deleted;
     Ok(ClonePlan {
@@ -123,24 +137,24 @@ pub fn clone_plan(
                 .fields
                 .iter()
                 .filter(|field| !field.deleted)
-                .map(|field| remap_field(field, &remap))
+                .map(|field| remap_field(field, remap))
                 .collect::<Result<_, _>>()?,
             deleted: false,
         },
         computed_fields: computed
             .iter()
             .filter(|item| owned_active(item.collection_id, item.deleted))
-            .map(|item| remap_computed(item, &remap))
+            .map(|item| remap_computed(item, remap))
             .collect::<Result<_, _>>()?,
         query_definitions: queries
             .iter()
             .filter(|item| owned_active(item.collection_id, item.deleted))
-            .map(|item| remap_query_definition(item, &remap))
+            .map(|item| remap_query_definition(item, remap))
             .collect::<Result<_, _>>()?,
         widgets: widgets
             .iter()
             .filter(|item| owned_active(item.collection_id, item.deleted))
-            .map(|item| remap_widget(item, &remap))
+            .map(|item| remap_widget(item, remap))
             .collect::<Result<_, _>>()?,
     })
 }
@@ -403,6 +417,31 @@ pub fn remap_widget(
         query_id: remap.query(definition.query_id)?,
         ..definition.clone()
     })
+}
+
+/// Rewrites a record's value map: every key to its new field id and every enum value to its new
+/// option id. A value for a field or option outside the table is an error.
+pub fn remap_record_values(
+    values: &BTreeMap<FieldId, FieldValue>,
+    remap: &IdRemap,
+) -> Result<BTreeMap<FieldId, FieldValue>, DomainError> {
+    values
+        .iter()
+        .map(|(field, value)| {
+            let value = match value {
+                FieldValue::Enum(id) => FieldValue::Enum(remap.option(*id)?),
+                FieldValue::Null
+                | FieldValue::Text(_)
+                | FieldValue::Integer(_)
+                | FieldValue::FixedDecimal(_)
+                | FieldValue::Boolean(_)
+                | FieldValue::Date(_)
+                | FieldValue::DateTime(_)
+                | FieldValue::Duration(_) => value.clone(),
+            };
+            Ok((remap.field(*field)?, value))
+        })
+        .collect()
 }
 
 fn lookup<T: Copy + Eq + std::hash::Hash + ToString>(

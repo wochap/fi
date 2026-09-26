@@ -1,16 +1,19 @@
 import 'package:fi/app.dart';
+import 'package:fi/file_dialogs.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fake_bridge.dart';
 
-Widget app(FakeCollectionBridge bridge) => CollectionApp(
-  bridge: bridge,
-  initializeRust: () async {},
-  dataDirProvider: () async => '/test',
-  setPlatformForeground: (_) async {},
-);
+Widget app(FakeCollectionBridge bridge, {FileDialogs? fileDialogs}) =>
+    CollectionApp(
+      bridge: bridge,
+      initializeRust: () async {},
+      dataDirProvider: () async => '/test',
+      setPlatformForeground: (_) async {},
+      fileDialogs: fileDialogs ?? FakeFileDialogs(),
+    );
 Future<void> pumpUntilFound(WidgetTester tester, Finder finder) async {
   for (var attempt = 0; attempt < 30; attempt++) {
     await tester.pump(const Duration(milliseconds: 50));

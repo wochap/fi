@@ -57,6 +57,24 @@ abstract interface class CollectionBridge {
   /// Copies [sourceId]'s fields, computed fields, queries and widgets (no records) into a new
   /// collection named [name]. Returns the new collection id.
   Future<String> cloneCollection(String sourceId, String name);
+
+  /// The active records of [id] as CSV text.
+  Future<String> exportCollectionCsv(String id);
+
+  /// The given collections as one `fi-collection` JSON document.
+  Future<String> exportCollectionsJson(List<String> ids);
+
+  /// Every active collection as one `fi-collection` JSON document.
+  Future<String> exportAllJson();
+
+  /// Adds every CSV row as a new record of [collectionId]; a rejected file writes nothing.
+  Future<ImportOutcomeDto> importCollectionCsv(
+    String collectionId,
+    String text,
+  );
+
+  /// Creates a new collection per envelope entry; a rejected document writes nothing.
+  Future<ImportOutcomeDto> importCollectionsJson(String text);
   Future<void> deleteCollection(String id);
   Future<String> addField(String collectionId, FieldDefinitionDto field);
   Future<void> updateField(String collectionId, FieldDefinitionDto field);
@@ -295,6 +313,22 @@ final class RustCollectionBridge implements CollectionBridge {
   @override
   Future<String> cloneCollection(String sourceId, String name) =>
       collections.cloneCollection(sourceId: sourceId, name: name);
+  @override
+  Future<String> exportCollectionCsv(String id) =>
+      collections.exportCollectionCsv(id: id);
+  @override
+  Future<String> exportCollectionsJson(List<String> ids) =>
+      collections.exportCollectionsJson(ids: ids);
+  @override
+  Future<String> exportAllJson() => collections.exportAllJson();
+  @override
+  Future<ImportOutcomeDto> importCollectionCsv(
+    String collectionId,
+    String text,
+  ) => collections.importCollectionCsv(collectionId: collectionId, text: text);
+  @override
+  Future<ImportOutcomeDto> importCollectionsJson(String text) =>
+      collections.importCollectionsJson(text: text);
   @override
   Future<void> deleteCollection(String id) =>
       collections.deleteCollection(id: id);

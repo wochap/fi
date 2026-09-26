@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:fi/bridge/collection_bridge.dart';
+import 'package:fi/file_dialogs.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:flutter/foundation.dart';
 
@@ -206,9 +207,15 @@ final class CollectionContents {
 }
 
 final class CollectionsController extends ChangeNotifier {
-  CollectionsController(this.bridge);
+  CollectionsController(
+    this.bridge, {
+    this.fileDialogs = const PlatformFileDialogs(),
+  });
 
   final CollectionBridge bridge;
+
+  /// Save and open dialogs for export and import.
+  final FileDialogs fileDialogs;
   List<CollectionDto> collections = const [];
   CollectionSchemaDto? schema;
   List<RecordDto> records = const [];
@@ -429,6 +436,61 @@ final class CollectionsController extends ChangeNotifier {
     final id = await bridge.cloneCollection(sourceId, name);
     await refresh();
     return id;
+  }
+
+  /// Exports [collection]'s records as CSV to a file the user picks. Returns the written file
+  /// name, or null when the dialog was dismissed. The text is produced first, so a failed export
+  /// never opens the dialog or leaves an empty file behind.
+  Future<String?> exportCsv(CollectionDto collection) async {
+    final text = await bridge.exportCollectionCsv(collection.id);
+    return fileDialogs.saveText(
+      suggestedName: '${exportFileStem(collection.name)}.csv',
+      kind: FileKind.csv,
+      text: text,
+    );
+  }
+
+  /// Exports one or several collections as one JSON document; see [exportCsv].
+  Future<String?> exportJson(List<CollectionDto> collections) async {
+    final text = await bridge.exportCollectionsJson([
+      for (final item in collections) item.id,
+    ]);
+    return fileDialogs.saveText(
+      suggestedName: collections.length == 1
+          ? '${exportFileStem(collections.single.name)}.json'
+          : 'collections.json',
+      kind: FileKind.json,
+      text: text,
+    );
+  }
+
+  /// Exports every collection as one JSON document; see [exportCsv].
+  Future<String?> exportAll() async {
+    final text = await bridge.exportAllJson();
+    return fileDialogs.saveText(
+      suggestedName: 'collections.json',
+      kind: FileKind.json,
+      text: text,
+    );
+  }
+
+  /// Imports a CSV file the user picks into [collectionId]. Null when the dialog was dismissed,
+  /// in which case nothing is sent to Rust.
+  Future<ImportOutcomeDto?> importCsv(String collectionId) async {
+    final text = await fileDialogs.openText(kind: FileKind.csv);
+    if (text == null) return null;
+    final outcome = await bridge.importCollectionCsv(collectionId, text);
+    if (outcome.imported) await refresh();
+    return outcome;
+  }
+
+  /// Imports a `fi-collection` JSON file as new collections; see [importCsv].
+  Future<ImportOutcomeDto?> importJson() async {
+    final text = await fileDialogs.openText(kind: FileKind.json);
+    if (text == null) return null;
+    final outcome = await bridge.importCollectionsJson(text);
+    if (outcome.imported) await refresh();
+    return outcome;
   }
 
   /// Counts what deleting [collectionId] takes with it: its active records, widgets and saved
@@ -975,6 +1037,39 @@ final class DevicesController extends ChangeNotifier {
     }
     super.dispose();
   }
+}
+
+/// A file name stem from a collection name: characters file systems reject become `-`.
+String exportFileStem(String name) {
+  final stem = name.trim().replaceAll(RegExp(r'[\\/:*?"<>|\x00-\x1f]+'), '-');
+  return stem.isEmpty ? 'collection' : stem;
+}
+
+/// What an import did, for a snackbar: the count on success, otherwise where and why it stopped.
+String importOutcomeMessage(ImportOutcomeDto outcome, {required bool csv}) {
+  if (outcome.imported) {
+    if (csv) {
+      final count = outcome.recordCount;
+      return '$count ${count == 1 ? 'record' : 'records'} imported';
+    }
+    final count = outcome.collectionIds.length;
+    return '$count ${count == 1 ? 'collection' : 'collections'} imported';
+  }
+  final reason = outcome.reason ?? outcome.message;
+  if (outcome.row case final row?) {
+    final column = outcome.column ?? '';
+    final place = row == 0 ? 'Header' : 'Row $row';
+    return column.isEmpty
+        ? 'Import stopped. $place: $reason'
+        : 'Import stopped. $place, column $column: $reason';
+  }
+  final place = [
+    if (outcome.collectionIndex case final index?) 'Collection ${index + 1}',
+    ?outcome.item,
+  ].join(', ');
+  return place.isEmpty
+      ? 'Import stopped: $reason'
+      : 'Import stopped. $place: $reason';
 }
 
 String bridgeMessage(Object error) => switch (error) {

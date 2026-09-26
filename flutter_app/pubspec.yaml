@@ -43,6 +43,7 @@ dependencies:
   # 2.3.x adds a JNI native build pinned to Flutter's NDK rather than our Nix NDK.
   path_provider_android: 2.2.23
   fl_chart: ^1.2.0
+  file_selector: ^1.1.0
 
 dev_dependencies:
   flutter_test:

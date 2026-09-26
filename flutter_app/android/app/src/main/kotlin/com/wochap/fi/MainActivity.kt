@@ -1,9 +1,13 @@
 package com.wochap.fi
 
+import android.app.Activity
 import android.content.Context
+import android.content.Intent
 import android.net.ConnectivityManager
 import android.net.wifi.WifiManager
+import android.net.Uri
 import android.os.Build
+import android.provider.OpenableColumns
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
@@ -21,6 +25,10 @@ import javax.crypto.spec.GCMParameterSpec
 /** Narrow Android capability adapter. Pairing, routing, and sync policy remain in Rust. */
 class MainActivity : FlutterActivity() {
     private var multicastLock: WifiManager.MulticastLock? = null
+    private var pendingSave: PendingSave? = null
+
+    /** An export waiting for the user to pick a destination in the system save dialog. */
+    private class PendingSave(val bytes: ByteArray, val result: MethodChannel.Result)
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -59,12 +67,60 @@ class MainActivity : FlutterActivity() {
                     removeSecret("discovery-secret")
                     result.success(null)
                 }
+                "saveDocument" -> saveDocument(call, result)
                 else -> result.notImplemented()
             }
         } catch (failure: Exception) {
             result.error("android_capability", safeCategory(failure), null)
         }
     }
+
+    /**
+     * Opens the Storage Access Framework save dialog. The bytes are written only after the user
+     * picks a destination; the reply is the chosen display name, or null when dismissed.
+     */
+    private fun saveDocument(call: MethodCall, result: MethodChannel.Result) {
+        val name = call.argument<String>("name") ?: throw IllegalArgumentException("name")
+        val mimeType = call.argument<String>("mimeType") ?: throw IllegalArgumentException("mimeType")
+        val bytes = call.argument<ByteArray>("bytes") ?: throw IllegalArgumentException("bytes")
+        pendingSave?.result?.success(null)
+        pendingSave = PendingSave(bytes, result)
+        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = mimeType
+            putExtra(Intent.EXTRA_TITLE, name)
+        }
+        @Suppress("DEPRECATION")
+        startActivityForResult(intent, SAVE_DOCUMENT_REQUEST)
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        @Suppress("DEPRECATION")
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != SAVE_DOCUMENT_REQUEST) return
+        val pending = pendingSave ?: return
+        pendingSave = null
+        val uri = data?.data
+        if (resultCode != Activity.RESULT_OK || uri == null) {
+            pending.result.success(null)
+            return
+        }
+        try {
+            val stream = contentResolver.openOutputStream(uri, "wt")
+                ?: error("document_unwritable")
+            stream.use { it.write(pending.bytes) }
+            pending.result.success(displayName(uri))
+        } catch (failure: Exception) {
+            pending.result.error("android_capability", safeCategory(failure), null)
+        }
+    }
+
+    private fun displayName(uri: Uri): String =
+        contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+            ?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
+            ?: uri.lastPathSegment
+            ?: "document"
 
     private fun acquireMulticast() {
         val connectivity = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
@@ -162,6 +218,7 @@ class MainActivity : FlutterActivity() {
 
     companion object {
         private const val CHANNEL = "fi/platform"
+        private const val SAVE_DOCUMENT_REQUEST = 4101
         private const val MULTICAST_TAG = "fi-mdns-foreground"
         private const val ANDROID_KEY_STORE = "AndroidKeyStore"
         private const val KEY_ALIAS = "fi.secure-store.wrap.v1"

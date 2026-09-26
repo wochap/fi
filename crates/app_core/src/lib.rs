@@ -10,6 +10,7 @@ pub mod events;
 pub mod generic;
 pub mod hlc;
 pub mod identity;
+pub mod import_export;
 pub mod pairing;
 pub mod pairing_manager;
 pub mod pairing_transport;
@@ -60,13 +61,18 @@ pub use events::{
 };
 pub use generic::{
     APP_SCHEMA_VERSION, CollectionView, GenericCommand, GenericDiagnostic, GenericSnapshot,
-    RecordView, apply_generic_command, decode_generic, initialize_generic,
+    ImportItemError, RecordView, apply_generic_command, decode_generic, initialize_generic,
+    validate_import,
 };
 pub use hlc::{HlcError, HlcNodeId, HlcStamp, HybridLogicalClock, SystemWallTime, WallTime};
 pub use identity::{
     DeviceId, DeviceIdentity, IdentityError, InMemorySecureKeyStore, LinuxSecretServiceKeyStore,
     LockableSecureKeyStore, PrivateDeviceKey, PublicDeviceKey, SecureKeyStore, SecureStoreError,
     UnavailableSecureKeyStore,
+};
+pub use import_export::{
+    ENVELOPE_FORMAT, ENVELOPE_VERSION, Envelope, ExportedCollection, ExportedRecord, ImportAbort,
+    ImportOutcome, ImportedCollection, prepare_import,
 };
 pub use pairing::{
     PAIRING_ALPN, PairingCandidate, PairingDecision, PairingDecisionKind, PairingError,
@@ -87,7 +93,7 @@ pub use quinn_transport::{
 pub use records::{
     GenericRecord, RecordFieldIssue, RecordId, RecordValidationError, validate_record,
 };
-pub use remap::{ClonePlan, IdRemap, clone_plan};
+pub use remap::{ClonePlan, IdRemap, clone_plan, plan_with_remap, remap_record_values};
 pub use routing::{
     ConnectionDirection, ConnectionFailure, ConnectionManager, DialTiming, EndpointRegistry,
     EndpointSource, NetworkEndpoint, PeerConnectionState, PeerConnector, SessionCandidate,

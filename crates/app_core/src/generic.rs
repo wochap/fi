@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     error::DomainError,
     hlc::HlcStamp,
+    import_export::ImportedCollection,
     query::{
         ComputedFieldDefinition, ComputedFieldId, QueryDefinition, QueryId,
         validate_computed_field, validate_query,
@@ -84,6 +85,9 @@ pub enum GenericCommand {
         name: String,
         plan: Option<ClonePlan>,
     },
+    /// New collections with their definitions and records, already given fresh identities by
+    /// `import_export::prepare_import`. Applied as one change; never touches existing data.
+    ImportCollections(Vec<ImportedCollection>),
     AddField {
         collection_id: CollectionSchemaId,
         field: FieldDefinition,
@@ -148,8 +152,8 @@ pub enum GenericCommand {
         ids: Vec<WidgetId>,
     },
     /// Record-scoped members applied atomically under one stamp. Members are
-    /// restricted to `UpdateRecordField` and `DeleteRecord` over distinct
-    /// records of one collection; see `validate_against`.
+    /// restricted to `CreateRecord`, `UpdateRecordField` and `DeleteRecord` over
+    /// distinct records of one collection; see `validate_against`.
     Batch(Vec<GenericCommand>),
 }
 
@@ -190,6 +194,13 @@ impl GenericCommand {
                 )?;
                 validate_clone_plan(&cloned)?;
                 *plan = Some(cloned);
+            }
+            Self::ImportCollections(items) => {
+                if items.is_empty() {
+                    return Err(invalid("import", "must contain at least one collection"));
+                }
+                validate_import(snapshot, items)
+                    .map_err(|error| invalid("import", error.to_string()))?;
             }
             Self::AddField {
                 collection_id,
@@ -454,22 +465,37 @@ impl GenericCommand {
                 }
                 let mut seen: HashSet<RecordId> = HashSet::new();
                 let mut target_collection: Option<CollectionSchemaId> = None;
+                let mut existing: Option<HashSet<RecordId>> = None;
                 for (index, member) in members.iter().enumerate() {
                     let record_id = batch_member_record(member).ok_or_else(|| {
                         invalid(
                             "batch",
                             format!(
-                                "member {index}: only record field updates and record deletions \
-                                 may appear in a batch"
+                                "member {index}: only record creations, record field updates \
+                                 and record deletions may appear in a batch"
                             ),
                         )
                     })?;
                     if !seen.insert(record_id) {
                         return Err(batch_invalid(index, record_id, "duplicate record"));
                     }
-                    let collection_id = record(snapshot, record_id)
-                        .map_err(|error| batch_error(index, record_id, error))?
-                        .collection_id;
+                    let collection_id = match member {
+                        GenericCommand::CreateRecord(created) => {
+                            // Built once: a bulk import checks thousands of fresh ids.
+                            let existing = existing.get_or_insert_with(|| {
+                                snapshot.records.iter().map(|item| item.id).collect()
+                            });
+                            if existing.contains(&record_id) {
+                                return Err(batch_invalid(index, record_id, "already exists"));
+                            }
+                            created.collection_id
+                        }
+                        _ => {
+                            record(snapshot, record_id)
+                                .map_err(|error| batch_error(index, record_id, error))?
+                                .collection_id
+                        }
+                    };
                     match target_collection {
                         None => {
                             active_collection(snapshot, collection_id)
@@ -486,16 +512,140 @@ impl GenericCommand {
                         }
                     }
                 }
+                let schema = active_collection(
+                    snapshot,
+                    target_collection.expect("non-empty batch has a target"),
+                )?;
                 for (index, member) in members.iter_mut().enumerate() {
                     let record_id =
                         batch_member_record(member).expect("member shape checked above");
-                    member
-                        .validate_against(snapshot)
-                        .map_err(|error| batch_error(index, record_id, error))?;
+                    match member {
+                        // Freshness and the collection were checked above; only the schema
+                        // rules remain, so the snapshot is not rescanned per member.
+                        GenericCommand::CreateRecord(created) => {
+                            validate_record(created, schema, true)
+                                .map_err(|error| batch_error(index, record_id, error.into()))?;
+                        }
+                        _ => member
+                            .validate_against(snapshot)
+                            .map_err(|error| batch_error(index, record_id, error))?,
+                    }
                 }
             }
         }
         Ok(())
+    }
+}
+
+/// The first import item that failed validation.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ImportItemError {
+    /// 0-based position of the collection in the import.
+    pub collection_index: usize,
+    pub item: String,
+    pub reason: String,
+}
+
+impl std::fmt::Display for ImportItemError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            formatter,
+            "collection {}, {}: {}",
+            self.collection_index + 1,
+            self.item,
+            self.reason
+        )
+    }
+}
+
+/// Validates imported collections with the ordinary create validators, in dependency order
+/// (collection, computed fields, queries, widgets, records). The snapshot is extended in memory
+/// as each item is accepted, so later items see earlier ones exactly as they would after the
+/// write. Records get defaults applied, as on create.
+pub fn validate_import(
+    snapshot: &GenericSnapshot,
+    items: &mut [ImportedCollection],
+) -> Result<(), ImportItemError> {
+    // Records are checked against a fresh-id set instead; no create validator reads them.
+    let mut working = snapshot.clone_structure();
+    let mut record_ids: HashSet<RecordId> = snapshot.records.iter().map(|item| item.id).collect();
+    for (collection_index, item) in items.iter_mut().enumerate() {
+        let fail = |item: String, error: DomainError| ImportItemError {
+            collection_index,
+            item,
+            reason: error.to_string(),
+        };
+        let plan = &item.plan;
+        validate_name(&plan.schema.name).map_err(|error| fail("collection".into(), error))?;
+        GenericCommand::CreateCollection(plan.schema.clone())
+            .validate_against(&working)
+            .map_err(|error| fail("collection".into(), error))?;
+        working.collections.push(plan.schema.clone());
+        for definition in &plan.computed_fields {
+            GenericCommand::CreateComputedField(definition.clone())
+                .validate_against(&working)
+                .map_err(|error| fail(format!("computed field \"{}\"", definition.name), error))?;
+            working.computed_fields.push(definition.clone());
+        }
+        for definition in &plan.query_definitions {
+            GenericCommand::CreateQuery(definition.clone())
+                .validate_against(&working)
+                .map_err(|error| fail(format!("query \"{}\"", definition.name), error))?;
+            working.query_definitions.push(definition.clone());
+        }
+        for definition in &plan.widgets {
+            GenericCommand::CreateWidget(definition.clone())
+                .validate_against(&working)
+                .map_err(|error| fail(format!("widget \"{}\"", definition.title), error))?;
+            working.widgets.push(definition.clone());
+        }
+        for (index, record) in item.records.iter_mut().enumerate() {
+            let label = || format!("record {}", index + 1);
+            if !record_ids.insert(record.id) {
+                return Err(fail(label(), invalid("record_id", "already exists")));
+            }
+            if record.deleted {
+                return Err(fail(
+                    label(),
+                    invalid("record", "cannot import a deleted record"),
+                ));
+            }
+            validate_record(record, &plan.schema, true)
+                .map_err(|error| fail(label(), error.into()))?;
+        }
+    }
+    Ok(())
+}
+
+impl GenericSnapshot {
+    /// Every definition, without records; records dominate the size of a dataset.
+    fn clone_structure(&self) -> Self {
+        Self {
+            schema_version: self.schema_version,
+            collections: self.collections.clone(),
+            records: Vec::new(),
+            computed_fields: self.computed_fields.clone(),
+            query_definitions: self.query_definitions.clone(),
+            widgets: self.widgets.clone(),
+            diagnostics: Vec::new(),
+            max_stamp: self.max_stamp,
+        }
+    }
+
+    /// A snapshot of an initialized dataset holding nothing, for checks that only need the
+    /// items under validation.
+    #[must_use]
+    pub fn empty() -> Self {
+        Self {
+            schema_version: APP_SCHEMA_VERSION,
+            collections: Vec::new(),
+            records: Vec::new(),
+            computed_fields: Vec::new(),
+            query_definitions: Vec::new(),
+            widgets: Vec::new(),
+            diagnostics: Vec::new(),
+            max_stamp: None,
+        }
     }
 }
 
@@ -530,9 +680,10 @@ fn validate_clone_plan(plan: &ClonePlan) -> Result<(), DomainError> {
 }
 
 /// The record a batch member targets, or `None` when the command is not a legal
-/// batch member (nested batches, schema commands, record creation, ...).
+/// batch member (nested batches, schema commands, ...).
 fn batch_member_record(command: &GenericCommand) -> Option<RecordId> {
     match command {
+        GenericCommand::CreateRecord(record) => Some(record.id),
         GenericCommand::UpdateRecordField { record_id, .. } => Some(*record_id),
         GenericCommand::DeleteRecord(record_id) => Some(*record_id),
         _ => None,
@@ -658,31 +809,14 @@ pub fn apply_generic_command(
             let plan = plan
                 .as_ref()
                 .ok_or_else(|| repo_change("clone collection was not validated"))?;
-            write_collection(tx, &collections, &plan.schema, stamp)?;
-            for definition in &plan.computed_fields {
-                write_definition(
-                    tx,
-                    &collections,
-                    definition.collection_id,
-                    "computed_fields",
-                    &definition.id.to_string(),
-                    definition,
-                    stamp,
-                )?;
-            }
-            for definition in &plan.query_definitions {
-                write_definition(
-                    tx,
-                    &collections,
-                    definition.collection_id,
-                    "queries",
-                    &definition.id.to_string(),
-                    definition,
-                    stamp,
-                )?;
-            }
-            for definition in &plan.widgets {
-                write_widget(tx, &collections, definition, stamp)?;
+            write_plan(tx, &collections, plan, stamp)?;
+        }
+        GenericCommand::ImportCollections(items) => {
+            for item in items {
+                write_plan(tx, &collections, &item.plan, stamp)?;
+                for record in &item.records {
+                    write_record(tx, &records, record, stamp)?;
+                }
             }
         }
         GenericCommand::AddField {
@@ -944,6 +1078,42 @@ pub fn apply_generic_command(
                 )?;
             }
         }
+    }
+    Ok(())
+}
+
+/// Writes a new collection with its computed fields, queries and widgets.
+fn write_plan(
+    tx: &mut AutomergeTransaction<'_>,
+    collections: &ObjId,
+    plan: &ClonePlan,
+    stamp: HlcStamp,
+) -> automerge_repo::Result<()> {
+    write_collection(tx, collections, &plan.schema, stamp)?;
+    for definition in &plan.computed_fields {
+        write_definition(
+            tx,
+            collections,
+            definition.collection_id,
+            "computed_fields",
+            &definition.id.to_string(),
+            definition,
+            stamp,
+        )?;
+    }
+    for definition in &plan.query_definitions {
+        write_definition(
+            tx,
+            collections,
+            definition.collection_id,
+            "queries",
+            &definition.id.to_string(),
+            definition,
+            stamp,
+        )?;
+    }
+    for definition in &plan.widgets {
+        write_widget(tx, collections, definition, stamp)?;
     }
     Ok(())
 }
@@ -2738,14 +2908,18 @@ mod tests {
                 ]),
             ),
             (
-                "record creation member",
+                "existing record id created",
                 GenericCommand::Batch(vec![GenericCommand::CreateRecord(GenericRecord {
-                    id: RecordId::new(),
-                    collection_id: schema.id,
-                    values: BTreeMap::from([(schema.fields[0].id, FieldValue::Integer(5))]),
-                    stamps: BTreeMap::new(),
-                    deleted: false,
+                    id: ids[1],
+                    ..new_record(&schema, 5)
                 })]),
+            ),
+            (
+                "creation in another collection",
+                GenericCommand::Batch(vec![
+                    GenericCommand::DeleteRecord(ids[0]),
+                    GenericCommand::CreateRecord(new_record(&other, 5)),
+                ]),
             ),
             (
                 "duplicate record",
@@ -2772,6 +2946,87 @@ mod tests {
                 "{label} batch should be rejected"
             );
         }
+        assert_eq!(doc.get_heads(), before);
+    }
+
+    fn new_record(schema: &CollectionSchema, intensity: i64) -> GenericRecord {
+        GenericRecord {
+            id: RecordId::new(),
+            collection_id: schema.id,
+            values: BTreeMap::from([(schema.fields[0].id, FieldValue::Integer(intensity))]),
+            stamps: BTreeMap::new(),
+            deleted: false,
+        }
+    }
+
+    #[test]
+    fn batch_create_commits_once_under_one_stamp() {
+        let schema = batch_schema();
+        let (mut doc, _) = seeded(&schema, 2);
+        let created: Vec<_> = (0..300)
+            .map(|index| new_record(&schema, index % 10 + 1))
+            .collect();
+        let mut command = GenericCommand::Batch(
+            created
+                .iter()
+                .cloned()
+                .map(GenericCommand::CreateRecord)
+                .collect(),
+        );
+        command
+            .validate_against(&decode_generic(&doc).unwrap())
+            .unwrap();
+        let before = doc.get_heads();
+        {
+            let mut tx = doc.transaction();
+            apply_generic_command(&mut tx, &command, stamp(9)).unwrap();
+            tx.commit();
+        }
+        assert_eq!(doc.get_changes(&before).len(), 1, "batch is one change");
+        let decoded = decode_generic(&doc).unwrap();
+        assert_eq!(decoded.records.len(), 302);
+        for expected in &created {
+            let record = decoded
+                .records
+                .iter()
+                .find(|item| item.id == expected.id)
+                .unwrap();
+            assert_eq!(record.values, expected.values);
+            assert!(record.stamps.values().all(|value| *value == stamp(9)));
+            assert_eq!(deleted_stamp(&doc, record.id), Some(stamp(9)));
+        }
+    }
+
+    #[test]
+    fn batch_create_rejects_duplicate_ids_and_invalid_members_before_any_write() {
+        let schema = batch_schema();
+        let (doc, _) = seeded(&schema, 1);
+        let before = doc.get_heads();
+        let snapshot = decode_generic(&doc).unwrap();
+        let repeated = new_record(&schema, 3);
+        let mut duplicate = GenericCommand::Batch(vec![
+            GenericCommand::CreateRecord(repeated.clone()),
+            GenericCommand::CreateRecord(repeated),
+        ]);
+        let error = duplicate
+            .validate_against(&snapshot)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("member 1"), "{error}");
+        assert!(error.contains("duplicate record"), "{error}");
+
+        let bad = new_record(&schema, 99);
+        let mut invalid_member = GenericCommand::Batch(vec![
+            GenericCommand::CreateRecord(new_record(&schema, 3)),
+            GenericCommand::CreateRecord(bad.clone()),
+            GenericCommand::CreateRecord(new_record(&schema, 4)),
+        ]);
+        let error = invalid_member
+            .validate_against(&snapshot)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("member 1"), "{error}");
+        assert!(error.contains(&bad.id.to_string()), "{error}");
         assert_eq!(doc.get_heads(), before);
     }
 
@@ -3083,5 +3338,130 @@ mod tests {
             .find(|item| item.id == collection.id);
         assert_eq!(source_before, source_after);
         assert_eq!(before.records, after.records);
+    }
+
+    /// The export of `clonable()` as an envelope entry, with its records.
+    fn exported(doc: &Automerge, collection: &CollectionSchema) -> crate::ExportedCollection {
+        let snapshot = decode_generic(doc).unwrap();
+        let schema = snapshot
+            .collections
+            .iter()
+            .find(|item| item.id == collection.id)
+            .unwrap();
+        crate::ExportedCollection::from_active(
+            schema,
+            &snapshot.computed_fields,
+            &snapshot.query_definitions,
+            &snapshot.widgets,
+            &snapshot.records,
+        )
+    }
+
+    fn import_command(entries: Vec<crate::ExportedCollection>) -> GenericCommand {
+        GenericCommand::ImportCollections(
+            crate::prepare_import(&crate::Envelope::new(entries)).unwrap(),
+        )
+    }
+
+    #[test]
+    fn import_writes_every_collection_under_one_stamp_in_one_change() {
+        let (mut doc, collection) = clonable();
+        let entry = exported(&doc, &collection);
+        let before = decode_generic(&doc).unwrap();
+        let mut command = import_command(vec![entry.clone(), entry]);
+        command.validate_against(&before).unwrap();
+        let heads = doc.get_heads();
+        {
+            let mut tx = doc.transaction();
+            apply_generic_command(&mut tx, &command, stamp(30)).unwrap();
+            tx.commit();
+        }
+        assert_eq!(doc.get_changes(&heads).len(), 1);
+        let after = decode_generic(&doc).unwrap();
+        assert!(after.diagnostics.is_empty(), "{:?}", after.diagnostics);
+        assert_eq!(after.collections.len(), 3);
+        assert_eq!(after.records.len(), 3);
+        assert_eq!(
+            after.widgets.len(),
+            4,
+            "two source widgets (one tombstoned) plus two imported"
+        );
+        let GenericCommand::ImportCollections(items) = &command else {
+            unreachable!()
+        };
+        for item in items {
+            let record = after
+                .records
+                .iter()
+                .find(|record| record.collection_id == item.plan.schema.id)
+                .unwrap();
+            assert!(record.stamps.values().all(|value| *value == stamp(30)));
+        }
+        assert_eq!(
+            before
+                .collections
+                .iter()
+                .find(|item| item.id == collection.id),
+            after
+                .collections
+                .iter()
+                .find(|item| item.id == collection.id)
+        );
+    }
+
+    #[test]
+    fn import_rejects_a_widget_with_an_invalid_query_reference() {
+        let (doc, collection) = clonable();
+        let mut command = import_command(vec![exported(&doc, &collection)]);
+        let GenericCommand::ImportCollections(items) = &mut command else {
+            unreachable!()
+        };
+        items[0].plan.widgets[0].query_id = QueryId::new();
+        let error = command
+            .validate_against(&decode_generic(&doc).unwrap())
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("collection 1, widget"), "{error}");
+    }
+
+    #[test]
+    fn one_invalid_record_rejects_the_whole_import_before_any_write() {
+        let (doc, collection) = clonable();
+        let entry = exported(&doc, &collection);
+        let mut broken = entry.clone();
+        broken.records[0]
+            .values
+            .insert(collection.fields[0].id, FieldValue::Integer(99));
+        let heads = doc.get_heads();
+        let mut command = import_command(vec![entry.clone(), entry, broken]);
+        let snapshot = decode_generic(&doc).unwrap();
+        let GenericCommand::ImportCollections(items) = &mut command else {
+            unreachable!()
+        };
+        let error = validate_import(&snapshot, items).unwrap_err();
+        assert_eq!(error.collection_index, 2);
+        assert_eq!(error.item, "record 1");
+        assert!(command.validate_against(&snapshot).is_err());
+        assert_eq!(doc.get_heads(), heads);
+    }
+
+    #[test]
+    fn import_rejects_ids_already_in_the_dataset() {
+        let (doc, collection) = clonable();
+        let snapshot = decode_generic(&doc).unwrap();
+        let mut command = import_command(vec![exported(&doc, &collection)]);
+        let GenericCommand::ImportCollections(items) = &mut command else {
+            unreachable!()
+        };
+        items[0].records[0].id = snapshot.records[0].id;
+        let error = validate_import(&snapshot, items).unwrap_err();
+        assert_eq!(error.item, "record 1");
+        assert!(matches!(
+            GenericCommand::ImportCollections(vec![]).validate_against(&snapshot),
+            Err(DomainError::Invalid {
+                field: "import",
+                ..
+            })
+        ));
     }
 }

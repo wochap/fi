@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:fi/bridge/collection_bridge.dart';
+import 'package:fi/file_dialogs.dart';
 import 'package:fi/src/rust/api/models.dart';
 
 final class FakeCollectionBridge implements CollectionBridge {
@@ -78,6 +79,15 @@ final class FakeCollectionBridge implements CollectionBridge {
 
   /// Every `(source id, name)` sent to [cloneCollection] that was not failed, in call order.
   final List<(String, String)> clones = [];
+
+  /// Every export request, in call order: `csv <id>`, `json <id,id>` or `json all`.
+  final List<String> exports = [];
+
+  /// Every `(collection id or null for JSON, text)` sent to an import, in call order.
+  final List<(String?, String)> imports = [];
+
+  /// Returned (once) by the next import instead of the fake's own outcome.
+  ImportOutcomeDto? nextImportOutcome;
 
   /// Every expression submitted for inference, in call order.
   final List<ExpressionDto> inferenceRequests = [];
@@ -317,6 +327,99 @@ final class FakeCollectionBridge implements CollectionBridge {
     ];
     changed(id);
     return id;
+  }
+
+  @override
+  Future<String> exportCollectionCsv(String id) async {
+    _fail();
+    exports.add('csv $id');
+    return 'csv of $id';
+  }
+
+  @override
+  Future<String> exportCollectionsJson(List<String> ids) async {
+    _fail();
+    exports.add('json ${ids.join(',')}');
+    return 'json of ${ids.join(',')}';
+  }
+
+  @override
+  Future<String> exportAllJson() async {
+    _fail();
+    exports.add('json all');
+    return 'json of all';
+  }
+
+  /// Adds one empty record per non-blank line after the header, unless [nextImportOutcome]
+  /// says otherwise.
+  @override
+  Future<ImportOutcomeDto> importCollectionCsv(
+    String collectionId,
+    String text,
+  ) async {
+    _fail();
+    imports.add((collectionId, text));
+    if (_takeImportOutcome() case final outcome?) return outcome;
+    final rows = text
+        .split('\n')
+        .skip(1)
+        .where((line) => line.trim().isNotEmpty)
+        .length;
+    for (var index = 0; index < rows; index++) {
+      records
+          .putIfAbsent(collectionId, () => [])
+          .add(
+            RecordDto(
+              id: 'record-${_next++}',
+              collectionId: collectionId,
+              values: const [],
+              valid: true,
+              diagnostics: const [],
+            ),
+          );
+    }
+    changed(collectionId);
+    return ImportOutcomeDto(
+      imported: true,
+      recordCount: rows,
+      collectionIds: const [],
+      message: '',
+    );
+  }
+
+  /// Creates one empty collection per line of [text], named by that line, unless
+  /// [nextImportOutcome] says otherwise.
+  @override
+  Future<ImportOutcomeDto> importCollectionsJson(String text) async {
+    _fail();
+    imports.add((null, text));
+    if (_takeImportOutcome() case final outcome?) return outcome;
+    final ids = <String>[];
+    for (final name in text.split('\n').where((line) => line.isNotEmpty)) {
+      final id = 'collection-${_next++}';
+      ids.add(id);
+      collections.add(CollectionDto(id: id, name: name, description: ''));
+      schemas[id] = CollectionSchemaDto(
+        id: id,
+        description: '',
+        name: name,
+        fields: const [],
+      );
+      records[id] = [];
+    }
+    changed();
+    return ImportOutcomeDto(
+      imported: true,
+      recordCount: 0,
+      collectionIds: ids,
+      message: '',
+    );
+  }
+
+  ImportOutcomeDto? _takeImportOutcome() {
+    final outcome = nextImportOutcome;
+    nextImportOutcome = null;
+    return outcome;
   }
 
   @override
@@ -1217,5 +1320,38 @@ final class _FakeInference {
       default:
         throw _error(path, 'unsupported in the fake inference mirror');
     }
+  }
+}
+
+/// Save and open dialogs that never touch the file system. A null [openResult] or
+/// [saveResult] behaves like a dismissed dialog.
+final class FakeFileDialogs implements FileDialogs {
+  /// Text the next open dialogs return, or null to simulate dismissal.
+  String? openResult;
+
+  /// Name the save dialog reports, or null to simulate dismissal.
+  String? saveResult = 'export.csv';
+
+  /// Kinds asked for by open dialogs, in call order.
+  final List<FileKind> opened = [];
+
+  /// `(suggested name, text)` for every save the user confirmed, in call order.
+  final List<(String, String)> written = [];
+
+  @override
+  Future<String?> openText({required FileKind kind}) async {
+    opened.add(kind);
+    return openResult;
+  }
+
+  @override
+  Future<String?> saveText({
+    required String suggestedName,
+    required FileKind kind,
+    required String text,
+  }) async {
+    final name = saveResult;
+    if (name != null) written.add((suggestedName, text));
+    return name;
   }
 }

@@ -6,7 +6,7 @@ use crate::api::{
     lifecycle::core,
     models::{
         BootstrapDto, BridgeError, BridgeIssueDto, CollectionDto, CollectionSchemaDto,
-        FieldDefinitionDto, FieldValueDto, RecordDto,
+        FieldDefinitionDto, FieldValueDto, ImportOutcomeDto, RecordDto,
     },
 };
 
@@ -37,6 +37,49 @@ pub async fn clone_collection(source_id: String, name: String) -> Result<String,
         .clone_collection(parse_collection(&source_id)?, name)
         .await
         .map(|id| id.to_string())
+        .map_err(Into::into)
+}
+/// Active records of one collection as CSV text; the caller writes the file.
+pub async fn export_collection_csv(id: String) -> Result<String, BridgeError> {
+    core()
+        .await?
+        .export_collection_csv(parse_collection(&id)?)
+        .map_err(Into::into)
+}
+/// The given collections as one `fi-collection` JSON document.
+pub async fn export_collections_json(ids: Vec<String>) -> Result<String, BridgeError> {
+    let ids = ids
+        .iter()
+        .map(|id| parse_collection(id))
+        .collect::<Result<Vec<_>, _>>()?;
+    core()
+        .await?
+        .export_collections_json(ids)
+        .map_err(Into::into)
+}
+/// Every active collection as one `fi-collection` JSON document.
+pub async fn export_all_json() -> Result<String, BridgeError> {
+    core().await?.export_all_json().map_err(Into::into)
+}
+/// Adds every row of `text` as a new record; a rejected file writes nothing.
+pub async fn import_collection_csv(
+    collection_id: String,
+    text: String,
+) -> Result<ImportOutcomeDto, BridgeError> {
+    core()
+        .await?
+        .import_collection_csv(parse_collection(&collection_id)?, text)
+        .await
+        .map(Into::into)
+        .map_err(Into::into)
+}
+/// Creates new collections from a `fi-collection` document; a rejected document writes nothing.
+pub async fn import_collections_json(text: String) -> Result<ImportOutcomeDto, BridgeError> {
+    core()
+        .await?
+        .import_collections_json(text)
+        .await
+        .map(Into::into)
         .map_err(Into::into)
 }
 pub async fn delete_collection(id: String) -> Result<(), BridgeError> {
