@@ -73,6 +73,9 @@ final class FakeCollectionBridge implements CollectionBridge {
   SyncStatusDto status = SyncStatusDto.offline;
   Object? nextError;
 
+  /// Every name sent to [renameCollection] that was not failed, in call order.
+  final List<String> renames = [];
+
   /// Every expression submitted for inference, in call order.
   final List<ExpressionDto> inferenceRequests = [];
 
@@ -216,6 +219,8 @@ final class FakeCollectionBridge implements CollectionBridge {
 
   @override
   Future<void> renameCollection(String id, String name) async {
+    _fail();
+    renames.add(name);
     final index = collections.indexWhere((item) => item.id == id);
     final old = collections[index];
     collections[index] = CollectionDto(

@@ -17,6 +17,7 @@ import 'package:fi/widgets/query_builder.dart';
 import 'package:fi/widgets/query_editor_dialog.dart';
 import 'package:fi/widgets/widget_dashboard.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 /// Below this content width the collection screen drops the table for a card list and the
 /// header actions collapse to icons.
@@ -347,6 +348,21 @@ class CollectionsPage extends StatelessWidget {
         '${fields.length} ${fields.length == 1 ? 'field' : 'fields'}';
   }
 
+  /// Sends an inline title rename. The input is already closed, so a rejection keeps the
+  /// previous name and is reported in a snackbar rather than under a field.
+  Future<void> _renameInline(
+    BuildContext context,
+    String id,
+    String name,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await controller.renameCollection(id, name);
+    } catch (failure) {
+      messenger.showSnackBar(SnackBar(content: Text(bridgeMessage(failure))));
+    }
+  }
+
   /// Breadcrumb over the title, and the collection's actions as labelled buttons (mock 1a).
   Widget _wideHeader(
     BuildContext context,
@@ -395,11 +411,11 @@ class CollectionsPage extends StatelessWidget {
                 textBaseline: TextBaseline.alphabetic,
                 children: [
                   Flexible(
-                    child: Text(
-                      schema.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    child: _EditableTitle(
+                      name: schema.name,
                       style: theme.textTheme.headlineMedium,
+                      onRename: (name) =>
+                          unawaited(_renameInline(context, schema.id, name)),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -469,15 +485,15 @@ class CollectionsPage extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                schema.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+              _EditableTitle(
+                name: schema.name,
                 style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w500,
                   height: 1.2,
                 ),
+                onRename: (name) =>
+                    unawaited(_renameInline(context, schema.id, name)),
               ),
               Text(
                 '$records ${records == 1 ? 'record' : 'records'}',
@@ -1378,6 +1394,113 @@ const _draftValidationDelay = Duration(milliseconds: 200);
 
 /// Creates or edits one record. Errors stay hidden until the first Save; after it, every edit
 /// re-runs Rust's dry-run validation (debounced) so each error clears as soon as it is fixed.
+/// The collection title, renamed in place: a double tap swaps the text for an input with the
+/// name selected. Enter or losing focus submits; Escape cancels. The trimmed name goes to
+/// [onRename] at most once per edit, and only when it is non-empty and differs from [name].
+class _EditableTitle extends StatefulWidget {
+  const _EditableTitle({
+    required this.name,
+    required this.style,
+    required this.onRename,
+  });
+
+  final String name;
+  final TextStyle? style;
+  final ValueChanged<String> onRename;
+
+  @override
+  State<_EditableTitle> createState() => _EditableTitleState();
+}
+
+class _EditableTitleState extends State<_EditableTitle> {
+  final _text = TextEditingController();
+  final _focus = FocusNode();
+  var _editing = false;
+
+  /// Set once the edit is submitted or cancelled, so the blur that follows closing the input
+  /// neither saves a cancelled edit nor sends a submitted one twice.
+  var _closed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _focus.addListener(_focusChanged);
+  }
+
+  @override
+  void dispose() {
+    _focus
+      ..removeListener(_focusChanged)
+      ..dispose();
+    _text.dispose();
+    super.dispose();
+  }
+
+  void _focusChanged() {
+    if (!_focus.hasFocus) _submit();
+  }
+
+  void _start() {
+    _text.value = TextEditingValue(
+      text: widget.name,
+      selection: TextSelection(baseOffset: 0, extentOffset: widget.name.length),
+    );
+    setState(() {
+      _editing = true;
+      _closed = false;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _editing) _focus.requestFocus();
+    });
+  }
+
+  /// Closes the input before any rename is awaited, so the shown name always comes from the
+  /// projection.
+  bool _close() {
+    if (!_editing || _closed) return false;
+    _closed = true;
+    setState(() => _editing = false);
+    return true;
+  }
+
+  void _submit() {
+    final name = _text.text.trim();
+    if (!_close()) return;
+    // Empty or unchanged is a cancel: nothing is sent and no error is shown.
+    if (name.isEmpty || name == widget.name) return;
+    widget.onRename(name);
+  }
+
+  void _cancel() => _close();
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_editing) {
+      return GestureDetector(
+        onDoubleTap: _start,
+        child: Text(
+          widget.name,
+          key: const Key('collection-title'),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: widget.style,
+        ),
+      );
+    }
+    return CallbackShortcuts(
+      bindings: {const SingleActivator(LogicalKeyboardKey.escape): _cancel},
+      child: FiTextInput(
+        key: const Key('collection-title-input'),
+        controller: _text,
+        focusNode: _focus,
+        style: widget.style,
+        textInputAction: TextInputAction.done,
+        onSubmitted: (_) => _submit(),
+      ),
+    );
+  }
+}
+
 class _RecordEditorForm extends StatefulWidget {
   const _RecordEditorForm({
     required this.controller,
