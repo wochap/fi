@@ -20,7 +20,9 @@ Flutter SHALL define exactly two input sizes. Small SHALL be 32 logical pixels t
 - **THEN** both are 32px tall
 
 ### Requirement: Shared input widgets
-Feature code SHALL build text, integer, decimal, search, select, and Date / DateTime / time picker inputs only through the shared inputs (`FiTextInput`, `FiSelect`, `FiPickerInput`). Every shared input of a given size and screen class SHALL render an input box of the same height, whatever its kind, label, value, prefix, or suffix. Switches, checkboxes, and buttons are not inputs under this requirement.
+Feature code SHALL build text, integer, decimal, search, select, slider, and Date / DateTime / time picker inputs only through the shared inputs (`FiTextInput`, `FiSelect`, `FiPickerInput`, `FiSlider`). Every shared input of a given size and screen class SHALL render an input box of the same height, whatever its kind, label, value, prefix, or suffix. Switches, checkboxes, and buttons are not inputs under this requirement.
+
+A `FiSlider` SHALL take integer minimum and maximum bounds and an optional integer value. It SHALL move in whole-number steps, SHALL show the current value as text beside the track, and SHALL show an explicit unset state when the value is absent. When the value is unset it SHALL offer a way to set the value and, when clearing is allowed, a way to return an already set value to unset. It SHALL report only integers inside the bounds and MUST NOT expose a floating-point value to feature code.
 
 #### Scenario: New field panel aligns
 - **WHEN** the schema sheet's "New field" panel shows the Name text input beside the Type select
@@ -33,6 +35,18 @@ Feature code SHALL build text, integer, decimal, search, select, and Date / Date
 #### Scenario: Picker input with an action
 - **WHEN** a Date input shows a "Today" action and a clear icon in its suffix
 - **THEN** its box height equals a plain text input of the same size
+
+#### Scenario: Slider aligns with a text input
+- **WHEN** a normal `FiSlider` is rendered beside a normal `FiTextInput` on the same screen
+- **THEN** both input boxes have the same height and their tops align
+
+#### Scenario: Slider reports whole numbers only
+- **WHEN** a `FiSlider` with bounds 1 and 5 is dragged to a position between 3 and 4
+- **THEN** the thumb snaps to 3 or 4, the value label shows that integer, and feature code receives that integer
+
+#### Scenario: Slider starts unset
+- **WHEN** a `FiSlider` is rendered with no value
+- **THEN** it shows an unset state instead of a value label and reports no value until the user sets one
 
 ### Requirement: Fixed box, growing messages
 A shared input's box height SHALL be fixed by its size, independent of content padding, label, or font metrics. Error lines SHALL render below the box and SHALL add height below it without changing the box. A multiline text input SHALL fix the height of its first line to the size's box height and grow by whole lines up to its maximum line count.

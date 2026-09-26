@@ -23,7 +23,7 @@ Every field and enum option SHALL have a globally unique stable ID independent o
 - **THEN** records referencing its `EnumOptionId` display the new label without changing their stored value
 
 ### Requirement: Supported field definitions
-Field definitions SHALL support Text, Integer, FixedDecimal with scale, Boolean, Date, DateTime, Duration, and Enum types plus requiredness, optional default, applicable validation metadata, display metadata, deterministic order, and logical deletion. Multiline text SHALL be represented as Text display metadata.
+Field definitions SHALL support Text, Integer, FixedDecimal with scale, Boolean, Date, DateTime, Duration, and Enum types plus requiredness, optional default, applicable validation metadata, display metadata, deterministic order, and logical deletion. Multiline text SHALL be represented as Text display metadata. A slider presentation SHALL be represented as Integer display metadata and SHALL be valid only when the field declares both a minimum and a maximum. Display metadata SHALL be forward compatible: a definition missing a display flag SHALL read as that flag unset.
 
 #### Scenario: Add every supported field type
 - **WHEN** a user adds one valid field of every supported type
@@ -33,12 +33,28 @@ Field definitions SHALL support Text, Integer, FixedDecimal with scale, Boolean,
 - **WHEN** field-type serialization is extended with a future type
 - **THEN** existing records remain keyed by stable schema and field IDs without requiring a new per-schema Rust record type
 
+#### Scenario: Slider flag round-trips
+- **WHEN** an Integer field with minimum 1, maximum 5, and the slider flag is created on one device
+- **THEN** another device reads the same field with the slider flag set and the bounds intact
+
+#### Scenario: Definition written before the slider flag existed
+- **WHEN** a field definition stored without any slider entry is read
+- **THEN** it parses with the slider flag unset and no malformed diagnostic
+
 ### Requirement: Schema validation before mutation
-Rust application-core commands SHALL validate names, field types, scale bounds, defaults, min/max constraints, enum membership metadata, duplicate identities, and command targets before committing authoritative schema changes.
+Rust application-core commands SHALL validate names, field types, scale bounds, defaults, min/max constraints, enum membership metadata, display metadata applicability, duplicate identities, and command targets before committing authoritative schema changes.
 
 #### Scenario: Invalid field definition
 - **WHEN** a field default has the wrong type or its minimum exceeds its maximum
 - **THEN** the command returns a typed validation error and commits neither Automerge nor projection changes
+
+#### Scenario: Slider on a non-Integer field
+- **WHEN** a field of any type other than Integer carries the slider flag
+- **THEN** the command returns a typed validation error naming the slider flag and commits nothing
+
+#### Scenario: Slider without both bounds
+- **WHEN** an Integer field carries the slider flag but its minimum or its maximum is unset
+- **THEN** the command returns a typed validation error naming the slider flag and commits nothing
 
 ### Requirement: Safe schema evolution
 Schema commands SHALL support collection create, rename, logical delete, field add/update/logical removal/reorder, and enum option maintenance. A field base type or FixedDecimal scale MUST NOT change once active records contain a value for that field. A required constraint MAY be introduced or a default removed while active records lack the field; the command SHALL be accepted, and each active record lacking the field SHALL be projected as invalid with a typed missing-required diagnostic until it is repaired or the constraint is relaxed. When the field carries a default, the default SHALL continue to satisfy the constraint for records lacking the field.

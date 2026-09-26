@@ -271,3 +271,38 @@ The Rename action on the collection list card menu SHALL remain available.
 #### Scenario: List menu rename still works
 - **WHEN** the user chooses Rename from a collection card menu on the collection list
 - **THEN** the existing Rename dialog opens as before
+
+### Requirement: Slider presentation for bounded Integer fields
+The field editor SHALL show a "Show as slider" switch only when the kind is Integer. The switch SHALL be enabled only while both the minimum and the maximum are filled, and SHALL turn off when either bound is cleared or the field type changes. The record editor SHALL render an Integer field whose slider flag is set as the shared slider input with those bounds, and SHALL render it as the plain integer input when the flag is unset. Record lists SHALL display the value as a plain number regardless of the flag.
+
+#### Scenario: Switch appears for Integer with bounds
+- **WHEN** the user picks Integer and fills minimum 1 and maximum 5
+- **THEN** the "Show as slider" switch is shown and enabled
+
+#### Scenario: Switch disabled without bounds
+- **WHEN** the kind is Integer and the maximum is empty
+- **THEN** the switch is shown but disabled, and it reads as off
+
+#### Scenario: Clearing a bound turns the slider off
+- **WHEN** the slider switch is on and the user clears the minimum
+- **THEN** the switch turns off and becomes disabled, and saving submits the field without the slider flag
+
+#### Scenario: Retyping clears the slider
+- **WHEN** the slider switch is on and the user changes the kind to Decimal
+- **THEN** the switch disappears and the saved definition carries no slider flag
+
+#### Scenario: Record editor renders the slider
+- **WHEN** the user opens the record editor for a collection with an Integer field flagged as slider with bounds 1 and 5
+- **THEN** that field is a slider with whole steps from 1 to 5 and a visible current value
+
+#### Scenario: Optional slider field left unset
+- **WHEN** an optional slider field is left in its unset state and the record is saved
+- **THEN** the submitted value for that field is null
+
+#### Scenario: Required slider field unset
+- **WHEN** a required slider field is left unset and the user saves
+- **THEN** the editor shows the typed missing-value error from Rust under the slider, as it does for other inputs
+
+#### Scenario: Slider value in the list
+- **WHEN** a record with slider value 3 is shown in the record list
+- **THEN** the cell reads 3
