@@ -1272,6 +1272,33 @@ impl AppCore {
         )
         .await
     }
+    /// Copies the active structure of `source_id` (fields, enum options, computed fields,
+    /// queries, widgets; never records) into a new collection named `name`, atomically.
+    pub async fn clone_collection(
+        &self,
+        source_id: CollectionSchemaId,
+        name: String,
+    ) -> Result<CollectionSchemaId> {
+        let id = CollectionSchemaId::new();
+        self.generic(
+            GenericCommand::CloneCollection {
+                source_id,
+                id,
+                name,
+                plan: None,
+            },
+            vec![
+                DomainKind::Collections,
+                DomainKind::Schemas,
+                DomainKind::ComputedFields,
+                DomainKind::Queries,
+                DomainKind::Widgets,
+            ],
+            vec![id],
+        )
+        .await?;
+        Ok(id)
+    }
     pub async fn delete_collection(&self, id: CollectionSchemaId) -> Result<()> {
         self.generic(
             GenericCommand::DeleteCollection(id),
@@ -2502,6 +2529,7 @@ fn command_name(command: &GenericCommand) -> &'static str {
         GenericCommand::CreateCollection(_) => "create_collection",
         GenericCommand::RenameCollection { .. } => "rename_collection",
         GenericCommand::DeleteCollection(_) => "delete_collection",
+        GenericCommand::CloneCollection { .. } => "clone_collection",
         GenericCommand::AddField { .. } => "add_field",
         GenericCommand::UpdateField { .. } => "update_field",
         GenericCommand::RemoveField { .. } => "remove_field",

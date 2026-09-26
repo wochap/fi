@@ -148,12 +148,15 @@ class CollectionsPage extends StatelessWidget {
                 onSelected: (action) {
                   if (action == 'rename') {
                     _editCollection(context, item);
+                  } else if (action == 'duplicate') {
+                    unawaited(_duplicateCollection(context, item));
                   } else {
                     unawaited(_confirmDeleteCollection(context, item));
                   }
                 },
                 itemBuilder: (_) => const [
                   PopupMenuItem(value: 'rename', child: Text('Rename')),
+                  PopupMenuItem(value: 'duplicate', child: Text('Duplicate')),
                   PopupMenuItem(value: 'delete', child: Text('Delete')),
                 ],
               ),
@@ -790,6 +793,53 @@ class CollectionsPage extends StatelessWidget {
               } else {
                 await controller.renameCollection(collection.id, name.text);
               }
+              if (route.mounted) Navigator.pop(route);
+            } catch (failure) {
+              setState(
+                () => issues = FormIssues.from(
+                  failure,
+                ).keyed({for (final key in nameKeys) key: 'name'}),
+              );
+            }
+          },
+        ),
+      ),
+    );
+  }
+
+  /// Names the copy of [source] (fields, queries and widgets; no records). The list refreshes
+  /// on success and the selection stays put; dismissing sends no command.
+  Future<void> _duplicateCollection(
+    BuildContext context,
+    CollectionDto source,
+  ) async {
+    final name = TextEditingController(text: '${source.name} (copy)');
+    const nameKeys = {'name', 'collection_name'};
+    var issues = FormIssues.none;
+    await showFormSurface<void>(
+      context,
+      builder: (route) => StatefulBuilder(
+        builder: (context, setState) => FormSurface(
+          title: 'Duplicate collection',
+          width: 420,
+          showRequiredLegend: true,
+          body: FiTextInput(
+            key: const Key('duplicate-collection-name'),
+            controller: name,
+            autofocus: true,
+            label: 'Name',
+            required: true,
+            errors: issues.of('name'),
+            onChanged: (_) {
+              if (issues.of('name').isEmpty) return;
+              setState(() => issues = issues.without('name'));
+            },
+          ),
+          errors: issues.form,
+          primaryLabel: 'Save',
+          onPrimary: () async {
+            try {
+              await controller.cloneCollection(source.id, name.text.trim());
               if (route.mounted) Navigator.pop(route);
             } catch (failure) {
               setState(

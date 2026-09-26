@@ -53,6 +53,10 @@ abstract interface class CollectionBridge {
   Future<CollectionSchemaDto?> getCollectionSchema(String id);
   Future<String> createCollection(String name, String description);
   Future<void> renameCollection(String id, String name);
+
+  /// Copies [sourceId]'s fields, computed fields, queries and widgets (no records) into a new
+  /// collection named [name]. Returns the new collection id.
+  Future<String> cloneCollection(String sourceId, String name);
   Future<void> deleteCollection(String id);
   Future<String> addField(String collectionId, FieldDefinitionDto field);
   Future<void> updateField(String collectionId, FieldDefinitionDto field);
@@ -288,6 +292,9 @@ final class RustCollectionBridge implements CollectionBridge {
   @override
   Future<void> renameCollection(String id, String name) =>
       collections.renameCollection(id: id, name: name);
+  @override
+  Future<String> cloneCollection(String sourceId, String name) =>
+      collections.cloneCollection(sourceId: sourceId, name: name);
   @override
   Future<void> deleteCollection(String id) =>
       collections.deleteCollection(id: id);

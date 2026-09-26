@@ -30,6 +30,15 @@ pub async fn rename_collection(id: String, name: String) -> Result<(), BridgeErr
         .await
         .map_err(Into::into)
 }
+/// Copies a collection's structure (no records) and returns the new collection id.
+pub async fn clone_collection(source_id: String, name: String) -> Result<String, BridgeError> {
+    core()
+        .await?
+        .clone_collection(parse_collection(&source_id)?, name)
+        .await
+        .map(|id| id.to_string())
+        .map_err(Into::into)
+}
 pub async fn delete_collection(id: String) -> Result<(), BridgeError> {
     core()
         .await?

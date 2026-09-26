@@ -18,6 +18,7 @@ pub mod projection;
 pub mod query;
 pub mod quinn_transport;
 pub mod records;
+pub mod remap;
 pub mod routing;
 pub mod schema;
 #[doc(hidden)]
@@ -86,6 +87,7 @@ pub use quinn_transport::{
 pub use records::{
     GenericRecord, RecordFieldIssue, RecordId, RecordValidationError, validate_record,
 };
+pub use remap::{ClonePlan, IdRemap, clone_plan};
 pub use routing::{
     ConnectionDirection, ConnectionFailure, ConnectionManager, DialTiming, EndpointRegistry,
     EndpointSource, NetworkEndpoint, PeerConnectionState, PeerConnector, SessionCandidate,

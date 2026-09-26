@@ -26,6 +26,15 @@ Future<void> renameCollection({required String id, required String name}) =>
       name: name,
     );
 
+/// Copies a collection's structure (no records) and returns the new collection id.
+Future<String> cloneCollection({
+  required String sourceId,
+  required String name,
+}) => RustLib.instance.api.crateApiCollectionsCloneCollection(
+  sourceId: sourceId,
+  name: name,
+);
+
 Future<void> deleteCollection({required String id}) =>
     RustLib.instance.api.crateApiCollectionsDeleteCollection(id: id);
 

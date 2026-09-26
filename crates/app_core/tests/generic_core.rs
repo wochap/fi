@@ -908,3 +908,323 @@ async fn record_draft_validation_reports_every_issue_and_commits_nothing() {
     assert_eq!(issues[0].message, "Required");
     app.shutdown().await.unwrap();
 }
+
+/// Source collection for clone tests: an enum field with a removed option, a computed field, a
+/// query filtering on an enum constant, a widget over that query, and `records` records.
+struct CloneSource {
+    collection: app_core::CollectionSchemaId,
+    query: QueryId,
+    widget: app_core::WidgetId,
+}
+
+async fn seed_clone_source(app: &AppCore, records: i64) -> CloneSource {
+    let collection = app
+        .create_collection("Headache".into(), "Symptom diary".into())
+        .await
+        .unwrap();
+    let intensity = field("Intensity", FieldType::Integer, true, 0);
+    let mut kind = field("Kind", FieldType::Enum, false, 1);
+    kind.enum_options = vec![
+        EnumOption {
+            id: EnumOptionId::new(),
+            label: "Mild".into(),
+            order: 0,
+            deleted: false,
+        },
+        EnumOption {
+            id: EnumOptionId::new(),
+            label: "Severe".into(),
+            order: 1,
+            deleted: false,
+        },
+    ];
+    app.add_field(collection, intensity.clone()).await.unwrap();
+    app.add_field(collection, kind.clone()).await.unwrap();
+    let retired = EnumOption {
+        id: EnumOptionId::new(),
+        label: "Retired".into(),
+        order: 2,
+        deleted: false,
+    };
+    app.upsert_enum_option(collection, kind.id, retired.clone())
+        .await
+        .unwrap();
+    app.remove_enum_option(collection, kind.id, retired.id)
+        .await
+        .unwrap();
+    let computed = ComputedFieldDefinition {
+        id: ComputedFieldId::new(),
+        collection_id: collection,
+        name: "Absolute".into(),
+        declared_type: ValueType::Integer,
+        nullable: false,
+        expression: VersionedExpression::new(Expression::Abs {
+            expression: Box::new(Expression::Field {
+                field: FieldReference::Source(intensity.id),
+            }),
+        }),
+        order: 0,
+        deleted: false,
+    };
+    app.create_computed_field(computed.clone()).await.unwrap();
+    let query = QueryDefinition {
+        id: QueryId::new(),
+        collection_id: collection,
+        name: "Severe total".into(),
+        query: VersionedCollectionQuery::new(CollectionQuery {
+            collection_id: collection,
+            filter: Some(Expression::Compare {
+                operator: ComparisonOperator::Equal,
+                left: Box::new(Expression::Field {
+                    field: FieldReference::Source(kind.id),
+                }),
+                right: Box::new(Expression::Constant {
+                    value: TypedValue::Enum(kind.enum_options[1].id),
+                }),
+            }),
+            grouping: None,
+            shape: QueryShape::Scalar {
+                aggregation: Aggregation::Sum {
+                    expression: Expression::Field {
+                        field: FieldReference::Computed(computed.id),
+                    },
+                },
+            },
+            sorting: vec![],
+            limit: None,
+            calendar: CalendarPolicy::default(),
+        }),
+        order: 0,
+        deleted: false,
+    };
+    app.create_query_definition(query.clone()).await.unwrap();
+    let widget = app_core::WidgetDefinition {
+        id: app_core::WidgetId::new(),
+        collection_id: collection,
+        widget_type: app_core::WidgetType::new("core.aggregate-number").unwrap(),
+        query_id: query.id,
+        title: "Severe total".into(),
+        configuration: app_core::WidgetConfiguration::empty(),
+        layout: app_core::WidgetLayout::default(),
+        order: 0,
+        deleted: false,
+    };
+    app.create_widget(widget.clone()).await.unwrap();
+    for index in 0..records {
+        app.create_record(
+            collection,
+            BTreeMap::from([
+                (intensity.id, FieldValue::Integer(index + 1)),
+                (kind.id, FieldValue::Enum(kind.enum_options[1].id)),
+            ]),
+        )
+        .await
+        .unwrap();
+    }
+    CloneSource {
+        collection,
+        query: query.id,
+        widget: widget.id,
+    }
+}
+
+#[tokio::test]
+async fn clone_copies_structure_without_records_and_emits_one_event() {
+    let directory = tempfile::tempdir().unwrap();
+    let app = AppCore::open(directory.path()).await.unwrap();
+    app.create_new_dataset().await.unwrap();
+    let source = seed_clone_source(&app, 3).await;
+    let source_schema = app.collection_schema(source.collection).unwrap().unwrap();
+    let source_queries = app.query_definitions(source.collection).unwrap();
+    let source_widgets = app.widget_definitions(source.collection).unwrap();
+    let source_result = app
+        .execute_query_definition(source.collection, source.query, 0)
+        .unwrap();
+
+    let mut events = app.subscribe_data_changed();
+    let clone = app
+        .clone_collection(source.collection, "  Migraine ".into())
+        .await
+        .unwrap();
+    let event = events.recv().await.unwrap();
+    assert_eq!(event.collection_ids, vec![clone]);
+    assert!(
+        tokio::time::timeout(Duration::from_millis(25), events.recv())
+            .await
+            .is_err()
+    );
+
+    let schema = app.collection_schema(clone).unwrap().unwrap();
+    assert_eq!(schema.name, "Migraine");
+    assert_eq!(schema.description, "Symptom diary");
+    assert_eq!(
+        schema
+            .fields
+            .iter()
+            .map(|field| field.name.as_str())
+            .collect::<Vec<_>>(),
+        vec!["Intensity", "Kind"]
+    );
+    assert_eq!(
+        schema.fields[1]
+            .enum_options
+            .iter()
+            .map(|option| option.label.as_str())
+            .collect::<Vec<_>>(),
+        vec!["Mild", "Severe"]
+    );
+    assert!(app.records(clone).unwrap().is_empty());
+    assert_eq!(app.records(source.collection).unwrap().len(), 3);
+    assert_eq!(
+        app.collection_schema(source.collection).unwrap().unwrap(),
+        source_schema
+    );
+    assert_eq!(
+        app.query_definitions(source.collection).unwrap(),
+        source_queries
+    );
+    assert_eq!(
+        app.widget_definitions(source.collection).unwrap(),
+        source_widgets
+    );
+
+    let computed = app.computed_fields(clone).unwrap();
+    let queries = app.query_definitions(clone).unwrap();
+    let widgets = app.widget_definitions(clone).unwrap();
+    assert_eq!((computed.len(), queries.len(), widgets.len()), (1, 1, 1));
+    assert_ne!(queries[0].id, source.query);
+    assert_ne!(widgets[0].id, source.widget);
+    assert_eq!(widgets[0].query_id, queries[0].id);
+    assert!(app.widget_diagnostics(widgets[0].id).unwrap().is_empty());
+    // Empty clone: the enum-filtered sum over zero records, not the source's total.
+    let cloned_result = app
+        .execute_query_definition(clone, queries[0].id, 0)
+        .unwrap();
+    assert_ne!(cloned_result, source_result);
+    assert!(matches!(
+        app.evaluate_widget(clone, widgets[0].id, 0).unwrap(),
+        app_core::WidgetEvaluation::Ready { .. }
+    ));
+    app.shutdown().await.unwrap();
+
+    std::fs::remove_file(directory.path().join("read-model.sqlite")).unwrap();
+    let reopened = AppCore::open(directory.path()).await.unwrap();
+    assert_eq!(reopened.collection_schema(clone).unwrap().unwrap(), schema);
+    assert_eq!(reopened.computed_fields(clone).unwrap(), computed);
+    assert_eq!(reopened.query_definitions(clone).unwrap(), queries);
+    assert_eq!(reopened.widget_definitions(clone).unwrap(), widgets);
+    assert!(reopened.records(clone).unwrap().is_empty());
+    reopened.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn invalid_clone_has_no_write_projection_or_event() {
+    let directory = tempfile::tempdir().unwrap();
+    let app = AppCore::open(directory.path()).await.unwrap();
+    app.create_new_dataset().await.unwrap();
+    let source = seed_clone_source(&app, 1).await;
+    let collections = app.collections().unwrap();
+    let before = app.projection_state();
+    let mut events = app.subscribe_data_changed();
+    let failure = app
+        .clone_collection(source.collection, "   ".into())
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        failure,
+        app_core::AppError::Domain(app_core::DomainError::Invalid { field: "name", .. })
+    ));
+    let missing = app
+        .clone_collection(app_core::CollectionSchemaId::new(), "Copy".into())
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        missing,
+        app_core::AppError::Domain(app_core::DomainError::NotFound { .. })
+    ));
+    assert_eq!(app.projection_state(), before);
+    assert_eq!(app.collections().unwrap(), collections);
+    assert!(
+        tokio::time::timeout(Duration::from_millis(25), events.recv())
+            .await
+            .is_err()
+    );
+
+    app.delete_collection(source.collection).await.unwrap();
+    let before = app.projection_state();
+    let mut events = app.subscribe_data_changed();
+    let deleted = app
+        .clone_collection(source.collection, "Copy".into())
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        deleted,
+        app_core::AppError::Domain(app_core::DomainError::NotFound { .. })
+    ));
+    assert_eq!(app.projection_state(), before);
+    assert!(app.collections().unwrap().is_empty());
+    assert!(
+        tokio::time::timeout(Duration::from_millis(25), events.recv())
+            .await
+            .is_err()
+    );
+    app.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn in_memory_two_device_clone_sync() {
+    let a_dir = tempfile::tempdir().unwrap();
+    let b_dir = tempfile::tempdir().unwrap();
+    let (a_network, b_network) = MemoryTransport::pair("clone-a", "clone-b", 256);
+    let a = AppCore::open_with_transport(a_dir.path(), a_network.clone())
+        .await
+        .unwrap();
+    let b = AppCore::open_with_transport(b_dir.path(), b_network.clone())
+        .await
+        .unwrap();
+    let root = a.create_new_dataset().await.unwrap();
+    let source = seed_clone_source(&a, 2).await;
+    let clone = a
+        .clone_collection(source.collection, "Migraine".into())
+        .await
+        .unwrap();
+    a_network.connect().await;
+    drive_memory(&a_network, &b_network).await;
+    b.join_existing(root).await.unwrap();
+    drive_memory(&a_network, &b_network).await;
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            if matches!(
+                b.lifecycle_state(),
+                app_core::ApplicationState::Ready { .. }
+            ) && b
+                .widget_definitions(clone)
+                .is_ok_and(|widgets| !widgets.is_empty())
+            {
+                break;
+            }
+            drive_memory(&a_network, &b_network).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(
+        a.collection_schema(clone).unwrap(),
+        b.collection_schema(clone).unwrap()
+    );
+    assert_eq!(
+        a.computed_fields(clone).unwrap(),
+        b.computed_fields(clone).unwrap()
+    );
+    assert_eq!(
+        a.query_definitions(clone).unwrap(),
+        b.query_definitions(clone).unwrap()
+    );
+    assert_eq!(
+        a.widget_definitions(clone).unwrap(),
+        b.widget_definitions(clone).unwrap()
+    );
+    assert!(b.records(clone).unwrap().is_empty());
+    a.shutdown().await.unwrap();
+    b.shutdown().await.unwrap();
+}

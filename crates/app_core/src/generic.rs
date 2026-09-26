@@ -20,6 +20,7 @@ use crate::{
         GenericRecord, RecordId, read_lww_candidates, read_lww_winner, validate_record,
         write_lww_register,
     },
+    remap::{ClonePlan, clone_plan},
     schema::{
         CollectionSchema, CollectionSchemaId, EnumOption, EnumOptionId, FieldDefinition, FieldId,
     },
@@ -75,6 +76,14 @@ pub enum GenericCommand {
         name: String,
     },
     DeleteCollection(CollectionSchemaId),
+    /// Structure-only copy of an active collection under a fresh identity. `plan` is filled by
+    /// `validate_against` so apply writes exactly the definitions that were validated.
+    CloneCollection {
+        source_id: CollectionSchemaId,
+        id: CollectionSchemaId,
+        name: String,
+        plan: Option<ClonePlan>,
+    },
     AddField {
         collection_id: CollectionSchemaId,
         field: FieldDefinition,
@@ -159,6 +168,28 @@ impl GenericCommand {
             }
             Self::DeleteCollection(id) => {
                 collection(snapshot, *id)?;
+            }
+            Self::CloneCollection {
+                source_id,
+                id,
+                name,
+                plan,
+            } => {
+                let source = active_collection(snapshot, *source_id)?;
+                validate_name(name)?;
+                if snapshot.collections.iter().any(|item| item.id == *id) {
+                    return Err(invalid("collection_id", "already exists"));
+                }
+                let cloned = clone_plan(
+                    source,
+                    *id,
+                    name.trim(),
+                    &snapshot.computed_fields,
+                    &snapshot.query_definitions,
+                    &snapshot.widgets,
+                )?;
+                validate_clone_plan(&cloned)?;
+                *plan = Some(cloned);
             }
             Self::AddField {
                 collection_id,
@@ -468,6 +499,36 @@ impl GenericCommand {
     }
 }
 
+/// Runs the checks the ordinary create commands run, against the cloned bundle rather than the
+/// snapshot, since none of the cloned definitions exist there yet.
+fn validate_clone_plan(plan: &ClonePlan) -> Result<(), DomainError> {
+    plan.schema.validate()?;
+    for definition in &plan.computed_fields {
+        validate_computed_field(definition, &plan.schema)
+            .map_err(|error| invalid("computed_field", error.to_string()))?;
+    }
+    for definition in &plan.query_definitions {
+        validate_name(&definition.name)?;
+        let query = definition
+            .query
+            .query()
+            .map_err(|error| invalid("query", error.to_string()))?;
+        validate_query(&query, &plan.schema, &plan.computed_fields)
+            .map_err(|error| invalid("query", error.to_string()))?;
+    }
+    for definition in &plan.widgets {
+        definition
+            .validate_standalone()
+            .map_err(|error| invalid("widget", error.to_string()))?;
+        validate_widget_query(
+            &plan.query_definitions,
+            &definition.widget_type,
+            definition.query_id,
+        )?;
+    }
+    Ok(())
+}
+
 /// The record a batch member targets, or `None` when the command is not a legal
 /// batch member (nested batches, schema commands, record creation, ...).
 fn batch_member_record(command: &GenericCommand) -> Option<RecordId> {
@@ -592,6 +653,37 @@ pub fn apply_generic_command(
                 &FieldValue::Boolean(true),
                 stamp,
             )?;
+        }
+        GenericCommand::CloneCollection { plan, .. } => {
+            let plan = plan
+                .as_ref()
+                .ok_or_else(|| repo_change("clone collection was not validated"))?;
+            write_collection(tx, &collections, &plan.schema, stamp)?;
+            for definition in &plan.computed_fields {
+                write_definition(
+                    tx,
+                    &collections,
+                    definition.collection_id,
+                    "computed_fields",
+                    &definition.id.to_string(),
+                    definition,
+                    stamp,
+                )?;
+            }
+            for definition in &plan.query_definitions {
+                write_definition(
+                    tx,
+                    &collections,
+                    definition.collection_id,
+                    "queries",
+                    &definition.id.to_string(),
+                    definition,
+                    stamp,
+                )?;
+            }
+            for definition in &plan.widgets {
+                write_widget(tx, &collections, definition, stamp)?;
+            }
         }
         GenericCommand::AddField {
             collection_id,
@@ -2681,5 +2773,315 @@ mod tests {
             );
         }
         assert_eq!(doc.get_heads(), before);
+    }
+
+    /// A collection with an enum field (one removed option), a removed field, a computed field,
+    /// a query filtering on an enum constant, an active and a removed widget, and one record.
+    fn clonable() -> (Automerge, CollectionSchema) {
+        let mut doc = initialized();
+        let mut collection = schema();
+        let options = vec![
+            EnumOption {
+                id: EnumOptionId::new(),
+                label: "Mild".into(),
+                order: 0,
+                deleted: false,
+            },
+            EnumOption {
+                id: EnumOptionId::new(),
+                label: "Gone".into(),
+                order: 1,
+                deleted: true,
+            },
+            EnumOption {
+                id: EnumOptionId::new(),
+                label: "Severe".into(),
+                order: 2,
+                deleted: false,
+            },
+        ];
+        collection.description = "Daily log".into();
+        collection.fields.push(FieldDefinition {
+            id: FieldId::new(),
+            name: "Kind".into(),
+            field_type: FieldType::Enum,
+            required: false,
+            default: Some(FieldValue::Enum(options[2].id)),
+            validation: ValidationMetadata::default(),
+            display: DisplayMetadata::default(),
+            order: 1,
+            deleted: false,
+            enum_options: options.clone(),
+        });
+        collection.fields.push(FieldDefinition {
+            id: FieldId::new(),
+            name: "Removed".into(),
+            field_type: FieldType::Text,
+            required: false,
+            default: None,
+            validation: ValidationMetadata::default(),
+            display: DisplayMetadata::default(),
+            order: 2,
+            deleted: true,
+            enum_options: vec![],
+        });
+        commit(
+            &mut doc,
+            &mut GenericCommand::CreateCollection(collection.clone()),
+            1,
+        );
+        let computed = ComputedFieldDefinition {
+            id: ComputedFieldId::new(),
+            collection_id: collection.id,
+            name: "Absolute".into(),
+            declared_type: ValueType::Integer,
+            nullable: false,
+            expression: VersionedExpression::new(Expression::Abs {
+                expression: Box::new(Expression::Field {
+                    field: FieldReference::Source(collection.fields[0].id),
+                }),
+            }),
+            order: 0,
+            deleted: false,
+        };
+        commit(
+            &mut doc,
+            &mut GenericCommand::CreateComputedField(computed.clone()),
+            2,
+        );
+        let query_id = QueryId::new();
+        let mut query = scalar_query(collection.id, query_id);
+        let mut body = query.query.query().unwrap();
+        body.filter = Some(Expression::Compare {
+            operator: crate::query::ComparisonOperator::Equal,
+            left: Box::new(Expression::Field {
+                field: FieldReference::Source(collection.fields[1].id),
+            }),
+            right: Box::new(Expression::Constant {
+                value: crate::query::TypedValue::Enum(options[2].id),
+            }),
+        });
+        body.shape = QueryShape::Scalar {
+            aggregation: Aggregation::Sum {
+                expression: Expression::Field {
+                    field: FieldReference::Computed(computed.id),
+                },
+            },
+        };
+        query.query = VersionedCollectionQuery::new(body);
+        commit(&mut doc, &mut GenericCommand::CreateQuery(query), 3);
+        commit(
+            &mut doc,
+            &mut GenericCommand::CreateWidget(widget(
+                collection.id,
+                query_id,
+                "core.aggregate-number",
+                0,
+            )),
+            4,
+        );
+        let removed = widget(collection.id, query_id, "core.aggregate-number", 1);
+        commit(
+            &mut doc,
+            &mut GenericCommand::CreateWidget(removed.clone()),
+            5,
+        );
+        commit(
+            &mut doc,
+            &mut GenericCommand::RemoveWidget {
+                collection_id: collection.id,
+                id: removed.id,
+            },
+            6,
+        );
+        commit(
+            &mut doc,
+            &mut GenericCommand::CreateRecord(GenericRecord {
+                id: RecordId::new(),
+                collection_id: collection.id,
+                values: BTreeMap::from([(collection.fields[0].id, FieldValue::Integer(4))]),
+                stamps: BTreeMap::new(),
+                deleted: false,
+            }),
+            7,
+        );
+        (doc, collection)
+    }
+
+    fn clone_command(source_id: CollectionSchemaId, name: &str) -> GenericCommand {
+        GenericCommand::CloneCollection {
+            source_id,
+            id: CollectionSchemaId::new(),
+            name: name.into(),
+            plan: None,
+        }
+    }
+
+    #[test]
+    fn clone_validation_rejects_deleted_source_and_empty_name() {
+        let (mut doc, collection) = clonable();
+        let snapshot = decode_generic(&doc).unwrap();
+        assert!(matches!(
+            clone_command(collection.id, "  ").validate_against(&snapshot),
+            Err(DomainError::Invalid { field: "name", .. })
+        ));
+        assert!(matches!(
+            clone_command(CollectionSchemaId::new(), "Copy").validate_against(&snapshot),
+            Err(DomainError::NotFound {
+                kind: "collection",
+                ..
+            })
+        ));
+        commit(
+            &mut doc,
+            &mut GenericCommand::DeleteCollection(collection.id),
+            8,
+        );
+        assert!(matches!(
+            clone_command(collection.id, "Copy").validate_against(&decode_generic(&doc).unwrap()),
+            Err(DomainError::NotFound {
+                kind: "collection",
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn clone_validation_produces_a_plan_with_fresh_ids() {
+        let (doc, collection) = clonable();
+        let snapshot = decode_generic(&doc).unwrap();
+        let mut command = clone_command(collection.id, "Migraine");
+        command.validate_against(&snapshot).unwrap();
+        let GenericCommand::CloneCollection {
+            id,
+            plan: Some(plan),
+            ..
+        } = &command
+        else {
+            panic!("validation stores the plan");
+        };
+        assert_eq!(plan.schema.id, *id);
+        assert_eq!(plan.schema.name, "Migraine");
+        assert_eq!(plan.schema.fields.len(), 2);
+        assert_eq!(plan.schema.fields[1].enum_options.len(), 2);
+        assert_eq!(plan.computed_fields.len(), 1);
+        assert_eq!(plan.query_definitions.len(), 1);
+        assert_eq!(plan.widgets.len(), 1);
+        let mut source_ids = vec![collection.id.to_string()];
+        for field in &collection.fields {
+            source_ids.push(field.id.to_string());
+            source_ids.extend(field.enum_options.iter().map(|item| item.id.to_string()));
+        }
+        source_ids.extend(
+            snapshot
+                .computed_fields
+                .iter()
+                .map(|item| item.id.to_string()),
+        );
+        source_ids.extend(
+            snapshot
+                .query_definitions
+                .iter()
+                .map(|item| item.id.to_string()),
+        );
+        source_ids.extend(snapshot.widgets.iter().map(|item| item.id.to_string()));
+        let encoded = format!(
+            "{}{}{}{}",
+            serde_json::to_string(&plan.schema).unwrap(),
+            serde_json::to_string(&plan.computed_fields).unwrap(),
+            serde_json::to_string(&plan.query_definitions).unwrap(),
+            serde_json::to_string(&plan.widgets).unwrap(),
+        );
+        assert!(source_ids.iter().all(|source| !encoded.contains(source)));
+    }
+
+    #[test]
+    fn clone_apply_writes_the_validated_plan_under_one_stamp() {
+        let (mut doc, collection) = clonable();
+        let before = decode_generic(&doc).unwrap();
+        let mut command = clone_command(collection.id, "Migraine");
+        command.validate_against(&before).unwrap();
+        let GenericCommand::CloneCollection {
+            id,
+            plan: Some(plan),
+            ..
+        } = command.clone()
+        else {
+            panic!("validation stores the plan");
+        };
+        {
+            let mut tx = doc.transaction();
+            apply_generic_command(&mut tx, &command, stamp(20)).unwrap();
+            tx.commit();
+        }
+        let after = decode_generic(&doc).unwrap();
+        assert!(after.diagnostics.is_empty(), "{:?}", after.diagnostics);
+        let clone = after.collections.iter().find(|item| item.id == id).unwrap();
+        assert_eq!(clone, &plan.schema);
+        assert_eq!(
+            clone
+                .fields
+                .iter()
+                .map(|field| (field.name.as_str(), field.order))
+                .collect::<Vec<_>>(),
+            vec![("Intensity", 0), ("Kind", 1)]
+        );
+        let owned = |collection_id: CollectionSchemaId| collection_id == id;
+        let computed: Vec<_> = after
+            .computed_fields
+            .iter()
+            .filter(|item| owned(item.collection_id))
+            .cloned()
+            .collect();
+        let queries: Vec<_> = after
+            .query_definitions
+            .iter()
+            .filter(|item| owned(item.collection_id))
+            .cloned()
+            .collect();
+        let widgets: Vec<_> = after
+            .widgets
+            .iter()
+            .filter(|item| owned(item.collection_id))
+            .cloned()
+            .collect();
+        assert_eq!(computed, plan.computed_fields);
+        assert_eq!(queries, plan.query_definitions);
+        assert_eq!(widgets, plan.widgets);
+        assert_eq!(widgets[0].query_id, queries[0].id);
+        let query = queries[0].query.query().unwrap();
+        assert_eq!(query.collection_id, id);
+        let Some(Expression::Compare { left, right, .. }) = query.filter else {
+            panic!("filter is copied");
+        };
+        assert_eq!(
+            *left,
+            Expression::Field {
+                field: FieldReference::Source(clone.fields[1].id)
+            }
+        );
+        assert_eq!(
+            *right,
+            Expression::Constant {
+                value: crate::query::TypedValue::Enum(clone.fields[1].ordered_enum_options()[1].id)
+            }
+        );
+        assert!(
+            after
+                .records
+                .iter()
+                .all(|record| record.collection_id != id)
+        );
+        assert_eq!(after.max_stamp, Some(stamp(20)));
+        let source_before = before
+            .collections
+            .iter()
+            .find(|item| item.id == collection.id);
+        let source_after = after
+            .collections
+            .iter()
+            .find(|item| item.id == collection.id);
+        assert_eq!(source_before, source_after);
+        assert_eq!(before.records, after.records);
     }
 }

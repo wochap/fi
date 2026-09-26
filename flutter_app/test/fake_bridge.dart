@@ -76,6 +76,9 @@ final class FakeCollectionBridge implements CollectionBridge {
   /// Every name sent to [renameCollection] that was not failed, in call order.
   final List<String> renames = [];
 
+  /// Every `(source id, name)` sent to [cloneCollection] that was not failed, in call order.
+  final List<(String, String)> clones = [];
+
   /// Every expression submitted for inference, in call order.
   final List<ExpressionDto> inferenceRequests = [];
 
@@ -236,6 +239,84 @@ final class FakeCollectionBridge implements CollectionBridge {
       fields: schema.fields,
     );
     changed(id);
+  }
+
+  /// Mirrors the core's structure-only copy: fields, computed fields, queries and widgets get
+  /// new ids (widgets follow their copied query); records are never copied. Expression bodies
+  /// are copied as-is, which is enough for the UI this fake drives.
+  @override
+  Future<String> cloneCollection(String sourceId, String name) async {
+    _fail();
+    final source = schemas[sourceId]!;
+    var id = 'collection-${_next++}';
+    // Seeded tests name their collection `collection-1` directly, so skip taken ids.
+    while (schemas.containsKey(id)) {
+      id = 'collection-${_next++}';
+    }
+    final trimmed = name.trim();
+    clones.add((sourceId, trimmed));
+    collections.add(
+      CollectionDto(id: id, name: trimmed, description: source.description),
+    );
+    schemas[id] = CollectionSchemaDto(
+      id: id,
+      description: source.description,
+      name: trimmed,
+      fields: [
+        for (final field in source.fields)
+          if (!field.deleted) _copyField(field, id: 'field-${_next++}'),
+      ],
+    );
+    records[id] = [];
+    computedFields[id] = [
+      for (final item
+          in computedFields[sourceId] ?? <ComputedFieldDefinitionDto>[])
+        if (!item.deleted)
+          ComputedFieldDefinitionDto(
+            id: 'computed-${_next++}',
+            collectionId: id,
+            name: item.name,
+            declaredType: item.declaredType,
+            nullable: item.nullable,
+            expressionVersion: item.expressionVersion,
+            expression: item.expression,
+            unsupportedBodyJson: item.unsupportedBodyJson,
+            order: item.order,
+            deleted: false,
+          ),
+    ];
+    final queryIds = <String, String>{};
+    queryDefinitions[id] = [
+      for (final item in queryDefinitions[sourceId] ?? <QueryDefinitionDto>[])
+        if (!item.deleted)
+          QueryDefinitionDto(
+            id: queryIds[item.id] = 'query-${_next++}',
+            collectionId: id,
+            name: item.name,
+            queryVersion: item.queryVersion,
+            query: item.query,
+            unsupportedBodyJson: item.unsupportedBodyJson,
+            order: item.order,
+            deleted: false,
+          ),
+    ];
+    widgetDefinitions[id] = [
+      for (final item in widgetDefinitions[sourceId] ?? <WidgetDefinitionDto>[])
+        if (!item.deleted && queryIds.containsKey(item.queryId))
+          WidgetDefinitionDto(
+            id: 'widget-${_next++}',
+            collectionId: id,
+            widgetType: item.widgetType,
+            queryId: queryIds[item.queryId]!,
+            title: item.title,
+            configuration: item.configuration,
+            layout: item.layout,
+            order: item.order,
+            deleted: false,
+          ),
+    ];
+    changed(id);
+    return id;
   }
 
   @override

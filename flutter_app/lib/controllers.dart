@@ -424,6 +424,13 @@ final class CollectionsController extends ChangeNotifier {
     await refresh();
   }
 
+  /// Duplicates [sourceId]'s structure under [name]; the selection stays where it is.
+  Future<String> cloneCollection(String sourceId, String name) async {
+    final id = await bridge.cloneCollection(sourceId, name);
+    await refresh();
+    return id;
+  }
+
   /// Counts what deleting [collectionId] takes with it: its active records, widgets and saved
   /// queries. Reads run in parallel and are independent of the selected collection.
   Future<CollectionContents> contentsOf(String collectionId) async {
