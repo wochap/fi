@@ -113,7 +113,62 @@ final _kinds = <String, Widget Function(InputSize size)>{
     onTap: () {},
     size: size,
   ),
+  'slider with value': (size) => FiSlider(
+    key: const Key('input'),
+    label: 'Pain',
+    min: 1,
+    max: 5,
+    value: 3,
+    onChanged: (_) {},
+    size: size,
+  ),
+  'unset slider': (size) => FiSlider(
+    key: const Key('input'),
+    label: 'Pain',
+    required: true,
+    min: 1,
+    max: 5,
+    onChanged: (_) {},
+    size: size,
+  ),
 };
+
+/// Hosts a [FiSlider] whose value lives in the test, so the widget sees each change.
+class _SliderHost extends StatefulWidget {
+  const _SliderHost({
+    required this.reported,
+    this.initial,
+    this.required = false,
+    this.errors = const [],
+  });
+
+  final List<int?> reported;
+  final int? initial;
+  final bool required;
+  final List<String> errors;
+
+  @override
+  State<_SliderHost> createState() => _SliderHostState();
+}
+
+class _SliderHostState extends State<_SliderHost> {
+  late int? value = widget.initial;
+
+  @override
+  Widget build(BuildContext context) => FiSlider(
+    key: const Key('input'),
+    label: 'Pain',
+    min: 1,
+    max: 5,
+    value: value,
+    required: widget.required,
+    errors: widget.errors,
+    onChanged: (next) => setState(() {
+      widget.reported.add(next);
+      value = next;
+    }),
+  );
+}
 
 void main() {
   final expected = {
@@ -204,6 +259,120 @@ void main() {
     controller.text = 'one\ntwo\nthree';
     await tester.pump();
     expect(_box(tester, find.byKey(const Key('input'))), 80);
+  });
+
+  for (final width in [1280.0, 390.0]) {
+    testWidgets('a slider aligns with a text input at ${width.toInt()}px', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        width,
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Expanded(
+              child: FiTextInput(key: Key('name'), label: 'Name'),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: FiSlider(
+                key: const Key('slider'),
+                label: 'Pain',
+                min: 1,
+                max: 5,
+                value: 2,
+                onChanged: (_) {},
+              ),
+            ),
+          ],
+        ),
+      );
+      final height = width < 720 ? 48.0 : 40.0;
+      expect(_box(tester, find.byKey(const Key('name'))), height);
+      expect(_box(tester, find.byKey(const Key('slider'))), height);
+      expect(
+        _top(tester, find.byKey(const Key('name'))),
+        _top(tester, find.byKey(const Key('slider'))),
+      );
+    });
+  }
+
+  testWidgets('a slider snaps drags to whole numbers inside the bounds', (
+    tester,
+  ) async {
+    final reported = <int?>[];
+    await _pump(tester, 1280, _SliderHost(reported: reported, initial: 1));
+    final track = find.byType(Slider);
+    final left = tester.getTopLeft(track);
+    final width = tester.getSize(track).width;
+    // Between 3 and 4 on the 1..5 track, a little past the halfway mark between them.
+    await tester.tapAt(
+      Offset(left.dx + width * 0.6, tester.getCenter(track).dy),
+    );
+    await tester.pump();
+    expect(reported, isNotEmpty);
+    expect(reported.last, anyOf(3, 4));
+    expect(
+      reported.every((value) => value is int && value >= 1 && value <= 5),
+      isTrue,
+    );
+    expect(find.text('${reported.last}'), findsOneWidget);
+    await tester.drag(track, const Offset(2000, 0));
+    await tester.pump();
+    expect(reported.last, 5);
+    expect(find.text('5'), findsOneWidget);
+  });
+
+  testWidgets('an unset slider reports nothing until set', (tester) async {
+    final reported = <int?>[];
+    await _pump(tester, 1280, _SliderHost(reported: reported));
+    expect(find.byKey(const Key('slider-unset')), findsOneWidget);
+    expect(find.byKey(const Key('slider-value')), findsNothing);
+    expect(find.byType(Slider), findsNothing);
+    expect(reported, isEmpty);
+    await tester.tap(find.byKey(const Key('slider-set')));
+    await tester.pump();
+    expect(reported, [1]);
+    expect(find.byKey(const Key('slider-value')), findsOneWidget);
+    expect(find.byType(Slider), findsOneWidget);
+  });
+
+  testWidgets(
+    'an optional slider clears back to unset; a required one cannot',
+    (tester) async {
+      final reported = <int?>[];
+      await _pump(tester, 1280, _SliderHost(reported: reported, initial: 4));
+      expect(find.text('4'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('slider-clear')));
+      await tester.pump();
+      expect(reported, [null]);
+      expect(find.byKey(const Key('slider-unset')), findsOneWidget);
+
+      await _pump(
+        tester,
+        1280,
+        _SliderHost(reported: reported, initial: 4, required: true),
+      );
+      expect(find.byKey(const Key('slider-clear')), findsNothing);
+    },
+  );
+
+  testWidgets('a slider shows its error lines and required marker', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      1280,
+      _SliderHost(
+        reported: [],
+        required: true,
+        errors: const ['Required', 'Must be between 1 and 5'],
+      ),
+    );
+    expect(find.text('Required\nMust be between 1 and 5'), findsOneWidget);
+    expect(find.bySemanticsLabel('Pain, required'), findsOneWidget);
+    expect(_box(tester, find.byKey(const Key('input'))), 40);
   });
 
   testWidgets('a required select reads "<label>, required"', (tester) async {

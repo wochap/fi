@@ -1786,6 +1786,7 @@ class _FieldEditorFormState extends State<_FieldEditorForm> {
   late var kind = existing?.fieldType.kind ?? FieldTypeKindDto.text;
   late var required = existing?.required_ ?? false;
   late var multiline = existing?.display.multiline ?? false;
+  late var slider = existing?.display.slider ?? false;
   late var scale = existing?.fieldType.scale ?? 2;
   // Range bounds are compared against the stored integer, which is epoch days for a Date, epoch
   // milliseconds for a DateTime, and the scaled representation for a FixedDecimal. Holding them
@@ -1826,6 +1827,15 @@ class _FieldEditorFormState extends State<_FieldEditorForm> {
     'numeric_range': 'maximum',
     'length_range': 'max-length',
   };
+
+  /// A slider needs a whole-number track, so only an Integer with both bounds can offer one.
+  bool get _sliderAvailable =>
+      kind == FieldTypeKindDto.integer && minimum != null && maximum != null;
+
+  /// Turns the slider off once it can no longer apply, so a later bound does not revive it.
+  void _dropUnavailableSlider() {
+    if (!_sliderAvailable) slider = false;
+  }
 
   /// Drops the shown issues for [input] once it changes, since they describe the old value.
   void _edited(String input) {
@@ -1914,7 +1924,10 @@ class _FieldEditorFormState extends State<_FieldEditorForm> {
           minLength: int.tryParse(minLength.text),
           maxLength: int.tryParse(maxLength.text),
         ),
-        display: DisplayMetadataDto(multiline: multiline),
+        display: DisplayMetadataDto(
+          multiline: multiline,
+          slider: slider && _sliderAvailable,
+        ),
         order: order,
         deleted: false,
         // Options travel separately; the controller keeps the stored ones here.
@@ -1965,6 +1978,7 @@ class _FieldEditorFormState extends State<_FieldEditorForm> {
               if (kind != FieldTypeKindDto.enum_) options.clear();
               minimum = null;
               maximum = null;
+              slider = false;
             })
           : null,
     );
@@ -2106,6 +2120,7 @@ class _FieldEditorFormState extends State<_FieldEditorForm> {
                   onChanged: (value) => setState(() {
                     _edited('maximum');
                     minimum = value?.integerValue;
+                    _dropUnavailableSlider();
                   }),
                 ),
               ),
@@ -2123,12 +2138,29 @@ class _FieldEditorFormState extends State<_FieldEditorForm> {
                   onChanged: (value) => setState(() {
                     _edited('maximum');
                     maximum = value?.integerValue;
+                    _dropUnavailableSlider();
                   }),
                 ),
               ),
             ],
           ),
         ],
+        if (kind == FieldTypeKindDto.integer)
+          SwitchListTile(
+            key: const Key('field-slider'),
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Show as slider'),
+            subtitle: Text(
+              _sliderAvailable
+                  ? 'Pick the value by dragging between the bounds'
+                  : 'Set a minimum and a maximum first',
+            ),
+            secondary: const HelpButton(HelpId.fieldSlider),
+            value: slider && _sliderAvailable,
+            onChanged: _sliderAvailable
+                ? (value) => setState(() => slider = value)
+                : null,
+          ),
         if (kind == FieldTypeKindDto.enum_) ..._optionsEditor(),
         gap,
         _metadataInput(
@@ -2309,7 +2341,7 @@ Widget _metadataInput({
             // Never required: the slot itself is optional whatever the field demands of records.
             required_: false,
             validation: const ValidationMetadataDto(),
-            display: const DisplayMetadataDto(multiline: false),
+            display: const DisplayMetadataDto(multiline: false, slider: false),
             order: 0,
             deleted: false,
             enumOptions: enumOptions,

@@ -362,3 +362,133 @@ class FiPickerInput extends StatelessWidget {
     );
   }
 }
+
+/// A whole-number slider between [min] and [max], with the value as text on the trailing side.
+///
+/// With no [value] it shows an unset state and a "Set" action that picks [min]. Once set, a clear
+/// icon returns it to unset when [allowClear] is on or the input is not [required]. [onChanged]
+/// only ever receives integers inside the bounds, or null when cleared; the slider's double stays
+/// inside this widget.
+class FiSlider extends StatelessWidget {
+  const FiSlider({
+    required this.min,
+    required this.max,
+    required this.onChanged,
+    this.value,
+    this.label,
+    this.required = false,
+    this.errors = const [],
+    this.helperText,
+    this.allowClear = false,
+    this.size = InputSize.normal,
+    super.key,
+  }) : assert(min <= max);
+
+  final int min;
+  final int max;
+  final int? value;
+
+  /// Null disables the slider.
+  final ValueChanged<int?>? onChanged;
+  final String? label;
+  final bool required;
+  final List<String> errors;
+  final String? helperText;
+
+  /// Offers the clear icon even on a required input.
+  final bool allowClear;
+  final InputSize size;
+
+  void _report(int next) {
+    final clamped = next.clamp(min, max);
+    if (clamped != value) onChanged?.call(clamped);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final value = this.value?.clamp(min, max);
+    final contentHeight = _textContentHeight(context);
+    final enabled = onChanged != null;
+    final muted = TextStyle(
+      fontSize: _fontSize,
+      color: Theme.of(context).hintColor,
+    );
+    final Widget content;
+    final List<Widget> trailing;
+    if (value == null) {
+      content = Text(
+        'Not set',
+        key: const Key('slider-unset'),
+        strutStyle: _strut,
+        style: muted,
+        overflow: TextOverflow.ellipsis,
+      );
+      trailing = [
+        TextButton(
+          key: const Key('slider-set'),
+          onPressed: enabled ? () => onChanged!(min) : null,
+          child: const Text('Set'),
+        ),
+      ];
+    } else {
+      content = SliderTheme(
+        data: SliderTheme.of(context).copyWith(
+          // Kept inside the line height so the thumb never sets the box height.
+          trackHeight: 4,
+          thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
+          overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+          showValueIndicator: ShowValueIndicator.never,
+        ),
+        child: Slider(
+          value: value.toDouble(),
+          min: min.toDouble(),
+          max: max.toDouble(),
+          divisions: max > min ? max - min : null,
+          onChanged: enabled && max > min
+              ? (position) => _report(position.round())
+              : null,
+        ),
+      );
+      trailing = [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: Text(
+            '$value',
+            key: const Key('slider-value'),
+            strutStyle: _strut,
+            style: const TextStyle(
+              fontSize: _fontSize,
+              fontFeatures: [FontFeature.tabularFigures()],
+            ),
+          ),
+        ),
+        if (allowClear || !required)
+          IconButton(
+            key: const Key('slider-clear'),
+            tooltip: 'Clear',
+            icon: const Icon(Icons.clear, size: 18),
+            onPressed: enabled ? () => onChanged!(null) : null,
+          ),
+      ];
+    }
+    return InputDecorator(
+      isEmpty: false,
+      decoration: _decoration(
+        context,
+        size: size,
+        contentHeight: contentHeight,
+        label: label,
+        hint: null,
+        required: required,
+        errors: errors,
+        helperText: helperText,
+        prefixIcon: null,
+        suffixIcon: Row(mainAxisSize: MainAxisSize.min, children: trailing),
+      ).copyWith(enabled: enabled),
+      child: SizedBox(
+        height: contentHeight,
+        child: Align(alignment: Alignment.centerLeft, child: content),
+      ),
+    );
+  }
+}

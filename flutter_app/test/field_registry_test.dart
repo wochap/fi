@@ -2,6 +2,7 @@ import 'package:clock/clock.dart';
 import 'package:fi/exact_format.dart';
 import 'package:fi/field_registry.dart';
 import 'package:fi/src/rust/api/models.dart';
+import 'package:fi/theme/inputs.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -16,10 +17,23 @@ FieldDefinitionDto field(
   fieldType: FieldTypeDto(kind: kind, scale: scale),
   required_: false,
   validation: const ValidationMetadataDto(),
-  display: const DisplayMetadataDto(multiline: false),
+  display: const DisplayMetadataDto(multiline: false, slider: false),
   order: 0,
   deleted: false,
   enumOptions: options,
+);
+
+/// An Integer field bounded to 1..5, optionally presented as a slider.
+FieldDefinitionDto painField({bool slider = true}) => FieldDefinitionDto(
+  id: 'pain',
+  name: 'Pain',
+  fieldType: const FieldTypeDto(kind: FieldTypeKindDto.integer),
+  required_: false,
+  validation: const ValidationMetadataDto(minInteger: 1, maxInteger: 5),
+  display: DisplayMetadataDto(multiline: false, slider: slider),
+  order: 0,
+  deleted: false,
+  enumOptions: const [],
 );
 
 void main() {
@@ -267,6 +281,113 @@ void main() {
         quickFill: false,
       );
       expect(find.text('Now'), findsNothing);
+    });
+  });
+
+  group('slider', () {
+    Future<List<FieldValueDto>> pumpEditor(
+      WidgetTester tester,
+      FieldDefinitionDto definition, {
+      FieldValueDto? initial,
+    }) async {
+      final emitted = <FieldValueDto>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: const FieldRendererRegistry().editor(
+              definition,
+              initial,
+              emitted.add,
+            ),
+          ),
+        ),
+      );
+      return emitted;
+    }
+
+    testWidgets('a flagged bounded Integer renders as a slider', (
+      tester,
+    ) async {
+      await pumpEditor(
+        tester,
+        painField(),
+        initial: const FieldValueDto(
+          kind: FieldValueKindDto.integer,
+          integerValue: 2,
+        ),
+      );
+      expect(find.byType(FiSlider), findsOneWidget);
+      expect(find.byType(EditableText), findsNothing);
+      final slider = tester.widget<Slider>(find.byType(Slider));
+      expect((slider.min, slider.max, slider.divisions), (1.0, 5.0, 4));
+      expect(find.byKey(const Key('slider-value')), findsOneWidget);
+      expect(find.text('2'), findsOneWidget);
+    });
+
+    testWidgets('dragging reports an integer value', (tester) async {
+      final emitted = await pumpEditor(
+        tester,
+        painField(),
+        initial: const FieldValueDto(
+          kind: FieldValueKindDto.integer,
+          integerValue: 1,
+        ),
+      );
+      await tester.drag(find.byType(Slider), const Offset(2000, 0));
+      await tester.pump();
+      expect(emitted.last.kind, FieldValueKindDto.integer);
+      expect(emitted.last.integerValue, 5);
+      expect(find.text('5'), findsOneWidget);
+    });
+
+    testWidgets('an unset optional slider reports null when cleared', (
+      tester,
+    ) async {
+      final emitted = await pumpEditor(tester, painField());
+      expect(find.byKey(const Key('slider-unset')), findsOneWidget);
+      expect(emitted, isEmpty);
+      await tester.tap(find.byKey(const Key('slider-set')));
+      await tester.pump();
+      expect(emitted.single.kind, FieldValueKindDto.integer);
+      expect(emitted.single.integerValue, 1);
+      await tester.tap(find.byKey(const Key('slider-clear')));
+      await tester.pump();
+      expect(emitted.last.kind, FieldValueKindDto.null_);
+      expect(find.byKey(const Key('slider-unset')), findsOneWidget);
+    });
+
+    testWidgets('without the flag the field is the plain integer input', (
+      tester,
+    ) async {
+      await pumpEditor(tester, painField(slider: false));
+      expect(find.byType(FiSlider), findsNothing);
+      expect(find.byType(EditableText), findsOneWidget);
+    });
+
+    testWidgets('the record list shows a slider value as a plain number', (
+      tester,
+    ) async {
+      const value = FieldValueDto(
+        kind: FieldValueKindDto.integer,
+        integerValue: 3,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: const FieldRendererRegistry().display(painField(), value),
+          ),
+        ),
+      );
+      expect(find.text('3'), findsOneWidget);
+      expect(find.byType(Slider), findsNothing);
+      expect(
+        const FieldRendererRegistry().displayText(
+          painField(),
+          value,
+          human: true,
+        ),
+        '3',
+      );
     });
   });
 }

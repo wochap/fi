@@ -131,6 +131,7 @@ pub struct ValidationMetadataDto {
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct DisplayMetadataDto {
     pub multiline: bool,
+    pub slider: bool,
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EnumOptionDto {
@@ -1134,6 +1135,7 @@ impl From<app_core::FieldDefinition> for FieldDefinitionDto {
             },
             display: DisplayMetadataDto {
                 multiline: value.display.multiline,
+                slider: value.display.slider,
             },
             order: value.order,
             deleted: value.deleted,
@@ -1164,6 +1166,7 @@ impl TryFrom<FieldDefinitionDto> for app_core::FieldDefinition {
             },
             display: app_core::DisplayMetadata {
                 multiline: value.display.multiline,
+                slider: value.display.slider,
             },
             order: value.order,
             deleted: value.deleted,

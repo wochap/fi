@@ -440,21 +440,23 @@ class DiagnosticDto {
 
 class DisplayMetadataDto {
   final bool multiline;
+  final bool slider;
 
-  const DisplayMetadataDto({required this.multiline});
+  const DisplayMetadataDto({required this.multiline, required this.slider});
 
   static Future<DisplayMetadataDto> default_() =>
       RustLib.instance.api.crateApiModelsDisplayMetadataDtoDefault();
 
   @override
-  int get hashCode => multiline.hashCode;
+  int get hashCode => multiline.hashCode ^ slider.hashCode;
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is DisplayMetadataDto &&
           runtimeType == other.runtimeType &&
-          multiline == other.multiline;
+          multiline == other.multiline &&
+          slider == other.slider;
 }
 
 enum DomainKindDto {

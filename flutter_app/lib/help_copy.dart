@@ -11,6 +11,7 @@ enum HelpId {
   fieldMinMax,
   fieldMinMaxLength,
   fieldMultiline,
+  fieldSlider,
 
   // Widget form: query.
   widgetType,
@@ -96,6 +97,14 @@ const Map<HelpId, HelpEntry> helpCopy = {
     body:
         'Shows this text field as a box that accepts line breaks instead of a single line. It '
         'changes how the field is edited, not what may be stored in it.',
+  ),
+  HelpId.fieldSlider: HelpEntry(
+    title: 'Show as slider',
+    body:
+        'Shows this number field as a slider that moves in whole steps from the minimum to the '
+        'maximum, with the picked value beside it.\n\n'
+        'Available only once both a minimum and a maximum are set. It changes how the field is '
+        'edited, not what is stored: queries, charts, and the record list still see a number.',
   ),
   HelpId.widgetType: HelpEntry(
     title: 'Widget type',

@@ -3512,9 +3512,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   DisplayMetadataDto dco_decode_display_metadata_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 1)
-      throw Exception('unexpected arr length: expect 1 but see ${arr.length}');
-    return DisplayMetadataDto(multiline: dco_decode_bool(arr[0]));
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return DisplayMetadataDto(
+      multiline: dco_decode_bool(arr[0]),
+      slider: dco_decode_bool(arr[1]),
+    );
   }
 
   @protected
@@ -5286,7 +5289,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_multiline = sse_decode_bool(deserializer);
-    return DisplayMetadataDto(multiline: var_multiline);
+    var var_slider = sse_decode_bool(deserializer);
+    return DisplayMetadataDto(multiline: var_multiline, slider: var_slider);
   }
 
   @protected
@@ -7552,6 +7556,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_bool(self.multiline, serializer);
+    sse_encode_bool(self.slider, serializer);
   }
 
   @protected

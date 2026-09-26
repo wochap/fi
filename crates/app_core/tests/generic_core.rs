@@ -495,6 +495,43 @@ async fn invalid_command_has_no_write_projection_or_event() {
 }
 
 #[tokio::test]
+async fn slider_flag_round_trips_and_invalid_slider_commits_nothing() {
+    let directory = tempfile::tempdir().unwrap();
+    let app = AppCore::open(directory.path()).await.unwrap();
+    app.create_new_dataset().await.unwrap();
+    let collection = app
+        .create_collection("Pain".into(), String::new())
+        .await
+        .unwrap();
+    let mut intensity = field("Intensity", FieldType::Integer, false, 0);
+    intensity.validation.min_integer = Some(1);
+    intensity.validation.max_integer = Some(5);
+    intensity.display.slider = true;
+    app.add_field(collection, intensity.clone()).await.unwrap();
+
+    let mut unbounded = field("Unbounded", FieldType::Integer, false, 1);
+    unbounded.validation.min_integer = Some(1);
+    unbounded.display.slider = true;
+    let before = app.projection_state();
+    let failure = app.add_field(collection, unbounded).await.unwrap_err();
+    assert!(matches!(
+        failure,
+        app_core::AppError::Domain(app_core::DomainError::Invalid {
+            field: "slider",
+            ..
+        })
+    ));
+    assert_eq!(app.projection_state(), before);
+    app.shutdown().await.unwrap();
+
+    std::fs::remove_file(directory.path().join("read-model.sqlite")).unwrap();
+    let reopened = AppCore::open(directory.path()).await.unwrap();
+    let schema = reopened.collection_schema(collection).unwrap().unwrap();
+    assert_eq!(schema.fields, vec![intensity]);
+    reopened.shutdown().await.unwrap();
+}
+
+#[tokio::test]
 async fn in_memory_two_device_schema_and_record_sync() {
     let a_dir = tempfile::tempdir().unwrap();
     let b_dir = tempfile::tempdir().unwrap();

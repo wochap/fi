@@ -15,7 +15,7 @@ FieldDefinitionDto _field(
   fieldType: FieldTypeDto(kind: kind, scale: scale),
   required_: required,
   validation: const ValidationMetadataDto(),
-  display: const DisplayMetadataDto(multiline: false),
+  display: const DisplayMetadataDto(multiline: false, slider: false),
   order: 0,
   deleted: false,
   enumOptions: const [],

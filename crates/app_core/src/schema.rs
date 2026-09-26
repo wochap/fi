@@ -77,15 +77,23 @@ pub enum FieldType {
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ValidationMetadata {
+    #[serde(default)]
     pub min_integer: Option<i64>,
+    #[serde(default)]
     pub max_integer: Option<i64>,
+    #[serde(default)]
     pub min_length: Option<u32>,
+    #[serde(default)]
     pub max_length: Option<u32>,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 pub struct DisplayMetadata {
+    #[serde(default)]
     pub multiline: bool,
+    /// Integer-only presentation hint; requires both integer bounds.
+    #[serde(default)]
+    pub slider: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -175,6 +183,14 @@ impl FieldDefinition {
         }
         if self.display.multiline && !matches!(self.field_type, FieldType::Text) {
             return Err(invalid("multiline", "is valid only for Text fields"));
+        }
+        if self.display.slider {
+            if !matches!(self.field_type, FieldType::Integer) {
+                return Err(invalid("slider", "is valid only for Integer fields"));
+            }
+            if self.validation.min_integer.is_none() || self.validation.max_integer.is_none() {
+                return Err(invalid("slider", "requires both a minimum and a maximum"));
+            }
         }
         if matches!(self.field_type, FieldType::Enum) {
             let mut ids = HashSet::new();
@@ -406,6 +422,50 @@ mod tests {
             max_length: Some(2),
         };
         assert!(invalid.validate().is_err());
+    }
+
+    #[test]
+    fn metadata_missing_keys_deserialize_to_defaults() {
+        assert_eq!(
+            serde_json::from_str::<DisplayMetadata>(r#"{"multiline":false}"#).unwrap(),
+            DisplayMetadata::default()
+        );
+        assert_eq!(
+            serde_json::from_str::<DisplayMetadata>("{}").unwrap(),
+            DisplayMetadata::default()
+        );
+        assert_eq!(
+            serde_json::from_str::<ValidationMetadata>("{}").unwrap(),
+            ValidationMetadata::default()
+        );
+    }
+
+    #[test]
+    fn slider_requires_integer_with_both_bounds() {
+        let mut field = text_field("Pain", 1);
+        field.display.slider = true;
+        assert_slider_rejected(&field);
+
+        field.field_type = FieldType::Integer;
+        field.validation.max_integer = Some(5);
+        assert_slider_rejected(&field);
+
+        field.validation.min_integer = Some(1);
+        field.validation.max_integer = None;
+        assert_slider_rejected(&field);
+
+        field.validation.max_integer = Some(5);
+        field.validate().unwrap();
+    }
+
+    fn assert_slider_rejected(field: &FieldDefinition) {
+        assert!(matches!(
+            field.validate(),
+            Err(DomainError::Invalid {
+                field: "slider",
+                ..
+            })
+        ));
     }
 
     fn text_field(name: &str, order: i64) -> FieldDefinition {

@@ -151,11 +151,15 @@ final class _FieldEditor extends StatefulWidget {
 final class _FieldEditorState extends State<_FieldEditor> {
   late final TextEditingController text;
   late bool boolean;
+  int? sliderValue;
   @override
   void initState() {
     super.initState();
     final value = widget.initial;
     boolean = value?.booleanValue ?? false;
+    sliderValue = value?.kind == FieldValueKindDto.integer
+        ? value?.integerValue
+        : null;
     text = TextEditingController(
       text: switch (widget.field.fieldType.kind) {
         FieldTypeKindDto.fixedDecimal =>
@@ -377,6 +381,34 @@ final class _FieldEditorState extends State<_FieldEditor> {
           if (time == null) return;
           _setDateTime(
             DateTime(day.year, day.month, day.day, time.hour, time.minute),
+          );
+        },
+      );
+    }
+    final minimum = field.validation.minInteger;
+    final maximum = field.validation.maxInteger;
+    if (field.fieldType.kind == FieldTypeKindDto.integer &&
+        field.display.slider &&
+        minimum != null &&
+        maximum != null &&
+        minimum <= maximum) {
+      return FiSlider(
+        min: minimum,
+        max: maximum,
+        value: sliderValue,
+        label: _label,
+        required: _required,
+        errors: widget.errors,
+        allowClear: widget.allowClear,
+        onChanged: (value) {
+          setState(() => sliderValue = value);
+          widget.onChanged(
+            value == null
+                ? const FieldValueDto(kind: FieldValueKindDto.null_)
+                : FieldValueDto(
+                    kind: FieldValueKindDto.integer,
+                    integerValue: value,
+                  ),
           );
         },
       );

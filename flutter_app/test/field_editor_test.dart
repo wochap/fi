@@ -19,7 +19,7 @@ FieldDefinitionDto _field(
   fieldType: FieldTypeDto(kind: kind),
   required_: required,
   validation: const ValidationMetadataDto(),
-  display: const DisplayMetadataDto(multiline: false),
+  display: const DisplayMetadataDto(multiline: false, slider: false),
   order: order,
   deleted: false,
   enumOptions: const [],
@@ -167,7 +167,7 @@ Future<Map<String, String>> seedChoice(
               textValue: tempOptionId(labels.indexOf(defaultLabel)),
             ),
       validation: const ValidationMetadataDto(),
-      display: const DisplayMetadataDto(multiline: false),
+      display: const DisplayMetadataDto(multiline: false, slider: false),
       order: 2,
       deleted: false,
       enumOptions: const [],
@@ -693,6 +693,111 @@ void main() {
     // 42 meant an integer; it must not survive as the text "42" or as a stale bound.
     expect(field.defaultValue, isNull);
     expect(field.validation.minInteger, isNull);
+  });
+
+  group('Show as slider', () {
+    final sliderSwitch = find.byKey(const Key('field-slider'));
+
+    SwitchListTile switchTile(WidgetTester tester) =>
+        tester.widget<SwitchListTile>(sliderSwitch);
+
+    Future<void> fillBounds(WidgetTester tester) async {
+      await tester.enterText(find.byKey(const Key('field-minimum')), '1');
+      await tester.enterText(find.byKey(const Key('field-maximum')), '5');
+      await tester.pumpAndSettle();
+    }
+
+    FieldDefinitionDto saved(Seeded seeded, String name) => seeded
+        .controller
+        .schema!
+        .fields
+        .firstWhere((item) => item.name == name);
+
+    testWidgets('is shown and enabled for an Integer with both bounds', (
+      tester,
+    ) async {
+      final seeded = await seed(tester);
+      await pumpPage(tester, seeded.controller);
+      await addFieldOfKind(tester, 'Pain', FieldTypeKindDto.integer);
+      await fillBounds(tester);
+
+      expect(sliderSwitch, findsOneWidget);
+      expect(switchTile(tester).onChanged, isNotNull);
+      await tester.ensureVisible(sliderSwitch);
+      await tester.tap(sliderSwitch);
+      await tester.pumpAndSettle();
+      expect(switchTile(tester).value, isTrue);
+      await save(tester);
+
+      final field = saved(seeded, 'Pain');
+      expect(field.display.slider, isTrue);
+      expect(field.validation.minInteger, 1);
+      expect(field.validation.maxInteger, 5);
+    });
+
+    testWidgets('is disabled and off while a bound is empty', (tester) async {
+      final seeded = await seed(tester);
+      await pumpPage(tester, seeded.controller);
+      await addFieldOfKind(tester, 'Pain', FieldTypeKindDto.integer);
+      await tester.enterText(find.byKey(const Key('field-minimum')), '1');
+      await tester.pumpAndSettle();
+
+      expect(sliderSwitch, findsOneWidget);
+      expect(switchTile(tester).onChanged, isNull);
+      expect(switchTile(tester).value, isFalse);
+    });
+
+    testWidgets('clearing a bound turns it off for good', (tester) async {
+      final seeded = await seed(tester);
+      await pumpPage(tester, seeded.controller);
+      await addFieldOfKind(tester, 'Pain', FieldTypeKindDto.integer);
+      await fillBounds(tester);
+      await tester.ensureVisible(sliderSwitch);
+      await tester.tap(sliderSwitch);
+      await tester.pumpAndSettle();
+      expect(switchTile(tester).value, isTrue);
+
+      await tester.enterText(find.byKey(const Key('field-minimum')), '');
+      await tester.pumpAndSettle();
+      expect(switchTile(tester).value, isFalse);
+      expect(switchTile(tester).onChanged, isNull);
+
+      // Filling the bound again does not bring the slider back on its own.
+      await tester.enterText(find.byKey(const Key('field-minimum')), '1');
+      await tester.pumpAndSettle();
+      expect(switchTile(tester).value, isFalse);
+      await save(tester);
+      expect(saved(seeded, 'Pain').display.slider, isFalse);
+    });
+
+    testWidgets('retyping hides it and saves without the flag', (tester) async {
+      final seeded = await seed(tester);
+      await pumpPage(tester, seeded.controller);
+      await addFieldOfKind(tester, 'Pain', FieldTypeKindDto.integer);
+      await fillBounds(tester);
+      await tester.ensureVisible(sliderSwitch);
+      await tester.tap(sliderSwitch);
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.widgetWithText(DropdownButtonFormField<FieldTypeKindDto>, 'Type'),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.text(fieldKindLabel(FieldTypeKindDto.fixedDecimal)).last,
+      );
+      await tester.pumpAndSettle();
+      expect(sliderSwitch, findsNothing);
+      await save(tester);
+      expect(saved(seeded, 'Pain').display.slider, isFalse);
+    });
+
+    testWidgets('is not offered for other kinds', (tester) async {
+      final seeded = await seed(tester);
+      await pumpPage(tester, seeded.controller);
+      await addFieldOfKind(tester, 'Note', FieldTypeKindDto.text);
+      expect(sliderSwitch, findsNothing);
+    });
   });
 
   testWidgets('the New field panel lines up Name and Type', (tester) async {

@@ -3566,8 +3566,10 @@ impl SseDecode for crate::api::models::DisplayMetadataDto {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut var_multiline = <bool>::sse_decode(deserializer);
+        let mut var_slider = <bool>::sse_decode(deserializer);
         return crate::api::models::DisplayMetadataDto {
             multiline: var_multiline,
+            slider: var_slider,
         };
     }
 }
@@ -6120,7 +6122,11 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::models::DiagnosticDto>
 // Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::models::DisplayMetadataDto {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
-        [self.multiline.into_into_dart().into_dart()].into_dart()
+        [
+            self.multiline.into_into_dart().into_dart(),
+            self.slider.into_into_dart().into_dart(),
+        ]
+        .into_dart()
     }
 }
 impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
@@ -7967,6 +7973,7 @@ impl SseEncode for crate::api::models::DisplayMetadataDto {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <bool>::sse_encode(self.multiline, serializer);
+        <bool>::sse_encode(self.slider, serializer);
     }
 }
 

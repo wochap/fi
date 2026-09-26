@@ -30,7 +30,7 @@ FakeCollectionBridge seeded(int count) {
         fieldType: FieldTypeDto(kind: FieldTypeKindDto.text),
         required_: false,
         validation: ValidationMetadataDto(),
-        display: DisplayMetadataDto(multiline: false),
+        display: DisplayMetadataDto(multiline: false, slider: false),
         order: 0,
         deleted: false,
         enumOptions: [],
