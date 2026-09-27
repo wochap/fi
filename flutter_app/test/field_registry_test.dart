@@ -17,20 +17,33 @@ FieldDefinitionDto field(
   fieldType: FieldTypeDto(kind: kind, scale: scale),
   required_: false,
   validation: const ValidationMetadataDto(),
-  display: const DisplayMetadataDto(multiline: false, slider: false),
+  display: const DisplayMetadataDto(
+    multiline: false,
+    slider: false,
+    sliderStep: null,
+  ),
   order: 0,
   deleted: false,
   enumOptions: options,
 );
 
 /// An Integer field bounded to 1..5, optionally presented as a slider.
-FieldDefinitionDto painField({bool slider = true}) => FieldDefinitionDto(
+FieldDefinitionDto painField({
+  bool slider = true,
+  int min = 1,
+  int max = 5,
+  int? step,
+}) => FieldDefinitionDto(
   id: 'pain',
   name: 'Pain',
   fieldType: const FieldTypeDto(kind: FieldTypeKindDto.integer),
   required_: false,
-  validation: const ValidationMetadataDto(minInteger: 1, maxInteger: 5),
-  display: DisplayMetadataDto(multiline: false, slider: slider),
+  validation: ValidationMetadataDto(minInteger: min, maxInteger: max),
+  display: DisplayMetadataDto(
+    multiline: false,
+    slider: slider,
+    sliderStep: step,
+  ),
   order: 0,
   deleted: false,
   enumOptions: const [],
@@ -340,16 +353,31 @@ void main() {
       expect(find.text('5'), findsOneWidget);
     });
 
-    testWidgets('an unset optional slider reports null when cleared', (
-      tester,
-    ) async {
+    testWidgets('the step reaches the slider', (tester) async {
+      await pumpEditor(
+        tester,
+        painField(min: 0, max: 100, step: 10),
+        initial: const FieldValueDto(
+          kind: FieldValueKindDto.integer,
+          integerValue: 40,
+        ),
+      );
+      expect(tester.widget<FiSlider>(find.byType(FiSlider)).step, 10);
+      final slider = tester.widget<Slider>(find.byType(Slider));
+      expect((slider.min, slider.max, slider.divisions), (0.0, 100.0, 10));
+    });
+
+    testWidgets('an unset slider reports nothing until touched, then clears '
+        'to null', (tester) async {
       final emitted = await pumpEditor(tester, painField());
       expect(find.byKey(const Key('slider-unset')), findsOneWidget);
+      expect(find.byType(Slider), findsOneWidget);
+      await tester.pump();
       expect(emitted, isEmpty);
-      await tester.tap(find.byKey(const Key('slider-set')));
+      await tester.tap(find.byType(Slider));
       await tester.pump();
       expect(emitted.single.kind, FieldValueKindDto.integer);
-      expect(emitted.single.integerValue, 1);
+      expect(emitted.single.integerValue, 3);
       await tester.tap(find.byKey(const Key('slider-clear')));
       await tester.pump();
       expect(emitted.last.kind, FieldValueKindDto.null_);

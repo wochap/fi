@@ -3725,11 +3725,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   DisplayMetadataDto dco_decode_display_metadata_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 2)
-      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
     return DisplayMetadataDto(
       multiline: dco_decode_bool(arr[0]),
       slider: dco_decode_bool(arr[1]),
+      sliderStep: dco_decode_opt_box_autoadd_u_32(arr[2]),
     );
   }
 
@@ -5522,7 +5523,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_multiline = sse_decode_bool(deserializer);
     var var_slider = sse_decode_bool(deserializer);
-    return DisplayMetadataDto(multiline: var_multiline, slider: var_slider);
+    var var_sliderStep = sse_decode_opt_box_autoadd_u_32(deserializer);
+    return DisplayMetadataDto(
+      multiline: var_multiline,
+      slider: var_slider,
+      sliderStep: var_sliderStep,
+    );
   }
 
   @protected
@@ -7814,6 +7820,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_bool(self.multiline, serializer);
     sse_encode_bool(self.slider, serializer);
+    sse_encode_opt_box_autoadd_u_32(self.sliderStep, serializer);
   }
 
   @protected

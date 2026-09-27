@@ -19,7 +19,11 @@ FieldDefinitionDto _field(
   fieldType: FieldTypeDto(kind: kind),
   required_: required,
   validation: const ValidationMetadataDto(),
-  display: const DisplayMetadataDto(multiline: false, slider: false),
+  display: const DisplayMetadataDto(
+    multiline: false,
+    slider: false,
+    sliderStep: null,
+  ),
   order: order,
   deleted: false,
   enumOptions: const [],
@@ -167,7 +171,11 @@ Future<Map<String, String>> seedChoice(
               textValue: tempOptionId(labels.indexOf(defaultLabel)),
             ),
       validation: const ValidationMetadataDto(),
-      display: const DisplayMetadataDto(multiline: false, slider: false),
+      display: const DisplayMetadataDto(
+        multiline: false,
+        slider: false,
+        sliderStep: null,
+      ),
       order: 2,
       deleted: false,
       enumOptions: const [],
@@ -790,6 +798,118 @@ void main() {
       expect(sliderSwitch, findsNothing);
       await save(tester);
       expect(saved(seeded, 'Pain').display.slider, isFalse);
+    });
+
+    final stepInput = find.byKey(const Key('field-slider-step'));
+
+    Future<void> turnOn(WidgetTester tester, {String min = '0'}) async {
+      await tester.enterText(find.byKey(const Key('field-minimum')), min);
+      await tester.enterText(find.byKey(const Key('field-maximum')), '100');
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(sliderSwitch);
+      await tester.tap(sliderSwitch);
+      await tester.pumpAndSettle();
+    }
+
+    String? stepError(WidgetTester tester) => tester
+        .widget<TextField>(
+          find.descendant(of: stepInput, matching: find.byType(TextField)),
+        )
+        .decoration
+        ?.errorText;
+
+    testWidgets('the Step input shows only while the switch is on', (
+      tester,
+    ) async {
+      final seeded = await seed(tester);
+      await pumpPage(tester, seeded.controller);
+      await addFieldOfKind(tester, 'Pain', FieldTypeKindDto.integer);
+      expect(stepInput, findsNothing);
+      await turnOn(tester);
+      expect(stepInput, findsOneWidget);
+      await save(tester);
+      final field = saved(seeded, 'Pain');
+      expect(field.display.slider, isTrue);
+      expect(field.display.sliderStep, isNull);
+    });
+
+    testWidgets('a dividing step is saved', (tester) async {
+      final seeded = await seed(tester);
+      await pumpPage(tester, seeded.controller);
+      await addFieldOfKind(tester, 'Pain', FieldTypeKindDto.integer);
+      await turnOn(tester);
+      await tester.enterText(stepInput, '10');
+      await tester.pumpAndSettle();
+      await save(tester);
+      expect(saved(seeded, 'Pain').display.sliderStep, 10);
+    });
+
+    testWidgets('turning the switch off saves neither flag nor step', (
+      tester,
+    ) async {
+      final seeded = await seed(tester);
+      await pumpPage(tester, seeded.controller);
+      await addFieldOfKind(tester, 'Pain', FieldTypeKindDto.integer);
+      await turnOn(tester);
+      await tester.enterText(stepInput, '10');
+      await tester.pumpAndSettle();
+      await tester.tap(sliderSwitch);
+      await tester.pumpAndSettle();
+      expect(stepInput, findsNothing);
+      await save(tester);
+      final field = saved(seeded, 'Pain');
+      expect(field.display.slider, isFalse);
+      expect(field.display.sliderStep, isNull);
+    });
+
+    testWidgets('a step that does not divide the range is refused in place', (
+      tester,
+    ) async {
+      final seeded = await seed(tester);
+      await pumpPage(tester, seeded.controller);
+      await addFieldOfKind(tester, 'Pain', FieldTypeKindDto.integer);
+      await turnOn(tester);
+      final calls = seeded.bridge.schemaCalls.length;
+      await tester.enterText(stepInput, '30');
+      await tester.pumpAndSettle();
+      await save(tester);
+      expect(
+        stepError(tester),
+        'Step must divide the range from minimum to maximum exactly',
+      );
+      expect(seeded.bridge.schemaCalls.length, calls);
+
+      await tester.enterText(stepInput, '0');
+      await tester.pumpAndSettle();
+      expect(stepError(tester), isNull);
+      await save(tester);
+      expect(stepError(tester), 'Step must be a positive whole number');
+      expect(seeded.bridge.schemaCalls.length, calls);
+    });
+
+    testWidgets('a Rust slider_step error lands under the Step input', (
+      tester,
+    ) async {
+      final seeded = await seed(tester);
+      await pumpPage(tester, seeded.controller);
+      await addFieldOfKind(tester, 'Pain', FieldTypeKindDto.integer);
+      await turnOn(tester);
+      await tester.enterText(stepInput, '10');
+      await tester.pumpAndSettle();
+      seeded.bridge.nextFieldError = const BridgeError(
+        kind: BridgeErrorKind.validation,
+        issues: [
+          BridgeIssueDto(
+            fields: ['slider_step'],
+            code: 'invalid',
+            message: 'slider_step must divide the range',
+          ),
+        ],
+        message: 'Invalid field',
+        resetResolvable: false,
+      );
+      await save(tester);
+      expect(stepError(tester), 'slider_step must divide the range');
     });
 
     testWidgets('is not offered for other kinds', (tester) async {

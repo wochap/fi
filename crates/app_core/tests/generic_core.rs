@@ -509,6 +509,29 @@ async fn slider_flag_round_trips_and_invalid_slider_commits_nothing() {
     intensity.display.slider = true;
     app.add_field(collection, intensity.clone()).await.unwrap();
 
+    let mut stepped = field("Stepped", FieldType::Integer, false, 2);
+    stepped.validation.min_integer = Some(0);
+    stepped.validation.max_integer = Some(100);
+    stepped.display.slider = true;
+    stepped.display.slider_step = Some(10);
+    app.add_field(collection, stepped.clone()).await.unwrap();
+
+    let mut uneven = stepped.clone();
+    uneven.id = FieldId::new();
+    uneven.name = "Uneven".into();
+    uneven.order = 3;
+    uneven.display.slider_step = Some(30);
+    let before = app.projection_state();
+    let failure = app.add_field(collection, uneven).await.unwrap_err();
+    assert!(matches!(
+        failure,
+        app_core::AppError::Domain(app_core::DomainError::Invalid {
+            field: "slider_step",
+            ..
+        })
+    ));
+    assert_eq!(app.projection_state(), before);
+
     let mut unbounded = field("Unbounded", FieldType::Integer, false, 1);
     unbounded.validation.min_integer = Some(1);
     unbounded.display.slider = true;
@@ -527,7 +550,10 @@ async fn slider_flag_round_trips_and_invalid_slider_commits_nothing() {
     std::fs::remove_file(directory.path().join("read-model.sqlite")).unwrap();
     let reopened = AppCore::open(directory.path()).await.unwrap();
     let schema = reopened.collection_schema(collection).unwrap().unwrap();
-    assert_eq!(schema.fields, vec![intensity]);
+    let mut fields = schema.fields.clone();
+    fields.sort_by_key(|field| field.order);
+    assert_eq!(fields, vec![intensity, stepped]);
+    assert_eq!(fields[1].display.slider_step, Some(10));
     reopened.shutdown().await.unwrap();
 }
 

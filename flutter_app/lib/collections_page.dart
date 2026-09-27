@@ -1700,8 +1700,28 @@ class _RecordEditorForm extends StatefulWidget {
   State<_RecordEditorForm> createState() => _RecordEditorFormState();
 }
 
+/// The values a new record opens with: every declared default, plus the minimum for a required
+/// slider without one, since a slider has no empty position to leave it at. Rust applies the same
+/// defaults on create, so saving an untouched form stores what it did before seeding.
+Map<String, FieldValueDto> _newRecordSeeds(CollectionSchemaDto schema) => {
+  for (final field in schema.fields.where((field) => !field.deleted))
+    if (field.defaultValue case final value?
+        when value.kind != FieldValueKindDto.null_)
+      field.id: value
+    else if (field.required_ &&
+        field.fieldType.kind == FieldTypeKindDto.integer &&
+        field.display.slider &&
+        field.validation.minInteger != null &&
+        field.validation.maxInteger != null)
+      field.id: FieldValueDto(
+        kind: FieldValueKindDto.integer,
+        integerValue: field.validation.minInteger,
+      ),
+};
+
 class _RecordEditorFormState extends State<_RecordEditorForm> {
   late final values = <String, FieldValueDto>{
+    if (widget.existing == null) ..._newRecordSeeds(widget.schema),
     for (final item in widget.existing?.values ?? const <RecordValueDto>[])
       item.fieldId: item.value,
   };
@@ -1971,6 +1991,9 @@ class _FieldEditorFormState extends State<_FieldEditorForm> {
   late var required = existing?.required_ ?? false;
   late var multiline = existing?.display.multiline ?? false;
   late var slider = existing?.display.slider ?? false;
+  late final sliderStep = TextEditingController(
+    text: existing?.display.sliderStep?.toString() ?? '',
+  );
   late var scale = existing?.fieldType.scale ?? 2;
   // Range bounds are compared against the stored integer, which is epoch days for a Date, epoch
   // milliseconds for a DateTime, and the scaled representation for a FixedDecimal. Holding them
@@ -2010,6 +2033,7 @@ class _FieldEditorFormState extends State<_FieldEditorForm> {
     'scale': 'scale',
     'numeric_range': 'maximum',
     'length_range': 'max-length',
+    'slider_step': 'slider-step',
   };
 
   /// A slider needs a whole-number track, so only an Integer with both bounds can offer one.
@@ -2018,7 +2042,30 @@ class _FieldEditorFormState extends State<_FieldEditorForm> {
 
   /// Turns the slider off once it can no longer apply, so a later bound does not revive it.
   void _dropUnavailableSlider() {
-    if (!_sliderAvailable) slider = false;
+    if (!_sliderAvailable) _turnSliderOff();
+  }
+
+  void _turnSliderOff() {
+    slider = false;
+    sliderStep.clear();
+    issues = issues.without('slider-step');
+  }
+
+  /// The step to submit; null while the slider is off or the input is empty (step 1).
+  int? get _submittedStep =>
+      slider && _sliderAvailable ? int.tryParse(sliderStep.text) : null;
+
+  /// Mirrors Rust's slider step rule so the common mistake is caught under the input.
+  String? _sliderStepIssue() {
+    if (!slider || !_sliderAvailable || sliderStep.text.isEmpty) return null;
+    final step = int.tryParse(sliderStep.text);
+    if (step == null || step <= 0) {
+      return 'Step must be a positive whole number';
+    }
+    if ((maximum! - minimum!) % step != 0) {
+      return 'Step must divide the range from minimum to maximum exactly';
+    }
+    return null;
   }
 
   /// Drops the shown issues for [input] once it changes, since they describe the old value.
@@ -2039,6 +2086,7 @@ class _FieldEditorFormState extends State<_FieldEditorForm> {
   @override
   void dispose() {
     name.dispose();
+    sliderStep.dispose();
     minLength.dispose();
     maxLength.dispose();
     super.dispose();
@@ -2088,6 +2136,13 @@ class _FieldEditorFormState extends State<_FieldEditorForm> {
   }
 
   Future<void> _save() async {
+    final stepIssue = _sliderStepIssue();
+    if (stepIssue != null) {
+      setState(
+        () => issues = FormIssues.none.withField('slider-step', stepIssue),
+      );
+      return;
+    }
     final missing = _missingRequiredCount();
     // Rust no longer refuses this, so the disclosure has to happen here, before the
     // command is sent and with the count the user is about to invalidate.
@@ -2111,6 +2166,7 @@ class _FieldEditorFormState extends State<_FieldEditorForm> {
         display: DisplayMetadataDto(
           multiline: multiline,
           slider: slider && _sliderAvailable,
+          sliderStep: _submittedStep,
         ),
         order: order,
         deleted: false,
@@ -2162,7 +2218,7 @@ class _FieldEditorFormState extends State<_FieldEditorForm> {
               if (kind != FieldTypeKindDto.enum_) options.clear();
               minimum = null;
               maximum = null;
-              slider = false;
+              _turnSliderOff();
             })
           : null,
     );
@@ -2342,8 +2398,25 @@ class _FieldEditorFormState extends State<_FieldEditorForm> {
             secondary: const HelpButton(HelpId.fieldSlider),
             value: slider && _sliderAvailable,
             onChanged: _sliderAvailable
-                ? (value) => setState(() => slider = value)
+                ? (value) => setState(() {
+                    if (value) {
+                      slider = true;
+                    } else {
+                      _turnSliderOff();
+                    }
+                  })
                 : null,
+          ),
+        if (kind == FieldTypeKindDto.integer && slider && _sliderAvailable)
+          FiTextInput(
+            key: const Key('field-slider-step'),
+            controller: sliderStep,
+            label: 'Step (optional)',
+            hint: '1',
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            errors: issues.of('slider-step'),
+            onChanged: (_) => setState(() => _edited('slider-step')),
           ),
         if (kind == FieldTypeKindDto.enum_) ..._optionsEditor(),
         gap,
@@ -2525,7 +2598,11 @@ Widget _metadataInput({
             // Never required: the slot itself is optional whatever the field demands of records.
             required_: false,
             validation: const ValidationMetadataDto(),
-            display: const DisplayMetadataDto(multiline: false, slider: false),
+            display: const DisplayMetadataDto(
+              multiline: false,
+              slider: false,
+              sliderStep: null,
+            ),
             order: 0,
             deleted: false,
             enumOptions: enumOptions,

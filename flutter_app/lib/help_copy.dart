@@ -101,8 +101,12 @@ const Map<HelpId, HelpEntry> helpCopy = {
   HelpId.fieldSlider: HelpEntry(
     title: 'Show as slider',
     body:
-        'Shows this number field as a slider that moves in whole steps from the minimum to the '
-        'maximum, with the picked value beside it.\n\n'
+        'Shows this number field as a slider that moves from the minimum to the maximum, with the '
+        'picked value beside it. Until a value is picked the track shows no thumb; tap or drag '
+        'it to pick one, and the number appears beside it.\n\n'
+        'Step sets how far each move goes, for example 10 on a 0 to 100 range. Leave it empty '
+        'for whole steps of 1. The step must divide the distance from the minimum to the maximum '
+        'exactly, so the last position lands on the maximum.\n\n'
         'Available only once both a minimum and a maximum are set. It changes how the field is '
         'edited, not what is stored: queries, charts, and the record list still see a number.',
   ),

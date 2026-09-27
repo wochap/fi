@@ -137,11 +137,18 @@ final _kinds = <String, Widget Function(InputSize size)>{
 class _SliderHost extends StatefulWidget {
   const _SliderHost({
     required this.reported,
+    super.key,
     this.initial,
     this.required = false,
     this.errors = const [],
+    this.min = 1,
+    this.max = 5,
+    this.step = 1,
   });
 
+  final int min;
+  final int max;
+  final int step;
   final List<int?> reported;
   final int? initial;
   final bool required;
@@ -158,8 +165,9 @@ class _SliderHostState extends State<_SliderHost> {
   Widget build(BuildContext context) => FiSlider(
     key: const Key('input'),
     label: 'Pain',
-    min: 1,
-    max: 5,
+    min: widget.min,
+    max: widget.max,
+    step: widget.step,
     value: value,
     required: widget.required,
     errors: widget.errors,
@@ -324,18 +332,75 @@ void main() {
     expect(find.text('5'), findsOneWidget);
   });
 
-  testWidgets('an unset slider reports nothing until set', (tester) async {
+  testWidgets('a stepped slider reports only multiples of its step', (
+    tester,
+  ) async {
+    final reported = <int?>[];
+    await _pump(
+      tester,
+      1280,
+      _SliderHost(reported: reported, initial: 0, min: 0, max: 100, step: 10),
+    );
+    final track = find.byType(Slider);
+    final left = tester.getTopLeft(track);
+    final width = tester.getSize(track).width;
+    await tester.tapAt(
+      Offset(left.dx + width * 0.37, tester.getCenter(track).dy),
+    );
+    await tester.pump();
+    expect(reported.last, anyOf(30, 40));
+    final gesture = await tester.startGesture(tester.getCenter(track));
+    for (var i = 0; i < 12; i++) {
+      await gesture.moveBy(const Offset(13, 0));
+      await tester.pump();
+    }
+    await gesture.up();
+    await tester.pump();
+    expect(reported.length, greaterThan(1));
+    expect(reported.every((value) => value! % 10 == 0), isTrue);
+    expect(reported.every((value) => value! >= 0 && value <= 100), isTrue);
+  });
+
+  testWidgets('an unset slider shows the track and reports nothing until '
+      'touched', (tester) async {
     final reported = <int?>[];
     await _pump(tester, 1280, _SliderHost(reported: reported));
     expect(find.byKey(const Key('slider-unset')), findsOneWidget);
-    expect(find.byKey(const Key('slider-value')), findsNothing);
-    expect(find.byType(Slider), findsNothing);
-    expect(reported, isEmpty);
-    await tester.tap(find.byKey(const Key('slider-set')));
-    await tester.pump();
-    expect(reported, [1]);
-    expect(find.byKey(const Key('slider-value')), findsOneWidget);
     expect(find.byType(Slider), findsOneWidget);
+    expect(find.byKey(const Key('slider-set')), findsNothing);
+    expect(find.byKey(const Key('slider-value')), findsNothing);
+    expect(find.byKey(const Key('slider-placeholder')), findsOneWidget);
+    expect(reported, isEmpty);
+    await tester.tap(find.byType(Slider));
+    await tester.pump();
+    expect(reported, [3]);
+    expect(find.byKey(const Key('slider-value')), findsOneWidget);
+    expect(find.text('3'), findsOneWidget);
+  });
+
+  testWidgets('the unset track spans the same width as the set track', (
+    tester,
+  ) async {
+    await _pump(tester, 1280, _SliderHost(key: const Key('a'), reported: []));
+    final unset = tester.getRect(find.byType(Slider));
+    final reported = <int?>[];
+    await _pump(
+      tester,
+      1280,
+      _SliderHost(key: const Key('b'), reported: reported, initial: 2),
+    );
+    final set = tester.getRect(find.byType(Slider));
+    expect(unset.left, set.left);
+    // The set state gives up the clear icon's width at the trailing edge.
+    expect(unset.width, greaterThanOrEqualTo(set.width));
+    await _pump(
+      tester,
+      1280,
+      _SliderHost(key: const Key('c'), reported: reported),
+    );
+    await tester.tapAt(unset.centerLeft + const Offset(1, 0));
+    await tester.pump();
+    expect(reported.last, 1);
   });
 
   testWidgets(

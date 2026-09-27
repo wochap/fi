@@ -374,6 +374,7 @@ class FiSlider extends StatelessWidget {
     required this.min,
     required this.max,
     required this.onChanged,
+    this.step = 1,
     this.value,
     this.label,
     this.required = false,
@@ -382,10 +383,15 @@ class FiSlider extends StatelessWidget {
     this.allowClear = false,
     this.size = InputSize.normal,
     super.key,
-  }) : assert(min <= max);
+  }) : assert(min <= max),
+       assert(step > 0),
+       assert((max - min) % step == 0);
 
   final int min;
   final int max;
+
+  /// Distance between reachable values; must divide `max - min` exactly.
+  final int step;
   final int? value;
 
   /// Null disables the slider.
@@ -399,78 +405,79 @@ class FiSlider extends StatelessWidget {
   final bool allowClear;
   final InputSize size;
 
+  int _snap(double position) {
+    final k = ((position - min) / step).round();
+    return (min + k * step).clamp(min, max);
+  }
+
   void _report(int next) {
-    final clamped = next.clamp(min, max);
-    if (clamped != value) onChanged?.call(clamped);
+    if (next != value) onChanged?.call(next);
   }
 
   @override
   Widget build(BuildContext context) {
-    final value = this.value?.clamp(min, max);
+    final value = this.value == null ? null : _snap(this.value!.toDouble());
     final contentHeight = _textContentHeight(context);
     final enabled = onChanged != null;
-    final muted = TextStyle(
-      fontSize: _fontSize,
-      color: Theme.of(context).hintColor,
+    final unset = value == null;
+    final interactive = enabled && max > min;
+    var touched = false;
+    final theme = SliderTheme.of(context).copyWith(
+      // Kept inside the line height so the thumb never sets the box height.
+      trackHeight: 4,
+      thumbShape: unset
+          ? SliderComponentShape.noThumb
+          : const RoundSliderThumbShape(enabledThumbRadius: 7),
+      overlayShape: unset
+          ? SliderComponentShape.noOverlay
+          : const RoundSliderOverlayShape(overlayRadius: 14),
+      showValueIndicator: ShowValueIndicator.never,
     );
-    final Widget content;
-    final List<Widget> trailing;
-    if (value == null) {
-      content = Text(
-        'Not set',
-        key: const Key('slider-unset'),
-        strutStyle: _strut,
-        style: muted,
-        overflow: TextOverflow.ellipsis,
-      );
-      trailing = [
-        TextButton(
-          key: const Key('slider-set'),
-          onPressed: enabled ? () => onChanged!(min) : null,
-          child: const Text('Set'),
-        ),
-      ];
-    } else {
-      content = SliderTheme(
-        data: SliderTheme.of(context).copyWith(
-          // Kept inside the line height so the thumb never sets the box height.
-          trackHeight: 4,
-          thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
-          overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
-          showValueIndicator: ShowValueIndicator.never,
-        ),
-        child: Slider(
-          value: value.toDouble(),
-          min: min.toDouble(),
-          max: max.toDouble(),
-          divisions: max > min ? max - min : null,
-          onChanged: enabled && max > min
-              ? (position) => _report(position.round())
-              : null,
-        ),
-      );
-      trailing = [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          child: Text(
-            '$value',
-            key: const Key('slider-value'),
-            strutStyle: _strut,
-            style: const TextStyle(
-              fontSize: _fontSize,
-              fontFeatures: [FontFeature.tabularFigures()],
-            ),
+    final Widget content = SliderTheme(
+      data: theme,
+      child: Slider(
+        key: Key(unset ? 'slider-unset' : 'slider-set-track'),
+        value: (value ?? min).toDouble(),
+        min: min.toDouble(),
+        max: max.toDouble(),
+        divisions: max > min ? (max - min) ~/ step : null,
+        onChanged: interactive
+            ? (position) {
+                touched = true;
+                _report(_snap(position));
+              }
+            : null,
+        // Slider skips onChanged when a touch lands on its current position,
+        // so a first touch at the minimum reports here.
+        onChangeEnd: interactive && unset
+            ? (position) {
+                if (!touched) _report(_snap(position));
+              }
+            : null,
+      ),
+    );
+    final trailing = <Widget>[
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        child: Text(
+          unset ? '–' : '$value',
+          key: Key(unset ? 'slider-placeholder' : 'slider-value'),
+          strutStyle: _strut,
+          style: TextStyle(
+            fontSize: _fontSize,
+            color: unset ? Theme.of(context).hintColor : null,
+            fontFeatures: const [FontFeature.tabularFigures()],
           ),
         ),
-        if (allowClear || !required)
-          IconButton(
-            key: const Key('slider-clear'),
-            tooltip: 'Clear',
-            icon: const Icon(Icons.clear, size: 18),
-            onPressed: enabled ? () => onChanged!(null) : null,
-          ),
-      ];
-    }
+      ),
+      if (!unset && (allowClear || !required))
+        IconButton(
+          key: const Key('slider-clear'),
+          tooltip: 'Clear',
+          icon: const Icon(Icons.clear, size: 18),
+          onPressed: enabled ? () => onChanged!(null) : null,
+        ),
+    ];
     return InputDecorator(
       isEmpty: false,
       decoration: _decoration(

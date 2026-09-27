@@ -392,9 +392,12 @@ final class _FieldEditorState extends State<_FieldEditor> {
         minimum != null &&
         maximum != null &&
         minimum <= maximum) {
+      final step = field.display.sliderStep ?? 1;
       return FiSlider(
         min: minimum,
         max: maximum,
+        // An off-range step from an older or malformed definition falls back to whole numbers.
+        step: step > 0 && (maximum - minimum) % step == 0 ? step : 1,
         value: sliderValue,
         label: _label,
         required: _required,

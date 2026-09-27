@@ -445,9 +445,16 @@ final class FakeCollectionBridge implements CollectionBridge {
     if (error != null) throw error;
   }
 
+  /// When set, the next [addField] throws it and changes nothing.
+  Object? nextFieldError;
+
   @override
   Future<String> addField(String collectionId, FieldDefinitionDto field) async {
     schemaCalls.add('addField');
+    if (nextFieldError case final error?) {
+      nextFieldError = null;
+      throw error;
+    }
     final id = field.id.isEmpty ? 'field-${_next++}' : field.id;
     final normalized = _copyField(field, id: id);
     final schema = schemas[collectionId]!;

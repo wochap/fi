@@ -26,7 +26,11 @@ FieldDefinitionDto _field(
   required_: required,
   defaultValue: defaultValue,
   validation: const ValidationMetadataDto(),
-  display: const DisplayMetadataDto(multiline: false, slider: false),
+  display: const DisplayMetadataDto(
+    multiline: false,
+    slider: false,
+    sliderStep: null,
+  ),
   order: order,
   deleted: false,
   enumOptions: const [],

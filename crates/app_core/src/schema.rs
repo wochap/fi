@@ -94,6 +94,9 @@ pub struct DisplayMetadata {
     /// Integer-only presentation hint; requires both integer bounds.
     #[serde(default)]
     pub slider: bool,
+    /// Slider step; `None` reads as 1. Must divide `max - min` exactly.
+    #[serde(default)]
+    pub slider_step: Option<u32>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -190,6 +193,22 @@ impl FieldDefinition {
             }
             if self.validation.min_integer.is_none() || self.validation.max_integer.is_none() {
                 return Err(invalid("slider", "requires both a minimum and a maximum"));
+            }
+        }
+        if let Some(step) = self.display.slider_step {
+            if step == 0 {
+                return Err(invalid("slider_step", "must be positive"));
+            }
+            if !self.display.slider {
+                return Err(invalid("slider_step", "requires the slider flag"));
+            }
+            if let Some((min, max)) = self.validation.min_integer.zip(self.validation.max_integer)
+                && (i128::from(max) - i128::from(min)) % i128::from(step) != 0
+            {
+                return Err(invalid(
+                    "slider_step",
+                    "must divide the distance between minimum and maximum exactly",
+                ));
             }
         }
         if matches!(self.field_type, FieldType::Enum) {
@@ -456,6 +475,60 @@ mod tests {
 
         field.validation.max_integer = Some(5);
         field.validate().unwrap();
+    }
+
+    #[test]
+    fn slider_step_defaults_to_none_and_round_trips() {
+        let display = serde_json::from_str::<DisplayMetadata>(r#"{"slider":true}"#).unwrap();
+        assert!(display.slider);
+        assert_eq!(display.slider_step, None);
+        let stepped = DisplayMetadata {
+            multiline: false,
+            slider: true,
+            slider_step: Some(10),
+        };
+        let encoded = serde_json::to_string(&stepped).unwrap();
+        assert!(encoded.contains(r#""slider_step":10"#));
+        assert_eq!(
+            serde_json::from_str::<DisplayMetadata>(&encoded).unwrap(),
+            stepped
+        );
+    }
+
+    #[test]
+    fn slider_step_validation() {
+        let mut field = text_field("Pain", 1);
+        field.field_type = FieldType::Integer;
+        field.validation.min_integer = Some(0);
+        field.validation.max_integer = Some(100);
+        field.display.slider_step = Some(10);
+        assert_step_rejected(&field);
+
+        field.display.slider = true;
+        field.display.slider_step = Some(0);
+        assert_step_rejected(&field);
+
+        field.display.slider_step = Some(30);
+        assert_step_rejected(&field);
+
+        for step in [None, Some(1), Some(10), Some(100)] {
+            field.display.slider_step = step;
+            field.validate().unwrap();
+        }
+        field.validation.min_integer = Some(1);
+        field.validation.max_integer = Some(5);
+        field.display.slider_step = Some(4);
+        field.validate().unwrap();
+    }
+
+    fn assert_step_rejected(field: &FieldDefinition) {
+        assert!(matches!(
+            field.validate(),
+            Err(DomainError::Invalid {
+                field: "slider_step",
+                ..
+            })
+        ));
     }
 
     fn assert_slider_rejected(field: &FieldDefinition) {
