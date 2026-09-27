@@ -76,3 +76,14 @@ The application SHALL expose the sync endpoint's bound UDP port, the pairing end
 #### Scenario: Embedder reads the ports
 - **WHEN** a networked open has completed under the fixed range and the embedder queries the network ports
 - **THEN** it receives the bound sync port, the bound pairing port, and the range bounds, and both bound ports lie inside the range
+
+### Requirement: Inbound sync connections are refused while sync is paused
+The sync transport SHALL expose an accepting flag. While accepting is off, every inbound connection SHALL be refused before TLS authentication and MUST NOT register a session or emit a peer event. Outbound dials requested explicitly by the core are not governed by this flag. Turning accepting back on SHALL accept later inbound connections without rebinding the endpoint.
+
+#### Scenario: Refused before authentication
+- **WHEN** accepting is off and a trusted peer opens a connection to the sync port
+- **THEN** the connection is refused, no certificate is checked, and the peer observes a connection failure rather than a handshake
+
+#### Scenario: Accepting resumes
+- **WHEN** accepting is turned back on and the same peer connects again
+- **THEN** the connection is authenticated and registered as usual on the same bound port

@@ -62,3 +62,18 @@ Every endpoint learned through pairing or normal discovery SHALL remain unauthen
 #### Scenario: Spoofed advertisement
 - **WHEN** an attacker advertises a known routing token from another address but cannot present the pinned key
 - **THEN** connection authentication rejects it and the Repo receives no peer event
+
+### Requirement: Normal discovery obeys the Discoverable preference
+Group-scoped normal discovery advertising and browsing SHALL run only while the Discoverable preference is on and networking is otherwise active. Every path that would start normal discovery, including core open, foreground resumption, deferred networking retry, pairing completion, and discovery-secret rotation, SHALL leave it stopped while the preference is off. Turning the preference on SHALL start normal discovery with the current secret and epoch. Generic pairing discovery is not governed by this preference.
+
+#### Scenario: Preference off at open
+- **WHEN** the core opens in networked mode with Discoverable off
+- **THEN** no normal discovery record is advertised and no browse for the normal service is started
+
+#### Scenario: Rotation while off
+- **WHEN** Discoverable is off and the discovery-group secret is rotated
+- **THEN** the new secret and epoch are stored and the normal service remains stopped
+
+#### Scenario: Pairing discovery while off
+- **WHEN** Discoverable is off and the user starts pairing
+- **THEN** the generic pairing service is advertised and browsed for the pairing window exactly as when Discoverable is on

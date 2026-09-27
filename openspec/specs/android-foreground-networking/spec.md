@@ -72,3 +72,14 @@ The Rust core SHALL own a lifecycle networking policy selected per platform: `Su
 #### Scenario: Policy is selected by configuration in tests
 - **WHEN** the core is opened with an explicit `SuspendInBackground` policy on a desktop host
 - **THEN** a background report stops discovery and disconnects peers, and with `KeepNetworkingInBackground` the same report leaves them untouched
+
+### Requirement: Foreground resumption respects the networking preferences
+When a lifecycle policy resumes networking on return to the foreground, it SHALL start normal discovery only if the Discoverable preference is on, and SHALL resume automatic dialing and accepting only if the Sync with paired devices preference is on. A background transition SHALL still stop discovery and close sessions under `SuspendInBackground` whatever the preferences are. Under `KeepNetworkingInBackground`, a user preference turned off SHALL stop the corresponding networking even though the policy alone would keep it running.
+
+#### Scenario: Android foreground with sync paused
+- **WHEN** Sync with paired devices is off and the Android application returns to the foreground
+- **THEN** discovery restarts only if Discoverable is on, no trusted peer is dialed, and inbound connections stay refused
+
+#### Scenario: Desktop pause overrides the keep-alive policy
+- **WHEN** the desktop policy is `KeepNetworkingInBackground` and the user turns Sync with paired devices off
+- **THEN** live sessions close and stay closed while the window is focused, unfocused, or hidden

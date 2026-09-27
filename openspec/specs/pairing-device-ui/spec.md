@@ -86,7 +86,7 @@ The devices screen SHALL offer a "Delete" action only on rows whose record is re
 - **THEN** its menu offers rename and revoke but not delete
 
 ### Requirement: Complete sync-status vocabulary
-The application shell SHALL present the typed Rust aggregate status exactly, mapping `Offline`, `Searching`, `Connected`, `Syncing`, `Synced`, and `Error` to the labels "Offline", "Looking for paired devices", "Connected", "Syncing", "Synced", and "Error", each with a distinct icon. The label for `Searching` MUST NOT reuse the word "Searching" so it is not mistaken for pairing discovery, which keeps its own copy on the pairing card.
+The application shell SHALL present the typed Rust aggregate status exactly, mapping `Offline`, `Searching`, `Connected`, `Syncing`, `Synced`, `Error`, and `Paused` to the labels "Offline", "Looking for paired devices", "Connected", "Syncing", "Synced", "Error", and "Paused", each with a distinct icon. The label for `Searching` MUST NOT reuse the word "Searching" so it is not mistaken for pairing discovery, which keeps its own copy on the pairing card. Trusted device rows SHALL present paused connectivity as "Paused".
 
 #### Scenario: Heads change while connected
 - **WHEN** a previously synced peer relationship receives or creates new authoritative heads
@@ -97,8 +97,12 @@ The application shell SHALL present the typed Rust aggregate status exactly, map
 - **THEN** the shell shows "Looking for paired devices" with its icon, and the pairing card still shows its idle copy because pairing mode was not started
 
 #### Scenario: Every status has an icon
-- **WHEN** the aggregate status takes each of its six values in turn
+- **WHEN** the aggregate status takes each of its seven values in turn
 - **THEN** the status chip shows a different icon for each value alongside the label
+
+#### Scenario: Paused while devices are recorded
+- **WHEN** Sync with paired devices is off and trusted devices are recorded
+- **THEN** the status chip reads "Paused" with its icon and each trusted row reads "Paused" instead of "Offline"
 
 ### Requirement: Pairing is reachable from a rootless onboarding state
 The onboarding surface presented when a local dataset does not yet exist SHALL provide a pairing entry
@@ -253,3 +257,29 @@ The devices screen SHALL end with a muted, selectable footer line reading `fi <v
 #### Scenario: Query fails
 - **WHEN** the build-identity query returns an error
 - **THEN** the devices screen renders every other section normally and shows no footer
+
+### Requirement: Connection switches on the devices screen
+The devices screen SHALL show a Connections section with two switches, "Discoverable" and "Sync with paired devices", each with a help entry. Each switch SHALL reflect the persisted preference obtained from Rust, SHALL delegate a toggle to Rust, and SHALL show the value Rust reports back rather than an optimistic value. A failed toggle SHALL leave the switch at its previous value and surface the error inline. The section SHALL be visible whether or not any device is paired.
+
+#### Scenario: Switches reflect stored preferences
+- **WHEN** the devices screen opens on an installation where Discoverable is off and Sync with paired devices is on
+- **THEN** the Discoverable switch reads off and the Sync switch reads on
+
+#### Scenario: Toggling sync off
+- **WHEN** the user turns Sync with paired devices off
+- **THEN** Rust is asked to pause, the switch reads off once Rust confirms, and the status chip reads "Paused"
+
+#### Scenario: Toggle fails
+- **WHEN** Rust rejects a toggle with an error
+- **THEN** the switch returns to its previous value and the error is shown inline on the devices screen
+
+### Requirement: Pairing card explains that pairing works while discovery is off
+While Discoverable is off, the idle pairing card SHALL state that discovery is off and that pairing still works. The pairing controls SHALL remain enabled whatever the two preferences are set to.
+
+#### Scenario: Idle card with discovery off
+- **WHEN** Discoverable is off and pairing is idle
+- **THEN** the pairing card shows its idle copy followed by a note that discovery is off and pairing still works, and the start control is enabled
+
+#### Scenario: Idle card with discovery on
+- **WHEN** Discoverable is on and pairing is idle
+- **THEN** the pairing card shows only its usual idle copy
