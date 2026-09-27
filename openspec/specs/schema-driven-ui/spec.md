@@ -331,6 +331,21 @@ The field editor SHALL show a "Show as slider" switch only when the kind is Inte
 - **WHEN** a record with slider value 3 is shown in the record list
 - **THEN** the cell reads 3
 
+### Requirement: Slider fields show their scale in the record editor
+The record editor SHALL render a slider field with a label row under the track: every step value when they fit, otherwise the minimum and maximum under the track ends, as the shared slider input defines. The taller slider MUST NOT change the height or alignment of the other inputs in the same form.
+
+#### Scenario: Scale visible before any interaction
+- **WHEN** the user opens the new-record editor for an optional slider field with bounds 0 and 100 and step 10 on a 1280px-wide screen
+- **THEN** the field shows a row of labels 0, 10, 20 ... 100 under the track before the user touches it
+
+#### Scenario: Narrow screen keeps only the bounds
+- **WHEN** the same field is shown on a 390px-wide screen where eleven labels cannot fit
+- **THEN** the row under the track shows only 0 under the leading end and 100 under the trailing end
+
+#### Scenario: Neighbouring inputs keep their height
+- **WHEN** a form shows a Text field above a slider field
+- **THEN** the Text input keeps the normal box height and the slider takes the extra height below its own label
+
 ### Requirement: Duplicate collection action
 The collection list card menu SHALL offer a Duplicate action next to Rename and Delete. Choosing it SHALL open a dialog with a Name input prefilled with the source name followed by " (copy)". Save SHALL submit the clone command with the trimmed name; Cancel or dismissing the dialog SHALL send no command. A typed name error from Rust SHALL be shown inline on the Name input and the dialog SHALL stay open. On success the dialog SHALL close and the new collection SHALL appear in the list after the projection refreshes, without navigating into it.
 

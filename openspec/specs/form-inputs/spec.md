@@ -20,9 +20,9 @@ Flutter SHALL define exactly two input sizes. Small SHALL be 32 logical pixels t
 - **THEN** both are 32px tall
 
 ### Requirement: Shared input widgets
-Feature code SHALL build text, integer, decimal, search, select, slider, and Date / DateTime / time picker inputs only through the shared inputs (`FiTextInput`, `FiSelect`, `FiPickerInput`, `FiSlider`). Every shared input of a given size and screen class SHALL render an input box of the same height, whatever its kind, label, value, prefix, or suffix. Switches, checkboxes, and buttons are not inputs under this requirement.
+Feature code SHALL build text, integer, decimal, search, select, slider, and Date / DateTime / time picker inputs only through the shared inputs (`FiTextInput`, `FiSelect`, `FiPickerInput`, `FiSlider`). Every shared input of a given size and screen class except `FiSlider` SHALL render an input box of the same height, whatever its kind, label, value, prefix, or suffix. Switches, checkboxes, and buttons are not inputs under this requirement. `FiSlider` is a composite control: it SHALL take the height its track and its label row need, SHALL keep the same label, required-marker, helper, and error handling as the other shared inputs, and is exempt from the equal-height rule only.
 
-A `FiSlider` SHALL take integer minimum and maximum bounds, an optional positive integer step that defaults to 1 and divides the distance between the bounds exactly, and an optional integer value. It SHALL move only between values of the form `minimum + k * step` inside the bounds, SHALL show the current value as text beside the track, and SHALL always show the track. When the value is absent it SHALL show the track with no thumb and a placeholder in place of the value label, and the first tap or drag on the track SHALL set the value to the nearest step position. When clearing is allowed, a set value SHALL offer a way to return to unset. It SHALL report only integers inside the bounds that lie on a step position and MUST NOT expose a floating-point value to feature code.
+A `FiSlider` SHALL take integer minimum and maximum bounds, an optional positive integer step that defaults to 1 and divides the distance between the bounds exactly, and an optional integer value. It SHALL move only between values of the form `minimum + k * step` inside the bounds, SHALL show the current value as text beside the track, and SHALL always show the track. Below the track it SHALL show one label row: one label per step position, from the minimum to the maximum, each centred under its position, when every label fits in the track width without overlapping; otherwise the row SHALL show only the minimum under the leading end and the maximum under the trailing end. The bounds are therefore always readable, and no label is ever shown twice. Error lines and helper text SHALL render below the label row. When the value is absent it SHALL show the track with no thumb and a placeholder in place of the value label, and the first tap or drag on the track SHALL set the value to the nearest step position. When clearing is allowed, a set value SHALL offer a way to return to unset. It SHALL report only integers inside the bounds that lie on a step position and MUST NOT expose a floating-point value to feature code.
 
 #### Scenario: New field panel aligns
 - **WHEN** the schema sheet's "New field" panel shows the Name text input beside the Type select
@@ -38,7 +38,23 @@ A `FiSlider` SHALL take integer minimum and maximum bounds, an optional positive
 
 #### Scenario: Slider aligns with a text input
 - **WHEN** a normal `FiSlider` is rendered beside a normal `FiTextInput` on the same screen
-- **THEN** both input boxes have the same height and their tops align
+- **THEN** their labels and track tops align with the text input's box top, and the slider extends below it by its label row
+
+#### Scenario: Full label row when every step fits
+- **WHEN** a `FiSlider` with bounds 0 and 100 and step 10 is rendered wide enough for eleven labels
+- **THEN** one row below the track shows 0, 10, 20 ... 100 centred under their step positions, and no other bound label is shown
+
+#### Scenario: Only the bounds when steps would overlap
+- **WHEN** a `FiSlider` with bounds 0 and 100 and step 1 is rendered at a width where 101 labels cannot fit
+- **THEN** the row below the track shows only 0 under the leading end and 100 under the trailing end
+
+#### Scenario: Bounds shown while unset
+- **WHEN** a `FiSlider` with bounds 1 and 5 is rendered with no value
+- **THEN** the label row is shown under the track with 1 at the leading end and 5 at the trailing end, whether as part of the full row or on their own
+
+#### Scenario: Errors render under the label row
+- **WHEN** a `FiSlider` receives an error line
+- **THEN** the error appears below the label row and the track position does not move
 
 #### Scenario: Slider reports whole numbers only
 - **WHEN** a `FiSlider` with bounds 1 and 5 is dragged to a position between 3 and 4
