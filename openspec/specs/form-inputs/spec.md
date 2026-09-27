@@ -22,7 +22,7 @@ Flutter SHALL define exactly two input sizes. Small SHALL be 32 logical pixels t
 ### Requirement: Shared input widgets
 Feature code SHALL build text, integer, decimal, search, select, slider, and Date / DateTime / time picker inputs only through the shared inputs (`FiTextInput`, `FiSelect`, `FiPickerInput`, `FiSlider`). Every shared input of a given size and screen class SHALL render an input box of the same height, whatever its kind, label, value, prefix, or suffix. Switches, checkboxes, and buttons are not inputs under this requirement.
 
-A `FiSlider` SHALL take integer minimum and maximum bounds and an optional integer value. It SHALL move in whole-number steps, SHALL show the current value as text beside the track, and SHALL show an explicit unset state when the value is absent. When the value is unset it SHALL offer a way to set the value and, when clearing is allowed, a way to return an already set value to unset. It SHALL report only integers inside the bounds and MUST NOT expose a floating-point value to feature code.
+A `FiSlider` SHALL take integer minimum and maximum bounds, an optional positive integer step that defaults to 1 and divides the distance between the bounds exactly, and an optional integer value. It SHALL move only between values of the form `minimum + k * step` inside the bounds, SHALL show the current value as text beside the track, and SHALL always show the track. When the value is absent it SHALL show the track with no thumb and a placeholder in place of the value label, and the first tap or drag on the track SHALL set the value to the nearest step position. When clearing is allowed, a set value SHALL offer a way to return to unset. It SHALL report only integers inside the bounds that lie on a step position and MUST NOT expose a floating-point value to feature code.
 
 #### Scenario: New field panel aligns
 - **WHEN** the schema sheet's "New field" panel shows the Name text input beside the Type select
@@ -44,9 +44,21 @@ A `FiSlider` SHALL take integer minimum and maximum bounds and an optional integ
 - **WHEN** a `FiSlider` with bounds 1 and 5 is dragged to a position between 3 and 4
 - **THEN** the thumb snaps to 3 or 4, the value label shows that integer, and feature code receives that integer
 
+#### Scenario: Slider moves in its step
+- **WHEN** a `FiSlider` with bounds 0 and 100 and step 10 is dragged to a position between 30 and 40
+- **THEN** the thumb snaps to 30 or 40, the value label shows that integer, and feature code receives that integer
+
 #### Scenario: Slider starts unset
 - **WHEN** a `FiSlider` is rendered with no value
-- **THEN** it shows an unset state instead of a value label and reports no value until the user sets one
+- **THEN** it shows the track with no thumb and a placeholder instead of a value label, offers no "Set" action, and reports no value until the user touches the track
+
+#### Scenario: Touching an unset track sets the value
+- **WHEN** the user taps an unset `FiSlider` with bounds 1 and 5 near the middle of the track
+- **THEN** the thumb appears at 3, the value label shows 3, and feature code receives 3
+
+#### Scenario: Optional slider clears back to unset
+- **WHEN** a `FiSlider` that allows clearing holds a value and the user taps its clear icon
+- **THEN** the track shows no thumb again and feature code receives a null value
 
 ### Requirement: Fixed box, growing messages
 A shared input's box height SHALL be fixed by its size, independent of content padding, label, or font metrics. Error lines SHALL render below the box and SHALL add height below it without changing the box. A multiline text input SHALL fix the height of its first line to the size's box height and grow by whole lines up to its maximum line count.

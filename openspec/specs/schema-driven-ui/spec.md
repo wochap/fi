@@ -273,7 +273,7 @@ The Rename action on the collection list card menu SHALL remain available.
 - **THEN** the existing Rename dialog opens as before
 
 ### Requirement: Slider presentation for bounded Integer fields
-The field editor SHALL show a "Show as slider" switch only when the kind is Integer. The switch SHALL be enabled only while both the minimum and the maximum are filled, and SHALL turn off when either bound is cleared or the field type changes. The record editor SHALL render an Integer field whose slider flag is set as the shared slider input with those bounds, and SHALL render it as the plain integer input when the flag is unset. Record lists SHALL display the value as a plain number regardless of the flag.
+The field editor SHALL show a "Show as slider" switch only when the kind is Integer. The switch SHALL be enabled only while both the minimum and the maximum are filled, and SHALL turn off when either bound is cleared or the field type changes. While the switch is on, the field editor SHALL show a Step input that accepts a positive whole number and is empty by default, meaning step 1. Before submitting, the field editor SHALL reject a step that is not positive or that does not divide the distance between the bounds exactly, showing the issue under the Step input, and SHALL clear the step when the switch turns off. The record editor SHALL render an Integer field whose slider flag is set as the shared slider input with those bounds and that step, and SHALL render it as the plain integer input when the flag is unset. In the new-record editor, a required slider field with no default SHALL start at the minimum and SHALL report the minimum as its value. When an existing record lacks a required slider field, the editor SHALL show the unset track with the typed missing-value error from Rust under it, as it does for other inputs, and MUST NOT substitute the minimum. Record lists SHALL display the value as a plain number regardless of the flag or step.
 
 #### Scenario: Switch appears for Integer with bounds
 - **WHEN** the user picks Integer and fills minimum 1 and maximum 5
@@ -291,17 +291,41 @@ The field editor SHALL show a "Show as slider" switch only when the kind is Inte
 - **WHEN** the slider switch is on and the user changes the kind to Decimal
 - **THEN** the switch disappears and the saved definition carries no slider flag
 
+#### Scenario: Step input appears with the switch
+- **WHEN** the user turns the slider switch on for an Integer field with bounds 0 and 100
+- **THEN** a Step input appears, empty, and saving submits the field with no explicit step
+
+#### Scenario: Valid step is saved
+- **WHEN** the slider switch is on with bounds 0 and 100 and the user enters step 10 and saves
+- **THEN** the saved definition carries slider step 10
+
+#### Scenario: Step that does not divide the range is rejected in the editor
+- **WHEN** the slider switch is on with bounds 0 and 100 and the user enters step 30 and saves
+- **THEN** an issue appears under the Step input stating that the step must divide the range exactly, and no schema command is submitted
+
+#### Scenario: Turning the switch off clears the step
+- **WHEN** the slider switch is on with step 10 and the user turns it off and saves
+- **THEN** the saved definition carries neither the slider flag nor a step
+
 #### Scenario: Record editor renders the slider
 - **WHEN** the user opens the record editor for a collection with an Integer field flagged as slider with bounds 1 and 5
 - **THEN** that field is a slider with whole steps from 1 to 5 and a visible current value
 
-#### Scenario: Optional slider field left unset
-- **WHEN** an optional slider field is left in its unset state and the record is saved
-- **THEN** the submitted value for that field is null
+#### Scenario: Record editor honours the step
+- **WHEN** the user opens the record editor for an Integer field flagged as slider with bounds 0 and 100 and step 10
+- **THEN** that field is a slider whose thumb stops only at multiples of 10
+
+#### Scenario: Required slider with no default starts at the minimum
+- **WHEN** the user opens the new-record editor for a required slider field with bounds 1 and 5 and no default
+- **THEN** the slider shows the thumb at 1 with value label 1, and saving without touching it stores 1
 
 #### Scenario: Required slider field unset
-- **WHEN** a required slider field is left unset and the user saves
-- **THEN** the editor shows the typed missing-value error from Rust under the slider, as it does for other inputs
+- **WHEN** an existing record projected as invalid because it lacks a required slider field is opened and the user saves without touching the slider
+- **THEN** the slider shows the unset track and the typed missing-value error from Rust under it, as it does for other inputs
+
+#### Scenario: Optional slider field left unset
+- **WHEN** an optional slider field with no default is left in its unset state and the record is saved
+- **THEN** the submitted value for that field is null
 
 #### Scenario: Slider value in the list
 - **WHEN** a record with slider value 3 is shown in the record list
@@ -340,3 +364,26 @@ The collections list SHALL offer, per collection, "Export CSV" and "Export JSON"
 #### Scenario: Import JSON adds collections
 - **WHEN** the user imports an envelope with two collections
 - **THEN** two new collections appear in the list and existing collections are unchanged
+
+### Requirement: New-record editor seeds defaults
+When the record editor opens for a new record, every field that declares a default SHALL open with that default as its current value, shown in the field's input exactly as a stored value would be. Fields without a default SHALL open empty. Editing an existing record SHALL show the stored values only and MUST NOT substitute defaults for absent fields. The stored result of saving an untouched seeded form SHALL equal the result of saving the same form before this requirement, because Rust applies the same defaults on create.
+
+#### Scenario: Slider opens at its default
+- **WHEN** the user opens the new-record editor for an optional slider field with bounds 1 and 5 and default 3
+- **THEN** the slider shows the thumb at 3 with value label 3 and the clear icon available
+
+#### Scenario: Text field opens at its default
+- **WHEN** the user opens the new-record editor for a Text field with default "Home"
+- **THEN** the text input reads "Home"
+
+#### Scenario: Choice field opens at its default
+- **WHEN** the user opens the new-record editor for a Choice field whose default is the option "Mild"
+- **THEN** the select shows "Mild"
+
+#### Scenario: Cleared default saves null
+- **WHEN** the user opens the new-record editor for an optional slider field with default 3, taps the clear icon, and saves
+- **THEN** the submitted value for that field is an explicit null, exactly as it is today when an optional field is cleared
+
+#### Scenario: Editing an existing record does not seed
+- **WHEN** the user opens an existing record that lacks an optional field which has since gained a default
+- **THEN** that field opens empty
