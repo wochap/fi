@@ -66,6 +66,9 @@ final class RootlessBridge implements CollectionBridge {
   @override
   Future<SyncStatusDto> syncStatus() => inner.syncStatus();
   @override
+  Future<NetworkPreferencesDto> networkPreferences() =>
+      inner.networkPreferences();
+  @override
   Future<BuildInfoDto> buildInfo() => inner.buildInfo();
 
   @override

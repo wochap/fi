@@ -1211,6 +1211,39 @@ final class FakeCollectionBridge implements CollectionBridge {
 
   @override
   Future<SyncStatusDto> syncStatus() async => status;
+
+  /// The stored preferences; setters update them the way Rust does, and a
+  /// set [nextError] makes the next setter throw and change nothing.
+  NetworkPreferencesDto preferences = const NetworkPreferencesDto(
+    discoverable: true,
+    syncEnabled: true,
+  );
+  final List<String> preferenceCalls = [];
+  @override
+  Future<NetworkPreferencesDto> networkPreferences() async => preferences;
+  @override
+  Future<NetworkPreferencesDto> setDiscoverable(bool discoverable) async {
+    preferenceCalls.add('discoverable=$discoverable');
+    _fail();
+    preferences = NetworkPreferencesDto(
+      discoverable: discoverable,
+      syncEnabled: preferences.syncEnabled,
+    );
+    return preferences;
+  }
+
+  @override
+  Future<NetworkPreferencesDto> setSyncEnabled(bool syncEnabled) async {
+    preferenceCalls.add('sync=$syncEnabled');
+    _fail();
+    preferences = NetworkPreferencesDto(
+      discoverable: preferences.discoverable,
+      syncEnabled: syncEnabled,
+    );
+    if (!syncEnabled) status = SyncStatusDto.paused;
+    return preferences;
+  }
+
   @override
   Stream<PairingStateDto> pairingStateEvents() => pairingController.stream;
   @override

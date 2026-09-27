@@ -158,3 +158,20 @@ pub struct DiscoveryRotationJournal {
     pub stage: DiscoveryRotationStage,
     pub updated_at_ms: u64,
 }
+
+/// Installation-level networking preferences. They describe this device, not
+/// the dataset it holds, so a dataset reset leaves them untouched.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct NetworkPreferences {
+    pub discoverable: bool,
+    pub sync_enabled: bool,
+}
+
+impl Default for NetworkPreferences {
+    fn default() -> Self {
+        Self {
+            discoverable: true,
+            sync_enabled: true,
+        }
+    }
+}

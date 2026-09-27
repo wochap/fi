@@ -41,6 +41,21 @@ Future<void> rejectPairing({String? sessionId}) =>
 Future<List<TrustedDeviceDto>> trustedDevices() =>
     RustLib.instance.api.crateApiPairingTrustedDevices();
 
+Future<NetworkPreferencesDto> networkPreferences() =>
+    RustLib.instance.api.crateApiPairingNetworkPreferences();
+
+/// Returns the stored preferences so Flutter renders what Rust holds.
+Future<NetworkPreferencesDto> setDiscoverable({required bool discoverable}) =>
+    RustLib.instance.api.crateApiPairingSetDiscoverable(
+      discoverable: discoverable,
+    );
+
+/// Returns the stored preferences so Flutter renders what Rust holds.
+Future<NetworkPreferencesDto> setSyncEnabled({required bool syncEnabled}) =>
+    RustLib.instance.api.crateApiPairingSetSyncEnabled(
+      syncEnabled: syncEnabled,
+    );
+
 Future<SyncStatusDto> syncStatus() =>
     RustLib.instance.api.crateApiPairingSyncStatus();
 

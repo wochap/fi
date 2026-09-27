@@ -1,5 +1,6 @@
 import 'package:clock/clock.dart';
 import 'package:fi/app.dart';
+import 'package:fi/pairing_card.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -42,6 +43,11 @@ Future<void> openDevices(
   WidgetTester tester,
   FakeCollectionBridge bridge,
 ) async {
+  // Tall enough that the connection switches above the pairing card do not
+  // push the device rows off screen.
+  tester.view.physicalSize = const Size(800, 1200);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.reset);
   bridge.bootstrap = const BootstrapDto(
     kind: BootstrapKindDto.ready,
     rootId: 'root',
@@ -227,6 +233,7 @@ void main() {
         SyncStatusDto.syncing: 'Syncing',
         SyncStatusDto.synced: 'Synced',
         SyncStatusDto.error: 'Error',
+        SyncStatusDto.paused: 'Paused',
       };
       final icons = <IconData>{};
       for (final entry in expected.entries) {
@@ -246,12 +253,116 @@ void main() {
         );
         icons.add(icon.icon!);
       }
-      // Six values, six icons: the status is readable without the label.
+      // Seven values, seven icons: the status is readable without the label.
       expect(icons, hasLength(expected.length));
       // The pairing card keeps "Searching" for discovery; the aggregate must not reuse it.
       expect(find.text('Searching'), findsNothing);
     },
   );
+
+  testWidgets('connection switches reflect, toggle, and survive a failure', (
+    tester,
+  ) async {
+    final bridge = FakeCollectionBridge()
+      ..preferences = const NetworkPreferencesDto(
+        discoverable: false,
+        syncEnabled: true,
+      )
+      ..devices.add(
+        const TrustedDeviceDto(
+          deviceId: 'peer',
+          friendlyName: 'Peer',
+          pairedAtMs: 1,
+          lastSeenMs: null,
+          lastSyncMs: null,
+          revoked: false,
+          connection: PeerConnectionKindDto.synced,
+        ),
+      );
+    await openDevices(tester, bridge);
+    await tester.pumpAndSettle();
+
+    bool switchValue(String key) =>
+        tester.widget<SwitchListTile>(find.byKey(Key(key))).value;
+    expect(switchValue('pref-discoverable'), isFalse);
+    expect(switchValue('pref-sync'), isTrue);
+
+    // Rust reports every row paused once sync is off.
+    bridge.devices[0] = const TrustedDeviceDto(
+      deviceId: 'peer',
+      friendlyName: 'Peer',
+      pairedAtMs: 1,
+      lastSeenMs: null,
+      lastSyncMs: null,
+      revoked: false,
+      connection: PeerConnectionKindDto.paused,
+    );
+    await tester.tap(find.byKey(const Key('pref-sync')));
+    await tester.pumpAndSettle();
+    expect(bridge.preferenceCalls, ['sync=false']);
+    expect(switchValue('pref-sync'), isFalse);
+    final chip = find.byKey(const Key('sync-status'));
+    expect(
+      find.descendant(of: chip, matching: find.text('Paused')),
+      findsOneWidget,
+    );
+    final row = find.ancestor(
+      of: find.text('Peer'),
+      matching: find.byType(Row),
+    );
+    expect(
+      find.descendant(of: row.first, matching: find.text('Paused')),
+      findsOneWidget,
+    );
+
+    bridge.nextError = const BridgeError(
+      kind: BridgeErrorKind.persistence,
+      issues: [],
+      message: 'Local data could not be saved or loaded.',
+      resetResolvable: false,
+    );
+    await tester.tap(find.byKey(const Key('pref-discoverable')));
+    await tester.pumpAndSettle();
+    expect(switchValue('pref-discoverable'), isFalse);
+    expect(
+      find.text('Local data could not be saved or loaded.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('the connection switches show with no paired device', (
+    tester,
+  ) async {
+    final bridge = FakeCollectionBridge();
+    await openDevices(tester, bridge);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('pref-discoverable')), findsOneWidget);
+    expect(find.byKey(const Key('pref-sync')), findsOneWidget);
+    expect(find.text('No devices have been paired yet.'), findsOneWidget);
+  });
+
+  for (final discoverable in [true, false]) {
+    testWidgets('idle pairing card with discoverable=$discoverable', (
+      tester,
+    ) async {
+      final bridge = FakeCollectionBridge()
+        ..preferences = NetworkPreferencesDto(
+          discoverable: discoverable,
+          syncEnabled: false,
+        );
+      await openDevices(tester, bridge);
+      await tester.pumpAndSettle();
+      final body = tester.widget<Text>(
+        find.byKey(const Key('pairing-idle-body')),
+      );
+      expect(body.data, startsWith('Pairing is off.'));
+      expect(body.data!.contains(PairingCard.discoveryOffNote), !discoverable);
+      final start = tester.widget<ButtonStyleButton>(
+        find.byKey(const Key('start-pairing')),
+      );
+      expect(start.onPressed, isNotNull);
+    });
+  }
 
   testWidgets('a locked keystore replaces the committing spinner with retry', (
     tester,

@@ -518,6 +518,52 @@ void main() {
     other.dispose();
   });
 
+  test('devices controller loads and toggles network preferences', () async {
+    final bridge = FakeCollectionBridge()
+      ..preferences = const NetworkPreferencesDto(
+        discoverable: false,
+        syncEnabled: true,
+      );
+    final controller = DevicesController(bridge);
+    await controller.start();
+    expect(controller.preferences.discoverable, isFalse);
+    expect(controller.preferences.syncEnabled, isTrue);
+
+    await controller.setSyncEnabled(false);
+    expect(bridge.preferenceCalls, ['sync=false']);
+    expect(controller.preferences.syncEnabled, isFalse);
+    expect(controller.syncStatus, SyncStatusDto.paused);
+    expect(controller.errorMessage, isNull);
+
+    bridge.nextError = const BridgeError(
+      kind: BridgeErrorKind.persistence,
+      issues: [],
+      message: 'Local data could not be saved or loaded.',
+      resetResolvable: false,
+    );
+    await controller.setDiscoverable(true);
+    expect(controller.preferences.discoverable, isFalse);
+    expect(controller.errorMessage, 'Local data could not be saved or loaded.');
+
+    bridge.nextError = const BridgeError(
+      kind: BridgeErrorKind.persistence,
+      issues: [],
+      message: 'Local data could not be saved or loaded.',
+      resetResolvable: false,
+    );
+    await controller.setSyncEnabled(true);
+    expect(controller.preferences.syncEnabled, isFalse);
+    expect(controller.errorMessage, 'Local data could not be saved or loaded.');
+
+    bridge.preferences = const NetworkPreferencesDto(
+      discoverable: true,
+      syncEnabled: true,
+    );
+    await controller.restart();
+    expect(controller.preferences, bridge.preferences);
+    controller.dispose();
+  });
+
   test('devices controller deletes a revoked device', () async {
     const revoked = TrustedDeviceDto(
       deviceId: 'peer',
@@ -881,6 +927,9 @@ final class ClosingDevicesBridge implements CollectionBridge {
   Future<List<TrustedDeviceDto>> trustedDevices() => inner.trustedDevices();
   @override
   Future<SyncStatusDto> syncStatus() => inner.syncStatus();
+  @override
+  Future<NetworkPreferencesDto> networkPreferences() =>
+      inner.networkPreferences();
   @override
   Future<BuildInfoDto> buildInfo() => inner.buildInfo();
 

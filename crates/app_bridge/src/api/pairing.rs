@@ -4,8 +4,8 @@ use crate::{
     api::{
         lifecycle::core,
         models::{
-            BridgeError, PairingCandidateDto, PairingStateDto, RevocationOutcomeDto, SyncStatusDto,
-            TrustedDeviceDto,
+            BridgeError, NetworkPreferencesDto, PairingCandidateDto, PairingStateDto,
+            RevocationOutcomeDto, SyncStatusDto, TrustedDeviceDto,
         },
     },
     frb_generated::StreamSink,
@@ -92,15 +92,40 @@ pub async fn reject_pairing(session_id: Option<String>) -> Result<(), BridgeErro
 pub async fn trusted_devices() -> Result<Vec<TrustedDeviceDto>, BridgeError> {
     let core = core().await?;
     let connections = core.connection_states();
+    let paused = !core.network_preferences().sync_enabled;
     Ok(core
         .trusted_devices()
         .map_err(BridgeError::from)?
         .into_iter()
         .map(|record| {
             let connection = connections.get(&record.device_id);
-            TrustedDeviceDto::from_core(record, connection)
+            TrustedDeviceDto::from_core(record, connection, paused)
         })
         .collect())
+}
+
+pub async fn network_preferences() -> Result<NetworkPreferencesDto, BridgeError> {
+    Ok(core().await?.network_preferences().into())
+}
+
+/// Returns the stored preferences so Flutter renders what Rust holds.
+pub async fn set_discoverable(discoverable: bool) -> Result<NetworkPreferencesDto, BridgeError> {
+    Ok(core()
+        .await?
+        .set_discoverable(discoverable)
+        .await
+        .map_err(BridgeError::from)?
+        .into())
+}
+
+/// Returns the stored preferences so Flutter renders what Rust holds.
+pub async fn set_sync_enabled(sync_enabled: bool) -> Result<NetworkPreferencesDto, BridgeError> {
+    Ok(core()
+        .await?
+        .set_sync_enabled(sync_enabled)
+        .await
+        .map_err(BridgeError::from)?
+        .into())
 }
 
 pub async fn sync_status() -> Result<SyncStatusDto, BridgeError> {
@@ -125,7 +150,12 @@ pub async fn connection_state_stream(
         .ok_or_else(|| BridgeError::lifecycle("Device networking is unavailable."))?;
     tokio::spawn(forward_connection_states(
         receiver,
-        move || core.trusted_devices().map_err(BridgeError::from),
+        move || {
+            Ok((
+                core.trusted_devices().map_err(BridgeError::from)?,
+                !core.network_preferences().sync_enabled,
+            ))
+        },
         move |values| sink.add(values).is_ok(),
     ));
     Ok(())
@@ -135,7 +165,8 @@ pub async fn connection_state_stream(
 /// connection change. A transient query failure skips that emission and keeps
 /// waiting; the stream ends only when the subscriber goes away or the
 /// connection source closes. The loop is driven by connection changes, not a
-/// timer, so a persistent failure cannot spin.
+/// timer, so a persistent failure cannot spin. The query also reports whether
+/// sync is paused, read at emission time so a toggle's disconnect carries it.
 async fn forward_connection_states<Q, E>(
     mut receiver: tokio::sync::watch::Receiver<
         std::collections::HashMap<DeviceId, app_core::PeerConnectionState>,
@@ -143,18 +174,18 @@ async fn forward_connection_states<Q, E>(
     mut query: Q,
     mut emit: E,
 ) where
-    Q: FnMut() -> Result<Vec<app_core::TrustedDeviceRecord>, BridgeError>,
+    Q: FnMut() -> Result<(Vec<app_core::TrustedDeviceRecord>, bool), BridgeError>,
     E: FnMut(Vec<TrustedDeviceDto>) -> bool,
 {
     loop {
         let connections = receiver.borrow_and_update().clone();
         match query() {
-            Ok(devices) => {
+            Ok((devices, paused)) => {
                 let values = devices
                     .into_iter()
                     .map(|record| {
                         let connection = connections.get(&record.device_id);
-                        TrustedDeviceDto::from_core(record, connection)
+                        TrustedDeviceDto::from_core(record, connection, paused)
                     })
                     .collect();
                 if !emit(values) {
@@ -360,7 +391,7 @@ mod tests {
                 if *calls == 1 {
                     Err(BridgeError::lifecycle("database is busy"))
                 } else {
-                    Ok(vec![record()])
+                    Ok((vec![record()], false))
                 }
             }
         };
@@ -398,5 +429,78 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
+    }
+
+    // Pins that the aggregate status and the per-row values are derived from
+    // the same preference and agree while sync is paused.
+    #[tokio::test]
+    async fn paused_aggregate_and_rows_agree() {
+        use app_core::{
+            AppCore, AppCoreConfig, FakeDiscoveryProvider, InMemorySecureKeyStore, ManualClock,
+            QuinnTransportConfig,
+        };
+
+        use crate::api::models::{PeerConnectionKindDto, SyncStatusDto, TrustedDeviceDto};
+
+        let directory = tempfile::tempdir().unwrap();
+        let core = AppCore::open_networked_with_discovery(
+            directory.path(),
+            Arc::new(InMemorySecureKeyStore::seeded([5; 32])),
+            "127.0.0.1:0".parse().unwrap(),
+            AppCoreConfig::default(),
+            QuinnTransportConfig::default(),
+            Arc::new(FakeDiscoveryProvider::new(Arc::new(ManualClock::new(0)))),
+        )
+        .await
+        .unwrap();
+        let mut revoked = record();
+        revoked.state = TrustState::Revoked;
+        let rows = |core: &AppCore| {
+            let paused = !core.network_preferences().sync_enabled;
+            [record(), revoked.clone()].map(|record| {
+                TrustedDeviceDto::from_core(record, Some(&PeerConnectionState::Synced), paused)
+                    .connection
+            })
+        };
+
+        core.set_sync_enabled(false).await.unwrap();
+        assert_eq!(
+            SyncStatusDto::from(core.sync_status()),
+            SyncStatusDto::Paused
+        );
+        assert_eq!(
+            rows(&core),
+            [PeerConnectionKindDto::Paused, PeerConnectionKindDto::Synced]
+        );
+
+        core.set_sync_enabled(true).await.unwrap();
+        assert_ne!(
+            SyncStatusDto::from(core.sync_status()),
+            SyncStatusDto::Paused
+        );
+        assert_eq!(rows(&core), [PeerConnectionKindDto::Synced; 2]);
+        core.shutdown().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn forwarded_rows_read_paused_while_sync_is_off() {
+        let (_tx, rx) =
+            tokio::sync::watch::channel(HashMap::<DeviceId, PeerConnectionState>::new());
+        let emitted = Arc::new(Mutex::new(Vec::new()));
+        let emit = {
+            let emitted = emitted.clone();
+            move |values: Vec<super::TrustedDeviceDto>| {
+                emitted
+                    .lock()
+                    .unwrap()
+                    .extend(values.into_iter().map(|value| value.connection));
+                false
+            }
+        };
+        forward_connection_states(rx, || Ok((vec![record()], true)), emit).await;
+        assert_eq!(
+            *emitted.lock().unwrap(),
+            vec![crate::api::models::PeerConnectionKindDto::Paused]
+        );
     }
 }

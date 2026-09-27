@@ -665,6 +665,9 @@ pub enum BridgeErrorKind {
     /// `Initialization` so Flutter can name the keyring and offer an
     /// unlock-and-retry path instead of a generic failure message.
     SecureStoreLocked,
+    /// The user turned Sync with paired devices off, so a connection request
+    /// was not attempted.
+    Paused,
     Validation,
     Bootstrap,
     Persistence,
@@ -875,6 +878,7 @@ pub enum PeerConnectionKindDto {
     Syncing,
     Synced,
     Error,
+    Paused,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -885,6 +889,23 @@ pub enum SyncStatusDto {
     Syncing,
     Synced,
     Error,
+    Paused,
+}
+
+/// The installation's networking preferences as Rust stores them.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct NetworkPreferencesDto {
+    pub discoverable: bool,
+    pub sync_enabled: bool,
+}
+
+impl From<app_core::NetworkPreferences> for NetworkPreferencesDto {
+    fn from(value: app_core::NetworkPreferences) -> Self {
+        Self {
+            discoverable: value.discoverable,
+            sync_enabled: value.sync_enabled,
+        }
+    }
 }
 
 impl From<app_core::PairingState> for PairingStateDto {
@@ -982,18 +1003,26 @@ impl PairingCandidateDto {
 }
 
 impl TrustedDeviceDto {
+    /// `paused` is the negated Sync with paired devices preference; while it
+    /// is set every non-revoked row reads `Paused`, matching the aggregate.
     pub(crate) fn from_core(
         value: app_core::TrustedDeviceRecord,
         connection: Option<&app_core::PeerConnectionState>,
+        paused: bool,
     ) -> Self {
+        let revoked = value.state == app_core::TrustState::Revoked;
         Self {
             device_id: value.device_id.to_string(),
             friendly_name: value.friendly_name,
             paired_at_ms: value.paired_at_ms,
             last_seen_ms: value.last_seen_ms,
             last_sync_ms: value.last_sync_ms,
-            revoked: value.state == app_core::TrustState::Revoked,
-            connection: connection.into(),
+            revoked,
+            connection: if paused && !revoked {
+                PeerConnectionKindDto::Paused
+            } else {
+                connection.into()
+            },
         }
     }
 }
@@ -1023,6 +1052,7 @@ impl From<app_core::SyncStatus> for SyncStatusDto {
             app_core::SyncStatus::Syncing => Self::Syncing,
             app_core::SyncStatus::Synced => Self::Synced,
             app_core::SyncStatus::Error => Self::Error,
+            app_core::SyncStatus::Paused => Self::Paused,
         }
     }
 }
@@ -1448,6 +1478,14 @@ impl From<AppError> for BridgeError {
                     BridgeErrorKind::Initialization,
                     "Secure device networking could not be initialized.",
                 ),
+                AppError::Connection(app_core::ConnectionFailure::Paused) => Self::safe(
+                    BridgeErrorKind::Paused,
+                    "Sync with paired devices is paused.",
+                ),
+                AppError::Connection(_) => Self::safe(
+                    BridgeErrorKind::Lifecycle,
+                    "The device could not be reached.",
+                ),
                 AppError::Clock(error) => {
                     Self::safe(BridgeErrorKind::Validation, error.to_string())
                 }
@@ -1583,6 +1621,15 @@ mod tests {
             )
             .already_paired
         );
+    }
+
+    #[test]
+    fn a_paused_connect_crosses_the_bridge_as_its_own_kind() {
+        let paused: BridgeError = AppError::Connection(app_core::ConnectionFailure::Paused).into();
+        assert_eq!(paused.kind, BridgeErrorKind::Paused);
+        let unreachable: BridgeError =
+            AppError::Connection(app_core::ConnectionFailure::NoRoute).into();
+        assert_ne!(unreachable.kind, BridgeErrorKind::Paused);
     }
 
     #[test]

@@ -25,8 +25,8 @@ use tokio::sync::mpsc;
 use crate::{
     control::{
         DiscoveryGroupMetadata, DiscoveryRotationJournal, DiscoveryRotationStage,
-        LocalIdentityRecord, PairingJournalRecord, PairingJournalStage, PeerConnectionMetadata,
-        PeerTrustRecord, ResetIntent, TrustState, TrustedDeviceRecord,
+        LocalIdentityRecord, NetworkPreferences, PairingJournalRecord, PairingJournalStage,
+        PeerConnectionMetadata, PeerTrustRecord, ResetIntent, TrustState, TrustedDeviceRecord,
     },
     identity::{DeviceId, PublicDeviceKey},
     routing::{ConnectionFailure, PeerConnectionState},
@@ -368,6 +368,9 @@ impl SqliteControlStore {
              ) STRICT;
              CREATE TABLE IF NOT EXISTS recovery_attempts (
                 root TEXT PRIMARY KEY, attempts INTEGER NOT NULL CHECK(attempts >= 0)
+             ) STRICT;
+             CREATE TABLE IF NOT EXISTS network_preferences (
+                key TEXT PRIMARY KEY, enabled INTEGER NOT NULL CHECK(enabled IN (0, 1))
              ) STRICT;",
         )
             .map_err(|e| storage_error("control_open", None, &path, e))?;
@@ -1067,6 +1070,66 @@ impl SqliteControlStore {
         .transpose()
     }
 
+    /// Missing rows read as on, so an installation that never stored a
+    /// preference behaves as before the preferences existed.
+    pub fn network_preferences(&self) -> Result<NetworkPreferences, StorageError> {
+        self.ensure_open("network_preferences_load")?;
+        let connection = self.connection.lock().map_err(|_| {
+            storage_error(
+                "network_preferences_load",
+                None,
+                &self.path,
+                "connection lock poisoned",
+            )
+        })?;
+        let read = |key: &str| -> Result<bool, StorageError> {
+            connection
+                .query_row(
+                    "SELECT enabled FROM network_preferences WHERE key=?1",
+                    params![key],
+                    |row| row.get::<_, i64>(0),
+                )
+                .optional()
+                .map(|value| value.is_none_or(|value| value != 0))
+                .map_err(|error| storage_error("network_preferences_load", None, &self.path, error))
+        };
+        Ok(NetworkPreferences {
+            discoverable: read("discoverable")?,
+            sync_enabled: read("sync_enabled")?,
+        })
+    }
+
+    pub fn store_network_preferences(&self, value: NetworkPreferences) -> Result<(), StorageError> {
+        self.ensure_open("network_preferences_store")?;
+        let mut connection = self.connection.lock().map_err(|_| {
+            storage_error(
+                "network_preferences_store",
+                None,
+                &self.path,
+                "connection lock poisoned",
+            )
+        })?;
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|error| storage_error("network_preferences_store", None, &self.path, error))?;
+        for (key, enabled) in [
+            ("discoverable", value.discoverable),
+            ("sync_enabled", value.sync_enabled),
+        ] {
+            transaction
+                .execute(
+                    "INSERT INTO network_preferences(key,enabled) VALUES(?1,?2) ON CONFLICT(key) DO UPDATE SET enabled=excluded.enabled",
+                    params![key, i64::from(enabled)],
+                )
+                .map_err(|error| {
+                    storage_error("network_preferences_store", None, &self.path, error)
+                })?;
+        }
+        transaction
+            .commit()
+            .map_err(|error| storage_error("network_preferences_store", None, &self.path, error))
+    }
+
     pub fn store_discovery_rotation(
         &self,
         value: DiscoveryRotationJournal,
@@ -1338,6 +1401,7 @@ fn encode_connection_state(state: &PeerConnectionState) -> (&'static str, Option
                 ConnectionFailure::Trust(_) => "trust",
                 ConnectionFailure::Stream(_) => "stream",
                 ConnectionFailure::Transport(_) => "transport",
+                ConnectionFailure::Paused => "paused",
             }),
         ),
     }
@@ -1366,6 +1430,7 @@ fn decode_connection_state(
             "trust" => ConnectionFailure::Trust("previous attempt failed".into()),
             "stream" => ConnectionFailure::Stream("previous attempt failed".into()),
             "transport" => ConnectionFailure::Transport("previous attempt failed".into()),
+            "paused" => ConnectionFailure::Paused,
             _ => return None,
         }),
         _ => return None,
@@ -1565,6 +1630,33 @@ mod tests {
     use super::*;
     use crate::identity::PrivateDeviceKey;
     use automerge::Automerge;
+
+    #[test]
+    fn network_preferences_default_on_round_trip_and_survive_reset() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("control.sqlite");
+        let store = SqliteControlStore::open(path.clone()).unwrap();
+        assert_eq!(
+            store.network_preferences().unwrap(),
+            NetworkPreferences::default()
+        );
+        let off = NetworkPreferences {
+            discoverable: false,
+            sync_enabled: false,
+        };
+        store.store_network_preferences(off).unwrap();
+        assert_eq!(store.network_preferences().unwrap(), off);
+        let mixed = NetworkPreferences {
+            discoverable: true,
+            sync_enabled: false,
+        };
+        store.store_network_preferences(mixed).unwrap();
+        store.complete_reset().unwrap();
+        assert_eq!(store.network_preferences().unwrap(), mixed);
+        drop(store);
+        let reopened = SqliteControlStore::open(path).unwrap();
+        assert_eq!(reopened.network_preferences().unwrap(), mixed);
+    }
 
     #[test]
     fn sqlite_control_stores_only_public_identity_and_typed_trust() {

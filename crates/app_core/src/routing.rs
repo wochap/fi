@@ -212,6 +212,10 @@ pub enum ConnectionFailure {
     Stream(String),
     #[error("transport failed: {0}")]
     Transport(String),
+    /// The user turned Sync with paired devices off. Not transient: only the
+    /// user can clear it, so retrying would never help.
+    #[error("sync is paused")]
+    Paused,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -233,6 +237,9 @@ pub enum SyncStatus {
     Syncing,
     Synced,
     Error,
+    /// The user turned Sync with paired devices off. Derived above the
+    /// routing layer; `aggregate_sync_status` never returns it.
+    Paused,
 }
 
 impl ConnectionFailure {
@@ -393,6 +400,9 @@ pub struct ConnectionManager {
     not_before: Mutex<HashMap<DeviceId, u64>>,
     /// Set while the platform has suspended networking (Android background).
     suspended: AtomicBool,
+    /// Set while the user has turned Sync with paired devices off. Separate
+    /// from `suspended` so a foreground report cannot clear it.
+    paused: AtomicBool,
     closed: AtomicBool,
     /// Re-evaluates the schedule when something other than a state change
     /// makes a peer dialable, such as an attempt releasing its claim.
@@ -445,6 +455,7 @@ impl ConnectionManager {
             in_flight: Arc::new(Mutex::new(HashMap::new())),
             not_before: Mutex::new(HashMap::new()),
             suspended: AtomicBool::new(false),
+            paused: AtomicBool::new(false),
             closed: AtomicBool::new(false),
             wake: Arc::new(Notify::new()),
             this: this.clone(),
@@ -488,6 +499,18 @@ impl ConnectionManager {
         self.wake.notify_one();
     }
 
+    /// Stops automatic dialing and rejects manual connects while the user has
+    /// paused sync. Only the user clears it; `set_suspended` does not.
+    pub fn set_paused(&self, paused: bool) {
+        self.paused.store(paused, Ordering::Release);
+        self.wake.notify_one();
+    }
+
+    #[must_use]
+    pub fn is_paused(&self) -> bool {
+        self.paused.load(Ordering::Acquire)
+    }
+
     /// Stops the scheduler and refuses further attempts. Called on shutdown so
     /// a replaced core does not keep dialing on a closed transport.
     pub fn close(&self) {
@@ -497,7 +520,9 @@ impl ConnectionManager {
     }
 
     fn automatic_dialing_allowed(&self) -> bool {
-        !self.closed.load(Ordering::Acquire) && !self.suspended.load(Ordering::Acquire)
+        !self.closed.load(Ordering::Acquire)
+            && !self.suspended.load(Ordering::Acquire)
+            && !self.paused.load(Ordering::Acquire)
     }
 
     fn has_live_session(&self, peer: DeviceId) -> bool {
@@ -605,6 +630,20 @@ impl ConnectionManager {
     /// While it runs, discovery and the scheduler do not start another
     /// attempt for the same peer.
     pub async fn connect_manual(
+        &self,
+        peer: DeviceId,
+        now_ms: u64,
+    ) -> Result<u64, ConnectionFailure> {
+        if self.is_paused() {
+            return Err(ConnectionFailure::Paused);
+        }
+        let _claim = self.claim(peer, false);
+        self.dial(peer, now_ms).await
+    }
+
+    /// The provisioning dial of a pairing commit. Explicit pairing is not
+    /// governed by the sync pause, so this dials even while paused.
+    pub async fn connect_for_pairing(
         &self,
         peer: DeviceId,
         now_ms: u64,
@@ -1402,6 +1441,54 @@ mod tests {
         node.manager.reconnect_known_peers(node.now());
         advance(10).await;
         assert_eq!(lan.dial_count(), 2);
+    }
+
+    // Pins that the user pause is independent of the platform suspend: a
+    // foreground report clears `suspended` but must not resume dialing.
+    #[tokio::test(start_paused = true)]
+    async fn paused_manager_does_not_redial_after_unsuspend() {
+        let (local, remote) = devices();
+        let lan = Arc::new(FakeLan::default());
+        lan.listeners
+            .lock()
+            .unwrap()
+            .insert(address(2, 7000), remote);
+        let node = Node::new(local, &lan);
+        node.learn(remote, address(2, 7000), 60_000);
+        advance(10).await;
+        node.manager.set_paused(true);
+        node.manager
+            .set_state(remote, PeerConnectionState::Disconnected);
+        node.manager.set_suspended(true);
+        node.manager.set_suspended(false);
+        node.manager.reconnect_known_peers(node.now());
+        node.manager.request_connect(remote, node.now());
+        advance(10_000).await;
+        assert_eq!(lan.dial_count(), 1);
+        node.manager.set_paused(false);
+        node.manager.reconnect_known_peers(node.now());
+        advance(10).await;
+        assert_eq!(lan.dial_count(), 2);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn paused_manager_rejects_manual_connect_without_dialing() {
+        let (local, remote) = devices();
+        let lan = Arc::new(FakeLan::default());
+        lan.listeners
+            .lock()
+            .unwrap()
+            .insert(address(2, 7000), remote);
+        let node = Node::new(local, &lan);
+        node.manager.set_paused(true);
+        node.learn(remote, address(2, 7000), 60_000);
+        advance(10).await;
+        assert_eq!(
+            node.manager.connect_manual(remote, node.now()).await,
+            Err(ConnectionFailure::Paused)
+        );
+        assert_eq!(lan.dial_count(), 0);
+        assert!(!ConnectionFailure::Paused.is_transient());
     }
 
     // Pins the status chip: an unreachable phone reads as Searching, a

@@ -444,6 +444,13 @@ pub struct QuinnTransport {
     sessions: Mutex<HashMap<PeerId, Session>>,
     generation: AtomicU64,
     closed: AtomicBool,
+    /// Cleared while the user has paused sync; inbound connections are then
+    /// refused before the handshake. Outbound dials are not gated here.
+    accepting: AtomicBool,
+    /// Peers admitted while not accepting, for the duration of a pairing
+    /// commit. Their connections are checked after authentication; with the
+    /// set empty, inbound connections are refused before the handshake.
+    pairing_admitted: Mutex<HashMap<DeviceId, usize>>,
     tasks: Mutex<Vec<JoinHandle<()>>>,
 }
 
@@ -523,6 +530,8 @@ impl QuinnTransport {
             sessions: Mutex::new(HashMap::new()),
             generation: AtomicU64::new(0),
             closed: AtomicBool::new(false),
+            accepting: AtomicBool::new(true),
+            pairing_admitted: Mutex::new(HashMap::new()),
             tasks: Mutex::new(Vec::new()),
         });
         let owner = transport.clone();
@@ -612,7 +621,9 @@ impl QuinnTransport {
             let Some(incoming) = self.endpoint.accept().await else {
                 break;
             };
-            if self.endpoint.open_connections() >= self.config.max_connections {
+            if (!self.accepting.load(Ordering::Acquire) && !self.admits_any())
+                || self.endpoint.open_connections() >= self.config.max_connections
+            {
                 incoming.refuse();
                 continue;
             }
@@ -627,6 +638,10 @@ impl QuinnTransport {
                 else {
                     return;
                 };
+                if !owner.accepting.load(Ordering::Acquire) && !owner.admits(authenticated.device) {
+                    authenticated.connection.close(1_u32.into(), b"sync paused");
+                    return;
+                }
                 let connection = authenticated.connection.clone();
                 let Ok((mut send, mut receive)) = connection.accept_bi().await else {
                     return;
@@ -643,6 +658,43 @@ impl QuinnTransport {
             });
             self.track_task(task);
         }
+    }
+
+    /// Turns inbound acceptance on or off without rebinding the endpoint.
+    pub fn set_accepting(&self, accepting: bool) {
+        self.accepting.store(accepting, Ordering::Release);
+    }
+
+    /// Lets `peer` connect while not accepting, until the matching
+    /// [`Self::release_pairing_peer`]. Used so a pairing commit can sync the
+    /// root even while the user has paused sync.
+    pub fn admit_pairing_peer(&self, peer: DeviceId) {
+        if let Ok(mut admitted) = self.pairing_admitted.lock() {
+            *admitted.entry(peer).or_default() += 1;
+        }
+    }
+
+    pub fn release_pairing_peer(&self, peer: DeviceId) {
+        if let Ok(mut admitted) = self.pairing_admitted.lock()
+            && let Some(count) = admitted.get_mut(&peer)
+        {
+            *count = count.saturating_sub(1);
+            if *count == 0 {
+                admitted.remove(&peer);
+            }
+        }
+    }
+
+    fn admits_any(&self) -> bool {
+        self.pairing_admitted
+            .lock()
+            .is_ok_and(|admitted| !admitted.is_empty())
+    }
+
+    fn admits(&self, peer: DeviceId) -> bool {
+        self.pairing_admitted
+            .lock()
+            .is_ok_and(|admitted| admitted.contains_key(&peer))
     }
 
     pub async fn dial(
@@ -1320,6 +1372,50 @@ mod tests {
             tokio::time::timeout(Duration::from_millis(100), events_b.recv())
                 .await
                 .is_err()
+        );
+        NetworkTransport::close(a.as_ref()).await.unwrap();
+        NetworkTransport::close(b.as_ref()).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn listener_refuses_inbound_while_not_accepting_and_resumes_on_same_port() {
+        let identity_a = identity(20).await;
+        let identity_b = identity(21).await;
+        let trust_a = Arc::new(MemoryTrustResolver::default());
+        let trust_b = Arc::new(MemoryTrustResolver::default());
+        trust_a.set(trusted(&identity_b, TrustState::Trusted));
+        trust_b.set(trusted(&identity_a, TrustState::Trusted));
+        let a = QuinnTransport::bind(
+            ([127, 0, 0, 1], 0).into(),
+            identity_a.clone(),
+            trust_a,
+            QuinnTransportConfig::default(),
+        )
+        .unwrap();
+        let b = QuinnTransport::bind(
+            ([127, 0, 0, 1], 0).into(),
+            identity_b.clone(),
+            trust_b,
+            QuinnTransportConfig::default(),
+        )
+        .unwrap();
+        let mut events_b = NetworkTransport::take_events(b.as_ref()).unwrap();
+        let address = b.local_addr().unwrap();
+        b.set_accepting(false);
+        assert!(a.dial(identity_b.id(), address).await.is_err());
+        assert!(
+            tokio::time::timeout(Duration::from_millis(100), events_b.recv())
+                .await
+                .is_err()
+        );
+        assert!(b.sessions.lock().unwrap().is_empty());
+
+        b.set_accepting(true);
+        assert_eq!(b.local_addr().unwrap(), address);
+        a.dial(identity_b.id(), address).await.unwrap();
+        assert_eq!(
+            event(&mut events_b).await,
+            NetworkEvent::PeerConnected(PeerId::from(identity_a.id().to_string()))
         );
         NetworkTransport::close(a.as_ref()).await.unwrap();
         NetworkTransport::close(b.as_ref()).await.unwrap();

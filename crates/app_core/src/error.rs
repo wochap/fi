@@ -123,6 +123,10 @@ pub enum AppError {
     Network(#[from] crate::quinn_transport::QuinnTransportError),
     #[error(transparent)]
     Pairing(#[from] crate::pairing::PairingError),
+    /// A connection request failed, kept typed so a paused sync can be told
+    /// apart from a route failure.
+    #[error(transparent)]
+    Connection(#[from] crate::routing::ConnectionFailure),
     /// Typed repository bootstrap failure, kept structured so open-time
     /// validation failures can be classified as reset-resolvable.
     #[error(transparent)]

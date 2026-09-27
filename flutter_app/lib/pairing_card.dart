@@ -86,6 +86,15 @@ class PairingCard extends StatelessWidget {
     label: const Text('Start pairing'),
   );
 
+  /// Shown after the idle copy while Discoverable is off, so the user knows
+  /// pairing does not depend on it.
+  static const discoveryOffNote =
+      'Discovery is off, but pairing still works: it uses its own short announcement.';
+
+  String get _idleText => controller.preferences.discoverable
+      ? _idleBody
+      : '$_idleBody $discoveryOffNote';
+
   /// Idle is the card's resting state (mocks 1b, 2i): a row on a wide screen, a stack on a phone.
   Widget _idle(bool compact) => compact
       ? Column(
@@ -100,7 +109,7 @@ class PairingCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 10),
-            const Text(_idleBody),
+            Text(_idleText, key: const Key('pairing-idle-body')),
             const SizedBox(height: 10),
             _startButton(block: true),
           ],
@@ -109,13 +118,13 @@ class PairingCard extends StatelessWidget {
           children: [
             _mark(false),
             const SizedBox(width: 16),
-            const Expanded(
+            Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Pair a device', style: _title),
-                  SizedBox(height: 3),
-                  Text(_idleBody),
+                  const Text('Pair a device', style: _title),
+                  const SizedBox(height: 3),
+                  Text(_idleText, key: const Key('pairing-idle-body')),
                 ],
               ),
             ),

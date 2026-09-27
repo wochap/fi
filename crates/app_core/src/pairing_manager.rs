@@ -3,7 +3,10 @@
 use std::{
     collections::{BTreeMap, HashMap},
     net::SocketAddr,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -204,6 +207,10 @@ pub struct PairingManager {
     group_tx: watch::Sender<Option<DiscoveryGroupState>>,
     address_policy: AddressPolicy,
     normal_scope: Mutex<Option<DiscoveryScope>>,
+    /// The Discoverable preference. While off, every path into
+    /// [`Self::start_normal_discovery`] is a no-op; pairing discovery is not
+    /// governed by it.
+    normal_discovery_enabled: AtomicBool,
     normal_port: Mutex<Option<u16>>,
     migration_scope: Mutex<Option<DiscoveryScope>>,
     deadline: Mutex<Option<JoinHandle<()>>>,
@@ -341,6 +348,7 @@ impl PairingManager {
             group_tx,
             address_policy,
             normal_scope: Mutex::new(None),
+            normal_discovery_enabled: AtomicBool::new(true),
             normal_port: Mutex::new(None),
             migration_scope: Mutex::new(None),
             deadline: Mutex::new(None),
@@ -950,7 +958,16 @@ impl PairingManager {
         Ok(())
     }
 
+    /// Gates normal discovery. Does not start or stop it; the caller decides.
+    pub fn set_normal_discovery_enabled(&self, enabled: bool) {
+        self.normal_discovery_enabled
+            .store(enabled, Ordering::Release);
+    }
+
     pub async fn start_normal_discovery(&self, port: u16) -> Result<bool, PairingError> {
+        if !self.normal_discovery_enabled.load(Ordering::Acquire) {
+            return Ok(false);
+        }
         if self
             .normal_scope
             .lock()
@@ -2233,6 +2250,38 @@ mod tests {
         );
         assert!(discovery.advertisements().is_empty());
         assert!(a.candidates().is_empty());
+    }
+
+    #[tokio::test]
+    async fn disabled_normal_discovery_survives_rotation_and_leaves_pairing_alone() {
+        let (manager, discovery, _directory) = manager(19).await;
+        manager.ensure_discovery_secret(true).await.unwrap();
+        manager.set_normal_discovery_enabled(false);
+        assert!(!manager.start_normal_discovery(41021).await.unwrap());
+        let epoch = manager
+            .rotate_discovery_secret(41021, now_ms(), 60_000)
+            .await
+            .unwrap();
+        assert_eq!(epoch, 2);
+        assert_eq!(
+            manager.control.discovery_metadata().unwrap().unwrap().epoch,
+            2
+        );
+        assert!(manager.normal_scope.lock().unwrap().is_none());
+        assert!(discovery.advertisements().is_empty());
+        assert!(discovery.browsing_scopes().is_empty());
+
+        manager.set_root_state(RootState::NeedsDecision);
+        manager
+            .start(Duration::from_secs(5), "A".into())
+            .await
+            .unwrap();
+        assert_eq!(discovery.advertisements().len(), 1);
+        assert!(manager.normal_scope.lock().unwrap().is_none());
+
+        manager.set_normal_discovery_enabled(true);
+        assert!(manager.start_normal_discovery(41021).await.unwrap());
+        assert!(manager.normal_scope.lock().unwrap().is_some());
     }
 
     #[tokio::test]

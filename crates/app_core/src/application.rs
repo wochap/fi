@@ -22,6 +22,7 @@ use tracing::{error, info, instrument, warn};
 use crate::{
     LocalIdentityRecord, ResetIntent,
     adapters::{FileDocumentStore, LocalTransport, SqliteControlStore},
+    control::NetworkPreferences,
     discovery::DiscoveryGroupSecret,
     error::{AppError, BootstrapError, Result},
     events::{ApplicationState, DataChanged, DomainKind, ErrorEvent, ProjectionState},
@@ -275,6 +276,10 @@ pub struct AppCore {
     lifecycle_policy: LifecyclePolicy,
     port_policy: PortPolicy,
     networking_deferred: Arc<Mutex<Option<NetworkingDeferral>>>,
+    control: Arc<SqliteControlStore>,
+    /// In-memory copy of the stored preferences. Held while a setter writes
+    /// through, so the store and this value never disagree.
+    preferences: Arc<Mutex<NetworkPreferences>>,
 }
 
 impl std::fmt::Debug for AppCore {
@@ -361,6 +366,9 @@ impl AppCore {
             .map_err(|error| AppError::Storage(error.to_string()))?;
         let control_store = Arc::new(open_control_store(&data_dir).await?);
         resume_reset_if_outstanding(&data_dir, &control_store, Some(key_store.as_ref())).await?;
+        // Read before anything binds or advertises, so a preference that is
+        // off is never briefly on during startup.
+        let preferences = control_store.network_preferences()?;
         let identity = match DeviceIdentity::load_or_create(key_store.as_ref()).await {
             Ok(identity) => Arc::new(identity),
             Err(error) => {
@@ -510,9 +518,12 @@ impl AppCore {
         let endpoints = Arc::new(Mutex::new(EndpointRegistry::new(
             crate::discovery::AddressPolicy::for_bind(bind.ip()),
         )));
+        network.set_accepting(preferences.sync_enabled);
+        pairing.set_normal_discovery_enabled(preferences.discoverable);
         let connections =
             ConnectionManager::new(identity.id(), network.clone(), endpoints.clone(), 4)
                 .map_err(|message| AppError::Storage(message.into()))?;
+        connections.set_paused(!preferences.sync_enabled);
         if let Some(requests) = network.take_control_requests() {
             spawn_rotation_control(requests, pairing.clone());
         }
@@ -715,6 +726,7 @@ impl AppCore {
             },
             command_rx,
         ));
+        let preferences = control_store.network_preferences()?;
         Ok(Self {
             commands,
             lifecycle,
@@ -734,6 +746,8 @@ impl AppCore {
             lifecycle_policy: config.lifecycle_policy,
             port_policy: config.ports,
             networking_deferred: Arc::new(Mutex::new(network_components.deferred)),
+            control: control_store,
+            preferences: Arc::new(Mutex::new(preferences)),
         })
     }
 
@@ -863,6 +877,9 @@ impl AppCore {
     }
     #[must_use]
     pub fn sync_status(&self) -> crate::routing::SyncStatus {
+        if !self.network_preferences().sync_enabled {
+            return crate::routing::SyncStatus::Paused;
+        }
         let status = self
             .connections
             .as_ref()
@@ -876,6 +893,89 @@ impl AppCore {
             crate::routing::SyncStatus::Searching
         } else {
             status
+        }
+    }
+
+    /// The stored networking preferences for this installation.
+    #[must_use]
+    pub fn network_preferences(&self) -> NetworkPreferences {
+        self.preferences
+            .lock()
+            .map(|preferences| *preferences)
+            .unwrap_or_default()
+    }
+
+    /// Writes one preference through to the control store and returns the
+    /// full stored value. The in-memory copy changes only after the write.
+    fn store_preference(
+        &self,
+        change: impl FnOnce(&mut NetworkPreferences),
+    ) -> Result<NetworkPreferences> {
+        let mut preferences = self
+            .preferences
+            .lock()
+            .map_err(|_| AppError::Storage("network preferences lock poisoned".into()))?;
+        let mut next = *preferences;
+        change(&mut next);
+        self.control.store_network_preferences(next)?;
+        *preferences = next;
+        Ok(next)
+    }
+
+    /// Turns group-scoped normal discovery on or off. Live sessions, inbound
+    /// acceptance, and pairing discovery are not affected.
+    pub async fn set_discoverable(&self, discoverable: bool) -> Result<NetworkPreferences> {
+        let preferences = self.store_preference(|value| value.discoverable = discoverable)?;
+        if let Some(pairing) = self.pairing.as_ref() {
+            pairing.set_normal_discovery_enabled(discoverable);
+            if !discoverable {
+                pairing.stop_normal_discovery().await?;
+            } else if self.networking_active()
+                && self.networking_deferred().is_none()
+                && let Some(port) = self.network_addr().map(|address| address.port())
+            {
+                pairing.start_normal_discovery(port).await?;
+            }
+        }
+        info!(event = "network_preference_changed", discoverable);
+        Ok(preferences)
+    }
+
+    /// Pauses or resumes sync with paired devices. Pausing stops automatic
+    /// dialing, refuses inbound connections before the handshake, and closes
+    /// every live session; resuming redials peers whose endpoints are known.
+    pub async fn set_sync_enabled(&self, sync_enabled: bool) -> Result<NetworkPreferences> {
+        let preferences = self.store_preference(|value| value.sync_enabled = sync_enabled)?;
+        if let Some(connections) = self.connections.as_ref() {
+            connections.set_paused(!sync_enabled);
+        }
+        if let Some(network) = self.network.as_ref() {
+            network.set_accepting(sync_enabled);
+        }
+        if sync_enabled {
+            if self.networking_active()
+                && let Some(connections) = self.connections.as_ref()
+            {
+                connections.reconnect_known_peers(current_time_ms());
+            }
+        } else {
+            self.disconnect_all_peers().await;
+        }
+        info!(event = "network_preference_changed", sync_enabled);
+        Ok(preferences)
+    }
+
+    async fn disconnect_all_peers(&self) {
+        let peers = self.connection_states().into_keys().collect::<Vec<_>>();
+        for peer in peers {
+            self.disconnect_and_mark(peer).await;
+        }
+    }
+
+    async fn disconnect_and_mark(&self, peer: DeviceId) {
+        let _ = self.disconnect_peer(peer).await;
+        if let Some(connections) = self.connections.as_ref() {
+            connections.set_state(peer, PeerConnectionState::Disconnected);
         }
     }
 
@@ -911,13 +1011,7 @@ impl AppCore {
                 connections.set_suspended(true);
             }
             pairing.stop_normal_discovery().await?;
-            let peers = self.connection_states().into_keys().collect::<Vec<_>>();
-            for peer in peers {
-                let _ = self.disconnect_peer(peer).await;
-                if let Some(connections) = self.connections.as_ref() {
-                    connections.set_state(peer, PeerConnectionState::Disconnected);
-                }
-            }
+            self.disconnect_all_peers().await;
         }
         Ok(())
     }
@@ -943,7 +1037,7 @@ impl AppCore {
             .ok_or_else(|| AppError::Storage("networking is not enabled".into()))?
             .connect_manual(peer, now_ms)
             .await
-            .map_err(|error| AppError::Storage(error.to_string()))
+            .map_err(AppError::from)
     }
     pub async fn disconnect_peer(&self, peer: DeviceId) -> Result<()> {
         let network = self
@@ -1049,7 +1143,18 @@ impl AppCore {
             .as_ref()
             .ok_or_else(|| AppError::Storage("pairing requires networked mode".into()))?;
         let plan = pairing.confirm(session).await?;
+        // Pairing is not governed by the sync pause: admit this peer for the
+        // commit, then close its session again if sync is still paused.
+        if let Some(network) = self.network.as_ref() {
+            network.admit_pairing_peer(plan.peer_device_id);
+        }
         let outcome = self.commit_pairing(pairing, &plan).await;
+        if let Some(network) = self.network.as_ref() {
+            network.release_pairing_peer(plan.peer_device_id);
+        }
+        if !self.network_preferences().sync_enabled {
+            self.disconnect_and_mark(plan.peer_device_id).await;
+        }
         if let Err(error) = &outcome {
             let reason = pairing_failure_reason(error);
             if let Err(journal_error) = pairing.journal_failure(&plan, &reason.to_string()) {
@@ -1186,7 +1291,12 @@ impl AppCore {
                 retry_after_ms: None,
             }],
         );
-        self.connect_peer(plan.peer_device_id, now).await?;
+        self.connections
+            .as_ref()
+            .ok_or_else(|| AppError::Storage("networking is not enabled".into()))?
+            .connect_for_pairing(plan.peer_device_id, now)
+            .await
+            .map_err(|error| AppError::Storage(error.to_string()))?;
         self.wait_for_join_ready(provision.root, std::time::Duration::from_secs(120))
             .await?;
         pairing.acknowledge_provisioning(plan).await?;
@@ -3153,5 +3263,73 @@ mod tests {
             Some((Some(7_000), None)),
             "a reconnect is a new session"
         );
+    }
+
+    async fn networked(directory: &Path) -> AppCore {
+        AppCore::open_networked_with_discovery(
+            directory,
+            Arc::new(crate::identity::InMemorySecureKeyStore::seeded([41; 32])),
+            "127.0.0.1:0".parse().unwrap(),
+            AppCoreConfig::default(),
+            QuinnTransportConfig::default(),
+            Arc::new(crate::discovery::FakeDiscoveryProvider::new(Arc::new(
+                crate::discovery::ManualClock::new(0),
+            ))),
+        )
+        .await
+        .unwrap()
+    }
+
+    #[tokio::test]
+    async fn paused_sync_status_takes_precedence_and_clears_on_resume() {
+        let directory = tempfile::tempdir().unwrap();
+        let core = networked(directory.path()).await;
+        core.set_foreground(true).await.unwrap();
+        assert_eq!(core.sync_status(), crate::routing::SyncStatus::Searching);
+        core.set_sync_enabled(false).await.unwrap();
+        assert_eq!(core.sync_status(), crate::routing::SyncStatus::Paused);
+        assert!(matches!(
+            core.connect_peer(device(9), 0).await,
+            Err(AppError::Connection(
+                crate::routing::ConnectionFailure::Paused
+            ))
+        ));
+        core.set_sync_enabled(true).await.unwrap();
+        assert_eq!(core.sync_status(), crate::routing::SyncStatus::Searching);
+        core.shutdown().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn preference_setters_persist_independently() {
+        let directory = tempfile::tempdir().unwrap();
+        let core = networked(directory.path()).await;
+        assert_eq!(core.network_preferences(), NetworkPreferences::default());
+        let after_sync = core.set_sync_enabled(false).await.unwrap();
+        assert_eq!(
+            after_sync,
+            NetworkPreferences {
+                discoverable: true,
+                sync_enabled: false
+            }
+        );
+        let after_discovery = core.set_discoverable(false).await.unwrap();
+        assert_eq!(
+            after_discovery,
+            NetworkPreferences {
+                discoverable: false,
+                sync_enabled: false
+            }
+        );
+        core.set_sync_enabled(true).await.unwrap();
+        core.shutdown().await.unwrap();
+        let reopened = networked(directory.path()).await;
+        assert_eq!(
+            reopened.network_preferences(),
+            NetworkPreferences {
+                discoverable: false,
+                sync_enabled: true
+            }
+        );
+        reopened.shutdown().await.unwrap();
     }
 }

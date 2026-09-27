@@ -405,6 +405,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   NetworkPortsDto dco_decode_network_ports_dto(dynamic raw);
 
   @protected
+  NetworkPreferencesDto dco_decode_network_preferences_dto(dynamic raw);
+
+  @protected
   NetworkingDeferredDto dco_decode_networking_deferred_dto(dynamic raw);
 
   @protected
@@ -1180,6 +1183,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   NetworkPortsDto sse_decode_network_ports_dto(SseDeserializer deserializer);
+
+  @protected
+  NetworkPreferencesDto sse_decode_network_preferences_dto(
+    SseDeserializer deserializer,
+  );
 
   @protected
   NetworkingDeferredDto sse_decode_networking_deferred_dto(
@@ -2145,6 +2153,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_network_ports_dto(
     NetworkPortsDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_network_preferences_dto(
+    NetworkPreferencesDto self,
     SseSerializer serializer,
   );
 

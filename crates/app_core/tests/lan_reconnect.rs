@@ -9,8 +9,8 @@ use std::{
 
 use app_core::{
     AppCore, AppCoreConfig, DeviceId, DiscoveryScope, EndpointSource, FakeDiscoveryProvider,
-    InMemorySecureKeyStore, LifecyclePolicy, ManualClock, PairingCandidate, PairingState,
-    PeerConnectionState, QuinnTransportConfig, SyncStatus,
+    InMemorySecureKeyStore, LifecyclePolicy, ManualClock, NetworkPreferences, PairingCandidate,
+    PairingState, PeerConnectionState, QuinnTransportConfig, SyncStatus, reset_dataset,
 };
 
 fn now_ms() -> u64 {
@@ -28,6 +28,7 @@ struct Pair {
     joining: AppCore,
     existing_discovery: Arc<FakeDiscoveryProvider>,
     joining_discovery: Arc<FakeDiscoveryProvider>,
+    existing_keys: Arc<InMemorySecureKeyStore>,
 }
 
 impl Pair {
@@ -48,6 +49,19 @@ async fn open(
     seed: u8,
     policy: LifecyclePolicy,
 ) -> (AppCore, Arc<FakeDiscoveryProvider>) {
+    open_with_keys(
+        directory,
+        Arc::new(InMemorySecureKeyStore::seeded([seed; 32])),
+        policy,
+    )
+    .await
+}
+
+async fn open_with_keys(
+    directory: &std::path::Path,
+    keys: Arc<InMemorySecureKeyStore>,
+    policy: LifecyclePolicy,
+) -> (AppCore, Arc<FakeDiscoveryProvider>) {
     // Wall-clock based so advertised expiries line up with the endpoint
     // registry's timeline.
     let discovery = Arc::new(FakeDiscoveryProvider::new(Arc::new(ManualClock::new(
@@ -55,7 +69,7 @@ async fn open(
     ))));
     let core = AppCore::open_networked_with_discovery(
         directory,
-        Arc::new(InMemorySecureKeyStore::seeded([seed; 32])),
+        keys,
         "127.0.0.1:0".parse().unwrap(),
         AppCoreConfig {
             lifecycle_policy: policy,
@@ -74,8 +88,26 @@ async fn open(
 async fn paired(seed: u8, policy: LifecyclePolicy) -> Pair {
     let existing_dir = tempfile::tempdir().unwrap();
     let joining_dir = tempfile::tempdir().unwrap();
-    let (existing, existing_discovery) = open(existing_dir.path(), seed, policy).await;
+    let existing_keys = Arc::new(InMemorySecureKeyStore::seeded([seed; 32]));
+    let (existing, existing_discovery) =
+        open_with_keys(existing_dir.path(), existing_keys.clone(), policy).await;
     let (joining, joining_discovery) = open(joining_dir.path(), seed + 1, policy).await;
+    pair_cores(&existing, &joining).await;
+    let pair = Pair {
+        _dirs: (existing_dir, joining_dir),
+        existing,
+        joining,
+        existing_discovery,
+        joining_discovery,
+        existing_keys,
+    };
+    wait_established(&pair.existing, pair.joining_id()).await;
+    wait_established(&pair.joining, pair.existing_id()).await;
+    pair
+}
+
+/// Runs the SAS pairing flow between an existing dataset and a fresh core.
+async fn pair_cores(existing: &AppCore, joining: &AppCore) {
     existing.create_new_dataset().await.unwrap();
     existing
         .create_collection("Food".into(), String::new())
@@ -114,16 +146,6 @@ async fn paired(seed: u8, policy: LifecyclePolicy) -> Pair {
     );
     existing_result.unwrap();
     joining_result.unwrap();
-    let pair = Pair {
-        _dirs: (existing_dir, joining_dir),
-        existing,
-        joining,
-        existing_discovery,
-        joining_discovery,
-    };
-    wait_established(&pair.existing, pair.joining_id()).await;
-    wait_established(&pair.joining, pair.existing_id()).await;
-    pair
 }
 
 fn established(state: Option<&PeerConnectionState>) -> bool {
@@ -336,4 +358,227 @@ async fn synced_peer_row_carries_a_last_sync_time() {
     assert!(last_sync >= before);
     assert!(record.last_seen_ms.is_some_and(|seen| seen >= before));
     pair.shutdown().await;
+}
+
+const OFF: NetworkPreferences = NetworkPreferences {
+    discoverable: false,
+    sync_enabled: false,
+};
+
+fn browses_group(discovery: &FakeDiscoveryProvider) -> bool {
+    discovery
+        .browsing_scopes()
+        .iter()
+        .any(|scope| matches!(scope, DiscoveryScope::Group { .. }))
+}
+
+/// Watches `core` for `window` and fails if it ever dials or holds a session.
+async fn assert_never_dials(core: &AppCore, window: Duration) {
+    let mut states = core.subscribe_connections().unwrap();
+    let watch = async {
+        loop {
+            for state in states.borrow_and_update().values() {
+                assert!(
+                    !established(Some(state))
+                        && !matches!(
+                            state,
+                            PeerConnectionState::Connecting { .. }
+                                | PeerConnectionState::Authenticating { .. }
+                        ),
+                    "unexpected state while paused: {state:?}"
+                );
+            }
+            if states.changed().await.is_err() {
+                std::future::pending::<()>().await;
+            }
+        }
+    };
+    let _ = tokio::time::timeout(window, watch).await;
+}
+
+// Pins "never briefly on": both preferences are applied before networking
+// starts at open.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn reopened_core_applies_stored_preferences_before_networking() {
+    let pair = paired(71, LifecyclePolicy::KeepNetworkingInBackground).await;
+    let Pair {
+        _dirs: (existing_dir, joining_dir),
+        existing,
+        joining,
+        existing_discovery,
+        existing_keys,
+        ..
+    } = pair;
+    let existing_id = existing.device_id().unwrap();
+    existing.set_discoverable(false).await.unwrap();
+    joining.set_sync_enabled(false).await.unwrap();
+    existing.shutdown().await.unwrap();
+    joining.shutdown().await.unwrap();
+
+    let (existing, existing_discovery_after) = open_with_keys(
+        existing_dir.path(),
+        existing_keys.clone(),
+        LifecyclePolicy::KeepNetworkingInBackground,
+    )
+    .await;
+    existing.set_foreground(true).await.unwrap();
+    assert!(!existing.network_preferences().discoverable);
+    assert!(!has_group_advertisement(&existing_discovery_after));
+    assert!(!browses_group(&existing_discovery_after));
+    drop(existing_discovery);
+    // The group secret survived the restart, so turning discovery back on
+    // advertises at once: the absence above was the preference, not a
+    // missing secret.
+    existing.set_discoverable(true).await.unwrap();
+    assert!(has_group_advertisement(&existing_discovery_after));
+    existing.set_discoverable(false).await.unwrap();
+    assert!(!has_group_advertisement(&existing_discovery_after));
+
+    let (joining, _) = open(
+        joining_dir.path(),
+        72,
+        LifecyclePolicy::KeepNetworkingInBackground,
+    )
+    .await;
+    joining.set_foreground(true).await.unwrap();
+    assert!(!joining.network_preferences().sync_enabled);
+    assert_eq!(joining.sync_status(), SyncStatus::Paused);
+    // The existing side is reachable at its current port, so only the pause
+    // can keep the joining side from dialing it.
+    let now = now_ms();
+    joining.replace_endpoints(
+        existing_id,
+        EndpointSource::Lan,
+        [app_core::NetworkEndpoint {
+            address: existing.network_addr().unwrap(),
+            source: EndpointSource::Lan,
+            observed_at_ms: now,
+            expires_at_ms: now + 60_000,
+            interface_scope: None,
+            last_success_ms: None,
+            failures: 0,
+            retry_after_ms: None,
+        }],
+    );
+    assert_never_dials(&joining, Duration::from_millis(800)).await;
+    assert_eq!(joining.sync_status(), SyncStatus::Paused);
+    existing.shutdown().await.unwrap();
+    joining.shutdown().await.unwrap();
+}
+
+// Android: returning to the foreground while paused restarts discovery (it
+// is on) but dials no peer, and inbound connections stay refused.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn foreground_return_while_paused_dials_nothing_and_refuses_inbound() {
+    let pair = paired(73, LifecyclePolicy::SuspendInBackground).await;
+    let peer = pair.existing_id();
+    pair.joining.set_foreground(true).await.unwrap();
+    pair.joining.set_sync_enabled(false).await.unwrap();
+    pair.joining.set_foreground(false).await.unwrap();
+    pair.joining.set_foreground(true).await.unwrap();
+    assert!(has_group_advertisement(&pair.joining_discovery));
+    assert_never_dials(&pair.joining, Duration::from_millis(800)).await;
+    assert!(!established(pair.joining.connection_states().get(&peer)));
+    assert!(
+        pair.existing
+            .connect_peer(pair.joining_id(), now_ms())
+            .await
+            .is_err(),
+        "the paused side refuses inbound connections"
+    );
+    assert!(!established(
+        pair.existing.connection_states().get(&pair.joining_id())
+    ));
+    assert_eq!(pair.joining.sync_status(), SyncStatus::Paused);
+    pair.shutdown().await;
+}
+
+// Desktop: the pause overrides the keep-alive policy, and resuming reconnects
+// from known endpoints without waiting for a discovery announcement.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn pause_closes_live_session_under_keep_alive_and_resume_reconnects() {
+    let pair = paired(75, LifecyclePolicy::KeepNetworkingInBackground).await;
+    let peer = pair.joining_id();
+    pair.existing.set_sync_enabled(false).await.unwrap();
+    wait_for(
+        &pair.joining,
+        pair.existing_id(),
+        "session closed",
+        |state| !established(state),
+    )
+    .await;
+    pair.existing.set_foreground(true).await.unwrap();
+    pair.existing.set_foreground(false).await.unwrap();
+    tokio::time::sleep(Duration::from_millis(800)).await;
+    assert!(!established(pair.existing.connection_states().get(&peer)));
+    assert!(!established(
+        pair.joining.connection_states().get(&pair.existing_id())
+    ));
+    assert_eq!(pair.existing.sync_status(), SyncStatus::Paused);
+
+    pair.existing.set_sync_enabled(true).await.unwrap();
+    wait_established(&pair.existing, peer).await;
+    wait_established(&pair.joining, pair.existing_id()).await;
+    assert_ne!(pair.existing.sync_status(), SyncStatus::Paused);
+    pair.shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn preferences_survive_dataset_reset() {
+    let directory = tempfile::tempdir().unwrap();
+    let (core, _) = open(
+        directory.path(),
+        77,
+        LifecyclePolicy::KeepNetworkingInBackground,
+    )
+    .await;
+    core.create_new_dataset().await.unwrap();
+    core.set_discoverable(false).await.unwrap();
+    core.set_sync_enabled(false).await.unwrap();
+    core.shutdown().await.unwrap();
+    reset_dataset(
+        directory.path(),
+        Some(&InMemorySecureKeyStore::seeded([77; 32])),
+    )
+    .await
+    .unwrap();
+    let (core, discovery) = open(
+        directory.path(),
+        77,
+        LifecyclePolicy::KeepNetworkingInBackground,
+    )
+    .await;
+    assert_eq!(core.network_preferences(), OFF);
+    assert!(!has_group_advertisement(&discovery));
+    core.shutdown().await.unwrap();
+}
+
+// Explicit pairing is not governed by either preference, and completing it
+// turns neither back on.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn pairing_with_both_preferences_off_completes_and_leaves_them_off() {
+    let existing_dir = tempfile::tempdir().unwrap();
+    let joining_dir = tempfile::tempdir().unwrap();
+    let policy = LifecyclePolicy::KeepNetworkingInBackground;
+    let (existing, existing_discovery) = open(existing_dir.path(), 79, policy).await;
+    let (joining, joining_discovery) = open(joining_dir.path(), 80, policy).await;
+    for core in [&existing, &joining] {
+        core.set_discoverable(false).await.unwrap();
+        core.set_sync_enabled(false).await.unwrap();
+    }
+    pair_cores(&existing, &joining).await;
+    for core in [&existing, &joining] {
+        assert_eq!(core.network_preferences(), OFF);
+        assert_eq!(core.trusted_devices().unwrap().len(), 1);
+        assert_eq!(core.sync_status(), SyncStatus::Paused);
+    }
+    assert!(matches!(
+        joining.lifecycle_state(),
+        app_core::ApplicationState::Ready { .. }
+    ));
+    assert!(!has_group_advertisement(&existing_discovery));
+    assert!(!has_group_advertisement(&joining_discovery));
+    assert_never_dials(&joining, Duration::from_millis(500)).await;
+    existing.shutdown().await.unwrap();
+    joining.shutdown().await.unwrap();
 }

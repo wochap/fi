@@ -38,8 +38,8 @@ pub use automerge_repo::{
 };
 pub use control::{
     DiscoveryGroupMetadata, DiscoveryRotationJournal, DiscoveryRotationStage, LocalIdentityRecord,
-    PairingJournalRecord, PairingJournalStage, PeerConnectionMetadata, PeerTrustRecord,
-    ResetIntent, TrustState, TrustedDeviceRecord,
+    NetworkPreferences, PairingJournalRecord, PairingJournalStage, PeerConnectionMetadata,
+    PeerTrustRecord, ResetIntent, TrustState, TrustedDeviceRecord,
 };
 pub use discovery::{
     Clock, DiscoveredEndpoint, DiscoveryAdvertisement, DiscoveryError, DiscoveryEvent,

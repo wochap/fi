@@ -4,6 +4,8 @@ import 'package:clock/clock.dart';
 import 'package:fi/bridge/collection_bridge.dart';
 import 'package:fi/controllers.dart';
 import 'package:fi/file_dialogs.dart';
+import 'package:fi/help_button.dart';
+import 'package:fi/help_copy.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/collections_page.dart';
 import 'package:fi/pairing_card.dart';
@@ -830,7 +832,7 @@ class _StatusDot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => switch (status) {
-    SyncStatusDto.offline => GlowDot(
+    SyncStatusDto.offline || SyncStatusDto.paused => GlowDot(
       size: size,
       ring: false,
       color: Nocturne.neutral600,
@@ -883,6 +885,7 @@ String _statusText(SyncStatusDto status) => switch (status) {
   SyncStatusDto.syncing => 'Syncing',
   SyncStatusDto.synced => 'Synced',
   SyncStatusDto.error => 'Error',
+  SyncStatusDto.paused => 'Paused',
 };
 
 /// One distinct icon per aggregate status, so the state is readable without the label.
@@ -893,6 +896,7 @@ IconData _statusIcon(SyncStatusDto status) => switch (status) {
   SyncStatusDto.syncing => Icons.sync,
   SyncStatusDto.synced => Icons.cloud_done,
   SyncStatusDto.error => Icons.error_outline,
+  SyncStatusDto.paused => Icons.pause_circle_outline,
 };
 
 /// Footer text naming the running build, e.g. `fi 0.1.21 (a1b2c3d-dirty)`.
@@ -1008,6 +1012,8 @@ class _DevicesPageState extends State<DevicesPage> {
                       ),
                     ],
                   ),
+                _ConnectionSwitches(controller: controller),
+                const SizedBox(height: 22),
                 PairingCard(
                   controller: controller,
                   onResetDataset: onResetDataset,
@@ -1131,7 +1137,8 @@ class _DevicesPageState extends State<DevicesPage> {
                     (
                       _,
                       PeerConnectionKindDto.offline ||
-                          PeerConnectionKindDto.error,
+                          PeerConnectionKindDto.error ||
+                          PeerConnectionKindDto.paused,
                     ) =>
                       Tag.neutral(_connectionText(device.connection)),
                     _ => Tag(_connectionText(device.connection)),
@@ -1287,6 +1294,69 @@ class _DevicesPageState extends State<DevicesPage> {
   }
 }
 
+/// The two installation-level networking switches. Each shows the value Rust
+/// stored; a failed toggle leaves it unchanged and the error banner explains.
+class _ConnectionSwitches extends StatelessWidget {
+  const _ConnectionSwitches({required this.controller});
+  final DevicesController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final preferences = controller.preferences;
+    final enabled = !controller.busy;
+    return Column(
+      key: const Key('connection-switches'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SectionLabel('Connections'),
+        const SizedBox(height: 10),
+        NocturneCard(
+          padding: EdgeInsets.zero,
+          child: Column(
+            children: [
+              SwitchListTile(
+                key: const Key('pref-discoverable'),
+                value: preferences.discoverable,
+                onChanged: enabled ? controller.setDiscoverable : null,
+                title: const _SwitchTitle('Discoverable', HelpId.discoverable),
+                subtitle: const Text(
+                  'Announce this device to paired devices on the local network.',
+                ),
+              ),
+              SwitchListTile(
+                key: const Key('pref-sync'),
+                value: preferences.syncEnabled,
+                onChanged: enabled ? controller.setSyncEnabled : null,
+                title: const _SwitchTitle(
+                  'Sync with paired devices',
+                  HelpId.syncEnabled,
+                ),
+                subtitle: const Text(
+                  'Connect to and accept connections from paired devices.',
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SwitchTitle extends StatelessWidget {
+  const _SwitchTitle(this.label, this.help);
+  final String label;
+  final HelpId help;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      Flexible(child: Text(label)),
+      HelpButton(help),
+    ],
+  );
+}
+
 class _SyncChip extends StatelessWidget {
   const _SyncChip({required this.status});
   final SyncStatusDto status;
@@ -1317,6 +1387,7 @@ String _connectionText(PeerConnectionKindDto state) => switch (state) {
   PeerConnectionKindDto.syncing => 'Syncing',
   PeerConnectionKindDto.synced => 'Synced',
   PeerConnectionKindDto.error => 'Error',
+  PeerConnectionKindDto.paused => 'Paused',
 };
 
 class _ErrorBanner extends StatelessWidget {

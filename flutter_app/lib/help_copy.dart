@@ -42,6 +42,10 @@ enum HelpId {
   // Pairing card.
   pairingStartPairing,
   pairingSingleInitiator,
+
+  // Devices screen: connection switches.
+  discoverable,
+  syncEnabled,
 }
 
 /// One popup's worth of copy.
@@ -268,5 +272,26 @@ const Map<HelpId, HelpEntry> helpCopy = {
         'Both devices see each other, but only one may tap Connect. If both tap, the two '
         'attempts collide and the pairing fails.\n\n'
         'Pick either device, tap Connect there, and let the other one wait.',
+  ),
+  HelpId.discoverable: HelpEntry(
+    title: 'Discoverable',
+    body:
+        'When on, this device announces itself to your paired devices on the local network '
+        'and looks for their announcements, so they find each other automatically.\n\n'
+        'When off, it neither announces nor looks. Paired devices can still connect while '
+        'their address is known, for example a session that is already open or one that '
+        'dials this device, but a device whose address changed will not be found again '
+        'until you turn this back on.\n\n'
+        'Pairing a new device is not affected: it uses its own short announcement.',
+  ),
+  HelpId.syncEnabled: HelpEntry(
+    title: 'Sync with paired devices',
+    body:
+        'When on, this device connects to your paired devices and keeps the dataset in sync '
+        'with them.\n\n'
+        'When off, sync is paused: open sessions close, this device stops connecting, and '
+        'connections from paired devices are refused. Your pairings and data are kept, and '
+        'changes sync again once you turn this back on.\n\n'
+        'Pairing a new device still works while sync is paused.',
   ),
 };

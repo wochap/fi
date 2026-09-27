@@ -51,6 +51,12 @@ abstract interface class CollectionBridge {
   Future<bool> deleteRevokedDevice(String deviceId);
   Future<int> rotateDiscoverySecret(int nowMs);
   Future<SyncStatusDto> syncStatus();
+
+  /// The installation's networking preferences. Each setter returns the
+  /// value Rust stored, which is what the switches render.
+  Future<NetworkPreferencesDto> networkPreferences();
+  Future<NetworkPreferencesDto> setDiscoverable(bool discoverable);
+  Future<NetworkPreferencesDto> setSyncEnabled(bool syncEnabled);
   Stream<PairingStateDto> pairingStateEvents();
   Stream<List<PairingCandidateDto>> pairingCandidateEvents();
   Stream<List<TrustedDeviceDto>> connectionStateEvents();
@@ -299,6 +305,15 @@ final class RustCollectionBridge implements CollectionBridge {
 
   @override
   Future<SyncStatusDto> syncStatus() => pairing.syncStatus();
+  @override
+  Future<NetworkPreferencesDto> networkPreferences() =>
+      pairing.networkPreferences();
+  @override
+  Future<NetworkPreferencesDto> setDiscoverable(bool discoverable) =>
+      pairing.setDiscoverable(discoverable: discoverable);
+  @override
+  Future<NetworkPreferencesDto> setSyncEnabled(bool syncEnabled) =>
+      pairing.setSyncEnabled(syncEnabled: syncEnabled);
   @override
   Stream<PairingStateDto> pairingStateEvents() => pairing.pairingStateStream();
   @override

@@ -799,6 +799,14 @@ final class DevicesController extends ChangeNotifier {
   List<TrustedDeviceDto> devices = const [];
   SyncStatusDto syncStatus = SyncStatusDto.offline;
 
+  /// The stored networking preferences. Both on until Rust reports
+  /// otherwise, matching the Rust default.
+  NetworkPreferencesDto preferences = _defaultPreferences;
+  static const _defaultPreferences = NetworkPreferencesDto(
+    discoverable: true,
+    syncEnabled: true,
+  );
+
   /// Identity of the running build; null while loading or if the query
   /// failed. Never gates the rest of the devices screen.
   BuildInfoDto? buildInfo;
@@ -833,8 +841,34 @@ final class DevicesController extends ChangeNotifier {
     }, refresh: _refreshSyncStatus);
     await refreshDevices();
     await _refreshSyncStatus();
+    await _loadPreferences();
     await _loadBuildInfo();
   }
+
+  Future<void> _loadPreferences() async {
+    try {
+      final value = await bridge.networkPreferences();
+      if (_disposed) return;
+      preferences = value;
+      notifyListeners();
+    } catch (error) {
+      _setError(error);
+    }
+  }
+
+  /// Asks Rust to change Discoverable and shows what Rust stored. A failure
+  /// leaves [preferences] unchanged and reports the error inline.
+  Future<void> setDiscoverable(bool value) => _run(() async {
+    preferences = await bridge.setDiscoverable(value);
+  });
+
+  /// Asks Rust to pause or resume sync and shows what Rust stored. The status
+  /// is re-read because a pause with no live session emits no stream event.
+  Future<void> setSyncEnabled(bool value) => _run(() async {
+    preferences = await bridge.setSyncEnabled(value);
+    syncStatus = await bridge.syncStatus();
+    devices = await bridge.trustedDevices();
+  });
 
   Future<void> _loadBuildInfo() async {
     try {
@@ -916,6 +950,7 @@ final class DevicesController extends ChangeNotifier {
     discoveredCandidates = const [];
     devices = const [];
     syncStatus = SyncStatusDto.offline;
+    preferences = _defaultPreferences;
     errorMessage = null;
     rotationError = null;
     busy = false;
