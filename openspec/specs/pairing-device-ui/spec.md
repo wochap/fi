@@ -223,3 +223,14 @@ When Rust reports that the secure key store is locked, Flutter SHALL show that s
 #### Scenario: Retry succeeds after unlocking
 - **WHEN** the user unlocks the keyring and presses retry
 - **THEN** the locked-keyring message clears and the affected operation proceeds
+
+### Requirement: Exhausted port range is explained with a retry
+When Rust reports that peer networking is deferred because every port in the fixed range is in use, Flutter SHALL show that specific condition in the networking-deferred banner, naming the UDP range and stating that another program or another instance of this application holds the ports, and SHALL offer the retry action. The banner MUST NOT show the generic networking-initialization message for this condition. Local data SHALL remain usable behind the banner.
+
+#### Scenario: Startup meets an exhausted range
+- **WHEN** the application starts while all ports `47380` through `47389` are held by other sockets
+- **THEN** the banner names the range `47380-47389`, explains that the ports are in use, offers retry, and the collection surfaces below it stay usable
+
+#### Scenario: Retry succeeds after a port frees up
+- **WHEN** a port in the range is released and the user presses retry
+- **THEN** the banner disappears and sync status leaves the deferred state

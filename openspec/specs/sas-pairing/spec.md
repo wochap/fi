@@ -169,3 +169,18 @@ When a pairing session reaches its deadline, the outcome reported to the caller 
 #### Scenario: Connection drops before the deadline
 - **WHEN** the connection is lost while the session deadline is still in the future
 - **THEN** the in-flight operation fails with a transport failure, the pairing state is failed with that transport failure, and no trust is created
+
+### Requirement: Pairing endpoint binds inside the sync port range
+The pairing-specific QUIC endpoint SHALL keep a socket separate from the sync endpoint. Under the fixed port policy it SHALL bind the lowest free UDP port in the same configured range that is above the port the sync endpoint took, trying ports in ascending order, and SHALL NOT bind an ephemeral port. Pairing advertisements and pairing provisioning SHALL continue to carry the actually bound ports (the pairing port in the advertisement, the sync port in provisioning), so peers learn the real ports whatever the range yields. Under the ephemeral policy the pairing endpoint SHALL bind an operating-system-chosen port as before.
+
+#### Scenario: Pairing takes the next port
+- **WHEN** the sync endpoint is bound to UDP `47380` and `47381` is free
+- **THEN** the pairing endpoint is bound to UDP `47381` and a pairing advertisement started afterwards carries port `47381`
+
+#### Scenario: Two instances on one host
+- **WHEN** a second application instance opens on the same host while the first holds `47380` and `47381`
+- **THEN** the second instance binds sync to `47382` and pairing to `47383`, and both instances can pair with each other
+
+#### Scenario: Sync port took the last free port
+- **WHEN** the sync endpoint binds the only free port in the range
+- **THEN** the pairing bind reports the range as exhausted and the open degrades as specified for exhausted ports rather than binding an ephemeral port

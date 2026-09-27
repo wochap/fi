@@ -145,3 +145,14 @@ The bridge SHALL expose an idempotent call that retries the networking startup d
 #### Scenario: Candidate carries already-paired status
 - **WHEN** the bridge emits pairing candidates
 - **THEN** each candidate carries whether it resolves to an already-trusted device
+
+### Requirement: Network ports bridge API
+The bridge SHALL open the networked core with the fixed port policy for the documented range on every supported platform, and SHALL expose a query returning the bound sync UDP port, the bound pairing UDP port, the first and last port of the configured range, and the mDNS port `5353`, as an FRB-safe typed DTO. While networking is deferred the bound ports SHALL be absent and the range SHALL still be reported. A ports-exhausted deferral SHALL cross the bridge as its own networking-deferred kind, distinct from the secure-store kinds, carrying a safe message that names the range.
+
+#### Scenario: Ports after a normal open
+- **WHEN** Flutter queries the network ports after a networked open succeeded
+- **THEN** the DTO carries a sync port and a pairing port inside `47380..=47389`, the range bounds, and `5353` for mDNS
+
+#### Scenario: Ports while deferred
+- **WHEN** Flutter queries the network ports while networking is deferred for an exhausted range
+- **THEN** the DTO carries no bound ports, still reports the range bounds, and the networking-deferred query returns the ports-exhausted kind with a message naming `47380-47389`

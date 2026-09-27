@@ -50,3 +50,29 @@ Two application-core instances connected only through Quinn SHALL synchronize th
 #### Scenario: Concurrent offline transactions
 - **WHEN** two previously synchronized cores disconnect, each creates a transaction, and Quinn reconnects them
 - **THEN** both Automerge roots converge and both SQLite projections eventually contain both transactions
+
+### Requirement: Sync endpoint binds inside a fixed port range
+When the application is opened with a fixed port policy, the sync QUIC endpoint SHALL bind the lowest free UDP port in the configured range, trying each port in ascending order, and SHALL NOT bind an ephemeral port. The default fixed range SHALL be UDP `47380` through `47389` inclusive. A bind failure caused by the port being in use SHALL be reported distinctly from every other bind failure, so the caller can continue to the next port for the former and fail for the latter. When the application is opened with the ephemeral policy (port 0), the endpoint SHALL bind an operating-system-chosen port as before.
+
+#### Scenario: First port is free
+- **WHEN** the application opens with the fixed range `47380..=47389` and no process holds UDP `47380`
+- **THEN** the sync endpoint is bound to UDP `47380` and the reported local address carries that port
+
+#### Scenario: Lower ports are busy
+- **WHEN** UDP `47380` and `47381` are held by other sockets and `47382` is free
+- **THEN** the sync endpoint is bound to UDP `47382` without reporting an error
+
+#### Scenario: Bind fails for a reason other than a busy port
+- **WHEN** binding a port in the range fails because the requested address is not assignable to this host
+- **THEN** the open fails with that bind error and does not try the remaining ports
+
+#### Scenario: Ephemeral policy is unchanged
+- **WHEN** the application opens with port 0
+- **THEN** the sync endpoint binds an operating-system-chosen port exactly as before this change
+
+### Requirement: Bound ports are observable
+The application SHALL expose the sync endpoint's bound UDP port, the pairing endpoint's bound UDP port, and the configured fixed range (or the fact that the ephemeral policy is in effect) to its embedder after a networked open, so a client can display which ports a firewall must allow.
+
+#### Scenario: Embedder reads the ports
+- **WHEN** a networked open has completed under the fixed range and the embedder queries the network ports
+- **THEN** it receives the bound sync port, the bound pairing port, and the range bounds, and both bound ports lie inside the range
