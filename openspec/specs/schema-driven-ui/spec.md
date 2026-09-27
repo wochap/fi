@@ -232,25 +232,41 @@ The DateTime editor SHALL show its current value as local time in the sortable f
 - **THEN** the editor shows `2026-09-24 23:00`
 
 ### Requirement: Inline collection title rename
-The collection screen SHALL let the user rename the collection by editing its title in place. A double tap (or double click) on the title SHALL replace it with a text input holding the current name, focused, with the whole name selected. Pressing Enter or moving focus away from the input SHALL submit the edit; pressing Escape SHALL cancel it and restore the title.
+The collection screen SHALL let the user rename the collection by editing its title in place. A double tap (or double click) on the title SHALL turn it into an editable text in the same position, with the same text style, and with no border, fill, label, or padding around it, holding the current name, focused, with the whole name selected. The editable text SHALL be as wide as its content: it SHALL start at the width of the current name, SHALL grow as the user types, SHALL NOT exceed the width the header layout gives the title, and SHALL keep a small minimum width so an emptied title remains visible and tappable. Neighbouring header widgets SHALL keep their position while the title is edited. Pressing Enter or moving focus away from the editable text SHALL submit the edit; pressing Escape SHALL cancel it and restore the title.
 
 On submit the text SHALL be trimmed of leading and trailing whitespace. When the trimmed text is empty, or equal to the current name, the edit SHALL be treated as a cancel: no rename command is sent and no error is shown. Otherwise the existing rename command SHALL be sent with the trimmed name, and the title SHALL show the new name once the projection refreshes.
 
-When the rename command is rejected, the title SHALL return to the previous name and the error SHALL be reported to the user without keeping the input open.
+When the rename command is rejected, the title SHALL return to the previous name and the error SHALL be reported to the user without keeping the editable text open.
 
 The Rename action on the collection list card menu SHALL remain available.
 
 #### Scenario: Double tap enters edit mode
 - **WHEN** the user double taps the title "Headaches" on the collection screen
-- **THEN** the title is replaced by a focused text input containing "Headaches" with the text selected, on both the wide and the narrow header layouts
+- **THEN** the title becomes a focused editable text containing "Headaches" with the text selected, in the same position and text style as the title and with no box drawn around it, on both the wide and the narrow header layouts
+
+#### Scenario: Editor width fits the name
+- **WHEN** the user double taps the title "Headaches"
+- **THEN** the editable text is no wider than the rendered title was, and the record count beside it on the wide layout stays where it was
+
+#### Scenario: Editor grows while typing
+- **WHEN** the user appends " and migraines" to the name while editing
+- **THEN** the editable text widens to fit the longer text without wrapping and without moving the caret out of view
+
+#### Scenario: Editor is capped at the header width
+- **WHEN** the user types a name longer than the width the header gives the title
+- **THEN** the editable text stops growing at that width and scrolls horizontally to keep the caret visible, and the header does not overflow
+
+#### Scenario: Emptied title stays tappable
+- **WHEN** the user deletes every character while editing
+- **THEN** the editable text keeps a small non-zero width with the caret visible and still accepts input
 
 #### Scenario: Enter saves the trimmed name
 - **WHEN** the user replaces the text with "  Migraines " and presses Enter
-- **THEN** a rename command is sent with "Migraines", the input closes, and the title shows "Migraines"
+- **THEN** a rename command is sent with "Migraines", the editable text closes, and the title shows "Migraines"
 
 #### Scenario: Losing focus saves
-- **WHEN** the user changes the text to "Migraines" and focus moves away from the input
-- **THEN** the rename command is sent with "Migraines" and the input closes
+- **WHEN** the user changes the text to "Migraines" and focus moves away from the editable text
+- **THEN** the rename command is sent with "Migraines" and the editable text closes
 
 #### Scenario: Escape cancels
 - **WHEN** the user changes the text and presses Escape
@@ -262,11 +278,11 @@ The Rename action on the collection list card menu SHALL remain available.
 
 #### Scenario: Unchanged name cancels silently
 - **WHEN** the user submits the current name unchanged, with or without surrounding whitespace
-- **THEN** no rename command is sent and the input closes
+- **THEN** no rename command is sent and the editable text closes
 
 #### Scenario: Rejected rename restores the title
 - **WHEN** the rename command fails
-- **THEN** the input closes, the title shows the previous name, and the failure is reported in a snackbar
+- **THEN** the editable text closes, the title shows the previous name, and the failure is reported in a snackbar
 
 #### Scenario: List menu rename still works
 - **WHEN** the user chooses Rename from a collection card menu on the collection list

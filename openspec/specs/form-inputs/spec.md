@@ -22,6 +22,8 @@ Flutter SHALL define exactly two input sizes. Small SHALL be 32 logical pixels t
 ### Requirement: Shared input widgets
 Feature code SHALL build text, integer, decimal, search, select, slider, and Date / DateTime / time picker inputs only through the shared inputs (`FiTextInput`, `FiSelect`, `FiPickerInput`, `FiSlider`). Every shared input of a given size and screen class except `FiSlider` SHALL render an input box of the same height, whatever its kind, label, value, prefix, or suffix. Switches, checkboxes, and buttons are not inputs under this requirement. `FiSlider` is a composite control: it SHALL take the height its track and its label row need, SHALL keep the same label, required-marker, helper, and error handling as the other shared inputs, and is exempt from the equal-height rule only.
 
+Feature code SHALL build in-place text editing of a displayed title or label only through the shared `FiEditableText`. `FiEditableText` draws no box: it renders the text in the caller's text style with a caret and selection and nothing else, sizes its width to its content within the bounds the caller gives it, and is exempt from the input size tokens and from the fixed-height and equal-height rules that apply to boxed inputs.
+
 A `FiSlider` SHALL take integer minimum and maximum bounds, an optional positive integer step that defaults to 1 and divides the distance between the bounds exactly, and an optional integer value. It SHALL move only between values of the form `minimum + k * step` inside the bounds, SHALL show the current value as text beside the track, and SHALL always show the track. Below the track it SHALL show one label row: one label per step position, from the minimum to the maximum, each centred under its position, when every label fits in the track width without overlapping; otherwise the row SHALL show only the minimum under the leading end and the maximum under the trailing end. The bounds are therefore always readable, and no label is ever shown twice. Error lines and helper text SHALL render below the label row. When the value is absent it SHALL show the track with no thumb and a placeholder in place of the value label, and the first tap or drag on the track SHALL set the value to the nearest step position. When clearing is allowed, a set value SHALL offer a way to return to unset. It SHALL report only integers inside the bounds that lie on a step position and MUST NOT expose a floating-point value to feature code.
 
 #### Scenario: New field panel aligns
@@ -75,6 +77,10 @@ A `FiSlider` SHALL take integer minimum and maximum bounds, an optional positive
 #### Scenario: Optional slider clears back to unset
 - **WHEN** a `FiSlider` that allows clearing holds a value and the user taps its clear icon
 - **THEN** the track shows no thumb again and feature code receives a null value
+
+#### Scenario: In-place editor has no box and fits its text
+- **WHEN** a `FiEditableText` holding "Headaches" in a 32px heading style is rendered inside a 600px-wide parent
+- **THEN** it draws no border or fill, its height equals the heading's line height rather than an input size token, and its width equals the width of "Headaches" in that style, growing with the text up to 600px and never below its minimum width
 
 ### Requirement: Fixed box, growing messages
 A shared input's box height SHALL be fixed by its size, independent of content padding, label, or font metrics. Error lines SHALL render below the box and SHALL add height below it without changing the box. A multiline text input SHALL fix the height of its first line to the size's box height and grow by whole lines up to its maximum line count.
