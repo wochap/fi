@@ -326,8 +326,13 @@ impl PairingTransport {
         client_tls.alpn_protocols = vec![PAIRING_ALPN.to_vec()];
         let client_crypto = quinn::crypto::rustls::QuicClientConfig::try_from(client_tls)
             .map_err(|error| PairingError::Transport(error.to_string()))?;
-        let endpoint =
-            Endpoint::client(bind).map_err(|error| PairingError::Transport(error.to_string()))?;
+        let endpoint = Endpoint::client(bind).map_err(|error| {
+            if error.kind() == std::io::ErrorKind::AddrInUse {
+                PairingError::AddrInUse(bind.port())
+            } else {
+                PairingError::Transport(error.to_string())
+            }
+        })?;
         Ok(Self {
             endpoint,
             server_config,

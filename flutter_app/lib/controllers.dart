@@ -137,6 +137,9 @@ final class BootstrapController extends ChangeNotifier {
     }
   }
 
+  /// Ports peer networking holds, for the sync diagnostics view.
+  Future<NetworkPortsDto> networkPorts() => bridge.networkPorts();
+
   Future<void> createNewDataset() async {
     creating = true;
     notifyListeners();

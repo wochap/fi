@@ -63,6 +63,29 @@ durable before disconnect and route removal. Rotation excludes the revoked key;
 offline trusted peers can migrate through the retained old browse selector or a
 last-known pinned endpoint until retention expires.
 
+## Network ports
+
+Peer networking uses a fixed UDP range, `47380-47389`, so a firewall rule can
+name it once. Each instance holds two sockets from the range: the sync QUIC
+endpoint and the pairing QUIC endpoint (ALPN `fi-pair/1`). Ports are allocated
+in ascending order: sync takes the lowest free port, and pairing takes the next
+free port above it. Ten ports therefore serve five instances on one host.
+
+Only "address in use" moves on to the next port. Any other bind failure, such
+as an address not assignable to this host, fails the networked open.
+
+When no port is left for either endpoint, the core opens with peer networking
+deferred and the ports-exhausted reason naming the range. It holds no QUIC
+socket and never binds an ephemeral port. The banner's retry reopens the core
+and walks the range again.
+
+mDNS discovery stays on the standard UDP `5353` multicast group (`224.0.0.251`
+and `ff02::fb`). Firewall recipes for NixOS, ufw, iptables, and OpenSnitch are
+in the README section "Linux firewall and OpenSnitch". Android needs no rule.
+
+Tests and other embedders keep the ephemeral policy by default; only the
+Flutter bridge selects the fixed range.
+
 ## Android
 
 Target SDK 35 declares `INTERNET`, `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE`,

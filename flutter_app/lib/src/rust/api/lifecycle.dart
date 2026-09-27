@@ -7,7 +7,7 @@ import '../frb_generated.dart';
 import 'models.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `core`, `initialize_with`, `open_core`, `process_slot`
+// These functions are ignored because they are not marked as `pub`: `core`, `initialize_with`, `networked_config`, `open_core`, `process_slot`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `OpenMode`, `OpenTarget`, `ProcessSlot`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`
 // These functions are ignored (category: IgnoreBecauseOwnerTyShouldIgnore): `default`
@@ -49,6 +49,11 @@ Future<NetworkingDeferredDto?> networkingDeferred() =>
 /// core with the same target, since there is no network stack to restart.
 Future<bool> retryNetworking() =>
     RustLib.instance.api.crateApiLifecycleRetryNetworking();
+
+/// UDP ports the core's sync and pairing endpoints hold, the configured range,
+/// and the mDNS port, so the UI can show what a firewall must allow.
+Future<NetworkPortsDto> networkPorts() =>
+    RustLib.instance.api.crateApiLifecycleNetworkPorts();
 
 Future<BootstrapDto> bootstrapState() =>
     RustLib.instance.api.crateApiLifecycleBootstrapState();

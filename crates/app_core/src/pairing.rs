@@ -335,6 +335,9 @@ pub enum PairingError {
     Rejected,
     #[error("pairing transport failed: {0}")]
     Transport(String),
+    /// The pairing endpoint's UDP port is held by another socket.
+    #[error("UDP port {0} is already in use")]
+    AddrInUse(u16),
     /// The secure key store exists but is locked. Kept distinct from
     /// `SecureStoreUnavailable` all the way to the UI so the user can be told
     /// to unlock the keyring and retry rather than shown a generic failure.

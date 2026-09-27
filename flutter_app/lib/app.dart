@@ -246,7 +246,8 @@ class _CollectionAppState extends State<CollectionApp>
 
 /// Explains why peer networking is off and offers the retry that resumes it.
 /// A locked keyring names the keyring and the unlock, because that is the
-/// action that fixes it; an unavailable store has no such action.
+/// action that fixes it; an unavailable store has no such action. Exhausted
+/// ports carry the UDP range in Rust's message, so it is shown as given.
 class _NetworkingDeferredBanner extends StatelessWidget {
   const _NetworkingDeferredBanner({
     required this.deferred,
@@ -265,7 +266,11 @@ class _NetworkingDeferredBanner extends StatelessWidget {
     final locked = deferred.kind == NetworkingDeferredKindDto.secureStoreLocked;
     return MaterialBanner(
       key: const Key('networking-deferred-banner'),
-      leading: Icon(locked ? Icons.lock_outline : Icons.cloud_off),
+      leading: Icon(switch (deferred.kind) {
+        NetworkingDeferredKindDto.secureStoreLocked => Icons.lock_outline,
+        NetworkingDeferredKindDto.portsExhausted => Icons.lan_outlined,
+        NetworkingDeferredKindDto.secureStoreUnavailable => Icons.cloud_off,
+      }),
       content: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,

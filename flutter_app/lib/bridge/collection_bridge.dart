@@ -30,6 +30,9 @@ abstract interface class CollectionBridge {
   /// Retries the deferred networking startup and reports whether peer
   /// networking is now active. Idempotent.
   Future<bool> retryNetworking();
+
+  /// UDP ports peer networking holds, the configured range, and mDNS.
+  Future<NetworkPortsDto> networkPorts();
   Future<void> startPairing(int durationMs);
   Future<void> stopPairing();
   Future<void> connectPairingCandidate(PairingCandidateDto candidate);
@@ -227,6 +230,8 @@ final class RustCollectionBridge implements CollectionBridge {
       lifecycle.networkingDeferred();
   @override
   Future<bool> retryNetworking() => lifecycle.retryNetworking();
+  @override
+  Future<NetworkPortsDto> networkPorts() => lifecycle.networkPorts();
   @override
   Future<void> startPairing(int durationMs) async =>
       pairing.startPairing(durationMs: durationMs);

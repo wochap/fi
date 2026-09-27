@@ -2,7 +2,7 @@
 
 use std::{
     collections::{BTreeMap, HashMap},
-    net::IpAddr,
+    net::SocketAddr,
     sync::{Arc, Mutex},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -231,10 +231,10 @@ impl PairingManager {
         keys: Arc<dyn SecureKeyStore>,
         control: Arc<SqliteControlStore>,
         discovery: Arc<dyn DiscoveryProvider>,
-        bind_ip: IpAddr,
+        bind: SocketAddr,
     ) -> Result<Arc<Self>, PairingError> {
-        let transport = Arc::new(PairingTransport::bind((bind_ip, 0).into(), &identity)?);
-        let address_policy = AddressPolicy::for_bind(bind_ip);
+        let transport = Arc::new(PairingTransport::bind(bind, &identity)?);
+        let address_policy = AddressPolicy::for_bind(bind.ip());
         let (state_tx, _) = watch::channel(PairingState::Idle);
         let (candidates_tx, _) = watch::channel(Vec::new());
         let (events, _) = broadcast::channel(128);
@@ -1907,7 +1907,7 @@ mod tests {
             keys.clone(),
             control,
             discovery,
-            "127.0.0.1".parse().unwrap(),
+            "127.0.0.1:0".parse().unwrap(),
         )
         .unwrap();
 
@@ -1953,7 +1953,10 @@ mod tests {
             })
             .unwrap();
         let addresses = manager.trusted_device_addresses().unwrap();
-        assert_eq!(addresses, vec!["192.168.0.22".parse::<IpAddr>().unwrap()]);
+        assert_eq!(
+            addresses,
+            vec!["192.168.0.22".parse::<std::net::IpAddr>().unwrap()]
+        );
         assert!(manager.is_trusted(peer).unwrap());
 
         // A revoked device stops suppressing its own address.
@@ -2148,7 +2151,7 @@ mod tests {
             keys,
             control,
             discovery.clone(),
-            "127.0.0.1".parse().unwrap(),
+            "127.0.0.1:0".parse().unwrap(),
         )
         .unwrap();
         (manager, discovery, directory)
@@ -2766,7 +2769,7 @@ mod tests {
             keys_a,
             Arc::new(SqliteControlStore::open(directory_a.path().join("control.sqlite")).unwrap()),
             provider.clone(),
-            "127.0.0.1".parse().unwrap(),
+            "127.0.0.1:0".parse().unwrap(),
         )
         .unwrap();
         let b = PairingManager::new(
@@ -2774,7 +2777,7 @@ mod tests {
             keys_b,
             Arc::new(SqliteControlStore::open(directory_b.path().join("control.sqlite")).unwrap()),
             provider.clone(),
-            "127.0.0.1".parse().unwrap(),
+            "127.0.0.1:0".parse().unwrap(),
         )
         .unwrap();
         a.establish_trust(identity_b.public_key(), "B".into(), 1)

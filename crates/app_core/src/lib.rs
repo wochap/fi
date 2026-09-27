@@ -29,8 +29,8 @@ pub mod widget_registry;
 pub mod widgets;
 
 pub use application::{
-    AppCore, AppCoreConfig, LifecyclePolicy, NetworkingDeferredReason, RevocationOutcome,
-    reset_dataset,
+    AppCore, AppCoreConfig, DEFAULT_SYNC_PORT_RANGE, LifecyclePolicy, NetworkPorts,
+    NetworkingDeferredReason, PortPolicy, RevocationOutcome, reset_dataset,
 };
 pub use automerge_repo::{
     QuarantineReason, RecoveryOutcome, RecoveryReason, RecoveryRecord,

@@ -1,9 +1,9 @@
 use std::{net::SocketAddr, path::PathBuf, sync::Arc, sync::OnceLock};
 
 use app_core::{
-    AppCore, AppCoreConfig, ApplicationState, DiscoveryGroupSecret, DomainKind,
-    InMemorySecureKeyStore, LinuxSecretServiceKeyStore, QuinnTransportConfig, RecoveryRecord,
-    SecureKeyStore,
+    AppCore, AppCoreConfig, ApplicationState, DEFAULT_SYNC_PORT_RANGE, DiscoveryGroupSecret,
+    DomainKind, InMemorySecureKeyStore, LinuxSecretServiceKeyStore, PortPolicy,
+    QuinnTransportConfig, RecoveryRecord, SecureKeyStore,
 };
 use flutter_rust_bridge::frb;
 use tokio::sync::{RwLock, watch};
@@ -11,7 +11,7 @@ use tokio::sync::{RwLock, watch};
 use crate::{
     api::models::{
         BootstrapDto, BridgeError, BridgeErrorEventDto, DataChangedDto, DomainKindDto,
-        NetworkingDeferredDto, ProjectionDto,
+        NetworkPortsDto, NetworkingDeferredDto, ProjectionDto,
     },
     frb_generated::StreamSink,
 };
@@ -68,6 +68,16 @@ pub fn init_app() {
     flutter_rust_bridge::setup_default_user_utils();
 }
 
+/// Core configuration for a networked open: the shipped application binds its
+/// QUIC endpoints inside the documented fixed range so firewalls can name it.
+#[frb(ignore)]
+fn networked_config() -> AppCoreConfig {
+    AppCoreConfig {
+        ports: PortPolicy::Range(DEFAULT_SYNC_PORT_RANGE),
+        ..AppCoreConfig::default()
+    }
+}
+
 #[frb(ignore)]
 async fn open_core(target: &OpenTarget) -> Result<AppCore, BridgeError> {
     match &target.mode {
@@ -76,7 +86,7 @@ async fn open_core(target: &OpenTarget) -> Result<AppCore, BridgeError> {
             target.data_dir.clone(),
             key_store.clone(),
             SocketAddr::from(([0, 0, 0, 0], 0)),
-            AppCoreConfig::default(),
+            networked_config(),
             QuinnTransportConfig::default(),
         )
         .await
@@ -205,6 +215,12 @@ pub async fn retry_networking() -> Result<bool, BridgeError> {
         Some(reason) => Err(BridgeError::from(reason.to_app_error())),
         None => Ok(true),
     }
+}
+
+/// UDP ports the core's sync and pairing endpoints hold, the configured range,
+/// and the mDNS port, so the UI can show what a firewall must allow.
+pub async fn network_ports() -> Result<NetworkPortsDto, BridgeError> {
+    Ok(NetworkPortsDto::from_core(&core().await?.network_ports()))
 }
 
 pub async fn bootstrap_state() -> Result<BootstrapDto, BridgeError> {
@@ -339,7 +355,15 @@ mod tests {
         models::{BootstrapKindDto, RecoveryOutcomeDto, RecoveryReasonDto},
     };
 
-    use super::{core, initialize, reset_dataset, shutdown};
+    use super::{core, initialize, networked_config, reset_dataset, shutdown};
+
+    #[test]
+    fn networked_opens_use_the_fixed_port_range() {
+        assert_eq!(
+            networked_config().ports,
+            app_core::PortPolicy::Range(app_core::DEFAULT_SYNC_PORT_RANGE)
+        );
+    }
 
     /// Bridge tests share one process slot; serialize the ones that use it.
     static SLOT_GUARD: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());

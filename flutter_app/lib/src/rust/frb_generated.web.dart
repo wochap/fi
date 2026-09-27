@@ -174,6 +174,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   TypedValueDto dco_decode_box_autoadd_typed_value_dto(dynamic raw);
 
   @protected
+  int dco_decode_box_autoadd_u_16(dynamic raw);
+
+  @protected
   int dco_decode_box_autoadd_u_32(dynamic raw);
 
   @protected
@@ -398,6 +401,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<WidgetEvaluationDto> dco_decode_list_widget_evaluation_dto(dynamic raw);
 
   @protected
+  NetworkPortsDto dco_decode_network_ports_dto(dynamic raw);
+
+  @protected
   NetworkingDeferredDto dco_decode_networking_deferred_dto(dynamic raw);
 
   @protected
@@ -493,6 +499,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   TypedValueDto? dco_decode_opt_box_autoadd_typed_value_dto(dynamic raw);
+
+  @protected
+  int? dco_decode_opt_box_autoadd_u_16(dynamic raw);
 
   @protected
   int? dco_decode_opt_box_autoadd_u_32(dynamic raw);
@@ -616,6 +625,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   TypedValueDto dco_decode_typed_value_dto(dynamic raw);
+
+  @protected
+  int dco_decode_u_16(dynamic raw);
 
   @protected
   int dco_decode_u_32(dynamic raw);
@@ -854,6 +866,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   TypedValueDto sse_decode_box_autoadd_typed_value_dto(
     SseDeserializer deserializer,
   );
+
+  @protected
+  int sse_decode_box_autoadd_u_16(SseDeserializer deserializer);
 
   @protected
   int sse_decode_box_autoadd_u_32(SseDeserializer deserializer);
@@ -1160,6 +1175,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  NetworkPortsDto sse_decode_network_ports_dto(SseDeserializer deserializer);
+
+  @protected
   NetworkingDeferredDto sse_decode_networking_deferred_dto(
     SseDeserializer deserializer,
   );
@@ -1273,6 +1291,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   TypedValueDto? sse_decode_opt_box_autoadd_typed_value_dto(
     SseDeserializer deserializer,
   );
+
+  @protected
+  int? sse_decode_opt_box_autoadd_u_16(SseDeserializer deserializer);
 
   @protected
   int? sse_decode_opt_box_autoadd_u_32(SseDeserializer deserializer);
@@ -1432,6 +1453,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   TypedValueDto sse_decode_typed_value_dto(SseDeserializer deserializer);
+
+  @protected
+  int sse_decode_u_16(SseDeserializer deserializer);
 
   @protected
   int sse_decode_u_32(SseDeserializer deserializer);
@@ -1726,6 +1750,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
     TypedValueDto self,
     SseSerializer serializer,
   );
+
+  @protected
+  void sse_encode_box_autoadd_u_16(int self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_u_32(int self, SseSerializer serializer);
@@ -2109,6 +2136,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_network_ports_dto(
+    NetworkPortsDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_networking_deferred_dto(
     NetworkingDeferredDto self,
     SseSerializer serializer,
@@ -2242,6 +2275,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
     TypedValueDto? self,
     SseSerializer serializer,
   );
+
+  @protected
+  void sse_encode_opt_box_autoadd_u_16(int? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_box_autoadd_u_32(int? self, SseSerializer serializer);
@@ -2449,6 +2485,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_typed_value_dto(TypedValueDto self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_u_16(int self, SseSerializer serializer);
 
   @protected
   void sse_encode_u_32(int self, SseSerializer serializer);

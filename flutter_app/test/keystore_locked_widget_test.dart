@@ -49,6 +49,35 @@ void main() {
     expect(find.text('Collections'), findsWidgets);
   });
 
+  testWidgets('exhausted ports name the UDP range and retry', (tester) async {
+    final bridge = FakeCollectionBridge()
+      ..bootstrap = const BootstrapDto(
+        kind: BootstrapKindDto.ready,
+        rootId: 'root',
+      )
+      ..deferredNetworking = const NetworkingDeferredDto(
+        kind: NetworkingDeferredKindDto.portsExhausted,
+        message:
+            'Every network port fi uses (UDP 47380-47389) is already in use, '
+            'so this device cannot reach your other devices. Close the other '
+            'program or instance holding them, then retry.',
+      );
+    await tester.pumpWidget(testApp(bridge));
+    await pumpUntilFound(
+      tester,
+      find.byKey(const Key('networking-deferred-banner')),
+    );
+    expect(find.textContaining('47380-47389'), findsOneWidget);
+    expect(find.textContaining('keyring'), findsNothing);
+    expect(find.byIcon(Icons.lan_outlined), findsOneWidget);
+    expect(find.text('Collections'), findsWidgets);
+
+    await tester.tap(find.byKey(const Key('retry-networking')));
+    await tester.pumpAndSettle();
+    expect(bridge.retryNetworkingCalls, 1);
+    expect(find.byKey(const Key('networking-deferred-banner')), findsNothing);
+  });
+
   testWidgets('a fatal locked keystore offers retry, not a dataset reset', (
     tester,
   ) async {

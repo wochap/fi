@@ -721,6 +721,7 @@ pub struct NetworkingDeferredDto {
 pub enum NetworkingDeferredKindDto {
     SecureStoreLocked,
     SecureStoreUnavailable,
+    PortsExhausted,
 }
 
 impl NetworkingDeferredDto {
@@ -736,6 +737,43 @@ impl NetworkingDeferredDto {
                 kind: NetworkingDeferredKindDto::SecureStoreUnavailable,
                 message: "Secure device networking could not be initialized.".into(),
             },
+            NetworkingDeferredReason::PortsExhausted { first, last } => Self {
+                kind: NetworkingDeferredKindDto::PortsExhausted,
+                message: format!(
+                    "Every network port fi uses (UDP {first}-{last}) is already in use, so this device cannot reach your other devices. Close the other program or instance holding them, then retry."
+                ),
+            },
+        }
+    }
+}
+
+/// UDP ports used for peer networking. Bound ports are absent while
+/// networking is deferred; the range is absent under the ephemeral policy.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NetworkPortsDto {
+    pub sync_port: Option<u16>,
+    pub pairing_port: Option<u16>,
+    pub range_first: Option<u16>,
+    pub range_last: Option<u16>,
+    pub mdns_port: u16,
+}
+
+impl NetworkPortsDto {
+    /// Standard multicast DNS port used for discovery.
+    pub(crate) const MDNS_PORT: u16 = 5353;
+
+    #[must_use]
+    pub(crate) fn from_core(ports: &app_core::NetworkPorts) -> Self {
+        let (range_first, range_last) = match &ports.policy {
+            app_core::PortPolicy::Range(range) => (Some(*range.start()), Some(*range.end())),
+            app_core::PortPolicy::Ephemeral => (None, None),
+        };
+        Self {
+            sync_port: ports.sync,
+            pairing_port: ports.pairing,
+            range_first,
+            range_last,
+            mdns_port: Self::MDNS_PORT,
         }
     }
 }
@@ -1458,6 +1496,54 @@ mod tests {
         BootstrapDto, BootstrapKindDto, BridgeError, BridgeErrorKind, RecoveryOutcomeDto,
         RecoveryReasonDto,
     };
+
+    #[test]
+    fn exhausted_ports_cross_the_bridge_as_their_own_kind() {
+        use super::{NetworkingDeferredDto, NetworkingDeferredKindDto};
+        let dto =
+            NetworkingDeferredDto::from_core(&app_core::NetworkingDeferredReason::PortsExhausted {
+                first: 47380,
+                last: 47389,
+            });
+        assert_eq!(dto.kind, NetworkingDeferredKindDto::PortsExhausted);
+        assert!(dto.message.contains("47380-47389"), "{}", dto.message);
+    }
+
+    #[test]
+    fn network_ports_report_bound_and_deferred_shapes() {
+        use super::NetworkPortsDto;
+        use app_core::{DEFAULT_SYNC_PORT_RANGE, NetworkPorts, PortPolicy};
+        let bound = NetworkPortsDto::from_core(&NetworkPorts {
+            sync: Some(47380),
+            pairing: Some(47381),
+            policy: PortPolicy::Range(DEFAULT_SYNC_PORT_RANGE),
+        });
+        assert_eq!(
+            bound,
+            NetworkPortsDto {
+                sync_port: Some(47380),
+                pairing_port: Some(47381),
+                range_first: Some(47380),
+                range_last: Some(47389),
+                mdns_port: 5353,
+            }
+        );
+        let deferred = NetworkPortsDto::from_core(&NetworkPorts {
+            sync: None,
+            pairing: None,
+            policy: PortPolicy::Range(DEFAULT_SYNC_PORT_RANGE),
+        });
+        assert_eq!(deferred.sync_port, None);
+        assert_eq!(deferred.pairing_port, None);
+        assert_eq!(deferred.range_first, Some(47380));
+        assert_eq!(deferred.range_last, Some(47389));
+        let ephemeral = NetworkPortsDto::from_core(&NetworkPorts {
+            sync: Some(40000),
+            pairing: Some(40001),
+            policy: PortPolicy::Ephemeral,
+        });
+        assert_eq!((ephemeral.range_first, ephemeral.range_last), (None, None));
+    }
 
     #[test]
     fn candidates_at_a_trusted_address_are_flagged_as_already_paired() {

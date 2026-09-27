@@ -69,6 +69,10 @@ pub enum QuinnTransportError {
     KeyMismatch(DeviceId),
     #[error("QUIC configuration failed: {0}")]
     Configuration(String),
+    /// The requested UDP port is held by another socket. Kept apart from
+    /// `Configuration` so a port-range walk can move on to the next port.
+    #[error("UDP port {0} is already in use")]
+    AddrInUse(u16),
     #[error("QUIC connection failed: {0}")]
     Connection(String),
     #[error("sync stream failed: {0}")]
@@ -494,8 +498,13 @@ impl QuinnTransport {
             .max_concurrent_uni_streams(0_u8.into())
             .datagram_receive_buffer_size(None)
             .datagram_send_buffer_size(0);
-        let endpoint = Endpoint::server(server, bind)
-            .map_err(|error| QuinnTransportError::Configuration(error.to_string()))?;
+        let endpoint = Endpoint::server(server, bind).map_err(|error| {
+            if error.kind() == std::io::ErrorKind::AddrInUse {
+                QuinnTransportError::AddrInUse(bind.port())
+            } else {
+                QuinnTransportError::Configuration(error.to_string())
+            }
+        })?;
         let (events_tx, events_rx) = mpsc::channel(config.event_capacity);
         let (control_tx, control_rx) = mpsc::channel(config.event_capacity);
         let (observed_tx, _) = broadcast::channel(config.event_capacity);
@@ -1106,7 +1115,9 @@ impl PeerConnector for QuinnTransport {
                     ConnectionFailure::Stream(error.to_string())
                 }
                 QuinnTransportError::Connection(_) => ConnectionFailure::Route(error.to_string()),
-                QuinnTransportError::Closed => ConnectionFailure::Transport(error.to_string()),
+                QuinnTransportError::Closed | QuinnTransportError::AddrInUse(_) => {
+                    ConnectionFailure::Transport(error.to_string())
+                }
             })
     }
 }
@@ -1163,6 +1174,35 @@ mod tests {
             );
             assert!(extract_public_key(&CertificateDer::from(vec![1, 2, 3])).is_err());
         });
+    }
+
+    #[tokio::test]
+    async fn bind_reports_busy_port_apart_from_other_failures() {
+        let identity = identity(9).await;
+        let holder = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
+        let busy = holder.local_addr().unwrap();
+        let error = QuinnTransport::bind(
+            busy,
+            identity.clone(),
+            Arc::new(MemoryTrustResolver::default()),
+            QuinnTransportConfig::default(),
+        )
+        .expect_err("busy port must not bind");
+        assert!(
+            matches!(error, QuinnTransportError::AddrInUse(port) if port == busy.port()),
+            "{error}"
+        );
+        let error = QuinnTransport::bind(
+            ([192, 0, 2, 1], busy.port()).into(),
+            identity,
+            Arc::new(MemoryTrustResolver::default()),
+            QuinnTransportConfig::default(),
+        )
+        .expect_err("unassignable address must not bind");
+        assert!(
+            matches!(error, QuinnTransportError::Configuration(_)),
+            "{error}"
+        );
     }
 
     #[tokio::test]

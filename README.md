@@ -91,43 +91,49 @@ signing, and local installation, follow the
 
 ## Linux firewall and OpenSnitch
 
-Devices find each other over mDNS (UDP 5353) and pair/sync over QUIC on an
-ephemeral UDP port chosen at each start. Two things on a Linux desktop block
-that, and both were measured, not guessed.
+fi uses two kinds of UDP traffic on the LAN:
+
+- **UDP `47380-47389`** for QUIC sync and pairing. Each running instance binds
+  two ports from this range, lowest free first: the sync endpoint, then the
+  pairing endpoint above it. One instance normally holds `47380` and `47381`; a
+  second instance on the same host takes `47382` and `47383`. If every port in
+  the range is busy, fi opens with device networking off and shows a banner with
+  a retry; it never falls back to a random port. See
+  [Network ports](docs/operations.md#network-ports).
+- **UDP `5353`** multicast (`224.0.0.251` / `ff02::fb`) for mDNS discovery.
+
+Android needs no rule. Two things on a Linux desktop block this traffic, and
+both were measured, not guessed.
 
 **1. Inbound QUIC is dropped by the host firewall.** The NixOS firewall accepts
 mDNS (avahi adds UDP 5353) and replies to dials this host starts, but drops a
-dial *from* another device because the listen port is ephemeral. While pairing,
-allow UDP from your LAN subnet (adjust `192.168.0.0/24`):
+dial *from* another device unless the range is open. Allow it from your LAN
+subnet (adjust `192.168.0.0/24`).
 
-```sh
-sudo iptables -I nixos-fw 1 -s 192.168.0.0/24 -p udp -j nixos-fw-accept
-```
-
-Remove it afterwards (it is also lost on reboot):
-
-```sh
-sudo iptables -D nixos-fw -s 192.168.0.0/24 -p udp -j nixos-fw-accept
-```
-
-Permanent alternative in `configuration.nix`, same scope:
+NixOS, in `configuration.nix`:
 
 ```nix
-networking.firewall.extraCommands = ''
-  iptables -A nixos-fw -s 192.168.0.0/24 -p udp -j nixos-fw-accept
-'';
+networking.firewall.allowedUDPPortRanges = [{ from = 47380; to = 47389; }];
+```
+
+ufw:
+
+```sh
+sudo ufw allow from 192.168.0.0/24 to any port 47380:47389 proto udp
+```
+
+iptables (lost on reboot; on NixOS insert into `nixos-fw`):
+
+```sh
+sudo iptables -I nixos-fw 1 -s 192.168.0.0/24 -p udp --dport 47380:47389 -j nixos-fw-accept
 ```
 
 **2. OpenSnitch holds the first QUIC packet.** The app's first packet to a new
 peer — its reply to an inbound dial included — is a new outbound flow. OpenSnitch
 queues it for a prompt and, unanswered, denies after 30 s, which is exactly the
-pairing timeout. Either answer the prompt with a permanent *allow* for the `fi`
-process, or stop the daemon while pairing:
-
-```sh
-sudo systemctl stop opensnitchd     # before
-sudo systemctl start opensnitchd    # after
-```
+pairing timeout. Add a permanent rule instead: allow process `fi`, protocol
+`udp`, destination port matching the regex `^4738[0-9]$`. Also allow UDP port
+`5353` for `fi` if mDNS is not already permitted.
 
 Check both from another LAN host: `ping` in both directions must succeed, and on
 Android the phone's default route must be Wi-Fi (`adb shell ip route get <desktop-ip>`

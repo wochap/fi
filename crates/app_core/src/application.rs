@@ -1,6 +1,7 @@
 use std::{
     future::pending,
     net::SocketAddr,
+    ops::RangeInclusive,
     path::{Path, PathBuf},
     sync::{
         Arc, Mutex,
@@ -42,7 +43,7 @@ use crate::{
         QueryDefinition, QueryId, QueryResult, QueryValidationError, TypeEnvironment,
         execute_query, infer_expression, validate_query,
     },
-    quinn_transport::{QuinnTransport, QuinnTransportConfig},
+    quinn_transport::{QuinnTransport, QuinnTransportConfig, QuinnTransportError},
     records::{GenericRecord, RecordId},
     routing::{ConnectionManager, EndpointRegistry, NetworkEndpoint, PeerConnectionState},
     schema::{
@@ -97,6 +98,32 @@ pub struct AppCoreConfig {
     pub hlc_node_id: Option<HlcNodeId>,
     pub wall_time: Arc<dyn WallTime>,
     pub lifecycle_policy: LifecyclePolicy,
+    /// How the networked open picks UDP ports for the sync and pairing
+    /// endpoints. Only consulted by the networked open paths.
+    pub ports: PortPolicy,
+}
+
+/// The UDP range the shipped application binds its sync and pairing endpoints
+/// in, so a firewall rule can name it once.
+pub const DEFAULT_SYNC_PORT_RANGE: RangeInclusive<u16> = 47380..=47389;
+
+/// Port selection for the networked QUIC endpoints.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub enum PortPolicy {
+    /// Use the bind address as given; port 0 lets the OS choose.
+    #[default]
+    Ephemeral,
+    /// Bind the lowest free port in the range, sync first and pairing above
+    /// it. Never falls back to an ephemeral port.
+    Range(RangeInclusive<u16>),
+}
+
+/// Ports a networked core holds, for display to the user.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NetworkPorts {
+    pub sync: Option<u16>,
+    pub pairing: Option<u16>,
+    pub policy: PortPolicy,
 }
 
 impl std::fmt::Debug for AppCoreConfig {
@@ -108,6 +135,7 @@ impl std::fmt::Debug for AppCoreConfig {
             .field("repo", &self.repo)
             .field("hlc_node_id", &self.hlc_node_id)
             .field("lifecycle_policy", &self.lifecycle_policy)
+            .field("ports", &self.ports)
             .finish_non_exhaustive()
     }
 }
@@ -121,6 +149,7 @@ impl Default for AppCoreConfig {
             hlc_node_id: None,
             wall_time: Arc::new(SystemWallTime),
             lifecycle_policy: LifecyclePolicy::platform_default(),
+            ports: PortPolicy::Ephemeral,
         }
     }
 }
@@ -155,6 +184,12 @@ struct NetworkComponents {
 pub enum NetworkingDeferredReason {
     SecureStoreLocked,
     SecureStoreUnavailable(String),
+    /// Every UDP port in the fixed range was held by another socket when the
+    /// sync or pairing endpoint tried to bind.
+    PortsExhausted {
+        first: u16,
+        last: u16,
+    },
 }
 
 impl NetworkingDeferredReason {
@@ -188,8 +223,27 @@ impl NetworkingDeferredReason {
             Self::SecureStoreUnavailable(message) => AppError::Pairing(
                 crate::pairing::PairingError::SecureStoreUnavailable(message.clone()),
             ),
+            Self::PortsExhausted { last, .. } => {
+                AppError::Network(QuinnTransportError::AddrInUse(*last))
+            }
         }
     }
+}
+
+/// Tries each port of `range` on `ip` in ascending order. `bind` returns
+/// `Ok(None)` when the port is in use, which moves on to the next port; any
+/// error stops the walk. `Ok(None)` overall means every port was busy.
+fn bind_in_range<T>(
+    range: &RangeInclusive<u16>,
+    ip: std::net::IpAddr,
+    mut bind: impl FnMut(SocketAddr) -> Result<Option<T>>,
+) -> Result<Option<(u16, T)>> {
+    for port in range.clone() {
+        if let Some(value) = bind(SocketAddr::new(ip, port))? {
+            return Ok(Some((port, value)));
+        }
+    }
+    Ok(None)
 }
 
 #[derive(Clone, Debug)]
@@ -219,6 +273,7 @@ pub struct AppCore {
     peer_sync: watch::Receiver<std::collections::HashMap<PeerId, PeerSyncProgress>>,
     network_foreground: Arc<AtomicBool>,
     lifecycle_policy: LifecyclePolicy,
+    port_policy: PortPolicy,
     networking_deferred: Arc<Mutex<Option<NetworkingDeferral>>>,
 }
 
@@ -353,25 +408,111 @@ impl AppCore {
             public_key: identity.public_key(),
             created_at_ms,
         })?;
-        let network = QuinnTransport::bind(
-            bind,
-            identity.clone(),
-            control_store.clone(),
-            network_config,
-        )?;
+        let (network, pairing) = match &config.ports {
+            PortPolicy::Ephemeral => {
+                let network = QuinnTransport::bind(
+                    bind,
+                    identity.clone(),
+                    control_store.clone(),
+                    network_config,
+                )?;
+                let pairing = PairingManager::new(
+                    identity.clone(),
+                    key_store,
+                    control_store.clone(),
+                    discovery,
+                    (bind.ip(), 0).into(),
+                )?;
+                (network, pairing)
+            }
+            PortPolicy::Range(range) => {
+                let bound =
+                    bind_in_range(range, bind.ip(), |address| {
+                        match QuinnTransport::bind(
+                            address,
+                            identity.clone(),
+                            control_store.clone(),
+                            network_config.clone(),
+                        ) {
+                            Ok(network) => Ok(Some(network)),
+                            Err(QuinnTransportError::AddrInUse(_)) => Ok(None),
+                            Err(error) => Err(error.into()),
+                        }
+                    })?;
+                let pairing = match &bound {
+                    Some((sync_port, _)) if sync_port < range.end() => {
+                        bind_in_range(&(sync_port + 1..=*range.end()), bind.ip(), |address| {
+                            match PairingManager::new(
+                                identity.clone(),
+                                key_store.clone(),
+                                control_store.clone(),
+                                discovery.clone(),
+                                address,
+                            ) {
+                                Ok(pairing) => Ok(Some(pairing)),
+                                Err(crate::pairing::PairingError::AddrInUse(_)) => Ok(None),
+                                Err(error) => Err(error.into()),
+                            }
+                        })?
+                    }
+                    _ => None,
+                };
+                match (bound, pairing) {
+                    (Some((sync_port, network)), Some((pairing_port, pairing))) => {
+                        info!(event = "sync_port_bound", role = "sync", port = sync_port);
+                        info!(
+                            event = "sync_port_bound",
+                            role = "pairing",
+                            port = pairing_port
+                        );
+                        (network, pairing)
+                    }
+                    (bound, _) => {
+                        // No port left for one of the endpoints. Release the
+                        // sync socket too so the core holds no QUIC port and
+                        // the retry reopens and binds both again.
+                        if let Some((_, network)) = bound {
+                            let _ = NetworkTransport::close(network.as_ref()).await;
+                        }
+                        let (first, last) = (*range.start(), *range.end());
+                        warn!(
+                            event = "networking_deferred",
+                            stage = "ports",
+                            first,
+                            last,
+                            "opening without peer networking"
+                        );
+                        return Self::open_with_components(
+                            data_dir,
+                            config,
+                            LocalTransport::new(),
+                            control_store,
+                            NetworkComponents {
+                                identity: None,
+                                network: None,
+                                endpoints: Arc::new(Mutex::new(EndpointRegistry::default())),
+                                connections: None,
+                                pairing: None,
+                                deferred: Some(NetworkingDeferral {
+                                    reason: NetworkingDeferredReason::PortsExhausted {
+                                        first,
+                                        last,
+                                    },
+                                    requires_reopen: true,
+                                }),
+                            },
+                        )
+                        .await;
+                    }
+                }
+            }
+        };
         let endpoints = Arc::new(Mutex::new(EndpointRegistry::new(
             crate::discovery::AddressPolicy::for_bind(bind.ip()),
         )));
         let connections =
             ConnectionManager::new(identity.id(), network.clone(), endpoints.clone(), 4)
                 .map_err(|message| AppError::Storage(message.into()))?;
-        let pairing = PairingManager::new(
-            identity.clone(),
-            key_store,
-            control_store.clone(),
-            discovery,
-            bind.ip(),
-        )?;
         if let Some(requests) = network.take_control_requests() {
             spawn_rotation_control(requests, pairing.clone());
         }
@@ -591,6 +732,7 @@ impl AppCore {
             peer_sync,
             network_foreground: Arc::new(AtomicBool::new(false)),
             lifecycle_policy: config.lifecycle_policy,
+            port_policy: config.ports,
             networking_deferred: Arc::new(Mutex::new(network_components.deferred)),
         })
     }
@@ -696,6 +838,16 @@ impl AppCore {
         self.network
             .as_ref()
             .and_then(|network| network.local_addr().ok())
+    }
+
+    /// Bound sync and pairing ports plus the policy they were chosen under.
+    #[must_use]
+    pub fn network_ports(&self) -> NetworkPorts {
+        NetworkPorts {
+            sync: self.network_addr().map(|address| address.port()),
+            pairing: self.pairing_addr().map(|address| address.port()),
+            policy: self.port_policy.clone(),
+        }
     }
     #[must_use]
     pub fn subscribe_peer_sync(
