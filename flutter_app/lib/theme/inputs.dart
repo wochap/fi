@@ -46,6 +46,9 @@ double _selectContentHeight(BuildContext context) => math.max(
 
 /// The decoration every shared input uses: the label (with the `*` marker when [required]),
 /// one error line per issue, and padding that makes the box [size] tall.
+///
+/// [belowContent] is extra content height under the [contentHeight] line (the slider's label
+/// row): it makes the box that much taller without changing the padding around the line.
 InputDecoration _decoration(
   BuildContext context, {
   required InputSize size,
@@ -57,13 +60,14 @@ InputDecoration _decoration(
   required String? helperText,
   required Widget? prefixIcon,
   required Widget? suffixIcon,
+  double belowContent = 0,
 }) {
   final height = Nocturne.inputHeight(context, size);
   final vertical = math.max(_minPadding, (height - contentHeight) / 2);
   // Icons may be as tall as the box but never taller, so an IconButton can't grow it.
   final iconConstraints = BoxConstraints(
     minWidth: math.min(height, 40),
-    maxHeight: math.max(height, contentHeight + 2 * _minPadding),
+    maxHeight: math.max(height, contentHeight + 2 * _minPadding) + belowContent,
   );
   return InputDecoration(
     isDense: true,
@@ -478,24 +482,172 @@ class FiSlider extends StatelessWidget {
           onPressed: enabled ? () => onChanged!(null) : null,
         ),
     ];
+    final labelRowHeight = _sliderLabelRowHeight(context);
     return InputDecorator(
       isEmpty: false,
       decoration: _decoration(
         context,
         size: size,
         contentHeight: contentHeight,
+        belowContent: labelRowHeight,
         label: label,
         hint: null,
         required: required,
         errors: errors,
         helperText: helperText,
         prefixIcon: null,
-        suffixIcon: Row(mainAxisSize: MainAxisSize.min, children: trailing),
+        // Lifted by the label row so the value stays beside the track.
+        suffixIcon: Padding(
+          padding: EdgeInsets.only(bottom: labelRowHeight),
+          child: Row(mainAxisSize: MainAxisSize.min, children: trailing),
+        ),
       ).copyWith(enabled: enabled),
-      child: SizedBox(
-        height: contentHeight,
-        child: Align(alignment: Alignment.centerLeft, child: content),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            height: contentHeight,
+            child: Align(alignment: Alignment.centerLeft, child: content),
+          ),
+          SizedBox(
+            height: labelRowHeight,
+            child: _SliderLabels(
+              min: min,
+              max: max,
+              step: step,
+              theme: theme,
+              enabled: enabled,
+            ),
+          ),
+        ],
       ),
+    );
+  }
+}
+
+const double _sliderLabelFontSize = 12;
+const double _sliderLabelLineHeight = 16;
+
+/// Gap kept between neighbouring step labels in the full row.
+const double _sliderLabelGap = 8;
+
+double _sliderLabelRowHeight(BuildContext context) =>
+    MediaQuery.textScalerOf(context).scale(_sliderLabelFontSize) *
+    _sliderLabelLineHeight /
+    _sliderLabelFontSize;
+
+/// The row under a [FiSlider]'s track: every step value centred under its tick when all of them
+/// fit, otherwise only the minimum under the leading end and the maximum under the trailing end.
+class _SliderLabels extends StatelessWidget {
+  const _SliderLabels({
+    required this.min,
+    required this.max,
+    required this.step,
+    required this.theme,
+    required this.enabled,
+  });
+
+  final int min;
+  final int max;
+  final int step;
+  final SliderThemeData theme;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) {
+    final scaler = MediaQuery.textScalerOf(context);
+    final style = TextStyle(
+      fontSize: _sliderLabelFontSize,
+      height: _sliderLabelLineHeight / _sliderLabelFontSize,
+      color: Theme.of(context).hintColor.withValues(alpha: enabled ? 1 : 0.6),
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
+    final rtl = Directionality.of(context) == TextDirection.rtl;
+    double widthOf(int value) {
+      final painter = TextPainter(
+        text: TextSpan(text: '$value', style: style),
+        textDirection: TextDirection.ltr,
+        textScaler: scaler,
+      )..layout();
+      final width = painter.width;
+      painter.dispose();
+      return width;
+    }
+
+    // The widest label is one of the bounds (the minimum when it is negative).
+    final labelWidth = math.max(widthOf(min), widthOf(max));
+    final divisions = (max - min) ~/ step;
+    // The same geometry the Slider's track shape uses: inset by the wider of the thumb and the
+    // overlay, and discrete ticks kept a track height inside the rounded ends.
+    final inset =
+        math.max(
+          theme.thumbShape!.getPreferredSize(false, true).width,
+          theme.overlayShape!.getPreferredSize(false, true).width,
+        ) /
+        2;
+    final trackHeight = theme.trackHeight!;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        final trackWidth = math.max(0.0, width - 2 * inset);
+        Widget label(
+          int value, {
+          double? left,
+          double? right,
+          TextAlign align = TextAlign.center,
+        }) => Positioned(
+          key: Key('slider-tick-$value'),
+          top: 0,
+          left: left,
+          right: right,
+          width: labelWidth,
+          child: Text(
+            '$value',
+            maxLines: 1,
+            softWrap: false,
+            textAlign: align,
+            style: style,
+          ),
+        );
+        final children = <Widget>[];
+        final fits =
+            (divisions + 1) * (labelWidth + _sliderLabelGap) <= trackWidth;
+        if (divisions == 0) {
+          children.add(
+            label(
+              min,
+              left: rtl ? null : inset,
+              right: rtl ? inset : null,
+              align: TextAlign.start,
+            ),
+          );
+        } else if (fits) {
+          final usable = trackWidth - trackHeight;
+          for (var i = 0; i <= divisions; i++) {
+            final dx = inset + trackHeight / 2 + usable * i / divisions;
+            final x = rtl ? width - dx : dx;
+            children.add(label(min + i * step, left: x - labelWidth / 2));
+          }
+        } else {
+          // Clamped inside the track: the leading label starts at its left end, the trailing one
+          // ends at its right end.
+          children.addAll([
+            label(
+              min,
+              left: rtl ? null : inset,
+              right: rtl ? inset : null,
+              align: TextAlign.start,
+            ),
+            label(
+              max,
+              left: rtl ? inset : null,
+              right: rtl ? null : inset,
+              align: TextAlign.end,
+            ),
+          ]);
+        }
+        return Stack(clipBehavior: Clip.none, children: children);
+      },
     );
   }
 }

@@ -3,7 +3,12 @@ import 'package:fi/theme/nocturne.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-Future<void> _pump(WidgetTester tester, double width, Widget child) async {
+Future<void> _pump(
+  WidgetTester tester,
+  double width,
+  Widget child, {
+  double childWidth = 340,
+}) async {
   tester.view.physicalSize = Size(width, 900);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
@@ -15,7 +20,7 @@ Future<void> _pump(WidgetTester tester, double width, Widget child) async {
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: [SizedBox(width: 340, child: child)],
+            children: [SizedBox(width: childWidth, child: child)],
           ),
         ),
       ),
@@ -42,6 +47,10 @@ double _box(WidgetTester tester, Finder finder) {
           .height -
       4;
 }
+
+/// The slider's value label, apart from the same number in its label row.
+String? _value(WidgetTester tester) =>
+    tester.widget<Text>(find.byKey(const Key('slider-value'))).data;
 
 double _top(WidgetTester tester, Finder finder) => tester
     .getTopLeft(
@@ -113,6 +122,10 @@ final _kinds = <String, Widget Function(InputSize size)>{
     onTap: () {},
     size: size,
   ),
+};
+
+/// Sliders are exempt from the equal-height rule: they grow by their label row.
+final _sliders = <String, Widget Function(InputSize size)>{
   'slider with value': (size) => FiSlider(
     key: const Key('input'),
     label: 'Pain',
@@ -132,6 +145,9 @@ final _kinds = <String, Widget Function(InputSize size)>{
     size: size,
   ),
 };
+
+/// The slider's label row at text scale 1.
+const double _labelRow = 16;
 
 /// Hosts a [FiSlider] whose value lives in the test, so the widget sees each change.
 class _SliderHost extends StatefulWidget {
@@ -193,6 +209,21 @@ void main() {
         (tester) async {
           await _pump(tester, width, build(size));
           expect(_box(tester, find.byKey(const Key('input'))), height);
+        },
+      );
+    }
+  }
+
+  for (final MapEntry(key: (width, size), value: height) in expected.entries) {
+    for (final MapEntry(key: kind, value: build) in _sliders.entries) {
+      testWidgets(
+        '$kind, ${size.name}, ${width.toInt()}px wide: box grows by the label row',
+        (tester) async {
+          await _pump(tester, width, build(size));
+          expect(
+            _box(tester, find.byKey(const Key('input'))),
+            height + _labelRow,
+          );
         },
       );
     }
@@ -298,13 +329,142 @@ void main() {
       );
       final height = width < 720 ? 48.0 : 40.0;
       expect(_box(tester, find.byKey(const Key('name'))), height);
-      expect(_box(tester, find.byKey(const Key('slider'))), height);
+      // The slider is taller by its label row; only the tops align.
+      expect(
+        _box(tester, find.byKey(const Key('slider'))),
+        greaterThan(height),
+      );
       expect(
         _top(tester, find.byKey(const Key('name'))),
         _top(tester, find.byKey(const Key('slider'))),
       );
+      // The track row sits where the text input's line does.
+      final text = find.descendant(
+        of: find.byKey(const Key('name')),
+        matching: find.byType(EditableText),
+      );
+      expect(
+        tester.getCenter(find.byType(Slider)).dy,
+        closeTo(tester.getCenter(text).dy, 1),
+      );
     });
   }
+
+  /// The x centres of the division ticks, as the Slider's rounded track places them.
+  List<double> ticks(WidgetTester tester, int divisions) {
+    final rect = tester.getRect(find.byType(Slider));
+    // Thumb 7 and overlay 14 radius: the track is inset by 14; ticks sit a track height (4)
+    // inside its rounded ends.
+    const inset = 14.0;
+    final usable = rect.width - 2 * inset - 4;
+    return [
+      for (var i = 0; i <= divisions; i++)
+        rect.left + inset + 2 + usable * i / divisions,
+    ];
+  }
+
+  List<String> tickLabels(WidgetTester tester) => [
+    for (final element
+        in find
+            .byWidgetPredicate(
+              (w) =>
+                  w.key is ValueKey<String> &&
+                  (w.key! as ValueKey<String>).value.startsWith('slider-tick-'),
+            )
+            .evaluate())
+      (element.widget.key! as ValueKey<String>).value.substring(12),
+  ];
+
+  testWidgets('a slider that fits every step labels each one under its tick', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      1280,
+      _SliderHost(reported: [], initial: 30, min: 0, max: 100, step: 10),
+      // The test font draws every glyph a font size wide, wider than real digits.
+      childWidth: 700,
+    );
+    final labels = tickLabels(tester);
+    expect(labels, [for (var v = 0; v <= 100; v += 10) '$v']);
+    final xs = ticks(tester, 10);
+    for (var i = 0; i <= 10; i++) {
+      expect(
+        tester.getCenter(find.byKey(Key('slider-tick-${i * 10}'))).dx,
+        closeTo(xs[i], 1),
+      );
+    }
+  });
+
+  testWidgets('a slider whose steps would overlap shows only its bounds', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      1280,
+      _SliderHost(reported: [], initial: 30, min: 0, max: 100),
+      childWidth: 600,
+    );
+    expect(tickLabels(tester), ['0', '100']);
+    expect(find.text('0'), findsOneWidget);
+    expect(find.text('100'), findsOneWidget);
+    final track = tester.getRect(find.byType(Slider));
+    final first = tester.getRect(find.text('0'));
+    final last = tester.getRect(find.text('100'));
+    // Clamped inside the track ends.
+    expect(first.left, greaterThanOrEqualTo(track.left));
+    expect(last.right, lessThanOrEqualTo(track.right));
+    expect(first.top, greaterThan(tester.getCenter(find.byType(Slider)).dy));
+  });
+
+  testWidgets('an unset slider shows its bounds under the track', (
+    tester,
+  ) async {
+    await _pump(tester, 1280, _SliderHost(reported: []));
+    final labels = tickLabels(tester);
+    expect(labels.first, '1');
+    expect(labels.last, '5');
+    expect(labels.toSet().length, labels.length);
+    expect(find.text('1'), findsOneWidget);
+    expect(find.text('5'), findsOneWidget);
+  });
+
+  testWidgets('bounds fall back to the ends under a large text scale', (
+    tester,
+  ) async {
+    tester.platformDispatcher.textScaleFactorTestValue = 1.3;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await _pump(
+      tester,
+      1280,
+      _SliderHost(reported: [], initial: 30, min: 0, max: 100, step: 10),
+      childWidth: 300,
+    );
+    expect(tickLabels(tester), ['0', '100']);
+  });
+
+  testWidgets('an error renders below the label row and keeps the track', (
+    tester,
+  ) async {
+    await _pump(tester, 1280, _SliderHost(key: const Key('a'), reported: []));
+    final before = tester.getRect(find.byType(Slider)).top;
+    await _pump(
+      tester,
+      1280,
+      _SliderHost(
+        key: const Key('b'),
+        reported: [],
+        errors: const ['Required'],
+      ),
+    );
+    expect(tester.getRect(find.byType(Slider)).top, before);
+    expect(
+      tester.getRect(find.text('Required')).top,
+      greaterThan(
+        tester.getRect(find.byKey(const Key('slider-tick-5'))).bottom,
+      ),
+    );
+  });
 
   testWidgets('a slider snaps drags to whole numbers inside the bounds', (
     tester,
@@ -325,11 +485,11 @@ void main() {
       reported.every((value) => value is int && value >= 1 && value <= 5),
       isTrue,
     );
-    expect(find.text('${reported.last}'), findsOneWidget);
+    expect(_value(tester), '${reported.last}');
     await tester.drag(track, const Offset(2000, 0));
     await tester.pump();
     expect(reported.last, 5);
-    expect(find.text('5'), findsOneWidget);
+    expect(_value(tester), '5');
   });
 
   testWidgets('a stepped slider reports only multiples of its step', (
@@ -375,7 +535,7 @@ void main() {
     await tester.pump();
     expect(reported, [3]);
     expect(find.byKey(const Key('slider-value')), findsOneWidget);
-    expect(find.text('3'), findsOneWidget);
+    expect(_value(tester), '3');
   });
 
   testWidgets('the unset track spans the same width as the set track', (
@@ -408,7 +568,7 @@ void main() {
     (tester) async {
       final reported = <int?>[];
       await _pump(tester, 1280, _SliderHost(reported: reported, initial: 4));
-      expect(find.text('4'), findsOneWidget);
+      expect(_value(tester), '4');
       await tester.tap(find.byKey(const Key('slider-clear')));
       await tester.pump();
       expect(reported, [null]);
@@ -437,7 +597,7 @@ void main() {
     );
     expect(find.text('Required\nMust be between 1 and 5'), findsOneWidget);
     expect(find.bySemanticsLabel('Pain, required'), findsOneWidget);
-    expect(_box(tester, find.byKey(const Key('input'))), 40);
+    expect(_box(tester, find.byKey(const Key('input'))), 40 + _labelRow);
   });
 
   testWidgets('a required select reads "<label>, required"', (tester) async {

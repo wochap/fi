@@ -108,6 +108,8 @@ const Map<HelpId, HelpEntry> helpCopy = {
         'Shows this number field as a slider that moves from the minimum to the maximum, with the '
         'picked value beside it. Until a value is picked the track shows no thumb; tap or drag '
         'it to pick one, and the number appears beside it.\n\n'
+        'A row of numbers under the track shows the scale: every step when they all fit, '
+        'otherwise only the minimum and the maximum at the two ends.\n\n'
         'Step sets how far each move goes, for example 10 on a 0 to 100 range. Leave it empty '
         'for whole steps of 1. The step must divide the distance from the minimum to the maximum '
         'exactly, so the last position lands on the maximum.\n\n'

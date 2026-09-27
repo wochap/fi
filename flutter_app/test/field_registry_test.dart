@@ -3,6 +3,7 @@ import 'package:fi/exact_format.dart';
 import 'package:fi/field_registry.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/theme/inputs.dart';
+import 'package:fi/theme/nocturne.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -333,8 +334,10 @@ void main() {
       expect(find.byType(EditableText), findsNothing);
       final slider = tester.widget<Slider>(find.byType(Slider));
       expect((slider.min, slider.max, slider.divisions), (1.0, 5.0, 4));
-      expect(find.byKey(const Key('slider-value')), findsOneWidget);
-      expect(find.text('2'), findsOneWidget);
+      expect(
+        tester.widget<Text>(find.byKey(const Key('slider-value'))).data,
+        '2',
+      );
     });
 
     testWidgets('dragging reports an integer value', (tester) async {
@@ -350,7 +353,10 @@ void main() {
       await tester.pump();
       expect(emitted.last.kind, FieldValueKindDto.integer);
       expect(emitted.last.integerValue, 5);
-      expect(find.text('5'), findsOneWidget);
+      expect(
+        tester.widget<Text>(find.byKey(const Key('slider-value'))).data,
+        '5',
+      );
     });
 
     testWidgets('the step reaches the slider', (tester) async {
@@ -383,6 +389,78 @@ void main() {
       expect(emitted.last.kind, FieldValueKindDto.null_);
       expect(find.byKey(const Key('slider-unset')), findsOneWidget);
     });
+
+    for (final (width, full) in [(1280.0, true), (390.0, false)]) {
+      testWidgets('the record editor labels the slider scale at '
+          '${width.toInt()}px', (tester) async {
+        tester.view.physicalSize = Size(width, 900);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        const registry = FieldRendererRegistry();
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: nocturneTheme(),
+            home: Scaffold(
+              body: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    KeyedSubtree(
+                      key: const Key('text'),
+                      child: registry.editor(
+                        field('name', FieldTypeKindDto.text),
+                        null,
+                        (_) {},
+                      ),
+                    ),
+                    registry.editor(
+                      painField(min: 0, max: 100, step: 10),
+                      null,
+                      (_) {},
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+        final ticks = [
+          for (final element
+              in find
+                  .byWidgetPredicate(
+                    (w) =>
+                        w.key is ValueKey<String> &&
+                        (w.key! as ValueKey<String>).value.startsWith(
+                          'slider-tick-',
+                        ),
+                  )
+                  .evaluate())
+            (element.widget.key! as ValueKey<String>).value.substring(12),
+        ];
+        expect(
+          ticks,
+          full ? [for (var v = 0; v <= 100; v += 10) '$v'] : ['0', '100'],
+        );
+        final text = find
+            .descendant(
+              of: find.byKey(const Key('text')),
+              matching: find.byType(InputDecorator),
+            )
+            .first;
+        expect(tester.getSize(text).height, width < 720 ? 48 : 40);
+        final slider = find
+            .descendant(
+              of: find.byType(FiSlider),
+              matching: find.byType(InputDecorator),
+            )
+            .first;
+        expect(
+          tester.getSize(slider).height,
+          greaterThan(tester.getSize(text).height),
+        );
+      });
+    }
 
     testWidgets('without the flag the field is the plain integer input', (
       tester,
