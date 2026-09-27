@@ -234,3 +234,22 @@ When Rust reports that peer networking is deferred because every port in the fix
 #### Scenario: Retry succeeds after a port frees up
 - **WHEN** a port in the range is released and the user presses retry
 - **THEN** the banner disappears and sync status leaves the deferred state
+
+### Requirement: Build identity on the devices screen
+The devices screen SHALL end with a muted, selectable footer line reading `fi <version> (<hash>)`, where version and hash come from the bridge build-identity query. When the build was dirty the hash SHALL be followed by `-dirty`. The footer SHALL be shown whether or not a dataset exists or any device is paired, and SHALL read `fi <version> (unknown)` when the hash is unavailable. It SHALL never block the rest of the screen: while the query is pending or if it fails, the footer is simply absent.
+
+#### Scenario: Clean release build
+- **WHEN** the bridge reports version `0.1.21`, hash `a1b2c3d`, and dirty false
+- **THEN** the devices screen footer reads `fi 0.1.21 (a1b2c3d)`
+
+#### Scenario: Dirty development build
+- **WHEN** the bridge reports version `0.1.21`, hash `a1b2c3d`, and dirty true
+- **THEN** the footer reads `fi 0.1.21 (a1b2c3d-dirty)`
+
+#### Scenario: No devices paired
+- **WHEN** the trusted-device list is empty and no reset action is offered
+- **THEN** the footer is still shown below the empty-list text
+
+#### Scenario: Query fails
+- **WHEN** the build-identity query returns an error
+- **THEN** the devices screen renders every other section normally and shows no footer
