@@ -200,6 +200,20 @@ final class FakeCollectionBridge implements CollectionBridge {
   @override
   Future<NetworkPortsDto> networkPorts() async => ports;
 
+  /// Build identity the fake reports; [buildInfoError] makes the query fail.
+  BuildInfoDto buildIdentity = const BuildInfoDto(
+    version: '0.1.0',
+    gitHash: 'abc1234',
+    dirty: false,
+  );
+  Object? buildInfoError;
+  @override
+  Future<BuildInfoDto> buildInfo() async {
+    final error = buildInfoError;
+    if (error != null) throw error;
+    return buildIdentity;
+  }
+
   @override
   Future<ProjectionDto> projectionState() async => projection;
   @override

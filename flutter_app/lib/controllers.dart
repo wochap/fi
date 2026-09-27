@@ -798,6 +798,10 @@ final class DevicesController extends ChangeNotifier {
   List<PairingCandidateDto> discoveredCandidates = const [];
   List<TrustedDeviceDto> devices = const [];
   SyncStatusDto syncStatus = SyncStatusDto.offline;
+
+  /// Identity of the running build; null while loading or if the query
+  /// failed. Never gates the rest of the devices screen.
+  BuildInfoDto? buildInfo;
   String? errorMessage;
 
   /// Set when a revocation committed but the follow-up discovery-secret
@@ -829,6 +833,18 @@ final class DevicesController extends ChangeNotifier {
     }, refresh: _refreshSyncStatus);
     await refreshDevices();
     await _refreshSyncStatus();
+    await _loadBuildInfo();
+  }
+
+  Future<void> _loadBuildInfo() async {
+    try {
+      final info = await bridge.buildInfo();
+      if (_disposed) return;
+      buildInfo = info;
+      notifyListeners();
+    } catch (_) {
+      // The footer is optional; a failed query leaves it absent.
+    }
   }
 
   /// Subscribes to [open] and keeps the subscription alive for the life of

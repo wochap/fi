@@ -502,6 +502,22 @@ void main() {
     controller.dispose();
   });
 
+  test('devices controller loads the build identity on start', () async {
+    final bridge = FakeCollectionBridge();
+    final controller = DevicesController(bridge);
+    expect(controller.buildInfo, isNull);
+    await controller.start();
+    expect(controller.buildInfo, bridge.buildIdentity);
+    controller.dispose();
+
+    final failing = FakeCollectionBridge()..buildInfoError = StateError('x');
+    final other = DevicesController(failing);
+    await other.start();
+    expect(other.buildInfo, isNull);
+    expect(other.errorMessage, isNull);
+    other.dispose();
+  });
+
   test('devices controller deletes a revoked device', () async {
     const revoked = TrustedDeviceDto(
       deviceId: 'peer',
@@ -865,6 +881,8 @@ final class ClosingDevicesBridge implements CollectionBridge {
   Future<List<TrustedDeviceDto>> trustedDevices() => inner.trustedDevices();
   @override
   Future<SyncStatusDto> syncStatus() => inner.syncStatus();
+  @override
+  Future<BuildInfoDto> buildInfo() => inner.buildInfo();
 
   @override
   dynamic noSuchMethod(Invocation invocation) =>

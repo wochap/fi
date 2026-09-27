@@ -895,6 +895,10 @@ IconData _statusIcon(SyncStatusDto status) => switch (status) {
   SyncStatusDto.error => Icons.error_outline,
 };
 
+/// Footer text naming the running build, e.g. `fi 0.1.21 (a1b2c3d-dirty)`.
+String buildLabel(BuildInfoDto build) =>
+    'fi ${build.version} (${build.gitHash}${build.dirty ? '-dirty' : ''})';
+
 class DevicesPage extends StatefulWidget {
   const DevicesPage({required this.controller, this.onResetDataset, super.key});
   final DevicesController controller;
@@ -1068,6 +1072,14 @@ class _DevicesPageState extends State<DevicesPage> {
                               button,
                             ],
                           ),
+                  ),
+                ],
+                if (controller.buildInfo case final build?) ...[
+                  const SizedBox(height: 26),
+                  SelectableText(
+                    buildLabel(build),
+                    key: const Key('build-version'),
+                    style: TextStyle(fontSize: 12, color: Nocturne.muted(.45)),
                   ),
                 ],
               ],

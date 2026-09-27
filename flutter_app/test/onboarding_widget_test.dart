@@ -65,6 +65,8 @@ final class RootlessBridge implements CollectionBridge {
   Future<List<TrustedDeviceDto>> trustedDevices() => inner.trustedDevices();
   @override
   Future<SyncStatusDto> syncStatus() => inner.syncStatus();
+  @override
+  Future<BuildInfoDto> buildInfo() => inner.buildInfo();
 
   @override
   dynamic noSuchMethod(Invocation invocation) {

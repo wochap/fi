@@ -10,8 +10,8 @@ use tokio::sync::{RwLock, watch};
 
 use crate::{
     api::models::{
-        BootstrapDto, BridgeError, BridgeErrorEventDto, DataChangedDto, DomainKindDto,
-        NetworkPortsDto, NetworkingDeferredDto, ProjectionDto,
+        BootstrapDto, BridgeError, BridgeErrorEventDto, BuildInfoDto, DataChangedDto,
+        DomainKindDto, NetworkPortsDto, NetworkingDeferredDto, ProjectionDto,
     },
     frb_generated::StreamSink,
 };
@@ -223,6 +223,15 @@ pub async fn network_ports() -> Result<NetworkPortsDto, BridgeError> {
     Ok(NetworkPortsDto::from_core(&core().await?.network_ports()))
 }
 
+/// Version, source commit and dirty flag this build was compiled from.
+pub fn build_info() -> BuildInfoDto {
+    BuildInfoDto {
+        version: env!("CARGO_PKG_VERSION").to_owned(),
+        git_hash: env!("FI_GIT_HASH").to_owned(),
+        dirty: env!("FI_GIT_DIRTY") == "1",
+    }
+}
+
 pub async fn bootstrap_state() -> Result<BootstrapDto, BridgeError> {
     Ok(BootstrapDto::from_app(&core().await?))
 }
@@ -355,7 +364,14 @@ mod tests {
         models::{BootstrapKindDto, RecoveryOutcomeDto, RecoveryReasonDto},
     };
 
-    use super::{core, initialize, networked_config, reset_dataset, shutdown};
+    use super::{build_info, core, initialize, networked_config, reset_dataset, shutdown};
+
+    #[test]
+    fn build_info_reports_the_crate_version_and_a_hash() {
+        let info = build_info();
+        assert_eq!(info.version, env!("CARGO_PKG_VERSION"));
+        assert!(!info.git_hash.is_empty());
+    }
 
     #[test]
     fn networked_opens_use_the_fixed_port_range() {

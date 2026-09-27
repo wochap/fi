@@ -224,6 +224,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   BucketPeriodDto dco_decode_bucket_period_dto(dynamic raw);
 
   @protected
+  BuildInfoDto dco_decode_build_info_dto(dynamic raw);
+
+  @protected
   CalendarPolicyDto dco_decode_calendar_policy_dto(dynamic raw);
 
   @protected
@@ -932,6 +935,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   BucketPeriodDto sse_decode_bucket_period_dto(SseDeserializer deserializer);
+
+  @protected
+  BuildInfoDto sse_decode_build_info_dto(SseDeserializer deserializer);
 
   @protected
   CalendarPolicyDto sse_decode_calendar_policy_dto(
@@ -1834,6 +1840,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
     BucketPeriodDto self,
     SseSerializer serializer,
   );
+
+  @protected
+  void sse_encode_build_info_dto(BuildInfoDto self, SseSerializer serializer);
 
   @protected
   void sse_encode_calendar_policy_dto(

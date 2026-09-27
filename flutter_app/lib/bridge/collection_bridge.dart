@@ -33,6 +33,10 @@ abstract interface class CollectionBridge {
 
   /// UDP ports peer networking holds, the configured range, and mDNS.
   Future<NetworkPortsDto> networkPorts();
+
+  /// Version, short source commit hash and dirty flag of this build. Needs no
+  /// initialized core.
+  Future<BuildInfoDto> buildInfo();
   Future<void> startPairing(int durationMs);
   Future<void> stopPairing();
   Future<void> connectPairingCandidate(PairingCandidateDto candidate);
@@ -232,6 +236,8 @@ final class RustCollectionBridge implements CollectionBridge {
   Future<bool> retryNetworking() => lifecycle.retryNetworking();
   @override
   Future<NetworkPortsDto> networkPorts() => lifecycle.networkPorts();
+  @override
+  Future<BuildInfoDto> buildInfo() => lifecycle.buildInfo();
   @override
   Future<void> startPairing(int durationMs) async =>
       pairing.startPairing(durationMs: durationMs);

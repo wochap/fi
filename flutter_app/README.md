@@ -66,6 +66,27 @@ flutter build apk --debug
 
 ## Release builds and installation
 
+### Versioning
+
+The `version:` line in `pubspec.yaml` (`MAJOR.MINOR.PATCH+BUILD`) is the only
+place the application version is authored; the Cargo workspace version mirrors
+its `MAJOR.MINOR.PATCH`. Cut a release from a clean tree, from the repository
+root, then build from the tagged commit:
+
+```sh
+scripts/bump-version.sh patch   # or minor / major
+git push --follow-tags          # the script commits and tags vX.Y.Z but does not push
+cd flutter_app
+flutter build linux --release   # or: flutter build apk --release
+```
+
+`scripts/check-version.sh` fails when the two manifests drift. Every build
+shows `fi <version> (<hash>)` at the bottom of the Devices screen. The hash is
+captured by `crates/app_bridge/build.rs` and reads `unknown` outside a git
+checkout. A `-dirty` suffix marks uncommitted tracked changes, but it is
+best-effort: it is only refreshed when the commit or index changes, so an
+uncommitted edit between two runs may not update it.
+
 ### Linux Wayland
 
 ```sh

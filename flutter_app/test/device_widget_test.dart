@@ -387,4 +387,85 @@ void main() {
     expect(find.text('Tablet'), findsOneWidget);
     expect(find.textContaining('1 paired'), findsOneWidget);
   });
+
+  group('build version footer', () {
+    Future<void> openWithBuild(
+      WidgetTester tester,
+      FakeCollectionBridge bridge,
+    ) async {
+      await openDevices(tester, bridge);
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+
+    testWidgets('shows a clean build as version and hash, last on the page', (
+      tester,
+    ) async {
+      final bridge = FakeCollectionBridge()
+        ..buildIdentity = const BuildInfoDto(
+          version: '0.1.21',
+          gitHash: 'a1b2c3d',
+          dirty: false,
+        );
+      await openWithBuild(tester, bridge);
+      final footer = find.byKey(const Key('build-version'));
+      await pumpUntilFound(tester, footer);
+      expect(find.text('fi 0.1.21 (a1b2c3d)'), findsOneWidget);
+      await tester.scrollUntilVisible(
+        footer,
+        200,
+        scrollable: find
+            .descendant(
+              of: find.byKey(const Key('devices-page')),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      final thisDevice = find.text('This device');
+      if (thisDevice.evaluate().isNotEmpty) {
+        expect(
+          tester.getTopLeft(footer).dy,
+          greaterThan(tester.getTopLeft(thisDevice).dy),
+        );
+      }
+    });
+
+    testWidgets('marks a dirty build', (tester) async {
+      final bridge = FakeCollectionBridge()
+        ..buildIdentity = const BuildInfoDto(
+          version: '0.1.21',
+          gitHash: 'a1b2c3d',
+          dirty: true,
+        );
+      await openWithBuild(tester, bridge);
+      await pumpUntilFound(tester, find.byKey(const Key('build-version')));
+      expect(find.text('fi 0.1.21 (a1b2c3d-dirty)'), findsOneWidget);
+    });
+
+    testWidgets('is shown below the empty device list', (tester) async {
+      final bridge = FakeCollectionBridge();
+      await openWithBuild(tester, bridge);
+      final footer = find.byKey(const Key('build-version'));
+      await pumpUntilFound(tester, footer);
+      final empty = find.text('No devices have been paired yet.');
+      expect(empty, findsOneWidget);
+      expect(
+        tester.getTopLeft(footer).dy,
+        greaterThan(tester.getTopLeft(empty).dy),
+      );
+    });
+
+    testWidgets('is absent when the query fails; the rest still renders', (
+      tester,
+    ) async {
+      final bridge = FakeCollectionBridge()
+        ..buildInfoError = StateError('no build info');
+      await openWithBuild(tester, bridge);
+      await pumpUntilFound(
+        tester,
+        find.text('No devices have been paired yet.'),
+      );
+      expect(find.byKey(const Key('pairing-card')), findsOneWidget);
+      expect(find.byKey(const Key('build-version')), findsNothing);
+    });
+  });
 }

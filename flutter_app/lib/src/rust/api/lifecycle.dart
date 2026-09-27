@@ -55,6 +55,10 @@ Future<bool> retryNetworking() =>
 Future<NetworkPortsDto> networkPorts() =>
     RustLib.instance.api.crateApiLifecycleNetworkPorts();
 
+/// Version, source commit and dirty flag this build was compiled from.
+Future<BuildInfoDto> buildInfo() =>
+    RustLib.instance.api.crateApiLifecycleBuildInfo();
+
 Future<BootstrapDto> bootstrapState() =>
     RustLib.instance.api.crateApiLifecycleBootstrapState();
 

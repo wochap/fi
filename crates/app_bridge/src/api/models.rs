@@ -747,6 +747,16 @@ impl NetworkingDeferredDto {
     }
 }
 
+/// Identity of the running build: application version, short source commit
+/// hash (`unknown` outside git), and whether tracked files had uncommitted
+/// changes at build time (best-effort).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct BuildInfoDto {
+    pub version: String,
+    pub git_hash: String,
+    pub dirty: bool,
+}
+
 /// UDP ports used for peer networking. Bound ports are absent while
 /// networking is deferred; the range is absent under the ephemeral policy.
 #[derive(Clone, Debug, Eq, PartialEq)]
