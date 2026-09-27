@@ -4,8 +4,8 @@ use crate::{
     api::{
         lifecycle::core,
         models::{
-            BridgeError, NetworkPreferencesDto, PairingCandidateDto, PairingStateDto,
-            RevocationOutcomeDto, SyncStatusDto, TrustedDeviceDto,
+            BridgeError, LocalDeviceDto, NetworkPreferencesDto, PairingCandidateDto,
+            PairingStateDto, RevocationOutcomeDto, SyncStatusDto, TrustedDeviceDto,
         },
     },
     frb_generated::StreamSink,
@@ -92,6 +92,7 @@ pub async fn reject_pairing(session_id: Option<String>) -> Result<(), BridgeErro
 pub async fn trusted_devices() -> Result<Vec<TrustedDeviceDto>, BridgeError> {
     let core = core().await?;
     let connections = core.connection_states();
+    let attempts = core.attempt_times();
     let paused = !core.network_preferences().sync_enabled;
     Ok(core
         .trusted_devices()
@@ -99,9 +100,61 @@ pub async fn trusted_devices() -> Result<Vec<TrustedDeviceDto>, BridgeError> {
         .into_iter()
         .map(|record| {
             let connection = connections.get(&record.device_id);
-            TrustedDeviceDto::from_core(record, connection, paused)
+            let attempt = attempts.get(&record.device_id).copied();
+            TrustedDeviceDto::from_core(record, connection, attempt, paused)
         })
         .collect())
+}
+
+/// This device's DeviceId and the name it presents in the pairing hello;
+/// `None` when no identity exists yet (local-only mode).
+pub async fn local_device() -> Result<Option<LocalDeviceDto>, BridgeError> {
+    let core = core().await?;
+    Ok(core.device_id().map(|device_id| LocalDeviceDto {
+        device_id: device_id.to_string(),
+        pairing_name: core.local_device_name(),
+    }))
+}
+
+/// Dials a trusted, non-revoked peer now, bypassing backoff and initiator
+/// preference. An attempt already in flight is not doubled, and a live
+/// session is kept.
+pub async fn connect_device_now(device_id: String) -> Result<(), BridgeError> {
+    let peer: DeviceId = device_id
+        .parse()
+        .map_err(|_| BridgeError::lifecycle("The device identifier is invalid."))?;
+    let core = core().await?;
+    reconnect_allowed(&core.trusted_devices().map_err(BridgeError::from)?, peer)?;
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |elapsed| {
+            elapsed.as_millis().try_into().unwrap_or(u64::MAX)
+        });
+    match core.connect_peer(peer, now_ms).await {
+        Ok(_) => Ok(()),
+        Err(app_core::AppError::Connection(failure))
+            if failure != app_core::ConnectionFailure::Paused =>
+        {
+            Err(BridgeError::lifecycle(format!(
+                "The device could not be reached: {failure}"
+            )))
+        }
+        Err(error) => Err(error.into()),
+    }
+}
+
+/// Refuses a reconnect for an unknown or revoked record before any dial.
+fn reconnect_allowed(
+    records: &[app_core::TrustedDeviceRecord],
+    peer: DeviceId,
+) -> Result<(), BridgeError> {
+    match records.iter().find(|record| record.device_id == peer) {
+        Some(record) if record.state == app_core::TrustState::Trusted => Ok(()),
+        Some(_) => Err(BridgeError::lifecycle(
+            "A revoked device cannot be reconnected.",
+        )),
+        None => Err(BridgeError::lifecycle("The device is not paired.")),
+    }
 }
 
 pub async fn network_preferences() -> Result<NetworkPreferencesDto, BridgeError> {
@@ -151,14 +204,22 @@ pub async fn connection_state_stream(
     tokio::spawn(forward_connection_states(
         receiver,
         move || {
-            Ok((
-                core.trusted_devices().map_err(BridgeError::from)?,
-                !core.network_preferences().sync_enabled,
-            ))
+            Ok(DeviceRows {
+                devices: core.trusted_devices().map_err(BridgeError::from)?,
+                attempts: core.attempt_times(),
+                paused: !core.network_preferences().sync_enabled,
+            })
         },
         move |values| sink.add(values).is_ok(),
     ));
     Ok(())
+}
+
+/// What one connection-state emission joins with the live states.
+struct DeviceRows {
+    devices: Vec<app_core::TrustedDeviceRecord>,
+    attempts: std::collections::HashMap<DeviceId, u64>,
+    paused: bool,
 }
 
 /// Emits the trusted-device list joined with connection state on every
@@ -174,18 +235,20 @@ async fn forward_connection_states<Q, E>(
     mut query: Q,
     mut emit: E,
 ) where
-    Q: FnMut() -> Result<(Vec<app_core::TrustedDeviceRecord>, bool), BridgeError>,
+    Q: FnMut() -> Result<DeviceRows, BridgeError>,
     E: FnMut(Vec<TrustedDeviceDto>) -> bool,
 {
     loop {
         let connections = receiver.borrow_and_update().clone();
         match query() {
-            Ok((devices, paused)) => {
-                let values = devices
+            Ok(rows) => {
+                let values = rows
+                    .devices
                     .into_iter()
                     .map(|record| {
                         let connection = connections.get(&record.device_id);
-                        TrustedDeviceDto::from_core(record, connection, paused)
+                        let attempt = rows.attempts.get(&record.device_id).copied();
+                        TrustedDeviceDto::from_core(record, connection, attempt, rows.paused)
                     })
                     .collect();
                 if !emit(values) {
@@ -362,7 +425,7 @@ mod tests {
         DeviceId, PeerConnectionState, PrivateDeviceKey, TrustState, TrustedDeviceRecord,
     };
 
-    use super::forward_connection_states;
+    use super::{DeviceRows, forward_connection_states, reconnect_allowed};
     use crate::api::models::BridgeError;
 
     fn record() -> TrustedDeviceRecord {
@@ -391,7 +454,11 @@ mod tests {
                 if *calls == 1 {
                     Err(BridgeError::lifecycle("database is busy"))
                 } else {
-                    Ok((vec![record()], false))
+                    Ok(DeviceRows {
+                        devices: vec![record()],
+                        attempts: HashMap::new(),
+                        paused: false,
+                    })
                 }
             }
         };
@@ -431,6 +498,50 @@ mod tests {
             .unwrap();
     }
 
+    #[test]
+    fn reconnect_is_refused_for_revoked_and_unknown_devices() {
+        let trusted = record();
+        let mut revoked = record();
+        revoked.state = TrustState::Revoked;
+        assert!(reconnect_allowed(std::slice::from_ref(&trusted), trusted.device_id).is_ok());
+        let refused =
+            reconnect_allowed(std::slice::from_ref(&revoked), revoked.device_id).unwrap_err();
+        assert_eq!(refused.kind, crate::api::models::BridgeErrorKind::Lifecycle);
+        assert!(refused.message.contains("revoked"));
+        assert!(reconnect_allowed(&[], trusted.device_id).is_err());
+    }
+
+    #[tokio::test]
+    async fn forwarded_rows_carry_the_last_attempt_time() {
+        let (_tx, rx) =
+            tokio::sync::watch::channel(HashMap::<DeviceId, PeerConnectionState>::new());
+        let emitted = Arc::new(Mutex::new(Vec::new()));
+        let emit = {
+            let emitted = emitted.clone();
+            move |values: Vec<super::TrustedDeviceDto>| {
+                emitted
+                    .lock()
+                    .unwrap()
+                    .extend(values.into_iter().map(|value| value.last_attempt_ms));
+                false
+            }
+        };
+        let peer = record().device_id;
+        forward_connection_states(
+            rx,
+            || {
+                Ok(DeviceRows {
+                    devices: vec![record()],
+                    attempts: HashMap::from([(peer, 42)]),
+                    paused: false,
+                })
+            },
+            emit,
+        )
+        .await;
+        assert_eq!(*emitted.lock().unwrap(), vec![Some(42)]);
+    }
+
     // Pins that the aggregate status and the per-row values are derived from
     // the same preference and agree while sync is paused.
     #[tokio::test]
@@ -458,8 +569,13 @@ mod tests {
         let rows = |core: &AppCore| {
             let paused = !core.network_preferences().sync_enabled;
             [record(), revoked.clone()].map(|record| {
-                TrustedDeviceDto::from_core(record, Some(&PeerConnectionState::Synced), paused)
-                    .connection
+                TrustedDeviceDto::from_core(
+                    record,
+                    Some(&PeerConnectionState::Synced),
+                    None,
+                    paused,
+                )
+                .connection
             })
         };
 
@@ -497,7 +613,18 @@ mod tests {
                 false
             }
         };
-        forward_connection_states(rx, || Ok((vec![record()], true)), emit).await;
+        forward_connection_states(
+            rx,
+            || {
+                Ok(DeviceRows {
+                    devices: vec![record()],
+                    attempts: HashMap::new(),
+                    paused: true,
+                })
+            },
+            emit,
+        )
+        .await;
         assert_eq!(
             *emitted.lock().unwrap(),
             vec![crate::api::models::PeerConnectionKindDto::Paused]

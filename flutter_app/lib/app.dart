@@ -899,10 +899,6 @@ IconData _statusIcon(SyncStatusDto status) => switch (status) {
   SyncStatusDto.paused => Icons.pause_circle_outline,
 };
 
-/// Footer text naming the running build, e.g. `fi 0.1.21 (a1b2c3d-dirty)`.
-String buildLabel(BuildInfoDto build) =>
-    'fi ${build.version} (${build.gitHash}${build.dirty ? '-dirty' : ''})';
-
 class DevicesPage extends StatefulWidget {
   const DevicesPage({required this.controller, this.onResetDataset, super.key});
   final DevicesController controller;
@@ -916,6 +912,9 @@ class _DevicesPageState extends State<DevicesPage> {
   // Relative status times ("5 min ago") go stale without device events, so
   // the page rebuilds once a minute while mounted.
   late final Timer _ticker;
+
+  /// Device ids whose Details disclosure is open.
+  final Set<String> _openDetails = {};
 
   DevicesController get controller => widget.controller;
   ResetDatasetAction? get onResetDataset => widget.onResetDataset;
@@ -1052,9 +1051,11 @@ class _DevicesPageState extends State<DevicesPage> {
                       ],
                     ),
                   ),
+                const SizedBox(height: 26),
+                const SectionLabel('This device'),
+                const SizedBox(height: 10),
+                _LocalIdentity(device: controller.localDevice),
                 if (onResetDataset != null) ...[
-                  const SizedBox(height: 26),
-                  const SectionLabel('This device'),
                   const SizedBox(height: 10),
                   Container(
                     padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
@@ -1106,88 +1107,146 @@ class _DevicesPageState extends State<DevicesPage> {
   }) => Padding(
     key: Key('device-${device.deviceId}'),
     padding: const EdgeInsets.fromLTRB(16, 12, 6, 12),
-    child: Row(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        IconTile(
-          device.revoked ? Icons.block : Icons.devices_other,
-          fill: Nocturne.neutral800,
-          color: Nocturne.text,
-        ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Flexible(
-                    child: Text(
-                      device.friendlyName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  switch ((device.revoked, device.connection)) {
-                    (true, _) => const Tag.neutral('Revoked'),
-                    (
-                      _,
-                      PeerConnectionKindDto.offline ||
-                          PeerConnectionKindDto.error ||
-                          PeerConnectionKindDto.paused,
-                    ) =>
-                      Tag.neutral(_connectionText(device.connection)),
-                    _ => Tag(_connectionText(device.connection)),
-                  },
-                ],
-              ),
-              const SizedBox(height: 2),
-              Text.rich(
-                TextSpan(
-                  children: [
-                    if (!phone) ...[
-                      TextSpan(
-                        text: _shortDeviceId(device.deviceId),
-                        style: const TextStyle(fontFamily: Nocturne.monoFamily),
-                      ),
-                      const TextSpan(text: ' · '),
-                    ],
-                    TextSpan(
-                      text:
-                          'Last seen ${formatStatusTime(device.lastSeenMs, now: now)} · '
-                          'Last sync ${formatStatusTime(device.lastSyncMs, now: now)}',
-                    ),
-                  ],
-                ),
-                style: TextStyle(fontSize: 12, color: Nocturne.muted(.55)),
-              ),
-            ],
+        _deviceSummary(context, device, now, phone: phone),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            key: Key('device-details-${device.deviceId}'),
+            onPressed: () => _toggleDetails(device),
+            icon: Icon(
+              _openDetails.contains(device.deviceId)
+                  ? Icons.expand_less
+                  : Icons.expand_more,
+              size: 18,
+            ),
+            label: const Text('Details'),
           ),
         ),
-        PopupMenuButton<String>(
-          icon: const Icon(Icons.more_vert),
-          onSelected: (action) {
-            if (action == 'rename') _renameDevice(context, device);
-            if (action == 'revoke') _revokeDevice(context, device);
-            if (action == 'delete') _deleteDevice(context, device);
-          },
-          itemBuilder: (_) => [
-            const PopupMenuItem(value: 'rename', child: Text('Rename')),
-            if (!device.revoked)
-              const PopupMenuItem(
-                value: 'revoke',
-                child: Text('Revoke / unpair'),
-              ),
-            if (device.revoked)
-              const PopupMenuItem(value: 'delete', child: Text('Delete')),
-          ],
-        ),
+        if (_openDetails.contains(device.deviceId))
+          _DeviceDetails(
+            device: device,
+            controller: controller,
+            now: now,
+            onCopy: () => _copyDiagnostics(context, device),
+          ),
       ],
     ),
+  );
+
+  void _toggleDetails(TrustedDeviceDto device) {
+    setState(() {
+      if (!_openDetails.remove(device.deviceId)) {
+        _openDetails.add(device.deviceId);
+      }
+    });
+    if (_openDetails.contains(device.deviceId)) {
+      unawaited(controller.loadDetails(device));
+    } else {
+      controller.closeDetails(device.deviceId);
+    }
+  }
+
+  Future<void> _copyDiagnostics(
+    BuildContext context,
+    TrustedDeviceDto device,
+  ) async {
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    if (await controller.copyDiagnostics(device)) {
+      messenger?.showSnackBar(
+        const SnackBar(content: Text('Diagnostics copied')),
+      );
+    }
+  }
+
+  Widget _deviceSummary(
+    BuildContext context,
+    TrustedDeviceDto device,
+    DateTime now, {
+    required bool phone,
+  }) => Row(
+    children: [
+      IconTile(
+        device.revoked ? Icons.block : Icons.devices_other,
+        fill: Nocturne.neutral800,
+        color: Nocturne.text,
+      ),
+      const SizedBox(width: 14),
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Flexible(
+                  child: Text(
+                    device.friendlyName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                switch ((device.revoked, device.connection)) {
+                  (true, _) => const Tag.neutral('Revoked'),
+                  (
+                    _,
+                    PeerConnectionKindDto.offline ||
+                        PeerConnectionKindDto.error ||
+                        PeerConnectionKindDto.paused,
+                  ) =>
+                    Tag.neutral(_connectionText(device.connection)),
+                  _ => Tag(_connectionText(device.connection)),
+                },
+              ],
+            ),
+            const SizedBox(height: 2),
+            Text.rich(
+              TextSpan(
+                children: [
+                  if (!phone) ...[
+                    TextSpan(
+                      text: _shortDeviceId(device.deviceId),
+                      style: const TextStyle(fontFamily: Nocturne.monoFamily),
+                    ),
+                    const TextSpan(text: ' · '),
+                  ],
+                  TextSpan(
+                    text:
+                        'Last seen ${formatStatusTime(device.lastSeenMs, now: now)} · '
+                        'Last sync ${formatStatusTime(device.lastSyncMs, now: now)}',
+                  ),
+                ],
+              ),
+              style: TextStyle(fontSize: 12, color: Nocturne.muted(.55)),
+            ),
+          ],
+        ),
+      ),
+      PopupMenuButton<String>(
+        icon: const Icon(Icons.more_vert),
+        onSelected: (action) {
+          if (action == 'rename') _renameDevice(context, device);
+          if (action == 'revoke') _revokeDevice(context, device);
+          if (action == 'delete') _deleteDevice(context, device);
+        },
+        itemBuilder: (_) => [
+          const PopupMenuItem(value: 'rename', child: Text('Rename')),
+          if (!device.revoked)
+            const PopupMenuItem(
+              value: 'revoke',
+              child: Text('Revoke / unpair'),
+            ),
+          if (device.revoked)
+            const PopupMenuItem(value: 'delete', child: Text('Delete')),
+        ],
+      ),
+    ],
   );
 
   Future<void> _resetDataset(BuildContext context) async {
@@ -1399,4 +1458,141 @@ class _ErrorBanner extends StatelessWidget {
     content: Text(message),
     actions: const [SizedBox.shrink()],
   );
+}
+
+/// The "This device" identity: full DeviceId and pairing name, or a note that
+/// networking is not set up.
+class _LocalIdentity extends StatelessWidget {
+  const _LocalIdentity({required this.device});
+  final LocalDeviceDto? device;
+
+  @override
+  Widget build(BuildContext context) {
+    final device = this.device;
+    if (device == null) {
+      return Text(
+        'Networking is not set up on this device.',
+        key: const Key('local-device-missing'),
+        style: TextStyle(fontSize: 13, color: Nocturne.muted(.6)),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          device.pairingName,
+          key: const Key('local-device-name'),
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+        ),
+        const SizedBox(height: 2),
+        SelectableText(
+          device.deviceId,
+          key: const Key('local-device-id'),
+          style: TextStyle(
+            fontSize: 12,
+            fontFamily: Nocturne.monoFamily,
+            color: Nocturne.muted(.7),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// A trusted row's diagnostic detail: identity, attempt state, bound port,
+/// retained log lines, and the Reconnect and Copy all actions.
+class _DeviceDetails extends StatelessWidget {
+  const _DeviceDetails({
+    required this.device,
+    required this.controller,
+    required this.now,
+    required this.onCopy,
+  });
+  final TrustedDeviceDto device;
+  final DevicesController controller;
+  final DateTime now;
+  final VoidCallback onCopy;
+
+  @override
+  Widget build(BuildContext context) {
+    final id = device.deviceId;
+    final logs = controller.details[id];
+    final lines = [
+      if (logs != null) ...[
+        ...logs.peer.map(logLine),
+        if (logs.peer.isEmpty) '(no lines for this device)',
+        '-- this device --',
+        ...logs.local.map(logLine),
+      ],
+    ];
+    const mono = TextStyle(fontFamily: Nocturne.monoFamily, fontSize: 12);
+    final muted = TextStyle(fontSize: 12, color: Nocturne.muted(.7));
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(54, 0, 10, 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SelectableText(id, style: mono),
+          const SizedBox(height: 6),
+          Text(
+            'State: ${device.revoked ? 'Revoked' : _connectionText(device.connection)}',
+            style: muted,
+          ),
+          Text('Endpoint: ${device.attemptEndpoint ?? 'none'}', style: muted),
+          Text(
+            'Last attempt: ${formatStatusTime(device.lastAttemptMs, now: now)}',
+            style: muted,
+          ),
+          if (device.failure case final failure?)
+            Text(
+              'Failure: $failure',
+              key: Key('device-failure-$id'),
+              style: muted,
+            ),
+          Text(
+            'Sync port: ${controller.syncPort ?? 'not bound'}',
+            style: muted,
+          ),
+          const SizedBox(height: 8),
+          Container(
+            width: double.infinity,
+            constraints: const BoxConstraints(maxHeight: 240),
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(Nocturne.radius),
+              border: Border.all(color: Nocturne.divider),
+            ),
+            child: SingleChildScrollView(
+              child: SelectableText(
+                logs == null ? 'Loading…' : lines.join('\n'),
+                key: Key('device-log-$id'),
+                style: mono,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            children: [
+              if (!device.revoked)
+                OutlinedButton.icon(
+                  key: Key('device-reconnect-$id'),
+                  onPressed: controller.reconnecting.contains(id)
+                      ? null
+                      : () => controller.reconnect(device),
+                  icon: const Icon(Icons.refresh, size: 18),
+                  label: const Text('Reconnect'),
+                ),
+              OutlinedButton.icon(
+                key: Key('device-copy-$id'),
+                onPressed: onCopy,
+                icon: const Icon(Icons.copy, size: 18),
+                label: const Text('Copy all'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 }

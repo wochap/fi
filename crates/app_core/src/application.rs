@@ -1031,6 +1031,16 @@ impl AppCore {
             registry.replace_source(peer, source, endpoints);
         }
     }
+    /// Start time of the most recent dial per peer; empty outside networked
+    /// mode.
+    #[must_use]
+    pub fn attempt_times(&self) -> std::collections::HashMap<DeviceId, u64> {
+        self.connections
+            .as_ref()
+            .map_or_else(std::collections::HashMap::new, |manager| {
+                manager.attempt_times()
+            })
+    }
     pub async fn connect_peer(&self, peer: DeviceId, now_ms: u64) -> Result<u64> {
         self.connections
             .as_ref()
@@ -1436,7 +1446,7 @@ impl AppCore {
                         if self.connections.as_ref().is_some_and(|connections| {
                             !matches!(
                                 connections.states().get(&recipient),
-                                Some(PeerConnectionState::Failed(_))
+                                Some(PeerConnectionState::Failed { .. })
                             )
                         }) =>
                     {
@@ -1452,6 +1462,12 @@ impl AppCore {
             }
         }
         Ok(epoch)
+    }
+
+    /// The friendly name this device presents to peers in the pairing hello.
+    #[must_use]
+    pub fn local_device_name(&self) -> String {
+        self.local_pairing_name()
     }
 
     fn local_pairing_name(&self) -> String {

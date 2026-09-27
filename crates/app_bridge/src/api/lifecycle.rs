@@ -59,11 +59,19 @@ pub(crate) async fn core() -> Result<AppCore, BridgeError> {
 
 #[frb(init)]
 pub fn init_app() {
-    let _ = tracing_subscriber::fmt()
-        .json()
-        .with_target(false)
-        .with_current_span(false)
-        .with_writer(crate::log_sink::make_writer)
+    use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+    // The level filter applies to both layers, so retention sees exactly the
+    // events written to stdout or logcat.
+    let _ = tracing_subscriber::registry()
+        .with(tracing_subscriber::filter::LevelFilter::INFO)
+        .with(
+            tracing_subscriber::fmt::layer()
+                .json()
+                .with_target(false)
+                .with_current_span(false)
+                .with_writer(crate::log_sink::make_writer),
+        )
+        .with(app_core::diagnostics::RecentEventsLayer::new())
         .try_init();
     flutter_rust_bridge::setup_default_user_utils();
 }

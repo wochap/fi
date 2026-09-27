@@ -214,6 +214,58 @@ final class FakeCollectionBridge implements CollectionBridge {
     return buildIdentity;
   }
 
+  /// Identity [localDevice] reports; null models local-only mode.
+  LocalDeviceDto? localIdentity = const LocalDeviceDto(
+    deviceId: 'local-device-id-0123456789abcdef',
+    pairingName: 'Fi local-de',
+  );
+  int localDeviceCalls = 0;
+  @override
+  Future<LocalDeviceDto?> localDevice() async {
+    localDeviceCalls += 1;
+    return localIdentity;
+  }
+
+  /// Device ids passed to [connectDeviceNow], in call order. A set
+  /// [connectDelay] holds each call open until it completes.
+  final List<String> reconnects = [];
+  Future<void> Function()? connectDelay;
+  @override
+  Future<void> connectDeviceNow(String deviceId) async {
+    reconnects.add(deviceId);
+    if (connectDelay case final delay?) await delay();
+  }
+
+  /// Retained lines per device id; local lines use the key `null`.
+  final Map<String?, List<LogEventDto>> logs = {};
+  final List<String?> logQueries = [];
+  @override
+  Future<List<LogEventDto>> recentDeviceLogs(String deviceId, int limit) async {
+    logQueries.add(deviceId);
+    return List.of(logs[deviceId] ?? const []);
+  }
+
+  @override
+  Future<List<LogEventDto>> recentLocalLogs(int limit) async {
+    logQueries.add(null);
+    return List.of(logs[null] ?? const []);
+  }
+
+  /// Versions passed to [setBuildInfo]; the block reports the last one.
+  final List<String> buildInfoCalls = [];
+  @override
+  Future<void> setBuildInfo(String version) async {
+    buildInfoCalls.add(version);
+  }
+
+  final List<String> diagnosticBlockCalls = [];
+  @override
+  Future<String> diagnosticBlock(String deviceId) async {
+    diagnosticBlockCalls.add(deviceId);
+    final version = buildInfoCalls.isEmpty ? 'unknown' : buildInfoCalls.last;
+    return 'Version: $version\nPeer device: $deviceId\n';
+  }
+
   @override
   Future<ProjectionDto> projectionState() async => projection;
   @override
@@ -1159,6 +1211,9 @@ final class FakeCollectionBridge implements CollectionBridge {
       lastSyncMs: old.lastSyncMs,
       revoked: old.revoked,
       connection: old.connection,
+      attemptEndpoint: old.attemptEndpoint,
+      lastAttemptMs: old.lastAttemptMs,
+      failure: old.failure,
     );
     devicesController.add(List.of(devices));
   }
@@ -1183,6 +1238,9 @@ final class FakeCollectionBridge implements CollectionBridge {
       lastSyncMs: old.lastSyncMs,
       revoked: true,
       connection: PeerConnectionKindDto.offline,
+      attemptEndpoint: old.attemptEndpoint,
+      lastAttemptMs: old.lastAttemptMs,
+      failure: old.failure,
     );
     devicesController.add(List.of(devices));
     return RevocationOutcomeDto(

@@ -202,6 +202,28 @@ class PairingCard extends StatelessWidget {
           color: Nocturne.accent200,
         ),
       ),
+      if (controller.pairing.peerDeviceId case final peerId?) ...[
+        const SizedBox(height: 8),
+        SelectableText.rich(
+          TextSpan(
+            children: [
+              const TextSpan(text: 'Other device: '),
+              TextSpan(
+                text: peerId,
+                style: const TextStyle(fontFamily: Nocturne.monoFamily),
+              ),
+            ],
+          ),
+          key: const Key('pairing-peer-id'),
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 12, color: Nocturne.muted(.6)),
+        ),
+        Text(
+          'For reference only; the code above is what must match.',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 11, color: Nocturne.muted(.45)),
+        ),
+      ],
       const SizedBox(height: 12),
       FilledButton(
         onPressed: controller.busy ? null : controller.confirm,

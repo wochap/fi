@@ -221,12 +221,21 @@ pub enum ConnectionFailure {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum PeerConnectionState {
     Disconnected,
-    Connecting { endpoint: SocketAddr },
-    Authenticating { endpoint: SocketAddr },
+    Connecting {
+        endpoint: SocketAddr,
+    },
+    Authenticating {
+        endpoint: SocketAddr,
+    },
     Connected,
     Syncing,
     Synced,
-    Failed(ConnectionFailure),
+    /// The last attempt failed. `endpoint` is the last endpoint tried, or
+    /// `None` when no eligible endpoint was known.
+    Failed {
+        failure: ConnectionFailure,
+        endpoint: Option<SocketAddr>,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -268,7 +277,7 @@ pub fn aggregate_sync_status(states: &HashMap<DeviceId, PeerConnectionState>) ->
     {
         SyncStatus::Offline
     } else if states.values().any(
-        |state| matches!(state, PeerConnectionState::Failed(failure) if !failure.is_transient()),
+        |state| matches!(state, PeerConnectionState::Failed { failure, .. } if !failure.is_transient()),
     ) {
         SyncStatus::Error
     } else if states.values().any(|state| {
@@ -276,7 +285,7 @@ pub fn aggregate_sync_status(states: &HashMap<DeviceId, PeerConnectionState>) ->
             state,
             PeerConnectionState::Connecting { .. }
                 | PeerConnectionState::Authenticating { .. }
-                | PeerConnectionState::Failed(_)
+                | PeerConnectionState::Failed { .. }
         )
     }) {
         SyncStatus::Searching
@@ -398,6 +407,8 @@ pub struct ConnectionManager {
     /// backoff; set after a lost session or a failed attempt so neither can
     /// turn into an immediate redial loop.
     not_before: Mutex<HashMap<DeviceId, u64>>,
+    /// Start time of the most recent dial per peer, for diagnostics.
+    last_attempt: Mutex<HashMap<DeviceId, u64>>,
     /// Set while the platform has suspended networking (Android background).
     suspended: AtomicBool,
     /// Set while the user has turned Sync with paired devices off. Separate
@@ -454,6 +465,7 @@ impl ConnectionManager {
             clock,
             in_flight: Arc::new(Mutex::new(HashMap::new())),
             not_before: Mutex::new(HashMap::new()),
+            last_attempt: Mutex::new(HashMap::new()),
             suspended: AtomicBool::new(false),
             paused: AtomicBool::new(false),
             closed: AtomicBool::new(false),
@@ -490,6 +502,16 @@ impl ConnectionManager {
     #[must_use]
     pub fn states(&self) -> HashMap<DeviceId, PeerConnectionState> {
         self.states.borrow().clone()
+    }
+
+    /// Start time of the most recent dial per peer. A peer never dialed has
+    /// no entry.
+    #[must_use]
+    pub fn attempt_times(&self) -> HashMap<DeviceId, u64> {
+        self.last_attempt
+            .lock()
+            .map(|times| times.clone())
+            .unwrap_or_default()
     }
 
     /// Stops automatic dialing while the platform keeps networking off, and
@@ -664,13 +686,18 @@ impl ConnectionManager {
         let started = tokio::time::Instant::now();
         let elapsed_now =
             || now_ms.saturating_add(started.elapsed().as_millis().try_into().unwrap_or(u64::MAX));
+        if let Ok(mut last_attempt) = self.last_attempt.lock() {
+            last_attempt.insert(peer, now_ms);
+        }
         let endpoints = self
             .registry
             .lock()
             .map_err(|_| ConnectionFailure::Transport("endpoint registry lock poisoned".into()))?
             .ranked(peer, now_ms);
         let mut last = ConnectionFailure::NoRoute;
+        let mut last_endpoint = None;
         for endpoint in endpoints {
+            last_endpoint = Some(endpoint.address);
             self.set_attempt_state(
                 peer,
                 PeerConnectionState::Connecting {
@@ -727,7 +754,13 @@ impl ConnectionManager {
         if let Ok(mut not_before) = self.not_before.lock() {
             not_before.insert(peer, elapsed_now().saturating_add(self.retry_min_ms));
         }
-        self.set_attempt_state(peer, PeerConnectionState::Failed(last.clone()));
+        self.set_attempt_state(
+            peer,
+            PeerConnectionState::Failed {
+                failure: last.clone(),
+                endpoint: last_endpoint,
+            },
+        );
         Err(last)
     }
 
@@ -771,7 +804,7 @@ impl ConnectionManager {
             .iter()
             .filter(|(_, state)| match state {
                 PeerConnectionState::Disconnected => true,
-                PeerConnectionState::Failed(failure) => failure.is_transient(),
+                PeerConnectionState::Failed { failure, .. } => failure.is_transient(),
                 _ => false,
             })
             .map(|(peer, _)| (*peer, now.max(not_before.get(peer).copied().unwrap_or(0))))
@@ -896,7 +929,7 @@ fn connection_state_name(state: &PeerConnectionState) -> &'static str {
         PeerConnectionState::Connected => "connected",
         PeerConnectionState::Syncing => "syncing",
         PeerConnectionState::Synced => "synced",
-        PeerConnectionState::Failed(_) => "error",
+        PeerConnectionState::Failed { .. } => "error",
     }
 }
 
@@ -1419,6 +1452,64 @@ mod tests {
         assert!(manual.await.unwrap().is_err());
     }
 
+    #[tokio::test(start_paused = true)]
+    async fn failed_dial_reports_the_last_endpoint_tried() {
+        let (local, remote) = devices();
+        let lan = Arc::new(FakeLan::default());
+        let node = Node::new(local, &lan);
+        let now = node.now();
+        {
+            let mut registry = node.registry.lock().unwrap();
+            let mut first = lan_endpoint(address(2, 7000), now, 60_000);
+            first.last_success_ms = Some(now);
+            registry.upsert(remote, first);
+            registry.upsert(remote, lan_endpoint(address(3, 7001), now, 60_000));
+        }
+        assert!(node.manager.connect_manual(remote, now).await.is_err());
+        assert_eq!(
+            lan.dialed_addresses(),
+            vec![address(2, 7000), address(3, 7001)]
+        );
+        assert!(matches!(
+            node.state(remote),
+            Some(PeerConnectionState::Failed {
+                failure: ConnectionFailure::Route(_),
+                endpoint: Some(endpoint),
+            }) if endpoint == address(3, 7001)
+        ));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn failed_dial_without_route_has_no_endpoint() {
+        let (local, remote) = devices();
+        let lan = Arc::new(FakeLan::default());
+        let node = Node::new(local, &lan);
+        let now = node.now();
+        assert!(node.manager.connect_manual(remote, now).await.is_err());
+        assert_eq!(
+            node.state(remote),
+            Some(PeerConnectionState::Failed {
+                failure: ConnectionFailure::NoRoute,
+                endpoint: None,
+            })
+        );
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn manual_dial_records_the_attempt_time() {
+        let (local, remote) = devices();
+        let other = DeviceId::from_public_key(&[9; 32]);
+        let lan = Arc::new(FakeLan::default());
+        let node = Node::new(local, &lan);
+        assert!(node.manager.attempt_times().is_empty());
+        advance(50).await;
+        let now = node.now();
+        let _ = node.manager.connect_manual(remote, now).await;
+        let times = node.manager.attempt_times();
+        assert_eq!(times.get(&remote), Some(&now));
+        assert_eq!(times.get(&other), None);
+    }
+
     // Pins that suspending (Android background) stops automatic redials.
     #[tokio::test(start_paused = true)]
     async fn suspended_manager_does_not_redial() {
@@ -1502,7 +1593,13 @@ mod tests {
             ConnectionFailure::Transport("closed".into()),
             ConnectionFailure::Stream("reset".into()),
         ] {
-            let states = HashMap::from([(one, PeerConnectionState::Failed(failure))]);
+            let states = HashMap::from([(
+                one,
+                PeerConnectionState::Failed {
+                    failure,
+                    endpoint: None,
+                },
+            )]);
             assert_eq!(aggregate_sync_status(&states), SyncStatus::Searching);
         }
         for failure in [
@@ -1510,7 +1607,13 @@ mod tests {
             ConnectionFailure::Tls("bad cert".into()),
         ] {
             let states = HashMap::from([
-                (one, PeerConnectionState::Failed(failure)),
+                (
+                    one,
+                    PeerConnectionState::Failed {
+                        failure,
+                        endpoint: None,
+                    },
+                ),
                 (two, PeerConnectionState::Synced),
             ]);
             assert_eq!(aggregate_sync_status(&states), SyncStatus::Error);

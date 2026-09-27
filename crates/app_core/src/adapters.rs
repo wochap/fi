@@ -1392,7 +1392,7 @@ fn encode_connection_state(state: &PeerConnectionState) -> (&'static str, Option
         PeerConnectionState::Connected => ("connected", None),
         PeerConnectionState::Syncing => ("syncing", None),
         PeerConnectionState::Synced => ("synced", None),
-        PeerConnectionState::Failed(error) => (
+        PeerConnectionState::Failed { failure: error, .. } => (
             "failed",
             Some(match error {
                 ConnectionFailure::NoRoute => "no_route",
@@ -1423,16 +1423,19 @@ fn decode_connection_state(
         "connected" => PeerConnectionState::Connected,
         "syncing" => PeerConnectionState::Syncing,
         "synced" => PeerConnectionState::Synced,
-        "failed" => PeerConnectionState::Failed(match category? {
-            "no_route" => ConnectionFailure::NoRoute,
-            "route" => ConnectionFailure::Route("previous attempt failed".into()),
-            "tls" => ConnectionFailure::Tls("previous attempt failed".into()),
-            "trust" => ConnectionFailure::Trust("previous attempt failed".into()),
-            "stream" => ConnectionFailure::Stream("previous attempt failed".into()),
-            "transport" => ConnectionFailure::Transport("previous attempt failed".into()),
-            "paused" => ConnectionFailure::Paused,
-            _ => return None,
-        }),
+        "failed" => PeerConnectionState::Failed {
+            failure: match category? {
+                "no_route" => ConnectionFailure::NoRoute,
+                "route" => ConnectionFailure::Route("previous attempt failed".into()),
+                "tls" => ConnectionFailure::Tls("previous attempt failed".into()),
+                "trust" => ConnectionFailure::Trust("previous attempt failed".into()),
+                "stream" => ConnectionFailure::Stream("previous attempt failed".into()),
+                "transport" => ConnectionFailure::Transport("previous attempt failed".into()),
+                "paused" => ConnectionFailure::Paused,
+                _ => return None,
+            },
+            endpoint,
+        },
         _ => return None,
     })
 }

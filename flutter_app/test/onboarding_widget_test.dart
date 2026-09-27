@@ -70,6 +70,10 @@ final class RootlessBridge implements CollectionBridge {
       inner.networkPreferences();
   @override
   Future<BuildInfoDto> buildInfo() => inner.buildInfo();
+  @override
+  Future<void> setBuildInfo(String version) => inner.setBuildInfo(version);
+  @override
+  Future<LocalDeviceDto?> localDevice() => inner.localDevice();
 
   @override
   dynamic noSuchMethod(Invocation invocation) {
@@ -128,6 +132,27 @@ void main() {
     await tester.pump();
     expect(find.byKey(const Key('single-initiator-hint')), findsOneWidget);
     expect(find.textContaining('one device only'), findsWidgets);
+    // Candidates are anonymous: the list shows the endpoint, not an id.
+    expect(find.byKey(const Key('pairing-peer-id')), findsNothing);
+    expect(find.textContaining(peerId), findsNothing);
+
+    bridge.pairingController.add(
+      pairingState(
+        PairingKindDto.awaitingConfirmation,
+        session: 'session',
+        sas: '42',
+        peer: peerId,
+      ),
+    );
+    await tester.pump();
+    expect(find.text('000042'), findsOneWidget);
+    expect(
+      tester
+          .widget<SelectableText>(find.byKey(const Key('pairing-peer-id')))
+          .textSpan
+          ?.toPlainText(),
+      'Other device: $peerId',
+    );
   });
 
   testWidgets('pairing blocks create with a reason until stopped', (

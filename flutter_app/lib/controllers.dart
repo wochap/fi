@@ -4,6 +4,7 @@ import 'package:fi/bridge/collection_bridge.dart';
 import 'package:fi/file_dialogs.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 
 final class BootstrapController extends ChangeNotifier {
   BootstrapController({
@@ -782,6 +783,28 @@ final class CollectionsController extends ChangeNotifier {
   }
 }
 
+/// Footer text naming the running build, e.g. `fi 0.1.21 (a1b2c3d-dirty)`.
+String buildLabel(BuildInfoDto build) =>
+    'fi ${build.version} (${build.gitHash}${build.dirty ? '-dirty' : ''})';
+
+/// One retained log event as `at_ms level event message key=value ...`,
+/// matching the lines of the Rust diagnostic block.
+String logLine(LogEventDto event) => [
+  '${event.atMs}',
+  event.level,
+  ?event.event,
+  if (event.message.isNotEmpty) event.message,
+  for (final (name, value) in event.fields) '$name=$value',
+].join(' ');
+
+/// Retained log lines shown in a device's Details: the peer's lines, then
+/// the lines that name no peer.
+final class DeviceLogs {
+  const DeviceLogs({required this.peer, required this.local});
+  final List<LogEventDto> peer;
+  final List<LogEventDto> local;
+}
+
 final class DevicesController extends ChangeNotifier {
   DevicesController(this.bridge);
 
@@ -810,6 +833,23 @@ final class DevicesController extends ChangeNotifier {
   /// Identity of the running build; null while loading or if the query
   /// failed. Never gates the rest of the devices screen.
   BuildInfoDto? buildInfo;
+
+  /// This device's identity as peers see it; null while loading, in
+  /// local-only mode, or if the query failed.
+  LocalDeviceDto? localDevice;
+
+  /// Device ids with a Reconnect in flight.
+  final Set<String> reconnecting = {};
+
+  /// Retained log lines per device id whose Details are open; refreshed on
+  /// every connection-state emission.
+  final Map<String, DeviceLogs> details = {};
+
+  /// Locally bound sync port, read when Details opens; null when unbound.
+  int? syncPort;
+
+  /// Lines requested per query for the Details panel.
+  static const logLimit = 200;
   String? errorMessage;
 
   /// Set when a revocation committed but the follow-up discovery-secret
@@ -834,6 +874,11 @@ final class DevicesController extends ChangeNotifier {
     _subscribe(bridge.connectionStateEvents, (value) {
       devices = value;
       notifyListeners();
+      for (final device in value) {
+        if (details.containsKey(device.deviceId)) {
+          unawaited(loadDetails(device));
+        }
+      }
     }, refresh: refreshDevices);
     _subscribe(bridge.syncStatusEvents, (value) {
       syncStatus = value;
@@ -843,6 +888,68 @@ final class DevicesController extends ChangeNotifier {
     await _refreshSyncStatus();
     await _loadPreferences();
     await _loadBuildInfo();
+    await _loadLocalDevice();
+  }
+
+  Future<void> _loadLocalDevice() async {
+    try {
+      final value = await bridge.localDevice();
+      if (_disposed) return;
+      localDevice = value;
+      notifyListeners();
+    } catch (_) {
+      // Shown as "not set up"; the rest of the screen does not depend on it.
+    }
+  }
+
+  /// Dials [device] now. Ignored for a revoked device and while a reconnect
+  /// for it is in flight; the outcome shows through connection-state events.
+  Future<void> reconnect(TrustedDeviceDto device) async {
+    if (device.revoked || !reconnecting.add(device.deviceId)) return;
+    notifyListeners();
+    try {
+      await bridge.connectDeviceNow(device.deviceId);
+    } catch (error) {
+      _setError(error);
+    } finally {
+      reconnecting.remove(device.deviceId);
+      if (!_disposed) notifyListeners();
+    }
+    if (details.containsKey(device.deviceId)) await loadDetails(device);
+  }
+
+  /// Fetches the retained log lines and bound port for [device]'s Details
+  /// panel.
+  Future<void> loadDetails(TrustedDeviceDto device) async {
+    try {
+      final peer = await bridge.recentDeviceLogs(device.deviceId, logLimit);
+      final local = await bridge.recentLocalLogs(logLimit);
+      final ports = await bridge.networkPorts();
+      if (_disposed) return;
+      details[device.deviceId] = DeviceLogs(peer: peer, local: local);
+      syncPort = ports.syncPort;
+      notifyListeners();
+    } catch (error) {
+      _setError(error);
+    }
+  }
+
+  /// Stops refreshing [deviceId]'s Details once the panel is closed.
+  void closeDetails(String deviceId) {
+    if (details.remove(deviceId) != null) notifyListeners();
+  }
+
+  /// Places [device]'s diagnostic block on the clipboard. Returns false and
+  /// reports the error when the block could not be produced.
+  Future<bool> copyDiagnostics(TrustedDeviceDto device) async {
+    try {
+      final block = await bridge.diagnosticBlock(device.deviceId);
+      await Clipboard.setData(ClipboardData(text: block));
+      return true;
+    } catch (error) {
+      _setError(error);
+      return false;
+    }
   }
 
   Future<void> _loadPreferences() async {
@@ -876,6 +983,7 @@ final class DevicesController extends ChangeNotifier {
       if (_disposed) return;
       buildInfo = info;
       notifyListeners();
+      await bridge.setBuildInfo(buildLabel(info));
     } catch (_) {
       // The footer is optional; a failed query leaves it absent.
     }
@@ -951,6 +1059,10 @@ final class DevicesController extends ChangeNotifier {
     devices = const [];
     syncStatus = SyncStatusDto.offline;
     preferences = _defaultPreferences;
+    localDevice = null;
+    reconnecting.clear();
+    details.clear();
+    syncPort = null;
     errorMessage = null;
     rotationError = null;
     busy = false;

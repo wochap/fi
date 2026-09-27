@@ -4,6 +4,7 @@
 // ignore_for_file: unused_import, unused_element, unnecessary_import, duplicate_ignore, invalid_use_of_internal_member, annotate_overrides, non_constant_identifier_names, curly_braces_in_flow_control_structures, prefer_const_literals_to_create_immutables, unused_field
 
 import 'api/collections.dart';
+import 'api/diagnostics.dart';
 import 'api/lifecycle.dart';
 import 'api/models.dart';
 import 'api/pairing.dart';
@@ -142,6 +143,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   GroupingDto dco_decode_box_autoadd_grouping_dto(dynamic raw);
+
+  @protected
+  LocalDeviceDto dco_decode_box_autoadd_local_device_dto(dynamic raw);
 
   @protected
   NetworkingDeferredDto dco_decode_box_autoadd_networking_deferred_dto(
@@ -355,6 +359,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<FieldReferenceDto> dco_decode_list_field_reference_dto(dynamic raw);
 
   @protected
+  List<LogEventDto> dco_decode_list_log_event_dto(dynamic raw);
+
+  @protected
   List<PairingCandidateDto> dco_decode_list_pairing_candidate_dto(dynamic raw);
 
   @protected
@@ -371,6 +378,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<RecordDto> dco_decode_list_record_dto(dynamic raw);
+
+  @protected
+  List<(String, String)> dco_decode_list_record_string_string(dynamic raw);
 
   @protected
   List<RecordValueDto> dco_decode_list_record_value_dto(dynamic raw);
@@ -400,6 +410,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<WidgetEvaluationDto> dco_decode_list_widget_evaluation_dto(dynamic raw);
+
+  @protected
+  LocalDeviceDto dco_decode_local_device_dto(dynamic raw);
+
+  @protected
+  LogEventDto dco_decode_log_event_dto(dynamic raw);
 
   @protected
   NetworkPortsDto dco_decode_network_ports_dto(dynamic raw);
@@ -476,6 +492,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   GroupingDto? dco_decode_opt_box_autoadd_grouping_dto(dynamic raw);
+
+  @protected
+  LocalDeviceDto? dco_decode_opt_box_autoadd_local_device_dto(dynamic raw);
 
   @protected
   NetworkingDeferredDto? dco_decode_opt_box_autoadd_networking_deferred_dto(
@@ -578,6 +597,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   RecordDto dco_decode_record_dto(dynamic raw);
+
+  @protected
+  (String, String) dco_decode_record_string_string(dynamic raw);
 
   @protected
   RecordValueDto dco_decode_record_value_dto(dynamic raw);
@@ -834,6 +856,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   GroupingDto sse_decode_box_autoadd_grouping_dto(SseDeserializer deserializer);
+
+  @protected
+  LocalDeviceDto sse_decode_box_autoadd_local_device_dto(
+    SseDeserializer deserializer,
+  );
 
   @protected
   NetworkingDeferredDto sse_decode_box_autoadd_networking_deferred_dto(
@@ -1113,6 +1140,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  List<LogEventDto> sse_decode_list_log_event_dto(SseDeserializer deserializer);
+
+  @protected
   List<PairingCandidateDto> sse_decode_list_pairing_candidate_dto(
     SseDeserializer deserializer,
   );
@@ -1135,6 +1165,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<RecordDto> sse_decode_list_record_dto(SseDeserializer deserializer);
+
+  @protected
+  List<(String, String)> sse_decode_list_record_string_string(
+    SseDeserializer deserializer,
+  );
 
   @protected
   List<RecordValueDto> sse_decode_list_record_value_dto(
@@ -1180,6 +1215,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<WidgetEvaluationDto> sse_decode_list_widget_evaluation_dto(
     SseDeserializer deserializer,
   );
+
+  @protected
+  LocalDeviceDto sse_decode_local_device_dto(SseDeserializer deserializer);
+
+  @protected
+  LogEventDto sse_decode_log_event_dto(SseDeserializer deserializer);
 
   @protected
   NetworkPortsDto sse_decode_network_ports_dto(SseDeserializer deserializer);
@@ -1266,6 +1307,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   GroupingDto? sse_decode_opt_box_autoadd_grouping_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  LocalDeviceDto? sse_decode_opt_box_autoadd_local_device_dto(
     SseDeserializer deserializer,
   );
 
@@ -1398,6 +1444,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   RecordDto sse_decode_record_dto(SseDeserializer deserializer);
+
+  @protected
+  (String, String) sse_decode_record_string_string(
+    SseDeserializer deserializer,
+  );
 
   @protected
   RecordValueDto sse_decode_record_value_dto(SseDeserializer deserializer);
@@ -1712,6 +1763,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_box_autoadd_grouping_dto(
     GroupingDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_local_device_dto(
+    LocalDeviceDto self,
     SseSerializer serializer,
   );
 
@@ -2064,6 +2121,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_list_log_event_dto(
+    List<LogEventDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_list_pairing_candidate_dto(
     List<PairingCandidateDto> self,
     SseSerializer serializer,
@@ -2093,6 +2156,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_list_record_dto(
     List<RecordDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_record_string_string(
+    List<(String, String)> self,
     SseSerializer serializer,
   );
 
@@ -2149,6 +2218,15 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
     List<WidgetEvaluationDto> self,
     SseSerializer serializer,
   );
+
+  @protected
+  void sse_encode_local_device_dto(
+    LocalDeviceDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_log_event_dto(LogEventDto self, SseSerializer serializer);
 
   @protected
   void sse_encode_network_ports_dto(
@@ -2252,6 +2330,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_opt_box_autoadd_grouping_dto(
     GroupingDto? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_local_device_dto(
+    LocalDeviceDto? self,
     SseSerializer serializer,
   );
 
@@ -2416,6 +2500,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_record_dto(RecordDto self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_record_string_string(
+    (String, String) self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_record_value_dto(

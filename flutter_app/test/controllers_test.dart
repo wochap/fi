@@ -564,6 +564,87 @@ void main() {
     controller.dispose();
   });
 
+  test('devices controller reconnects once per press', () async {
+    const peer = TrustedDeviceDto(
+      deviceId: 'peer',
+      friendlyName: 'Peer',
+      pairedAtMs: 1,
+      revoked: false,
+      connection: PeerConnectionKindDto.error,
+    );
+    final release = Completer<void>();
+    final bridge = FakeCollectionBridge()
+      ..devices.add(peer)
+      ..connectDelay = (() => release.future);
+    final controller = DevicesController(bridge);
+    await controller.refreshDevices();
+
+    final first = controller.reconnect(peer);
+    expect(controller.reconnecting, {'peer'});
+    // A second press while the first is in flight is ignored.
+    await controller.reconnect(peer);
+    expect(bridge.reconnects, ['peer']);
+    release.complete();
+    await first;
+    expect(controller.reconnecting, isEmpty);
+
+    await controller.reconnect(peer);
+    expect(bridge.reconnects, ['peer', 'peer']);
+
+    const revoked = TrustedDeviceDto(
+      deviceId: 'gone',
+      friendlyName: 'Gone',
+      pairedAtMs: 1,
+      revoked: true,
+      connection: PeerConnectionKindDto.offline,
+    );
+    await controller.reconnect(revoked);
+    expect(bridge.reconnects, ['peer', 'peer']);
+    controller.dispose();
+  });
+
+  test('devices controller loads peer and local log lines', () async {
+    const peer = TrustedDeviceDto(
+      deviceId: 'peer',
+      friendlyName: 'Peer',
+      pairedAtMs: 1,
+      revoked: false,
+      connection: PeerConnectionKindDto.error,
+    );
+    const line = LogEventDto(
+      atMs: 1,
+      level: 'INFO',
+      event: 'peer_dial_failed',
+      message: 'dial failed',
+      fields: [],
+      deviceId: 'peer',
+    );
+    final bridge = FakeCollectionBridge()..logs['peer'] = [line];
+    final controller = DevicesController(bridge);
+    await controller.loadDetails(peer);
+    expect(controller.details['peer']?.peer, [line]);
+    expect(controller.details['peer']?.local, isEmpty);
+    expect(bridge.logQueries, ['peer', null]);
+    controller.dispose();
+  });
+
+  test('devices controller refreshes the local identity on restart', () async {
+    final bridge = FakeCollectionBridge();
+    final controller = DevicesController(bridge);
+    await controller.start();
+    expect(controller.localDevice, bridge.localIdentity);
+    expect(bridge.buildInfoCalls, [buildLabel(bridge.buildIdentity)]);
+
+    bridge.localIdentity = const LocalDeviceDto(
+      deviceId: 'replaced-device-id',
+      pairingName: 'Fi replaced',
+    );
+    await controller.restart();
+    expect(controller.localDevice?.deviceId, 'replaced-device-id');
+    expect(bridge.localDeviceCalls, 2);
+    controller.dispose();
+  });
+
   test('devices controller deletes a revoked device', () async {
     const revoked = TrustedDeviceDto(
       deviceId: 'peer',
@@ -932,6 +1013,10 @@ final class ClosingDevicesBridge implements CollectionBridge {
       inner.networkPreferences();
   @override
   Future<BuildInfoDto> buildInfo() => inner.buildInfo();
+  @override
+  Future<void> setBuildInfo(String version) => inner.setBuildInfo(version);
+  @override
+  Future<LocalDeviceDto?> localDevice() => inner.localDevice();
 
   @override
   dynamic noSuchMethod(Invocation invocation) =>

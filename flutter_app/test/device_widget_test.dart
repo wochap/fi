@@ -3,6 +3,7 @@ import 'package:fi/app.dart';
 import 'package:fi/pairing_card.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fake_bridge.dart';
@@ -26,12 +27,14 @@ PairingStateDto pairingState(
   PairingKindDto kind, {
   String? session,
   String? sas,
+  String? peer,
   String? message,
   PairingFailureKindDto? failure,
 }) => PairingStateDto(
   kind: kind,
   sessionId: session,
   sas: sas,
+  peerDeviceId: peer,
   localConfirmed: false,
   remoteConfirmed: false,
   message: message,
@@ -58,7 +61,214 @@ Future<void> openDevices(
   await tester.pump();
 }
 
+const failedPeerId =
+    'fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210';
+
+const failedPeer = TrustedDeviceDto(
+  deviceId: failedPeerId,
+  friendlyName: 'Phone',
+  pairedAtMs: 1,
+  revoked: false,
+  connection: PeerConnectionKindDto.error,
+  attemptEndpoint: '192.168.1.20:47380',
+  lastAttemptMs: 1,
+  failure: 'TLS failed: bad certificate',
+);
+
+/// Records what the app writes to the clipboard.
+List<String> mockClipboard(WidgetTester tester) {
+  final copied = <String>[];
+  tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+    SystemChannels.platform,
+    (call) async {
+      if (call.method == 'Clipboard.setData') {
+        copied.add((call.arguments as Map)['text'] as String);
+      }
+      return null;
+    },
+  );
+  addTearDown(
+    () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      null,
+    ),
+  );
+  return copied;
+}
+
+Future<void> tapVisible(WidgetTester tester, Finder finder) async {
+  await tester.ensureVisible(finder);
+  await tester.pump();
+  await tester.tap(finder);
+  await tester.pump();
+  await tester.pump();
+}
+
+void diagnosticsTests() {
+  testWidgets('this device shows its full id and pairing name', (tester) async {
+    final bridge = FakeCollectionBridge();
+    await openDevices(tester, bridge);
+    await pumpUntilFound(tester, find.byKey(const Key('local-device-id')));
+    expect(
+      tester
+          .widget<SelectableText>(find.byKey(const Key('local-device-id')))
+          .data,
+      bridge.localIdentity!.deviceId,
+    );
+    expect(find.text(bridge.localIdentity!.pairingName), findsOneWidget);
+    expect(find.byKey(const Key('local-device-missing')), findsNothing);
+  });
+
+  testWidgets('this device says networking is not set up without an id', (
+    tester,
+  ) async {
+    final bridge = FakeCollectionBridge()..localIdentity = null;
+    await openDevices(tester, bridge);
+    await pumpUntilFound(tester, find.byKey(const Key('local-device-missing')));
+    expect(
+      find.text('Networking is not set up on this device.'),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('local-device-id')), findsNothing);
+  });
+
+  testWidgets('details stay hidden until opened and explain a failure', (
+    tester,
+  ) async {
+    final bridge = FakeCollectionBridge()
+      ..devices.add(failedPeer)
+      ..logs[failedPeerId] = const [
+        LogEventDto(
+          atMs: 7,
+          level: 'INFO',
+          event: 'peer_dial_failed',
+          message: 'dial to peer endpoint failed',
+          fields: [('endpoint', '192.168.1.20:47380')],
+          deviceId: failedPeerId,
+        ),
+      ];
+    await openDevices(tester, bridge);
+    await pumpUntilFound(tester, find.text('Phone'));
+    expect(find.textContaining('TLS failed'), findsNothing);
+    expect(find.textContaining('192.168.1.20:47380'), findsNothing);
+    expect(find.byKey(const Key('device-log-$failedPeerId')), findsNothing);
+
+    await tapVisible(
+      tester,
+      find.byKey(const Key('device-details-$failedPeerId')),
+    );
+    expect(find.text('Failure: TLS failed: bad certificate'), findsOneWidget);
+    expect(find.text('Endpoint: 192.168.1.20:47380'), findsOneWidget);
+    expect(find.textContaining('Last attempt: '), findsOneWidget);
+    expect(find.text('Sync port: ${bridge.ports.syncPort}'), findsOneWidget);
+    final log = tester
+        .widget<SelectableText>(
+          find.byKey(const Key('device-log-$failedPeerId')),
+        )
+        .data!;
+    expect(
+      log,
+      contains(
+        '7 INFO peer_dial_failed dial to peer endpoint failed '
+        'endpoint=192.168.1.20:47380',
+      ),
+    );
+
+    await tapVisible(
+      tester,
+      find.byKey(const Key('device-reconnect-$failedPeerId')),
+    );
+    expect(bridge.reconnects, [failedPeerId]);
+  });
+
+  testWidgets('copy all places the diagnostic block on the clipboard', (
+    tester,
+  ) async {
+    final copied = mockClipboard(tester);
+    // Without a build identity the block has no version to report.
+    final bridge = FakeCollectionBridge()
+      ..buildInfoError = StateError('no build info')
+      ..devices.add(failedPeer);
+    await openDevices(tester, bridge);
+    await pumpUntilFound(tester, find.text('Phone'));
+    await tapVisible(
+      tester,
+      find.byKey(const Key('device-details-$failedPeerId')),
+    );
+    await tapVisible(
+      tester,
+      find.byKey(const Key('device-copy-$failedPeerId')),
+    );
+    expect(bridge.diagnosticBlockCalls, [failedPeerId]);
+    expect(copied, hasLength(1));
+    expect(copied.single, startsWith('Version: unknown\n'));
+    expect(find.text('Diagnostics copied'), findsOneWidget);
+  });
+
+  testWidgets('a revoked row offers copy but no reconnect', (tester) async {
+    final bridge = FakeCollectionBridge()
+      ..devices.add(
+        const TrustedDeviceDto(
+          deviceId: failedPeerId,
+          friendlyName: 'Phone',
+          pairedAtMs: 1,
+          revoked: true,
+          connection: PeerConnectionKindDto.offline,
+        ),
+      );
+    await openDevices(tester, bridge);
+    await pumpUntilFound(tester, find.text('Phone'));
+    await tapVisible(
+      tester,
+      find.byKey(const Key('device-details-$failedPeerId')),
+    );
+    expect(find.byKey(const Key('device-copy-$failedPeerId')), findsOneWidget);
+    expect(
+      find.byKey(const Key('device-reconnect-$failedPeerId')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('the confirmation step shows the other device id', (
+    tester,
+  ) async {
+    final bridge = FakeCollectionBridge();
+    await openDevices(tester, bridge);
+    await tester.tap(find.byKey(const Key('start-pairing')));
+    await tester.pump();
+    bridge.candidateController.add([
+      PairingCandidateDto(
+        instanceId: List.filled(16, '01').join(),
+        endpoint: '192.0.2.1:4400',
+        expiresAtMs: DateTime.now().millisecondsSinceEpoch + 10000,
+        alreadyPaired: false,
+      ),
+    ]);
+    await tester.pump();
+    expect(find.byKey(const Key('pairing-peer-id')), findsNothing);
+    expect(find.textContaining(failedPeerId), findsNothing);
+
+    bridge.pairingController.add(
+      pairingState(
+        PairingKindDto.awaitingConfirmation,
+        session: 'session',
+        sas: '42',
+        peer: failedPeerId,
+      ),
+    );
+    await tester.pump();
+    expect(
+      tester
+          .widget<SelectableText>(find.byKey(const Key('pairing-peer-id')))
+          .textSpan
+          ?.toPlainText(),
+      'Other device: $failedPeerId',
+    );
+  });
+}
+
 void main() {
+  diagnosticsTests();
   testWidgets('pairing renders candidates, expiry, SAS actions, and errors', (
     tester,
   ) async {

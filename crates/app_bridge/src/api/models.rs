@@ -868,6 +868,45 @@ pub struct TrustedDeviceDto {
     pub last_sync_ms: Option<u64>,
     pub revoked: bool,
     pub connection: PeerConnectionKindDto,
+    /// Endpoint being tried (connecting or authenticating) or last tried
+    /// (failed), as `ip:port`.
+    pub attempt_endpoint: Option<String>,
+    /// Start time of the most recent dial; absent for a never-dialed peer.
+    pub last_attempt_ms: Option<u64>,
+    /// Failure category and message of the last attempt, when it failed.
+    pub failure: Option<String>,
+}
+
+/// This device's identity as peers see it.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LocalDeviceDto {
+    pub device_id: String,
+    /// The name this device presents in the pairing hello.
+    pub pairing_name: String,
+}
+
+/// One retained tracing event. `fields` keep emission order.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LogEventDto {
+    pub at_ms: u64,
+    pub level: String,
+    pub event: Option<String>,
+    pub message: String,
+    pub fields: Vec<(String, String)>,
+    pub device_id: Option<String>,
+}
+
+impl From<app_core::diagnostics::LogEvent> for LogEventDto {
+    fn from(value: app_core::diagnostics::LogEvent) -> Self {
+        Self {
+            at_ms: value.at_ms,
+            level: value.level,
+            event: value.event,
+            message: value.message,
+            fields: value.fields,
+            device_id: value.device_id,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -940,6 +979,7 @@ impl From<app_core::PairingState> for PairingStateDto {
             }
             PairingState::AwaitingConfirmation {
                 session_id,
+                peer,
                 sas,
                 local_confirmed,
                 remote_confirmed,
@@ -948,6 +988,7 @@ impl From<app_core::PairingState> for PairingStateDto {
                 dto.kind = PairingKindDto::AwaitingConfirmation;
                 dto.session_id = Some(hex_id(session_id.0));
                 dto.sas = Some(sas.expose().to_owned());
+                dto.peer_device_id = Some(peer.to_string());
                 dto.local_confirmed = local_confirmed;
                 dto.remote_confirmed = remote_confirmed;
                 dto.deadline_ms = Some(deadline_ms);
@@ -1008,9 +1049,22 @@ impl TrustedDeviceDto {
     pub(crate) fn from_core(
         value: app_core::TrustedDeviceRecord,
         connection: Option<&app_core::PeerConnectionState>,
+        last_attempt_ms: Option<u64>,
         paused: bool,
     ) -> Self {
+        use app_core::PeerConnectionState;
         let revoked = value.state == app_core::TrustState::Revoked;
+        let (attempt_endpoint, failure) = match connection {
+            Some(
+                PeerConnectionState::Connecting { endpoint }
+                | PeerConnectionState::Authenticating { endpoint },
+            ) => (Some(endpoint.to_string()), None),
+            Some(PeerConnectionState::Failed { failure, endpoint }) => (
+                endpoint.map(|endpoint| endpoint.to_string()),
+                Some(failure.to_string()),
+            ),
+            _ => (None, None),
+        };
         Self {
             device_id: value.device_id.to_string(),
             friendly_name: value.friendly_name,
@@ -1023,6 +1077,9 @@ impl TrustedDeviceDto {
             } else {
                 connection.into()
             },
+            attempt_endpoint,
+            last_attempt_ms,
+            failure,
         }
     }
 }
@@ -1038,7 +1095,7 @@ impl From<Option<&app_core::PeerConnectionState>> for PeerConnectionKindDto {
             Some(PeerConnectionState::Connected) => Self::Connected,
             Some(PeerConnectionState::Syncing) => Self::Syncing,
             Some(PeerConnectionState::Synced) => Self::Synced,
-            Some(PeerConnectionState::Failed(_)) => Self::Error,
+            Some(PeerConnectionState::Failed { .. }) => Self::Error,
         }
     }
 }
@@ -1621,6 +1678,77 @@ mod tests {
             )
             .already_paired
         );
+    }
+
+    fn trusted_record() -> app_core::TrustedDeviceRecord {
+        let key = app_core::PrivateDeviceKey::from_seed(&[7; 32])
+            .unwrap()
+            .public_key();
+        app_core::TrustedDeviceRecord {
+            device_id: app_core::DeviceId::from_public_key(key.as_bytes()),
+            public_key: key,
+            friendly_name: "peer".into(),
+            paired_at_ms: 1,
+            last_seen_ms: None,
+            last_sync_ms: None,
+            state: app_core::TrustState::Trusted,
+        }
+    }
+
+    #[test]
+    fn attempt_detail_is_not_flattened() {
+        use app_core::{ConnectionFailure, PeerConnectionState};
+
+        use super::{PeerConnectionKindDto, TrustedDeviceDto};
+
+        let endpoint: std::net::SocketAddr = "192.168.1.20:47380".parse().unwrap();
+        for state in [
+            PeerConnectionState::Connecting { endpoint },
+            PeerConnectionState::Authenticating { endpoint },
+        ] {
+            let dto = TrustedDeviceDto::from_core(trusted_record(), Some(&state), Some(9), false);
+            assert_eq!(dto.connection, PeerConnectionKindDto::Searching);
+            assert_eq!(dto.attempt_endpoint.as_deref(), Some("192.168.1.20:47380"));
+            assert_eq!(dto.last_attempt_ms, Some(9));
+            assert_eq!(dto.failure, None);
+        }
+        let failed = PeerConnectionState::Failed {
+            failure: ConnectionFailure::Tls("bad certificate".into()),
+            endpoint: Some(endpoint),
+        };
+        let dto = TrustedDeviceDto::from_core(trusted_record(), Some(&failed), Some(9), false);
+        assert_eq!(dto.connection, PeerConnectionKindDto::Error);
+        assert_eq!(dto.attempt_endpoint.as_deref(), Some("192.168.1.20:47380"));
+        assert_eq!(dto.failure.as_deref(), Some("TLS failed: bad certificate"));
+        let no_route = PeerConnectionState::Failed {
+            failure: ConnectionFailure::NoRoute,
+            endpoint: None,
+        };
+        let dto = TrustedDeviceDto::from_core(trusted_record(), Some(&no_route), None, false);
+        assert_eq!(dto.attempt_endpoint, None);
+        assert_eq!(dto.failure.as_deref(), Some("no eligible endpoint"));
+        let never = TrustedDeviceDto::from_core(trusted_record(), None, None, false);
+        assert_eq!(
+            (never.attempt_endpoint, never.last_attempt_ms, never.failure),
+            (None, None, None)
+        );
+    }
+
+    #[test]
+    fn awaiting_confirmation_carries_the_peer_id() {
+        use super::{PairingKindDto, PairingStateDto};
+
+        let peer = trusted_record().device_id;
+        let dto = PairingStateDto::from(app_core::PairingState::AwaitingConfirmation {
+            session_id: app_core::PairingSessionId([1; 16]),
+            peer,
+            sas: app_core::SasCode::new("012345".into()).unwrap(),
+            local_confirmed: false,
+            remote_confirmed: false,
+            deadline_ms: 5,
+        });
+        assert_eq!(dto.kind, PairingKindDto::AwaitingConfirmation);
+        assert_eq!(dto.peer_device_id, Some(peer.to_string()));
     }
 
     #[test]

@@ -213,6 +213,9 @@ pub enum PairingState {
     },
     AwaitingConfirmation {
         session_id: PairingSessionId,
+        /// The DeviceId derived from the authenticated hello key, the same key
+        /// that entered the SAS transcript.
+        peer: DeviceId,
         sas: SasCode,
         local_confirmed: bool,
         remote_confirmed: bool,
@@ -246,6 +249,7 @@ pub enum PairingInput {
     },
     SasReady {
         session_id: PairingSessionId,
+        peer: DeviceId,
         sas: SasCode,
         deadline_ms: u64,
     },
@@ -419,12 +423,14 @@ pub fn reduce_pairing(
             },
             I::SasReady {
                 session_id,
+                peer,
                 sas,
                 deadline_ms,
             },
         ) if *active == session_id => Ok((
             S::AwaitingConfirmation {
                 session_id,
+                peer,
                 sas: sas.clone(),
                 local_confirmed: false,
                 remote_confirmed: false,
@@ -435,6 +441,7 @@ pub fn reduce_pairing(
         (
             S::AwaitingConfirmation {
                 session_id: active,
+                peer,
                 sas,
                 remote_confirmed,
                 deadline_ms,
@@ -444,6 +451,7 @@ pub fn reduce_pairing(
         ) if *active == session_id => {
             let next = S::AwaitingConfirmation {
                 session_id,
+                peer: *peer,
                 sas: sas.clone(),
                 local_confirmed: true,
                 remote_confirmed: *remote_confirmed,
@@ -464,6 +472,7 @@ pub fn reduce_pairing(
         (
             S::AwaitingConfirmation {
                 session_id: active,
+                peer,
                 sas,
                 local_confirmed,
                 deadline_ms,
@@ -473,6 +482,7 @@ pub fn reduce_pairing(
         ) if *active == session_id => {
             let next = S::AwaitingConfirmation {
                 session_id,
+                peer: *peer,
                 sas: sas.clone(),
                 local_confirmed: *local_confirmed,
                 remote_confirmed: true,
@@ -1172,6 +1182,62 @@ mod tests {
             open_provisioning(&keys, session, &modified, 1, 5),
             Err(PairingError::Authentication)
         );
+    }
+
+    #[test]
+    fn awaiting_confirmation_carries_the_peer_into_commit() {
+        let peer = DeviceId::from_public_key(
+            PrivateDeviceKey::from_seed(&[7; 32])
+                .unwrap()
+                .public_key()
+                .as_bytes(),
+        );
+        let session_id = PairingSessionId([3; 16]);
+        let instance_id = PairingInstanceId::from_bytes([1; 16]);
+        let state = PairingState::Connecting {
+            session_id,
+            candidate: PairingCandidate {
+                instance_id: PairingInstanceId::from_bytes([2; 16]),
+                endpoint: "127.0.0.1:1".parse().unwrap(),
+                expires_at_ms: 100,
+            },
+            deadline_ms: 50,
+            instance_id,
+            window_deadline_ms: 100,
+        };
+        let (state, _) = reduce_pairing(
+            &state,
+            PairingInput::SasReady {
+                session_id,
+                peer,
+                sas: SasCode::new("012345".into()).unwrap(),
+                deadline_ms: 50,
+            },
+        )
+        .unwrap();
+        assert!(matches!(
+            state,
+            PairingState::AwaitingConfirmation { peer: p, .. } if p == peer
+        ));
+        let (state, _) = reduce_pairing(&state, PairingInput::LocalConfirm { session_id }).unwrap();
+        let (state, _) =
+            reduce_pairing(&state, PairingInput::RemoteConfirm { session_id }).unwrap();
+        let PairingState::AwaitingConfirmation { peer: awaiting, .. } = state.clone() else {
+            panic!("expected awaiting confirmation, got {state:?}");
+        };
+        let (state, _) = reduce_pairing(
+            &state,
+            PairingInput::BeginCommit {
+                session_id,
+                peer: awaiting,
+                deadline_ms: 50,
+            },
+        )
+        .unwrap();
+        assert!(matches!(
+            state,
+            PairingState::Committing { peer: p, .. } if p == peer
+        ));
     }
 
     #[test]

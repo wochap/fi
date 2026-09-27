@@ -197,6 +197,36 @@ fn has_group_advertisement(discovery: &FakeDiscoveryProvider) -> bool {
 // Pins the Wi-Fi-toggle failure: after the session dropped, both sides kept
 // their endpoints and sat at Offline forever because nothing redialed. Now the
 // reconnect scheduler re-establishes one session without a restart.
+// Pins that the name the UI shows for this device is the one a peer
+// receives in the pairing hello and records on the trust entry.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn local_device_name_matches_the_name_sent_in_the_hello() {
+    let pair = paired(70, LifecyclePolicy::KeepNetworkingInBackground).await;
+    let seen_by_joining = pair
+        .joining
+        .trusted_devices()
+        .unwrap()
+        .into_iter()
+        .find(|record| record.device_id == pair.existing_id())
+        .unwrap();
+    assert_eq!(
+        seen_by_joining.friendly_name,
+        pair.existing.local_device_name()
+    );
+    let seen_by_existing = pair
+        .existing
+        .trusted_devices()
+        .unwrap()
+        .into_iter()
+        .find(|record| record.device_id == pair.joining_id())
+        .unwrap();
+    assert_eq!(
+        seen_by_existing.friendly_name,
+        pair.joining.local_device_name()
+    );
+    pair.shutdown().await;
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn dropped_session_is_reestablished_by_both_sides_without_restart() {
     let pair = paired(61, LifecyclePolicy::KeepNetworkingInBackground).await;

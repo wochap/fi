@@ -613,11 +613,13 @@ impl PairingManager {
     pub fn sas_ready(
         &self,
         session_id: PairingSessionId,
+        peer: DeviceId,
         sas: crate::pairing::SasCode,
         deadline_ms: u64,
     ) -> Result<(), PairingError> {
         self.apply(PairingInput::SasReady {
             session_id,
+            peer,
             sas,
             deadline_ms,
         })
@@ -1710,6 +1712,7 @@ impl PairingManager {
         let keys = derive_pairing_keys(&transcript, &exporter)?;
         let sas = keys.sas();
         let deadline_ms = state_deadline(&self.state()).ok_or(PairingError::Inactive)?;
+        let peer_device_id = DeviceId::from_public_key(peer.public_key.as_bytes());
         self.sessions
             .lock()
             .map_err(|_| PairingError::Transport("session lock poisoned".into()))?
@@ -1725,11 +1728,7 @@ impl PairingManager {
                     deadline_ms,
                 }),
             );
-        self.apply(PairingInput::SasReady {
-            session_id,
-            sas,
-            deadline_ms,
-        })?;
+        self.sas_ready(session_id, peer_device_id, sas, deadline_ms)?;
         Ok(())
     }
 }

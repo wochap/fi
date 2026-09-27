@@ -7,7 +7,8 @@ import '../frb_generated.dart';
 import 'models.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `decode_16`, `encode_16`, `forward_connection_states`, `nibble`
+// These functions are ignored because they are not marked as `pub`: `decode_16`, `encode_16`, `forward_connection_states`, `nibble`, `reconnect_allowed`
+// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `DeviceRows`
 
 Future<String> startPairing({required int durationMs}) =>
     RustLib.instance.api.crateApiPairingStartPairing(durationMs: durationMs);
@@ -40,6 +41,17 @@ Future<void> rejectPairing({String? sessionId}) =>
 
 Future<List<TrustedDeviceDto>> trustedDevices() =>
     RustLib.instance.api.crateApiPairingTrustedDevices();
+
+/// This device's DeviceId and the name it presents in the pairing hello;
+/// `None` when no identity exists yet (local-only mode).
+Future<LocalDeviceDto?> localDevice() =>
+    RustLib.instance.api.crateApiPairingLocalDevice();
+
+/// Dials a trusted, non-revoked peer now, bypassing backoff and initiator
+/// preference. An attempt already in flight is not doubled, and a live
+/// session is kept.
+Future<void> connectDeviceNow({required String deviceId}) =>
+    RustLib.instance.api.crateApiPairingConnectDeviceNow(deviceId: deviceId);
 
 Future<NetworkPreferencesDto> networkPreferences() =>
     RustLib.instance.api.crateApiPairingNetworkPreferences();

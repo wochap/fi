@@ -1,4 +1,5 @@
 import 'package:fi/src/rust/api/collections.dart' as collections;
+import 'package:fi/src/rust/api/diagnostics.dart' as diagnostics;
 import 'package:fi/src/rust/api/lifecycle.dart' as lifecycle;
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/src/rust/api/pairing.dart' as pairing;
@@ -37,6 +38,25 @@ abstract interface class CollectionBridge {
   /// Version, short source commit hash and dirty flag of this build. Needs no
   /// initialized core.
   Future<BuildInfoDto> buildInfo();
+
+  /// This device's DeviceId and pairing name; null when networking is not set
+  /// up.
+  Future<LocalDeviceDto?> localDevice();
+
+  /// Dials a trusted, non-revoked device now. Throws the typed failure.
+  Future<void> connectDeviceNow(String deviceId);
+
+  /// Retained log lines for one peer, oldest first.
+  Future<List<LogEventDto>> recentDeviceLogs(String deviceId, int limit);
+
+  /// Retained log lines that name no peer, oldest first.
+  Future<List<LogEventDto>> recentLocalLogs(int limit);
+
+  /// Version text the diagnostic block reports on its first line.
+  Future<void> setBuildInfo(String version);
+
+  /// Secret-free plain-text diagnostic block for one device.
+  Future<String> diagnosticBlock(String deviceId);
   Future<void> startPairing(int durationMs);
   Future<void> stopPairing();
   Future<void> connectPairingCandidate(PairingCandidateDto candidate);
@@ -244,6 +264,23 @@ final class RustCollectionBridge implements CollectionBridge {
   Future<NetworkPortsDto> networkPorts() => lifecycle.networkPorts();
   @override
   Future<BuildInfoDto> buildInfo() => lifecycle.buildInfo();
+  @override
+  Future<LocalDeviceDto?> localDevice() => pairing.localDevice();
+  @override
+  Future<void> connectDeviceNow(String deviceId) =>
+      pairing.connectDeviceNow(deviceId: deviceId);
+  @override
+  Future<List<LogEventDto>> recentDeviceLogs(String deviceId, int limit) =>
+      diagnostics.recentDeviceLogs(deviceId: deviceId, limit: limit);
+  @override
+  Future<List<LogEventDto>> recentLocalLogs(int limit) =>
+      diagnostics.recentLocalLogs(limit: limit);
+  @override
+  Future<void> setBuildInfo(String version) =>
+      diagnostics.setBuildInfo(version: version);
+  @override
+  Future<String> diagnosticBlock(String deviceId) =>
+      diagnostics.diagnosticBlock(deviceId: deviceId);
   @override
   Future<void> startPairing(int durationMs) async =>
       pairing.startPairing(durationMs: durationMs);
