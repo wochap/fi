@@ -1662,23 +1662,29 @@ class _EditableTitleState extends State<_EditableTitle> {
     if (!_editing) {
       return GestureDetector(
         onDoubleTap: _start,
-        child: Text(
-          widget.name,
-          key: const Key('collection-title'),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: widget.style,
+        // Holds the editor's caret room, so entering edit mode moves nothing beside the title.
+        child: Padding(
+          padding: const EdgeInsetsDirectional.only(
+            end: FiEditableText.caretAllowance,
+          ),
+          child: Text(
+            widget.name,
+            key: const Key('collection-title'),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: widget.style,
+          ),
         ),
       );
     }
     return CallbackShortcuts(
       bindings: {const SingleActivator(LogicalKeyboardKey.escape): _cancel},
-      child: FiTextInput(
+      child: FiEditableText(
         key: const Key('collection-title-input'),
         controller: _text,
         focusNode: _focus,
-        style: widget.style,
-        textInputAction: TextInputAction.done,
+        // Resolved the way the title's `Text` resolves it, so both render alike.
+        style: DefaultTextStyle.of(context).style.merge(widget.style),
         onSubmitted: (_) => _submit(),
       ),
     );

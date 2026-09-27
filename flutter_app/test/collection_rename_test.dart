@@ -165,4 +165,68 @@ void main() {
     expect(bridge.renames, ['Gym']);
     expect(find.text('Gym'), findsWidgets);
   });
+
+  testWidgets('wide layout: the record count stays put and the editor fits', (
+    tester,
+  ) async {
+    await _useSize(tester, const Size(1280, 800));
+    final bridge = seeded(1);
+    await openCollection(tester, bridge);
+    final count = find.textContaining(RegExp(r'^\d+ records? · '));
+    final before = tester.getTopLeft(count);
+    final titleWidth = tester
+        .getSize(
+          find.ancestor(of: _title, matching: find.byType(Padding)).first,
+        )
+        .width;
+
+    await tester.tap(_title);
+    await tester.pump(kDoubleTapMinTime);
+    await tester.tap(_title);
+    await tester.pumpAndSettle();
+
+    expect(tester.getTopLeft(count), before);
+    expect(tester.getSize(_input).width, lessThanOrEqualTo(titleWidth));
+  });
+
+  testWidgets('narrow layout: Schema stays put and the editor is capped', (
+    tester,
+  ) async {
+    await _useSize(tester, const Size(390, 844));
+    final bridge = seeded(1);
+    await openCollection(tester, bridge);
+    final schema = find.byTooltip('Schema');
+    final before = tester.getTopLeft(schema);
+
+    await tester.tap(_title);
+    await tester.pump(kDoubleTapMinTime);
+    await tester.tap(_title);
+    await tester.pumpAndSettle();
+
+    expect(tester.getTopLeft(schema), before);
+    final column = find
+        .ancestor(of: _input, matching: find.byType(Column))
+        .first;
+    expect(
+      tester.getSize(_input).width,
+      lessThanOrEqualTo(tester.getSize(column).width),
+    );
+  });
+
+  testWidgets('a name longer than the header stops at the cap', (tester) async {
+    await _startEditing(tester, size: const Size(390, 844));
+    final schema = find.byTooltip('Schema');
+    final before = tester.getTopLeft(schema);
+    await tester.enterText(
+      _input,
+      'Headaches and migraines and every other kind of pain',
+    );
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    final column = find
+        .ancestor(of: _input, matching: find.byType(Column))
+        .first;
+    expect(tester.getSize(_input).width, tester.getSize(column).width);
+    expect(tester.getTopLeft(schema), before);
+  });
 }

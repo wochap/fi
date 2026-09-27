@@ -614,4 +614,129 @@ void main() {
     expect(find.bySemanticsLabel('Type, required'), findsOneWidget);
     expect(find.text(' *'), findsOneWidget);
   });
+
+  group('FiEditableText', () {
+    const heading = TextStyle(fontSize: 32, height: 1.2);
+    final editor = find.byKey(const Key('editor'));
+
+    Future<TextEditingController> pumpEditor(
+      WidgetTester tester,
+      String text, {
+      double parent = 600,
+      double scale = 1,
+    }) async {
+      final controller = TextEditingController(text: text);
+      final focus = FocusNode();
+      addTearDown(controller.dispose);
+      addTearDown(focus.dispose);
+      await _pump(
+        tester,
+        900,
+        MediaQuery(
+          data: MediaQueryData(textScaler: TextScaler.linear(scale)),
+          child: Row(
+            children: [
+              Flexible(
+                child: FiEditableText(
+                  key: const Key('editor'),
+                  controller: controller,
+                  focusNode: focus,
+                  style: heading,
+                ),
+              ),
+              Text('Headaches', key: const Key('reference'), style: heading),
+            ],
+          ),
+        ),
+        childWidth: parent,
+      );
+      return controller;
+    }
+
+    testWidgets('draws no box', (tester) async {
+      await pumpEditor(tester, 'Headaches');
+      expect(
+        find.descendant(of: editor, matching: find.byType(InputDecorator)),
+        findsNothing,
+      );
+      expect(
+        find.descendant(of: editor, matching: find.byType(DecoratedBox)),
+        findsNothing,
+      );
+      expect(
+        find.descendant(of: editor, matching: find.byType(EditableText)),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('is as wide as the same text plus the caret', (tester) async {
+      await pumpEditor(tester, 'Headaches', parent: 800);
+      final text = tester.getSize(find.byKey(const Key('reference'))).width;
+      expect(
+        tester.getSize(editor).width,
+        moreOrLessEquals(text + FiEditableText.caretAllowance),
+      );
+    });
+
+    testWidgets('widens as text is appended', (tester) async {
+      final controller = await pumpEditor(tester, 'Headaches', parent: 800);
+      final before = tester.getSize(editor).width;
+      controller.text = 'Headaches and';
+      await tester.pump();
+      expect(tester.getSize(editor).width, greaterThan(before));
+    });
+
+    testWidgets('stops at the parent width', (tester) async {
+      final controller = await pumpEditor(tester, 'Headaches', parent: 300);
+      controller.text = 'Headaches and migraines and more';
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+      // The reference text takes its share of the 300px row first.
+      final reference = tester
+          .getSize(find.byKey(const Key('reference')))
+          .width;
+      expect(tester.getSize(editor).width, moreOrLessEquals(300 - reference));
+    });
+
+    testWidgets('keeps a minimum width when empty', (tester) async {
+      await pumpEditor(tester, '');
+      expect(tester.getSize(editor).width, greaterThan(32));
+    });
+
+    testWidgets('is one line of the style tall, not an input box', (
+      tester,
+    ) async {
+      await pumpEditor(tester, 'Headaches');
+      final height = tester.getSize(editor).height;
+      // The reference `Text` is one line of the same style.
+      expect(height, tester.getSize(find.byKey(const Key('reference'))).height);
+      for (final size in InputSize.values) {
+        expect(
+          height,
+          isNot(
+            moreOrLessEquals(
+              Nocturne.inputHeight(tester.element(editor), size),
+            ),
+          ),
+        );
+      }
+    });
+
+    testWidgets('does not clip the last glyph at text scale 1.3', (
+      tester,
+    ) async {
+      await pumpEditor(tester, 'Headaches', parent: 800, scale: 1.3);
+      final state = tester.state<EditableTextState>(
+        find.descendant(of: editor, matching: find.byType(EditableText)),
+      );
+      final render = state.renderEditable;
+      final text = tester.getSize(find.byKey(const Key('reference'))).width;
+      expect(render.size.width, greaterThanOrEqualTo(text));
+      expect(render.maxScrollExtent, 0);
+      expect(
+        tester.getSize(editor).height,
+        tester.getSize(find.byKey(const Key('reference'))).height,
+      );
+    });
+  });
 }

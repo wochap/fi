@@ -651,3 +651,83 @@ class _SliderLabels extends StatelessWidget {
     );
   }
 }
+
+/// In-place editing of a displayed title or label: the text in the caller's style with a caret
+/// and selection, and no box. Unlike the inputs above it has no size token and no fixed height;
+/// its height is the style's line height and its width follows the text, from [minWidth] (a few
+/// characters in the style when null) up to the width the parent allows. Past that the text
+/// scrolls to keep the caret in view.
+class FiEditableText extends StatelessWidget {
+  const FiEditableText({
+    super.key,
+    required this.controller,
+    required this.focusNode,
+    required this.style,
+    this.onSubmitted,
+    this.textInputAction = TextInputAction.done,
+    this.minWidth,
+  });
+
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final TextStyle style;
+  final ValueChanged<String>? onSubmitted;
+  final TextInputAction textInputAction;
+  final double? minWidth;
+
+  static const double _cursorWidth = 2;
+
+  /// Width added to the measured text for the caret at the end, so it is never clipped. A
+  /// display widget the editor replaces can reserve the same room to keep its neighbours still.
+  static const double caretAllowance = _cursorWidth + 2;
+
+  double _measure(String text, TextScaler scaler, TextDirection direction) {
+    final painter = TextPainter(
+      text: TextSpan(text: text, style: style),
+      textDirection: direction,
+      textScaler: scaler,
+      maxLines: 1,
+    )..layout();
+    final width = painter.width;
+    painter.dispose();
+    return width;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scaler = MediaQuery.textScalerOf(context);
+    final direction = Directionality.of(context);
+    final floor = minWidth ?? _measure('———', scaler, direction);
+    return LayoutBuilder(
+      builder: (context, constraints) => ValueListenableBuilder(
+        valueListenable: controller,
+        builder: (context, value, child) {
+          final wanted =
+              _measure(value.text, scaler, direction) + caretAllowance;
+          final cap = constraints.maxWidth;
+          final width = math.min(math.max(wanted, floor), cap);
+          return SizedBox(width: width, child: child);
+        },
+        child: EditableText(
+          controller: controller,
+          focusNode: focusNode,
+          style: style,
+          textScaler: scaler,
+          maxLines: 1,
+          cursorWidth: _cursorWidth,
+          cursorColor:
+              theme.textSelectionTheme.cursorColor ?? theme.colorScheme.primary,
+          backgroundCursorColor: theme.colorScheme.onSurface,
+          selectionColor:
+              theme.textSelectionTheme.selectionColor ??
+              theme.colorScheme.primary.withValues(alpha: .4),
+          selectionControls: materialTextSelectionControls,
+          enableInteractiveSelection: true,
+          textInputAction: textInputAction,
+          onSubmitted: onSubmitted,
+        ),
+      ),
+    );
+  }
+}
