@@ -12,7 +12,7 @@ Rust subsystems SHALL emit structured tracing for application lifecycle, command
 - **THEN** tracing records public DeviceId, state transition, timing, and document-count context without synchronized finance contents
 
 ### Requirement: Sensitive values are never logged
-Tracing and formatted errors MUST NOT include permanent private keys, raw discovery secrets, SAS values, TLS exporter or handshake secret material, transcript-derived confirmation/provisioning keys, or plaintext protected provisioning payloads.
+Tracing and formatted errors MUST NOT include permanent private keys, raw discovery secrets, SAS values, TLS exporter or handshake secret material, transcript-derived confirmation/provisioning keys, or plaintext protected provisioning payloads. The same prohibition applies to every form in which a tracing event is retained or re-exposed: the in-memory recent-event buffer, the per-device log query results returned to the UI, and the plain-text diagnostic block the user can copy. Retention MUST NOT capture fields at a level or in a form that the redacting `Debug`/display wrappers would not have produced for the stdout or logcat sink.
 
 #### Scenario: Pairing fails after SAS derivation
 - **WHEN** a later pairing step reports an error
@@ -22,6 +22,10 @@ Tracing and formatted errors MUST NOT include permanent private keys, raw discov
 - **WHEN** key wrapping, unwrapping, or secret persistence fails
 - **THEN** logs identify the adapter and operation without secret bytes, ciphertext dumps, or key aliases containing secret data
 
+#### Scenario: Retained events stay redacted
+- **WHEN** a secret-bearing value is formatted into an event that is both written to the sink and retained
+- **THEN** the retained event's fields hold the same redacted text as the sink output, and the value cannot be recovered from the buffer or the diagnostic block
+
 ### Requirement: Secret-safe types
 Secret-bearing Rust values SHALL use wrappers that redact or omit `Debug`/display output, minimize cloning, and zeroize owned plaintext buffers where practical.
 
@@ -30,8 +34,12 @@ Secret-bearing Rust values SHALL use wrappers that redact or omit `Debug`/displa
 - **THEN** the secret field is redacted and its length/value cannot be recovered from the output
 
 ### Requirement: Logging leakage tests
-Automated tests SHALL run representative identity, pairing, discovery, provisioning, and failure paths with sentinel secret values and assert captured formatted events do not contain those sentinels or SAS representations.
+Automated tests SHALL run representative identity, pairing, discovery, provisioning, and failure paths with sentinel secret values and assert captured formatted events do not contain those sentinels or SAS representations. The same test SHALL also assert that the retained recent-event buffer and a diagnostic block produced from it contain none of the sentinels or SAS representations.
 
 #### Scenario: Sentinel scan
 - **WHEN** the secret-safety test captures all configured trace levels for representative operations
 - **THEN** no forbidden sentinel material appears in any event or error string
+
+#### Scenario: Sentinel scan of retained events
+- **WHEN** the same operations run with the retention layer installed and a diagnostic block is produced
+- **THEN** neither the retained events nor the block contain the sentinel material or the SAS

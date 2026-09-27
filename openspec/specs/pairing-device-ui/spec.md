@@ -20,7 +20,7 @@ Flutter SHALL provide controls to start and stop pairing mode, show its remainin
 - **THEN** it is not offered for selection, and the list explains that the remaining devices are already paired rather than appearing empty
 
 ### Requirement: SAS confirmation UI
-Flutter SHALL display the zero-padded six-digit SAS supplied by Rust for the current attempt and provide explicit confirm and reject actions, without calculating or transmitting the SAS itself.
+Flutter SHALL display the zero-padded six-digit SAS supplied by Rust for the current attempt and provide explicit confirm and reject actions, without calculating or transmitting the SAS itself. Beside the SAS, Flutter SHALL display the peer DeviceId supplied by Rust for the current attempt, so both users can compare the identity of the device they are about to trust as well as the code. The peer id SHALL be shown in full in a selectable monospace presentation, and MUST NOT be shown before Rust reports it for the awaiting-confirmation state.
 
 #### Scenario: Codes match
 - **WHEN** the user confirms the displayed SAS
@@ -30,10 +30,16 @@ Flutter SHALL display the zero-padded six-digit SAS supplied by Rust for the cur
 - **WHEN** the user rejects a mismatched SAS
 - **THEN** Flutter invokes Rust rejection and displays the resulting non-trusted terminal state
 
+#### Scenario: Peer identity is shown at confirmation
+- **WHEN** Rust reports the awaiting-confirmation state with a peer DeviceId
+- **THEN** the confirmation view shows that DeviceId beside the SAS, labelled as the other device's id, and the candidate list before connection still showed only the endpoint
+
 ### Requirement: Trusted-device list
 The devices screen SHALL list locally trusted and revoked device records with friendly name, DeviceId presentation, connectivity, last seen, last sync, and status obtained through Rust queries/events. Last sync SHALL reflect the most recent time the peer reached the synced state, not only the pairing time, and SHALL be carried by the same connection-state emission that reports the synced state so the row never shows synced connectivity alongside a never-synced timestamp.
 
 Last seen and last sync SHALL be presented as status times, not exact values: an absent value reads "never"; a value under one minute old reads "just now"; under one hour reads a whole number of minutes ago; under twenty-four hours reads a whole number of hours ago; anything older reads as a short local date and time with weekday, day, month, and hour:minute, adding the year only when it differs from the current year. A value in the future because of clock skew SHALL read as "just now". Relative wording SHALL be refreshed at least once per minute while the devices screen is mounted, without waiting for a device event. Record field values, chart axes, and query output SHALL keep their exact formatting; this presentation applies to status metadata only.
+
+Each trusted row SHALL offer a "Details" disclosure, collapsed by default, that reveals the peer's diagnostic detail: the full DeviceId, connection state, the endpoint being tried or last tried, the last attempt time as a status time, the failure reason text when the last attempt failed, the local device's bound sync port, and the retained log lines for that peer followed by the retained local-device lines. The disclosure SHALL contain a "Reconnect" action that invokes the manual reconnect command and a "Copy all" action that places the peer's diagnostic block on the clipboard and confirms the copy. "Reconnect" SHALL be unavailable on a revoked row and while a reconnect for that row is in flight. Log lines SHALL be presented as technical text without reformatting their fields.
 
 #### Scenario: Device connects and syncs
 - **WHEN** Rust advances a trusted peer from connected through syncing to synced
@@ -58,6 +64,26 @@ Last seen and last sync SHALL be presented as status times, not exact values: an
 #### Scenario: Record values unaffected
 - **WHEN** a record has a Date & time field
 - **THEN** its list row and editor still show the exact `yyyy-MM-dd HH:mm` value
+
+#### Scenario: Details are hidden until asked for
+- **WHEN** the devices screen renders a trusted row
+- **THEN** the endpoint, failure text, port, and log lines are not visible until the user opens that row's Details
+
+#### Scenario: Failed peer shows why
+- **WHEN** a peer's last attempt failed with a TLS failure at `192.168.1.20:47380` and the user opens Details
+- **THEN** the panel shows the failure category and message, the endpoint, when the attempt happened, and the log lines for that peer
+
+#### Scenario: Reconnect from details
+- **WHEN** the user presses Reconnect on a failed peer
+- **THEN** the manual reconnect command is invoked for that DeviceId, the action is disabled until it returns, and the row's connection tag follows the state emissions
+
+#### Scenario: Copy all confirms
+- **WHEN** the user presses Copy all
+- **THEN** the clipboard receives the diagnostic block for that peer and the screen shows a brief confirmation
+
+#### Scenario: Revoked row offers no reconnect
+- **WHEN** a row's record is revoked and its Details are opened
+- **THEN** the panel shows the retained lines and Copy all, but no Reconnect action
 
 ### Requirement: Device rename and revoke actions
 Flutter SHALL expose friendly-name editing and confirmed revoke/unpair actions that delegate to Rust and refresh persisted device state.
@@ -283,3 +309,14 @@ While Discoverable is off, the idle pairing card SHALL state that discovery is o
 #### Scenario: Idle card with discovery on
 - **WHEN** Discoverable is on and pairing is idle
 - **THEN** the pairing card shows only its usual idle copy
+
+### Requirement: This device shows its identity
+The "This device" section of the devices screen SHALL show the local DeviceId in full, in a selectable monospace presentation, together with the name this device presents to peers during pairing, obtained from Rust. When Rust reports that no identity is available, the section SHALL say that networking is not set up instead of showing an empty identifier.
+
+#### Scenario: Identity shown
+- **WHEN** the devices screen is opened on a networked device
+- **THEN** the "This device" section shows the local DeviceId and pairing name, and the id equals the one a paired peer lists for this device
+
+#### Scenario: Identity copyable
+- **WHEN** the user selects the local DeviceId text
+- **THEN** the full identifier can be copied, not a shortened form

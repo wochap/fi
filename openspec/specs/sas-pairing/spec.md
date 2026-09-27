@@ -11,6 +11,11 @@ failure of the local pairing attempt; the discoverable window, the candidate lis
 outbound attempt SHALL survive it. An outbound attempt refused by a busy peer SHALL return the local
 device to discoverable rather than to failed, so the user can retry without restarting pairing.
 
+The awaiting-confirmation state SHALL identify the peer by the DeviceId derived from the permanent
+public key the peer presented in its authenticated hello, the same key that entered the SAS
+transcript. The state MUST NOT carry the SAS-derivation inputs, and the DeviceId it carries MUST be
+the one that the committing and trusted states later record.
+
 #### Scenario: Candidate selected
 - **WHEN** the user selects a live pairing candidate
 - **THEN** state leaves discoverable, enters connecting, and identifies the ephemeral candidate without granting trust
@@ -38,6 +43,10 @@ device to discoverable rather than to failed, so the user can retry without rest
 - **WHEN** an inbound pairing connection arrives while the local device is awaiting confirmation or
   committing
 - **THEN** it is refused without disturbing the in-progress commitment and without failing the session
+
+#### Scenario: Awaiting confirmation identifies the peer
+- **WHEN** the SAS becomes ready for a session
+- **THEN** the awaiting-confirmation state carries the peer DeviceId derived from the authenticated hello key, and the DeviceId recorded on commit for that session is the same value
 
 ### Requirement: Pairing-specific authenticated channel
 Pairing SHALL use QUIC TLS 1.3 with ALPN `fi-pair/1`, require both peers to present structurally valid identity-key certificates, verify handshake signatures and hello/certificate key equality, and MUST NOT register the connection with the Repo transport.
