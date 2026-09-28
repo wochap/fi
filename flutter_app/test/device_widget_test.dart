@@ -1,4 +1,5 @@
 import 'package:clock/clock.dart';
+import 'package:fi/theme/nocturne_widgets.dart';
 import 'package:fi/app.dart';
 import 'package:fi/pairing_card.dart';
 import 'package:fi/src/rust/api/models.dart';
@@ -493,7 +494,7 @@ void main() {
     await tester.pumpAndSettle();
 
     bool switchValue(String key) =>
-        tester.widget<SwitchListTile>(find.byKey(Key(key))).value;
+        tester.widget<FiSwitchTile>(find.byKey(Key(key))).value;
     expect(switchValue('pref-discoverable'), isFalse);
     expect(switchValue('pref-sync'), isTrue);
 

@@ -1,3 +1,5 @@
+import 'package:fi/theme/nocturne_widgets.dart';
+import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/collections_page.dart';
 import 'package:fi/controllers.dart';
 import 'package:fi/field_registry.dart';
@@ -109,7 +111,7 @@ Future<void> openFieldEditor(WidgetTester tester, String fieldName) async {
 }
 
 Future<void> toggleRequired(WidgetTester tester) async {
-  await tester.tap(find.widgetWithText(SwitchListTile, 'Required'));
+  await tester.tap(find.widgetWithText(FiSwitchTile, 'Required'));
   await tester.pumpAndSettle();
 }
 
@@ -140,7 +142,7 @@ Future<void> dragOption(WidgetTester tester, String id, int rows) async {
   final height = tester.getSize(row).height;
   final gesture = await tester.startGesture(
     tester.getCenter(
-      find.descendant(of: row, matching: find.byIcon(Icons.drag_handle)),
+      find.descendant(of: row, matching: find.byIcon(FiIcons.dragHandle)),
     ),
   );
   await tester.pump();
@@ -330,7 +332,7 @@ void main() {
     await pumpPage(tester, seeded.controller);
 
     // The list marks it before the user opens anything.
-    expect(find.byIcon(Icons.warning_amber), findsWidgets);
+    expect(find.byIcon(FiIcons.warning), findsWidgets);
 
     await tester.tap(find.text('7'));
     await tester.pumpAndSettle();
@@ -378,7 +380,7 @@ void main() {
     expect(
       find.descendant(
         of: find.byKey(const Key('field-default')),
-        matching: find.byIcon(Icons.calendar_today),
+        matching: find.byIcon(FiIcons.date),
       ),
       findsOneWidget,
     );
@@ -469,7 +471,7 @@ void main() {
     expect(
       find.descendant(
         of: find.byKey(const Key('field-default')),
-        matching: find.byType(SwitchListTile),
+        matching: find.byType(FiSwitchTile),
       ),
       findsNothing,
     );
@@ -587,7 +589,7 @@ void main() {
     ]);
     expect(find.text('Choice · Low, Medium, High'), findsOneWidget);
     // Options live in the field editor only.
-    expect(find.byIcon(Icons.list_alt), findsNothing);
+    expect(find.byIcon(FiIcons.choice), findsNothing);
   });
 
   testWidgets('editing options sends only what changed', (tester) async {
@@ -706,8 +708,8 @@ void main() {
   group('Show as slider', () {
     final sliderSwitch = find.byKey(const Key('field-slider'));
 
-    SwitchListTile switchTile(WidgetTester tester) =>
-        tester.widget<SwitchListTile>(sliderSwitch);
+    FiSwitchTile switchTile(WidgetTester tester) =>
+        tester.widget<FiSwitchTile>(sliderSwitch);
 
     Future<void> fillBounds(WidgetTester tester) async {
       await tester.enterText(find.byKey(const Key('field-minimum')), '1');

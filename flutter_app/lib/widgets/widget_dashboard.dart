@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/controllers.dart';
 import 'package:fi/help_button.dart';
 import 'package:fi/help_copy.dart';
@@ -55,13 +56,13 @@ final class CollectionDashboard extends StatelessWidget {
               onPressed: definitions.length < 2
                   ? null
                   : () => unawaited(showWidgetReorder(context, controller)),
-              icon: const Icon(Icons.swap_vert),
+              icon: const Icon(FiIcons.reorder),
               label: const Text('Reorder'),
             ),
             TextButton.icon(
               key: const Key('add-widget'),
               onPressed: () => unawaited(showWidgetEditor(context, controller)),
-              icon: const Icon(Icons.add_box_outlined),
+              icon: const Icon(FiIcons.add),
               label: const Text('Add widget'),
             ),
           ],
@@ -124,7 +125,7 @@ final class CollectionDashboard extends StatelessWidget {
                       child: const Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.add),
+                          Icon(FiIcons.add),
                           SizedBox(width: 8),
                           Text('Add widget'),
                         ],
@@ -415,7 +416,7 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
           errors: shown.of('title'),
           onChanged: (_) => setState(() => _edited('title')),
         ),
-        SwitchListTile(
+        FiSwitchTile(
           key: const Key('reuse-query'),
           contentPadding: EdgeInsets.zero,
           title: const Text('Use a saved query'),
@@ -497,7 +498,7 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
         if (existing != null)
           FormHeaderAction(
             key: const Key('remove-widget'),
-            icon: Icons.delete_outline,
+            icon: FiIcons.delete,
             label: 'Remove',
             tooltip: 'Remove widget',
             onPressed: () async {
@@ -685,7 +686,7 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
       ),
     ],
     'core.line-chart' => [
-      SwitchListTile(
+      FiSwitchTile(
         key: const Key('config-show-points'),
         contentPadding: EdgeInsets.zero,
         title: const Text('Show points'),
@@ -830,11 +831,11 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
 }
 
 IconData _typeIcon(String widgetType) => switch (widgetType) {
-  'core.aggregate-number' => Icons.tag,
-  'core.line-chart' => Icons.show_chart,
-  'core.bar-chart' => Icons.bar_chart,
-  'core.scatter-plot' => Icons.scatter_plot_outlined,
-  _ => Icons.widgets_outlined,
+  'core.aggregate-number' => FiIcons.number,
+  'core.line-chart' => FiIcons.lineChart,
+  'core.bar-chart' => FiIcons.barChart,
+  'core.scatter-plot' => FiIcons.scatterChart,
+  _ => FiIcons.widget,
 };
 
 StructuredValueDto _emptyStructuredMap() => _structuredMap(const {});

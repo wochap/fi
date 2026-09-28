@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/controllers.dart';
 import 'package:fi/field_registry.dart';
 import 'package:fi/help_button.dart';
@@ -61,7 +62,7 @@ class CollectionsPage extends StatelessWidget {
                   PopupMenuButton<String>(
                     key: const Key('collections-transfer-menu'),
                     tooltip: 'Import and export',
-                    icon: Icon(Icons.import_export, color: Nocturne.muted(.7)),
+                    icon: Icon(FiIcons.importExport, color: Nocturne.muted(.7)),
                     onSelected: (action) => unawaited(switch (action) {
                       'import-json' => _importJson(context),
                       'export-all' => _exportAll(context),
@@ -90,7 +91,7 @@ class CollectionsPage extends StatelessWidget {
                         ? FilledButton.styleFrom(minimumSize: const Size(0, 44))
                         : null,
                     onPressed: () => _editCollection(context),
-                    icon: const Icon(Icons.add),
+                    icon: const Icon(FiIcons.add),
                     label: Text(phone ? 'New' : 'New collection'),
                   ),
                 ],
@@ -144,7 +145,7 @@ class CollectionsPage extends StatelessWidget {
       constraints: const BoxConstraints(minHeight: 36),
       child: Row(
         children: [
-          const IconTile(Icons.grid_view_outlined),
+          const IconTile(FiIcons.collection),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -170,7 +171,7 @@ class CollectionsPage extends StatelessWidget {
             ),
           ),
           PopupMenuButton<String>(
-            icon: Icon(Icons.more_vert, color: Nocturne.muted(.7)),
+            icon: Icon(FiIcons.more, color: Nocturne.muted(.7)),
             onSelected: (action) {
               switch (action) {
                 case 'rename':
@@ -464,7 +465,7 @@ class CollectionsPage extends StatelessWidget {
                   child: FloatingActionButton.extended(
                     tooltip: 'New record',
                     onPressed: () => _recordEditor(context, schema),
-                    icon: const Icon(Icons.add, size: 18),
+                    icon: const Icon(FiIcons.add, size: 18),
                     label: const Text('Record'),
                   ),
                 ),
@@ -525,7 +526,7 @@ class CollectionsPage extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(
-                          Icons.arrow_back,
+                          FiIcons.back,
                           size: 13,
                           color: Nocturne.muted(.55),
                         ),
@@ -568,13 +569,13 @@ class CollectionsPage extends StatelessWidget {
         const SizedBox(width: 16),
         OutlinedButton.icon(
           onPressed: () => _schemaEditor(context, schema),
-          icon: const Icon(Icons.tune),
+          icon: const Icon(FiIcons.filter),
           label: const Text('Schema'),
         ),
         const SizedBox(width: 8),
         OutlinedButton.icon(
           onPressed: () => _queryEditor(context, schema),
-          icon: const Icon(Icons.query_stats),
+          icon: const Icon(FiIcons.query),
           label: const Text('Queries'),
         ),
         const SizedBox(width: 8),
@@ -583,13 +584,13 @@ class CollectionsPage extends StatelessWidget {
           onPressed: controller.records.isEmpty
               ? null
               : controller.startSelection,
-          icon: const Icon(Icons.check_box_outlined),
+          icon: const Icon(FiIcons.select),
           label: const Text('Select'),
         ),
         const SizedBox(width: 8),
         FilledButton.icon(
           onPressed: () => _recordEditor(context, schema),
-          icon: const Icon(Icons.add),
+          icon: const Icon(FiIcons.add),
           label: const Text('New record'),
         ),
       ],
@@ -615,7 +616,7 @@ class CollectionsPage extends StatelessWidget {
           style: button,
           tooltip: 'Back to collections',
           onPressed: () => unawaited(controller.selectCollection(null)),
-          icon: const Icon(Icons.arrow_back, size: 20),
+          icon: const Icon(FiIcons.back, size: 20),
         ),
         const SizedBox(width: 2),
         Expanded(
@@ -643,13 +644,13 @@ class CollectionsPage extends StatelessWidget {
           style: button,
           tooltip: 'Schema',
           onPressed: () => _schemaEditor(context, schema),
-          icon: const Icon(Icons.tune, size: 20),
+          icon: const Icon(FiIcons.filter, size: 20),
         ),
         IconButton(
           style: button,
           tooltip: 'Queries',
           onPressed: () => _queryEditor(context, schema),
-          icon: const Icon(Icons.query_stats, size: 20),
+          icon: const Icon(FiIcons.query, size: 20),
         ),
         IconButton(
           style: button,
@@ -658,7 +659,7 @@ class CollectionsPage extends StatelessWidget {
           onPressed: controller.records.isEmpty
               ? null
               : controller.startSelection,
-          icon: const Icon(Icons.check_box_outlined, size: 20),
+          icon: const Icon(FiIcons.select, size: 20),
         ),
       ],
     );
@@ -711,7 +712,7 @@ class CollectionsPage extends StatelessWidget {
                     const Padding(
                       padding: EdgeInsets.only(right: 6),
                       child: Icon(
-                        Icons.warning_amber,
+                        FiIcons.warning,
                         size: 16,
                         color: Nocturne.error,
                       ),
@@ -741,7 +742,7 @@ class CollectionsPage extends StatelessWidget {
                         style: IconButton.styleFrom(
                           foregroundColor: Nocturne.muted(.5),
                         ),
-                        icon: const Icon(Icons.delete_outline),
+                        icon: const Icon(FiIcons.delete),
                         onPressed: () =>
                             unawaited(controller.deleteRecord(record.id)),
                       ),
@@ -826,11 +827,7 @@ class CollectionsPage extends StatelessWidget {
             if (!record.valid)
               const Padding(
                 padding: EdgeInsets.only(right: 8),
-                child: Icon(
-                  Icons.warning_amber,
-                  size: 16,
-                  color: Nocturne.error,
-                ),
+                child: Icon(FiIcons.warning, size: 16, color: Nocturne.error),
               ),
             Expanded(
               child: Text(
@@ -871,7 +868,7 @@ class CollectionsPage extends StatelessWidget {
                 style: IconButton.styleFrom(
                   foregroundColor: Nocturne.muted(.45),
                 ),
-                icon: const Icon(Icons.delete_outline, size: 18),
+                icon: const Icon(FiIcons.delete, size: 18),
                 onPressed: () => unawaited(controller.deleteRecord(record.id)),
               ),
           ],
@@ -1043,7 +1040,7 @@ class CollectionsPage extends StatelessWidget {
                     alignment: Alignment.centerLeft,
                     child: TextButton.icon(
                       onPressed: () => setState(() => adding = true),
-                      icon: const Icon(Icons.add),
+                      icon: const Icon(FiIcons.add),
                       label: const Text('Add field'),
                     ),
                   ),
@@ -1071,7 +1068,7 @@ class CollectionsPage extends StatelessWidget {
                   child: Padding(
                     padding: const EdgeInsets.all(8),
                     child: Icon(
-                      Icons.drag_indicator,
+                      FiIcons.dragHandle,
                       size: 18,
                       color: Nocturne.muted(.45),
                     ),
@@ -1092,7 +1089,7 @@ class CollectionsPage extends StatelessWidget {
                   style: IconButton.styleFrom(
                     foregroundColor: Nocturne.muted(.5),
                   ),
-                  icon: const Icon(Icons.delete_outline),
+                  icon: const Icon(FiIcons.delete),
                   onPressed: () => unawaited(controller.removeField(field.id)),
                 ),
               ],
@@ -1119,7 +1116,7 @@ class CollectionsPage extends StatelessWidget {
     );
     return _SheetRow(
       key: ValueKey('computed-${item.id}'),
-      icon: Icons.functions,
+      icon: FiIcons.formula,
       title: item.name,
       subtitle: editable
           ? null
@@ -1135,12 +1132,12 @@ class CollectionsPage extends StatelessWidget {
         if (editable)
           IconButton(
             tooltip: 'Edit computed field',
-            icon: const Icon(Icons.edit_outlined),
+            icon: const Icon(FiIcons.edit),
             onPressed: open,
           ),
         IconButton(
           tooltip: 'Remove computed field',
-          icon: const Icon(Icons.delete_outline),
+          icon: const Icon(FiIcons.delete),
           onPressed: () => unawaited(controller.removeComputedField(item.id)),
         ),
       ],
@@ -1201,7 +1198,7 @@ class CollectionsPage extends StatelessWidget {
                     schema: schema,
                   ),
                 ),
-                icon: const Icon(Icons.add),
+                icon: const Icon(FiIcons.add),
                 label: const Text('Add computed field'),
               ),
             ),
@@ -1225,7 +1222,7 @@ class CollectionsPage extends StatelessWidget {
                     IconButton(
                       key: ValueKey('edit-query-${item.id}'),
                       tooltip: 'Edit query',
-                      icon: const Icon(Icons.edit_outlined),
+                      icon: const Icon(FiIcons.edit),
                       onPressed: () => unawaited(
                         showSavedQueryEditor(
                           sheet,
@@ -1240,7 +1237,7 @@ class CollectionsPage extends StatelessWidget {
                     ),
                     IconButton(
                       tooltip: 'Remove query',
-                      icon: const Icon(Icons.delete_outline),
+                      icon: const Icon(FiIcons.delete),
                       onPressed: () =>
                           unawaited(controller.removeQueryDefinition(item.id)),
                     ),
@@ -1275,7 +1272,7 @@ class CollectionsPage extends StatelessWidget {
                     deleted: false,
                   ),
                 ),
-                icon: const Icon(Icons.add),
+                icon: const Icon(FiIcons.add),
                 label: const Text('Add record-count query'),
               ),
             ),
@@ -1343,7 +1340,7 @@ class CollectionsPage extends StatelessWidget {
             tooltip: 'Cancel',
             style: onAccent,
             onPressed: controller.clearSelection,
-            icon: const Icon(Icons.close),
+            icon: const Icon(FiIcons.close),
           ),
           const SizedBox(width: 8),
           Text(
@@ -1367,7 +1364,7 @@ class CollectionsPage extends StatelessWidget {
             TextButton.icon(
               style: TextButton.styleFrom(foregroundColor: Nocturne.accent100),
               onPressed: unselected.isEmpty ? null : selectAll,
-              icon: const Icon(Icons.done_all),
+              icon: const Icon(FiIcons.selectAll),
               label: const Text('Select all'),
             ),
             const SizedBox(width: 8),
@@ -1375,7 +1372,7 @@ class CollectionsPage extends StatelessWidget {
               key: const Key('batch-edit'),
               style: outlined,
               onPressed: count == 0 ? null : edit,
-              icon: const Icon(Icons.edit_outlined),
+              icon: const Icon(FiIcons.edit),
               label: const Text('Edit'),
             ),
             const SizedBox(width: 8),
@@ -1383,7 +1380,7 @@ class CollectionsPage extends StatelessWidget {
               key: const Key('batch-delete'),
               style: outlined,
               onPressed: count == 0 ? null : delete,
-              icon: const Icon(Icons.delete_outline),
+              icon: const Icon(FiIcons.delete),
               label: const Text('Delete'),
             ),
           ] else ...[
@@ -1391,21 +1388,21 @@ class CollectionsPage extends StatelessWidget {
               tooltip: 'Select all',
               style: onAccent,
               onPressed: unselected.isEmpty ? null : selectAll,
-              icon: const Icon(Icons.done_all),
+              icon: const Icon(FiIcons.selectAll),
             ),
             IconButton(
               key: const Key('batch-edit'),
               tooltip: 'Edit field',
               style: onAccent,
               onPressed: count == 0 ? null : edit,
-              icon: const Icon(Icons.edit_outlined),
+              icon: const Icon(FiIcons.edit),
             ),
             IconButton(
               key: const Key('batch-delete'),
               tooltip: 'Delete',
               style: onAccent,
               onPressed: count == 0 ? null : delete,
-              icon: const Icon(Icons.delete_outline),
+              icon: const Icon(FiIcons.delete),
             ),
           ],
         ],
@@ -2238,11 +2235,7 @@ class _FieldEditorFormState extends State<_FieldEditorForm> {
             padding: EdgeInsets.only(bottom: 14),
             child: Row(
               children: [
-                Icon(
-                  Icons.add_circle_outline,
-                  size: 18,
-                  color: Nocturne.accent,
-                ),
+                Icon(FiIcons.addCircle, size: 18, color: Nocturne.accent),
                 SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -2304,7 +2297,7 @@ class _FieldEditorFormState extends State<_FieldEditorForm> {
           ),
         ],
         const SizedBox(height: 6),
-        SwitchListTile(
+        FiSwitchTile(
           contentPadding: EdgeInsets.zero,
           title: const Text('Required'),
           subtitle: const Text("Records can't be saved without a value"),
@@ -2313,7 +2306,7 @@ class _FieldEditorFormState extends State<_FieldEditorForm> {
           onChanged: (value) => setState(() => required = value),
         ),
         if (kind == FieldTypeKindDto.text) ...[
-          SwitchListTile(
+          FiSwitchTile(
             contentPadding: EdgeInsets.zero,
             title: const Text('Multiline'),
             subtitle: const Text('Show a text area instead of a single line'),
@@ -2392,7 +2385,7 @@ class _FieldEditorFormState extends State<_FieldEditorForm> {
           ),
         ],
         if (kind == FieldTypeKindDto.integer)
-          SwitchListTile(
+          FiSwitchTile(
             key: const Key('field-slider'),
             contentPadding: EdgeInsets.zero,
             title: const Text('Show as slider'),
@@ -2451,7 +2444,7 @@ class _FieldEditorFormState extends State<_FieldEditorForm> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Icon(
-                  Icons.warning_amber,
+                  FiIcons.warning,
                   size: 16,
                   color: Nocturne.accent300,
                 ),
@@ -2525,7 +2518,7 @@ class _FieldEditorFormState extends State<_FieldEditorForm> {
                   index: index,
                   child: Padding(
                     padding: const EdgeInsets.all(8),
-                    child: Icon(Icons.drag_handle, color: Nocturne.muted(.45)),
+                    child: Icon(FiIcons.dragHandle, color: Nocturne.muted(.45)),
                   ),
                 ),
                 Expanded(
@@ -2542,7 +2535,7 @@ class _FieldEditorFormState extends State<_FieldEditorForm> {
                 IconButton(
                   key: ValueKey('remove-option-${option.id}'),
                   tooltip: 'Remove option',
-                  icon: const Icon(Icons.close),
+                  icon: const Icon(FiIcons.close),
                   onPressed: () => setState(() {
                     options.remove(option);
                     if (defaultValue?.textValue == option.id) {
@@ -2562,7 +2555,7 @@ class _FieldEditorFormState extends State<_FieldEditorForm> {
         onPressed: () => setState(
           () => options.add(_DraftOption(tempOptionId(++addedOptions), '')),
         ),
-        icon: const Icon(Icons.add),
+        icon: const Icon(FiIcons.add),
         label: const Text('Add option'),
       ),
     ),
@@ -2634,10 +2627,12 @@ String _usage(int count) => switch (count) {
 
 IconData _queryIcon(QueryDefinitionDto query) => switch (query.query?.shape) {
   QueryShapeDto(kind: QueryShapeKindDto.scalar, :final aggregation?) =>
-    aggregation.kind == AggregationKindDto.count ? Icons.tag : Icons.functions,
-  QueryShapeDto(kind: QueryShapeKindDto.series) => Icons.show_chart,
-  QueryShapeDto(kind: QueryShapeKindDto.categorySeries) => Icons.bar_chart,
-  _ => Icons.query_stats,
+    aggregation.kind == AggregationKindDto.count
+        ? FiIcons.number
+        : FiIcons.formula,
+  QueryShapeDto(kind: QueryShapeKindDto.series) => FiIcons.lineChart,
+  QueryShapeDto(kind: QueryShapeKindDto.categorySeries) => FiIcons.barChart,
+  _ => FiIcons.query,
 };
 
 /// A stored range bound as a typed value of the field's own kind, so the bound is edited with a

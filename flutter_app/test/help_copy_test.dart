@@ -1,3 +1,4 @@
+import 'package:fi/theme/nocturne_widgets.dart';
 import 'package:fi/help_button.dart';
 import 'package:fi/help_copy.dart';
 import 'package:flutter/material.dart';
@@ -37,7 +38,7 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: StatefulBuilder(
-            builder: (context, setState) => SwitchListTile(
+            builder: (context, setState) => FiSwitchTile(
               title: const Text('Required'),
               secondary: const HelpButton(HelpId.fieldRequired),
               value: switchValue,
@@ -63,7 +64,7 @@ void main() {
     expect(find.byKey(const Key('help-dialog')), findsNothing);
     expect(switchValue, isFalse);
     expect(
-      tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value,
+      tester.widget<FiSwitchTile>(find.byType(FiSwitchTile)).value,
       isFalse,
     );
   });

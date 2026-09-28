@@ -4,12 +4,19 @@ Read this before adding or changing any Flutter UI. The app follows **Nocturne**
 dark interface. Inter at weight 500 for headings, soft 8px corners, and an accent used as a line or a
 glow, never as a flood of color. Follow these rules so new screens match the existing ones.
 
+## Design source
+
+The redesign mocks and their notes live in `docs/design/fi-redesign/` (start at
+[`README.md`](../docs/design/fi-redesign/README.md)). When a mock and this guide disagree, the mock
+is the target and this guide should be updated to match.
+
 ## Where things live
 
 | File | What it holds |
 | --- | --- |
 | `lib/theme/nocturne.dart` | `Nocturne` tokens (colors, radii, shadows, fonts, input heights via `Nocturne.inputHeight`) and `nocturneTheme()`, the only `ThemeData` |
-| `lib/theme/nocturne_widgets.dart` | Shared pieces: `FadedRule`, `Kicker`, `SectionLabel`, `GlowDot`, `IconTile`, `Tag`, `NocturneCard`, `nocturneGlow()`, `DashedSlot`, `FiLogoMark`, `FiLogoTile` |
+| `lib/theme/nocturne_widgets.dart` | Shared pieces: `FadedRule`, `Kicker`, `SectionLabel`, `GlowDot`, `IconTile`, `Tag` (accent, `Tag.neutral`, `Tag.outline`, optional leading icon), `NocturneCard`, `nocturneGlow()`, `DashedSlot`, `FiLogoMark`, `FiLogoTile`, `ClearMark`, the field status markers `VoiceChip` / `DefaultMarker` / `NeededMarker`, `FiSwitch` / `FiSwitchTile`, `FiIconButton`, `CardListRow` |
+| `lib/theme/fi_icons.dart` | `FiIcons`: every icon the app draws, named by meaning and pointing at a Phosphor glyph; `fieldTypeIcon()` for the eight field types |
 | `lib/theme/side_sheet.dart` | `showSideSheet()`: a 480px sheet from the right, or a bottom sheet on a phone |
 | `lib/theme/form_surface.dart` | `showFormSurface()` + `FormSurface`: every create/edit form, a bottom sheet on a phone and a dialog (optionally two-pane with an aside) otherwise |
 | `lib/theme/inputs.dart` | `FiTextInput`, `FiSelect`, `FiPickerInput`: every text, number, search, select and picker input, at the small or normal height token |
@@ -43,8 +50,12 @@ widget to `nocturne_widgets.dart` only when a second screen needs it.
    the accent itself on a large area. Text drawn in the accent at paragraph size should be
    `accent300`.
 7. **Dark only.** There is no light theme; don't add `brightness` branches.
-8. **Use Material icons** (outlined variants where they exist). The design system mentions
-   Phosphor icons; this app deliberately uses Material instead.
+8. **Use Phosphor icons through `FiIcons`** (`lib/theme/fi_icons.dart`), in the regular weight
+   unless a mock names fill or bold. Never reference Material `Icons.*` anywhere in `lib/` (the
+   generated `lib/src/` excepted); `test/design_rules_test.dart` enforces this. Where a framework
+   widget would draw its own Material glyph (a default back button, for example), pass the
+   `FiIcons` icon explicitly. Tests find icons by `FiIcons.*` too. Switches are `FiSwitch` /
+   `FiSwitchTile`, never Material's `Switch` or `SwitchListTile`.
 9. **Inputs come from the shared widgets.** Build text, integer, decimal, search, select and
    Date / Date & time / time inputs with `FiTextInput`, `FiSelect` and `FiPickerInput`
    (`lib/theme/inputs.dart`), never a raw `TextField`, `TextFormField`, `DropdownButton` or

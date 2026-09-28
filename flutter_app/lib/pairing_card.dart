@@ -1,3 +1,4 @@
+import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/controllers.dart';
 import 'package:fi/help_button.dart';
 import 'package:fi/help_copy.dart';
@@ -59,9 +60,9 @@ class PairingCard extends StatelessWidget {
   );
 
   Widget _mark(bool compact) => compact
-      ? const Icon(Icons.link, size: 20, color: Nocturne.accent)
+      ? const Icon(FiIcons.link, size: 20, color: Nocturne.accent)
       : const IconTile(
-          Icons.link,
+          FiIcons.link,
           size: 44,
           fill: null,
           outline: Nocturne.accent700,
@@ -82,7 +83,7 @@ class PairingCard extends StatelessWidget {
         ? FilledButton.styleFrom(minimumSize: const Size(0, 46))
         : null,
     onPressed: controller.busy ? null : controller.beginPairing,
-    icon: const Icon(Icons.link),
+    icon: const Icon(FiIcons.link),
     label: const Text('Start pairing'),
   );
 
@@ -167,7 +168,7 @@ class PairingCard extends StatelessWidget {
         ...controller.candidates.map(
           (candidate) => ListTile(
             key: Key('candidate-${candidate.instanceId}'),
-            leading: const Icon(Icons.phone_android),
+            leading: const Icon(FiIcons.phone),
             title: Text(candidate.endpoint),
             subtitle: const Text('Nearby device'),
             trailing: const Text('Connect'),
@@ -240,7 +241,7 @@ class PairingCard extends StatelessWidget {
       Text('Saving trust and synchronizing the dataset…'),
     ],
     PairingKindDto.trusted => [
-      const Icon(Icons.verified, color: Nocturne.accent, size: 40),
+      const Icon(FiIcons.verified, color: Nocturne.accent, size: 40),
       const Text('Device paired successfully.', textAlign: TextAlign.center),
       TextButton(
         onPressed: controller.beginPairing,
@@ -253,7 +254,7 @@ class PairingCard extends StatelessWidget {
   List<Widget> _failure(BuildContext context) =>
       switch (controller.pairing.failure) {
         PairingFailureKindDto.bothRootless => [
-          const Icon(Icons.info_outline, size: 40),
+          const Icon(FiIcons.info, size: 40),
           const Text(
             'Neither device has a dataset yet, so there is nothing to join. '
             'Pair with a device that already has a dataset, or create a new '
@@ -267,7 +268,7 @@ class PairingCard extends StatelessWidget {
           ),
         ],
         PairingFailureKindDto.rootMismatch => [
-          const Icon(Icons.block, color: Nocturne.error, size: 40),
+          const Icon(FiIcons.blocked, color: Nocturne.error, size: 40),
           const Text(
             'These devices hold different datasets, and datasets cannot be '
             'merged. Pairing them again will not succeed. To use the other '
@@ -280,7 +281,7 @@ class PairingCard extends StatelessWidget {
             FilledButton.icon(
               key: const Key('reset-dataset'),
               onPressed: controller.busy ? null : () => _confirmReset(context),
-              icon: const Icon(Icons.restart_alt),
+              icon: const Icon(FiIcons.reset),
               label: const Text("Reset this device's data"),
             ),
           TextButton(
@@ -289,7 +290,7 @@ class PairingCard extends StatelessWidget {
           ),
         ],
         PairingFailureKindDto.secureStoreLocked => [
-          const Icon(Icons.lock_outline, size: 40),
+          const Icon(FiIcons.locked, size: 40),
           const Text(
             'Your login keyring is locked, so this device could not save the '
             'pairing. Unlock the keyring, then retry — the other device may '
@@ -300,12 +301,12 @@ class PairingCard extends StatelessWidget {
           FilledButton.icon(
             key: const Key('pairing-retry-after-unlock'),
             onPressed: controller.busy ? null : controller.retryAfterUnlock,
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(FiIcons.refresh),
             label: const Text('Retry'),
           ),
         ],
         PairingFailureKindDto.other || null => [
-          const Icon(Icons.error_outline, color: Nocturne.error, size: 40),
+          const Icon(FiIcons.error, color: Nocturne.error, size: 40),
           Text(
             controller.pairing.message ?? 'Pairing did not complete.',
             textAlign: TextAlign.center,

@@ -66,6 +66,19 @@ abstract final class Nocturne {
   /// Below this screen width the app is laid out for a phone.
   static const phoneBreakpoint = 720.0;
 
+  /// The smallest tappable area on a phone.
+  static const touchTarget = 44.0;
+
+  /// The smallest height of a card list row on a phone.
+  static const phoneRowMinHeight = 64.0;
+
+  /// The drawn diameter of the clear (✕) mark.
+  static const clearMarkSize = 22.0;
+
+  /// Whether this screen is laid out for a phone.
+  static bool isPhone(BuildContext context) =>
+      MediaQuery.sizeOf(context).width < phoneBreakpoint;
+
   /// The box height of a shared input (`lib/theme/inputs.dart`) of [size] on this screen:
   /// small is 32 (40 on a phone), normal is 40 (48 on a phone).
   static double inputHeight(BuildContext context, InputSize size) {

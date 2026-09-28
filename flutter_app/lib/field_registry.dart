@@ -1,4 +1,6 @@
 import 'package:clock/clock.dart';
+import 'package:fi/theme/nocturne_widgets.dart';
+import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/exact_format.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/theme/form_errors.dart';
@@ -234,7 +236,7 @@ final class _FieldEditorState extends State<_FieldEditor> {
   Widget? get _clearButton => widget.allowClear && text.text.isNotEmpty
       ? IconButton(
           tooltip: 'Clear',
-          icon: const Icon(Icons.clear),
+          icon: const Icon(FiIcons.clear),
           onPressed: () => setState(_clear),
         )
       : null;
@@ -281,7 +283,7 @@ final class _FieldEditorState extends State<_FieldEditor> {
           ),
         );
       }
-      return SwitchListTile(
+      return FiSwitchTile(
         title: _required ? requiredLabel(_label) : Text(_label),
         subtitle: widget.errors.isEmpty ? null : FieldErrorLines(widget.errors),
         value: boolean,
@@ -333,7 +335,7 @@ final class _FieldEditorState extends State<_FieldEditor> {
         label: _label,
         required: _required,
         errors: widget.errors,
-        icon: Icons.calendar_today,
+        icon: FiIcons.date,
         actions: _quickFill('Today', () => _setDate(clock.now())),
         replaceIcon: _clearButton,
         onTap: () async {
@@ -357,7 +359,7 @@ final class _FieldEditorState extends State<_FieldEditor> {
         label: _label,
         required: _required,
         errors: widget.errors,
-        icon: Icons.event,
+        icon: FiIcons.dateTime,
         actions: _quickFill('Now', () => _setDateTime(clock.now())),
         replaceIcon: _clearButton,
         onTap: () async {

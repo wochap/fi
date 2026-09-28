@@ -1,3 +1,4 @@
+import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/controllers.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:flutter/material.dart';
@@ -67,7 +68,7 @@ Future<FakeCollectionBridge> _chooseDuplicate(WidgetTester tester) async {
   final bridge = _source();
   await tester.pumpWidget(app(bridge));
   await pumpUntilFound(tester, find.text('Headaches'));
-  await tester.tap(find.byIcon(Icons.more_vert));
+  await tester.tap(find.byIcon(FiIcons.more));
   await tester.pumpAndSettle();
   await tester.tap(find.text('Duplicate'));
   await tester.pumpAndSettle();

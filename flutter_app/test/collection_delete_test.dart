@@ -1,3 +1,4 @@
+import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/collections_page.dart';
 import 'package:fi/controllers.dart';
 import 'package:fi/src/rust/api/models.dart';
@@ -63,7 +64,7 @@ Future<void> chooseDelete(
 }) async {
   await tester.pumpWidget(app(bridge));
   await pumpUntilFound(tester, find.text('Headaches'));
-  await tester.tap(find.byIcon(Icons.more_vert));
+  await tester.tap(find.byIcon(FiIcons.more));
   await tester.pumpAndSettle();
   bridge.nextError = countError;
   await tester.tap(find.text('Delete'));

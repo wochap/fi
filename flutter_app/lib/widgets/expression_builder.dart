@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/controllers.dart';
 import 'package:fi/exact_format.dart';
 import 'package:fi/help_button.dart';
@@ -605,7 +606,7 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
     return Row(
       children: [
         if (missing > 0) ...[
-          const Icon(Icons.error_outline, size: 16, color: Nocturne.accent300),
+          const Icon(FiIcons.error, size: 16, color: Nocturne.accent300),
           const SizedBox(width: 6),
         ],
         Expanded(
@@ -696,7 +697,7 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
                 IconButton(
                   key: Key('abs-$path'),
                   tooltip: 'Absolute value',
-                  icon: const Icon(Icons.unfold_more),
+                  icon: const Icon(FiIcons.unfold),
                   onPressed: () => _update(
                     replaceAt(root, path, AbsNode(node)),
                     structural: true,
@@ -706,7 +707,7 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
                 PopupMenuButton<ExprOperator>(
                   key: Key('add-operator-$path'),
                   tooltip: 'Add operator',
-                  icon: const Icon(Icons.add_circle_outline),
+                  icon: const Icon(FiIcons.addCircle),
                   onSelected: (operator) => _wrapInOperator(path, operator),
                   itemBuilder: (_) => [
                     for (final operator in ExprOperator.values)
@@ -851,7 +852,7 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
           IconButton(
             key: Key('remove-$path'),
             tooltip: 'Remove operator (keep the left side)',
-            icon: const Icon(Icons.close),
+            icon: const Icon(FiIcons.close),
             onPressed: () =>
                 _update(replaceAt(root, path, node.left), structural: true),
           ),
@@ -869,7 +870,7 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
         IconButton(
           key: Key('scale-down-$path'),
           tooltip: 'Fewer decimals',
-          icon: const Icon(Icons.remove),
+          icon: const Icon(FiIcons.remove),
           onPressed: node.outputScale <= 0
               ? null
               : () => _update(
@@ -884,7 +885,7 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
         IconButton(
           key: Key('scale-up-$path'),
           tooltip: 'More decimals',
-          icon: const Icon(Icons.add),
+          icon: const Icon(FiIcons.add),
           onPressed: node.outputScale >= 18
               ? null
               : () => _update(
@@ -935,7 +936,7 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
             child: const Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.functions, size: 12, color: Nocturne.accent),
+                Icon(FiIcons.formula, size: 12, color: Nocturne.accent),
                 SizedBox(width: 4),
                 Text(
                   'Absolute value',
@@ -954,7 +955,7 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
           IconButton(
             key: Key('unabs-$path'),
             tooltip: 'Remove absolute value',
-            icon: const Icon(Icons.close),
+            icon: const Icon(FiIcons.close),
             onPressed: () =>
                 _update(replaceAt(root, path, node.child), structural: true),
           ),

@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/theme/form_errors.dart';
 import 'package:fi/theme/nocturne.dart';
 import 'package:flutter/material.dart';
@@ -478,7 +479,7 @@ class FiSlider extends StatelessWidget {
         IconButton(
           key: const Key('slider-clear'),
           tooltip: 'Clear',
-          icon: const Icon(Icons.clear, size: 18),
+          icon: const Icon(FiIcons.clear, size: 18),
           onPressed: enabled ? () => onChanged!(null) : null,
         ),
     ];

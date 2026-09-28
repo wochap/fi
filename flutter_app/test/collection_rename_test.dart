@@ -1,3 +1,4 @@
+import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -154,7 +155,7 @@ void main() {
     final bridge = seeded(1);
     await tester.pumpWidget(app(bridge));
     await pumpUntilFound(tester, find.text('Headaches'));
-    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.tap(find.byIcon(FiIcons.more));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Rename'));
     await tester.pumpAndSettle();

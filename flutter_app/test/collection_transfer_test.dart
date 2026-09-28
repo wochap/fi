@@ -1,3 +1,4 @@
+import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/controllers.dart';
 import 'package:fi/file_dialogs.dart';
 import 'package:fi/src/rust/api/models.dart';
@@ -56,7 +57,7 @@ Future<void> _showList(
 
 /// Chooses [label] from the menu of the first collection card.
 Future<void> _collectionAction(WidgetTester tester, String label) async {
-  await tester.tap(find.byIcon(Icons.more_vert).first);
+  await tester.tap(find.byIcon(FiIcons.more).first);
   await tester.pumpAndSettle();
   await tester.tap(find.text(label));
   await tester.pumpAndSettle();

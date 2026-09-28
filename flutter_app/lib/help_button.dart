@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/help_copy.dart';
 import 'package:flutter/material.dart';
 
@@ -19,7 +20,7 @@ final class HelpButton extends StatelessWidget {
     if (entry == null) return const SizedBox.shrink();
     return IconButton(
       key: Key('help-${id.name}'),
-      icon: const Icon(Icons.help_outline, size: 18),
+      icon: const Icon(FiIcons.help, size: 18),
       tooltip: 'About ${entry.title}',
       visualDensity: VisualDensity.compact,
       padding: EdgeInsets.zero,

@@ -1,3 +1,4 @@
+import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/theme/inputs.dart';
 import 'package:fi/theme/nocturne.dart';
 import 'package:flutter/material.dart';
@@ -73,7 +74,7 @@ final _kinds = <String, Widget Function(InputSize size)>{
   'search': (size) => FiTextInput(
     key: const Key('input'),
     hint: 'Search',
-    prefixIcon: const Icon(Icons.search),
+    prefixIcon: const Icon(FiIcons.search),
     size: size,
   ),
   'text with icon button': (size) => FiTextInput(
@@ -81,7 +82,7 @@ final _kinds = <String, Widget Function(InputSize size)>{
     label: 'Scale',
     suffixIcon: IconButton(
       tooltip: 'Help',
-      icon: const Icon(Icons.help_outline),
+      icon: const Icon(FiIcons.help),
       onPressed: () {},
     ),
     size: size,
@@ -101,7 +102,7 @@ final _kinds = <String, Widget Function(InputSize size)>{
     value: 1,
     suffixIcon: IconButton(
       tooltip: 'Help',
-      icon: const Icon(Icons.help_outline),
+      icon: const Icon(FiIcons.help),
       onPressed: () {},
     ),
     items: const [DropdownMenuItem(value: 1, child: Text('Day'))],
@@ -112,11 +113,11 @@ final _kinds = <String, Widget Function(InputSize size)>{
     key: const Key('input'),
     controller: TextEditingController(text: '2026-09-24'),
     label: 'Date',
-    icon: Icons.calendar_today,
+    icon: FiIcons.date,
     actions: [TextButton(onPressed: () {}, child: const Text('Today'))],
     replaceIcon: IconButton(
       tooltip: 'Clear',
-      icon: const Icon(Icons.clear),
+      icon: const Icon(FiIcons.clear),
       onPressed: () {},
     ),
     onTap: () {},

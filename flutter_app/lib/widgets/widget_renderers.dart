@@ -1,3 +1,4 @@
+import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/exact_format.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/theme/nocturne.dart';
@@ -194,7 +195,7 @@ final class UnsupportedWidgetPlaceholder extends StatelessWidget {
             Row(
               children: [
                 Icon(
-                  Icons.widgets_outlined,
+                  FiIcons.widget,
                   size: 18,
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -268,7 +269,7 @@ final class WidgetTile extends StatelessWidget {
                   ),
                 ),
               ),
-              Icon(Icons.more_horiz, size: 16, color: Nocturne.muted(.6)),
+              Icon(FiIcons.moreHorizontal, size: 16, color: Nocturne.muted(.6)),
             ],
           ),
           const SizedBox(height: 4),
@@ -385,10 +386,10 @@ final class WidgetFailureCard extends StatelessWidget {
   };
 
   IconData get _icon => switch (kind) {
-    WidgetErrorKindDto.unsupportedType => Icons.widgets_outlined,
-    WidgetErrorKindDto.overflow => Icons.numbers_outlined,
-    WidgetErrorKindDto.shapeMismatch => Icons.rule_outlined,
-    _ => Icons.error_outline,
+    WidgetErrorKindDto.unsupportedType => FiIcons.widget,
+    WidgetErrorKindDto.overflow => FiIcons.number,
+    WidgetErrorKindDto.shapeMismatch => FiIcons.rule,
+    _ => FiIcons.error,
   };
 }
 

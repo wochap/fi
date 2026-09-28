@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/theme/nocturne.dart';
 import 'package:fi/theme/nocturne_widgets.dart';
 import 'package:flutter/material.dart';
@@ -117,7 +118,7 @@ class _SideSheetFrame extends StatelessWidget {
             IconButton(
               tooltip: 'Close',
               onPressed: () => Navigator.pop(context),
-              icon: const Icon(Icons.close),
+              icon: const Icon(FiIcons.close),
             ),
           ],
         ),

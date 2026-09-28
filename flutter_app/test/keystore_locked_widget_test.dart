@@ -1,3 +1,4 @@
+import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -69,7 +70,7 @@ void main() {
     );
     expect(find.textContaining('47380-47389'), findsOneWidget);
     expect(find.textContaining('keyring'), findsNothing);
-    expect(find.byIcon(Icons.lan_outlined), findsOneWidget);
+    expect(find.byIcon(FiIcons.network), findsOneWidget);
     expect(find.text('Collections'), findsWidgets);
 
     await tester.tap(find.byKey(const Key('retry-networking')));

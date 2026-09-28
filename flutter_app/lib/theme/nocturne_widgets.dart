@@ -1,3 +1,4 @@
+import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/theme/nocturne.dart';
 import 'package:flutter/material.dart';
 
@@ -129,37 +130,41 @@ class IconTile extends StatelessWidget {
   );
 }
 
-/// A small tinted label (`.tag`).
+/// A small label (`.tag`): accent by default, [Tag.neutral] or [Tag.outline].
 class Tag extends StatelessWidget {
   const Tag(
     this.text, {
     this.background = Nocturne.accent800,
     this.color = Nocturne.accent100,
     this.fontSize = 11,
+    this.leading,
     super.key,
-  });
+  }) : border = null;
 
   /// `.tag-neutral`.
-  const Tag.neutral(this.text, {this.fontSize = 11, super.key})
+  const Tag.neutral(this.text, {this.fontSize = 11, this.leading, super.key})
     : background = Nocturne.neutral800,
-      color = Nocturne.neutral100;
+      color = Nocturne.neutral100,
+      border = null;
+
+  /// `.tag-outline`: no fill, a 1px accent border and accent text.
+  const Tag.outline(this.text, {this.fontSize = 11, this.leading, super.key})
+    : background = Colors.transparent,
+      color = Nocturne.accent,
+      border = Nocturne.accent;
 
   final String text;
   final Color background;
   final Color color;
+  final Color? border;
   final double fontSize;
 
+  /// An icon drawn 4px before the text, in the text color.
+  final IconData? leading;
+
   @override
-  Widget build(BuildContext context) => Container(
-    padding: EdgeInsets.symmetric(
-      horizontal: fontSize < 11 ? 6 : 10,
-      vertical: fontSize < 11 ? 1 : 3,
-    ),
-    decoration: BoxDecoration(
-      color: background,
-      borderRadius: BorderRadius.circular(6),
-    ),
-    child: Text(
+  Widget build(BuildContext context) {
+    final label = Text(
       text,
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
@@ -169,7 +174,300 @@ class Tag extends StatelessWidget {
         color: color,
         height: 1.3,
       ),
+    );
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: fontSize < 11 ? 6 : 10,
+        vertical: fontSize < 11 ? 1 : 3,
+      ),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(6),
+        border: border == null ? null : Border.all(color: border!),
+      ),
+      child: leading == null
+          ? label
+          : Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(leading, size: fontSize + 1, color: color),
+                const SizedBox(width: 4),
+                Flexible(child: label),
+              ],
+            ),
+    );
+  }
+}
+
+/// The one clear (✕) mark: a 22px neutral-700 circle holding an 11px `x`.
+///
+/// On a phone its tappable area grows to [Nocturne.touchTarget] while the circle stays 22px.
+class ClearMark extends StatelessWidget {
+  const ClearMark({required this.onPressed, super.key});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final hit = Nocturne.isPhone(context)
+        ? Nocturne.touchTarget
+        : Nocturne.clearMarkSize;
+    return Semantics(
+      button: true,
+      label: 'Clear',
+      excludeSemantics: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onPressed,
+        child: SizedBox.square(
+          dimension: hit,
+          child: Center(
+            child: Container(
+              key: const Key('clear-mark-circle'),
+              width: Nocturne.clearMarkSize,
+              height: Nocturne.clearMarkSize,
+              alignment: Alignment.center,
+              decoration: const BoxDecoration(
+                color: Nocturne.neutral700,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(FiIcons.clear, size: 11, color: Nocturne.text),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The trailing label-row marker for a field filled by voice: a sparkle and "Voice".
+class VoiceChip extends StatelessWidget {
+  const VoiceChip({required this.fieldLabel, this.onTap, super.key});
+
+  /// The field's name, read out as part of the button's label.
+  final String fieldLabel;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    label: '$fieldLabel, filled by voice',
+    excludeSemantics: true,
+    child: Material(
+      color: Nocturne.accent900,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: const BorderSide(color: Nocturne.accent700),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 28),
+          child: const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 8),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(FiIcons.voice, size: 12, color: Nocturne.accent100),
+                SizedBox(width: 4),
+                Text(
+                  'Voice',
+                  style: TextStyle(fontSize: 11, color: Nocturne.accent100),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     ),
+  );
+}
+
+/// The trailing label-row marker for a field holding its default value.
+class DefaultMarker extends StatelessWidget {
+  const DefaultMarker({super.key});
+
+  @override
+  Widget build(BuildContext context) =>
+      _Marker(FiIcons.defaultValue, 'Default', Nocturne.muted(.55));
+}
+
+/// The trailing label-row marker for a required field that still needs a value.
+class NeededMarker extends StatelessWidget {
+  const NeededMarker({super.key});
+
+  @override
+  Widget build(BuildContext context) =>
+      const _Marker(FiIcons.needed, 'Needed', Nocturne.accent200);
+}
+
+class _Marker extends StatelessWidget {
+  const _Marker(this.icon, this.text, this.color);
+
+  final IconData icon;
+  final String text;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Icon(icon, size: 12, color: color),
+      const SizedBox(width: 4),
+      Text(text, style: TextStyle(fontSize: 11, color: color)),
+    ],
+  );
+}
+
+/// The Nocturne switch: 38×22 with a 12px knob, 44×26 with a 14px knob on a phone.
+///
+/// On, it has an accent border, an accent-900 track and an accent knob at the trailing end;
+/// off, a divider border, no fill and a muted knob at the leading end.
+class FiSwitch extends StatelessWidget {
+  const FiSwitch({required this.value, required this.onChanged, super.key});
+
+  final bool value;
+
+  /// Null disables the switch.
+  final ValueChanged<bool>? onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final phone = Nocturne.isPhone(context);
+    final width = phone ? 44.0 : 38.0;
+    final height = phone ? 26.0 : 22.0;
+    final knob = phone ? 14.0 : 12.0;
+    final enabled = onChanged != null;
+    return Semantics(
+      toggled: value,
+      enabled: enabled,
+      onTap: enabled ? () => onChanged!(!value) : null,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: enabled ? () => onChanged!(!value) : null,
+        child: Opacity(
+          opacity: enabled ? 1 : .4,
+          child: AnimatedContainer(
+            key: const Key('fi-switch-track'),
+            duration: const Duration(milliseconds: 150),
+            width: width,
+            height: height,
+            // Inside the 1px border the knob sits as far from the ends as from the edges.
+            padding: EdgeInsets.symmetric(horizontal: (height - 2 - knob) / 2),
+            alignment: value
+                ? AlignmentDirectional.centerEnd
+                : AlignmentDirectional.centerStart,
+            decoration: BoxDecoration(
+              color: value ? Nocturne.accent900 : Colors.transparent,
+              borderRadius: BorderRadius.circular(height / 2),
+              border: Border.all(
+                color: value ? Nocturne.accent : Nocturne.divider,
+              ),
+            ),
+            child: Container(
+              key: const Key('fi-switch-knob'),
+              width: knob,
+              height: knob,
+              decoration: BoxDecoration(
+                color: value ? Nocturne.accent : Nocturne.muted(.55),
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A list tile with a trailing [FiSwitch]; tapping anywhere on the tile toggles it.
+class FiSwitchTile extends StatelessWidget {
+  const FiSwitchTile({
+    required this.value,
+    required this.onChanged,
+    this.title,
+    this.subtitle,
+    this.secondary,
+    this.contentPadding,
+    super.key,
+  });
+
+  final bool value;
+  final ValueChanged<bool>? onChanged;
+  final Widget? title;
+  final Widget? subtitle;
+
+  /// A widget before the switch, such as a help button.
+  final Widget? secondary;
+  final EdgeInsetsGeometry? contentPadding;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onChanged != null;
+    return MergeSemantics(
+      child: ListTile(
+        contentPadding: contentPadding,
+        enabled: enabled,
+        title: title,
+        subtitle: subtitle,
+        onTap: enabled ? () => onChanged!(!value) : null,
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ?secondary,
+            if (secondary != null) const SizedBox(width: 8),
+            FiSwitch(value: value, onChanged: onChanged),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The shared icon-only button: 36×36 on wider screens, at least 44×44 on a phone.
+class FiIconButton extends StatelessWidget {
+  const FiIconButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+    this.size = 18,
+    this.color,
+    super.key,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback? onPressed;
+  final double size;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final box = Nocturne.isPhone(context) ? Nocturne.touchTarget : 36.0;
+    return IconButton(
+      tooltip: tooltip,
+      onPressed: onPressed,
+      icon: Icon(icon, size: size, color: color),
+      padding: EdgeInsets.zero,
+      constraints: BoxConstraints.tightFor(width: box, height: box),
+      style: const ButtonStyle(tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+    );
+  }
+}
+
+/// The shared card list row: at least 64px tall on a phone, sized to its content otherwise.
+class CardListRow extends StatelessWidget {
+  const CardListRow({required this.child, super.key});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => ConstrainedBox(
+    constraints: BoxConstraints(
+      minHeight: Nocturne.isPhone(context) ? Nocturne.phoneRowMinHeight : 0,
+    ),
+    child: child,
   );
 }
 

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:clock/clock.dart';
+import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/bridge/collection_bridge.dart';
 import 'package:fi/controllers.dart';
 import 'package:fi/file_dialogs.dart';
@@ -168,7 +169,7 @@ class _CollectionAppState extends State<CollectionApp>
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.error_outline, size: 48),
+                const Icon(FiIcons.error, size: 48),
                 const SizedBox(height: 12),
                 Text(message, textAlign: TextAlign.center),
                 const SizedBox(height: 12),
@@ -178,7 +179,7 @@ class _CollectionAppState extends State<CollectionApp>
                     onPressed: controller.retryingNetworking
                         ? null
                         : () => unawaited(controller.retryNetworking()),
-                    icon: const Icon(Icons.refresh),
+                    icon: const Icon(FiIcons.refresh),
                     label: const Text('Retry after unlocking'),
                   )
                 else if (controller.fatalResetResolvable)
@@ -269,9 +270,9 @@ class _NetworkingDeferredBanner extends StatelessWidget {
     return MaterialBanner(
       key: const Key('networking-deferred-banner'),
       leading: Icon(switch (deferred.kind) {
-        NetworkingDeferredKindDto.secureStoreLocked => Icons.lock_outline,
-        NetworkingDeferredKindDto.portsExhausted => Icons.lan_outlined,
-        NetworkingDeferredKindDto.secureStoreUnavailable => Icons.cloud_off,
+        NetworkingDeferredKindDto.secureStoreLocked => FiIcons.locked,
+        NetworkingDeferredKindDto.portsExhausted => FiIcons.network,
+        NetworkingDeferredKindDto.secureStoreUnavailable => FiIcons.offline,
       }),
       content: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -348,7 +349,7 @@ class RecoverySurface extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.devices_other, size: 48),
+              const Icon(FiIcons.devices, size: 48),
               const SizedBox(height: 12),
               Text(
                 'Recovery needs another device',
@@ -505,7 +506,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                   FilledButton.icon(
                     key: const Key('create-dataset'),
                     onPressed: createBlocked ? null : _create,
-                    icon: const Icon(Icons.add_circle_outline),
+                    icon: const Icon(FiIcons.addCircle),
                     label: Text(
                       controller.creating ? 'Creating…' : 'Create new dataset',
                     ),
@@ -525,7 +526,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                     onPressed: controller.creating
                         ? null
                         : () => setState(() => showPairing = !showPairing),
-                    icon: Icon(showPairing ? Icons.expand_less : Icons.link),
+                    icon: Icon(showPairing ? FiIcons.collapse : FiIcons.link),
                     label: const Text('Join an existing dataset'),
                   ),
                   if (showPairing) ...[
@@ -651,11 +652,11 @@ class _CollectionShellState extends State<CollectionShell> {
             onDestinationSelected: _select,
             destinations: const [
               NavigationDestination(
-                icon: Icon(Icons.grid_view_outlined),
+                icon: Icon(FiIcons.collection),
                 label: 'Collections',
               ),
               NavigationDestination(
-                icon: Icon(Icons.devices_outlined),
+                icon: Icon(FiIcons.devices),
                 label: 'Devices',
               ),
             ],
@@ -708,14 +709,14 @@ class _Sidebar extends StatelessWidget {
           ),
         ),
         _NavRow(
-          icon: Icons.grid_view_outlined,
+          icon: FiIcons.collection,
           label: 'Collections',
           selected: selected == 0,
           onTap: () => onSelected(0),
         ),
         const SizedBox(height: 4),
         _NavRow(
-          icon: Icons.devices_outlined,
+          icon: FiIcons.devices,
           label: 'Devices',
           selected: selected == 1,
           onTap: () => onSelected(1),
@@ -890,13 +891,13 @@ String _statusText(SyncStatusDto status) => switch (status) {
 
 /// One distinct icon per aggregate status, so the state is readable without the label.
 IconData _statusIcon(SyncStatusDto status) => switch (status) {
-  SyncStatusDto.offline => Icons.cloud_off,
-  SyncStatusDto.searching => Icons.radar,
-  SyncStatusDto.connected => Icons.link,
-  SyncStatusDto.syncing => Icons.sync,
-  SyncStatusDto.synced => Icons.cloud_done,
-  SyncStatusDto.error => Icons.error_outline,
-  SyncStatusDto.paused => Icons.pause_circle_outline,
+  SyncStatusDto.offline => FiIcons.offline,
+  SyncStatusDto.searching => FiIcons.searching,
+  SyncStatusDto.connected => FiIcons.link,
+  SyncStatusDto.syncing => FiIcons.syncing,
+  SyncStatusDto.synced => FiIcons.synced,
+  SyncStatusDto.error => FiIcons.error,
+  SyncStatusDto.paused => FiIcons.paused,
 };
 
 class DevicesPage extends StatefulWidget {
@@ -959,7 +960,7 @@ class _DevicesPageState extends State<DevicesPage> {
     final button = OutlinedButton.icon(
       key: const Key('reset-dataset'),
       onPressed: controller.busy ? null : () => _resetDataset(context),
-      icon: const Icon(Icons.restart_alt),
+      icon: const Icon(FiIcons.reset),
       label: const Text('Reset data…'),
     );
     return ListView(
@@ -1118,8 +1119,8 @@ class _DevicesPageState extends State<DevicesPage> {
             onPressed: () => _toggleDetails(device),
             icon: Icon(
               _openDetails.contains(device.deviceId)
-                  ? Icons.expand_less
-                  : Icons.expand_more,
+                  ? FiIcons.collapse
+                  : FiIcons.expand,
               size: 18,
             ),
             label: const Text('Details'),
@@ -1169,7 +1170,7 @@ class _DevicesPageState extends State<DevicesPage> {
   }) => Row(
     children: [
       IconTile(
-        device.revoked ? Icons.block : Icons.devices_other,
+        device.revoked ? FiIcons.blocked : FiIcons.devices,
         fill: Nocturne.neutral800,
         color: Nocturne.text,
       ),
@@ -1229,7 +1230,7 @@ class _DevicesPageState extends State<DevicesPage> {
         ),
       ),
       PopupMenuButton<String>(
-        icon: const Icon(Icons.more_vert),
+        icon: const Icon(FiIcons.more),
         onSelected: (action) {
           if (action == 'rename') _renameDevice(context, device);
           if (action == 'revoke') _revokeDevice(context, device);
@@ -1373,7 +1374,7 @@ class _ConnectionSwitches extends StatelessWidget {
           padding: EdgeInsets.zero,
           child: Column(
             children: [
-              SwitchListTile(
+              FiSwitchTile(
                 key: const Key('pref-discoverable'),
                 value: preferences.discoverable,
                 onChanged: enabled ? controller.setDiscoverable : null,
@@ -1382,7 +1383,7 @@ class _ConnectionSwitches extends StatelessWidget {
                   'Announce this device to paired devices on the local network.',
                 ),
               ),
-              SwitchListTile(
+              FiSwitchTile(
                 key: const Key('pref-sync'),
                 value: preferences.syncEnabled,
                 onChanged: enabled ? controller.setSyncEnabled : null,
@@ -1580,13 +1581,13 @@ class _DeviceDetails extends StatelessWidget {
                   onPressed: controller.reconnecting.contains(id)
                       ? null
                       : () => controller.reconnect(device),
-                  icon: const Icon(Icons.refresh, size: 18),
+                  icon: const Icon(FiIcons.refresh, size: 18),
                   label: const Text('Reconnect'),
                 ),
               OutlinedButton.icon(
                 key: Key('device-copy-$id'),
                 onPressed: onCopy,
-                icon: const Icon(Icons.copy, size: 18),
+                icon: const Icon(FiIcons.copy, size: 18),
                 label: const Text('Copy all'),
               ),
             ],
