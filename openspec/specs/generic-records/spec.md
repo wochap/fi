@@ -117,3 +117,18 @@ Rust SHALL expose a read-only query that validates a draft record for a collecti
 #### Scenario: Invalid draft
 - **WHEN** Flutter validates a draft missing a required field
 - **THEN** the query returns an issue with code `required` naming that field, and no record is created
+
+### Requirement: Record creation time
+Every record view returned by the list and get queries SHALL carry the record's creation time in Unix milliseconds, derived from the timestamp embedded in its time-ordered (UUIDv7) record id, so that the value is identical on every device and survives a read-model rebuild without being stored separately. A record whose id carries no embedded timestamp SHALL report no creation time rather than a guessed one.
+
+#### Scenario: Creation time from the id
+- **WHEN** a record is created at 2026-09-22 10:15:00.000 UTC and then listed
+- **THEN** its view reports a creation time of that instant to the millisecond
+
+#### Scenario: Same on every device
+- **WHEN** the record syncs to a second device and is listed there
+- **THEN** the second device reports the same creation time
+
+#### Scenario: Id without a timestamp
+- **WHEN** a record's id is not a time-ordered id
+- **THEN** its view reports no creation time and the record is still listed

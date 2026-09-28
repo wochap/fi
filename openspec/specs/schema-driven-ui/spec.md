@@ -7,9 +7,45 @@ TBD: Define collection navigation, schema editing, registry-driven field control
 ### Requirement: Collection list and navigation
 The Flutter application SHALL show active user-defined collections and open a generic collection screen containing its record list, add action, and schema/settings access.
 
+Each collection in the list SHALL show its name, its active record count, its active field count, and when it was last edited as a status time ("Edited 2 h ago"), using the same status-time wording as device rows; a collection with no last-edited time shows no edit time. When one or more of its records are incomplete (projected invalid), the row SHALL also show an outline tag with a warning icon reading "N incomplete". On screens narrower than 720px the row SHALL be at least 64px tall and SHALL show the counts and edit time as one subtitle line under the name ("6 records · edited 2 h ago", or "1 record · 1 incomplete" when some are incomplete).
+
+The list header SHALL offer a sort control with two orders, "Last edited" (most recent first, the default) and "Name" (A–Z, case-insensitive), with ties broken by collection id. The chosen order SHALL be remembered on this device across restarts. The header SHALL keep the whole-dataset import/export menu (Import JSON, Export all, Export selected) as an icon button beside the sort control, and SHALL offer "New collection" ("New" below 720px).
+
+Each row SHALL offer a menu with, in this order: Rename, Duplicate, a divider, a "Data" group with Import CSV…, Export CSV and Export JSON, a divider, and Delete…. On screens at least 720px wide it SHALL be a popup menu and Rename SHALL show the F2 shortcut; pressing F2 while a collection row has focus SHALL start renaming it. Below 720px the menu SHALL open as an action sheet headed by the collection's icon, name, and "N records · N fields".
+
+The collection screen header SHALL show a back action, the collection title, and "N records · N fields". At 720px and wider it SHALL offer Schema, Queries, Select and New record as buttons. Below 720px it SHALL offer Schema as an icon button and a ⋮ menu holding Queries, Select records and Collection actions… (which opens the same actions as the list row menu), and New record SHALL be the floating "Record" button. A long press on a record card SHALL also start selection.
+
 #### Scenario: Open Headache collection
 - **WHEN** the user selects the Headache collection
 - **THEN** the screen is constructed from its synchronized schema without a Headache-specific page
+
+#### Scenario: Row shows size and recency
+- **WHEN** the collection "test" has 6 active records, 3 active fields and was last edited two hours ago
+- **THEN** its desktop row shows "test", "6 records · 3 fields" and "Edited 2 h ago", and no incomplete tag
+
+#### Scenario: Row flags incomplete records
+- **WHEN** the collection "tst" has one record projected invalid for a missing required field
+- **THEN** its row shows an outline "1 incomplete" tag with a warning icon, and on a phone its subtitle reads "1 record · 1 incomplete"
+
+#### Scenario: Sort by name is remembered
+- **WHEN** the user switches the sort to Name and restarts the app
+- **THEN** the list is ordered A–Z by name and the sort control reads "Name"
+
+#### Scenario: Grouped row menu
+- **WHEN** the user opens a row's menu on a 1240px-wide screen
+- **THEN** it lists Rename (with F2), Duplicate, then under "Data" Import CSV…, Export CSV and Export JSON, then Delete…, separated by dividers
+
+#### Scenario: Action sheet on a phone
+- **WHEN** the user taps a row's ⋮ on a 390px-wide screen
+- **THEN** an action sheet opens headed by the collection name and "N records · N fields", with the same actions in the same groups
+
+#### Scenario: Whole-dataset transfer stays reachable
+- **WHEN** the collections list is shown
+- **THEN** an icon button beside the sort control opens Import JSON, Export all and Export selected
+
+#### Scenario: Mobile collection header
+- **WHEN** a collection is opened on a 390px-wide screen
+- **THEN** the top bar shows back, the title, "N records · N fields", a Schema icon button and a ⋮ menu with Queries, Select records and Collection actions…, and a floating "Record" button starts a new record
 
 ### Requirement: Confirmed collection deletion
 Deleting a collection from the collection list SHALL require confirmation in a dialog before any delete command is sent. The dialog SHALL name the collection and state what is deleted with it, including the counts of its active records, widgets and saved queries when they are available, omitting zero counts. Cancelling or dismissing the dialog SHALL send no command.
@@ -117,7 +153,14 @@ A Flutter field renderer registry SHALL map supported field kinds to editor and 
 - **THEN** it shows a non-destructive unsupported-field placeholder and preserves the definition
 
 ### Requirement: Generic record CRUD experience
-The generated collection experience SHALL create, edit, view, logically delete, and list records using stable field IDs and typed values obtained through the bridge. Records projected as invalid SHALL be visibly marked in the list with an indicator and their diagnostics, and opening such a record for editing SHALL present the missing required field as needing a value.
+The generated collection experience SHALL create, edit, view, logically delete, and list records using stable field IDs and typed values obtained through the bridge. Records projected as invalid are incomplete and SHALL be marked in the list without relying on color alone:
+
+- At 720px and wider, an incomplete row SHALL show a 2px accent edge at its leading side and a warning icon in its first cell, and each cell of a missing required field SHALL show an accent "Required" tag.
+- Below 720px, an incomplete card SHALL show an outline "Incomplete" tag with a warning icon, and the missing field's line SHALL show a "Needed" marker in place of a value.
+
+When a collection has incomplete records, a status line under the records SHALL read "N record is missing a required field. Click it to finish." at 720px and wider, or "N record is missing a required field" with "Tap it to finish." below 720px, pluralized for N greater than one.
+
+Opening an incomplete record SHALL open the record editor scrolled to the first missing required field in form order, with keyboard focus in that field. The field SHALL show the Needed marker and the line "Needed to complete this record". The editor title SHALL add "· N field needed" at 720px and wider. Saving values for every missing field SHALL remove the record's incomplete marks after the projection refreshes.
 
 #### Scenario: Create Headache record
 - **WHEN** the user completes a schema-generated Headache form
@@ -128,8 +171,16 @@ The generated collection experience SHALL create, edit, view, logically delete, 
 - **THEN** Flutter submits field-specific updates rather than replacing the record
 
 #### Scenario: Invalid record in list
-- **WHEN** the record list contains a record with `valid = false` and a missing-required diagnostic
-- **THEN** the row shows an invalid indicator and the diagnostic text, and opening it highlights the missing field
+- **WHEN** the record list on a 1240px-wide screen contains a record with `valid = false` and a missing-required diagnostic for "text multiline"
+- **THEN** the row has an accent leading edge and a warning icon, its "text multiline" cell shows a "Required" tag, and the status line reads "1 record is missing a required field. Click it to finish."
+
+#### Scenario: Invalid record on a phone
+- **WHEN** the same record is listed on a 390px-wide screen
+- **THEN** its card shows an "Incomplete" tag and its "text multiline" line shows "Needed", and the status line above the records reads "1 record is missing a required field" with "Tap it to finish."
+
+#### Scenario: Finishing an incomplete record
+- **WHEN** the user opens that record
+- **THEN** the editor opens scrolled to "text multiline" with focus in it, the field shows "Needed" and "Needed to complete this record", and after the user saves a value the row's incomplete marks are gone
 
 ### Requirement: Exact FixedDecimal editor
 The FixedDecimal editor SHALL accept signed decimal text appropriate to the field scale and serialize an exact scaled integer without using binary floating-point as authoritative state.
@@ -139,11 +190,33 @@ The FixedDecimal editor SHALL accept signed decimal text appropriate to the fiel
 - **THEN** the form submits representation `-2350` and displays the projected value as `-23.50`
 
 ### Requirement: Sensible record list defaults
-The collection screen SHALL select deterministic generic primary/secondary display and ordering defaults from active schema fields, with stable-ID tie breaking when metadata is equal.
+The collection screen SHALL select deterministic generic primary/secondary display defaults from active schema fields, with stable-ID tie breaking when metadata is equal. The default order SHALL be newest first by record creation time, with the record id as the tie breaker; a record without a creation time SHALL sort after those that have one, by record id.
+
+At 720px and wider the records SHALL be shown as a table:
+- It SHALL have one column per active field in form order.
+- Each column header SHALL show the field-type icon, the field name, and the required mark for required fields.
+- The first column SHALL stay pinned at the leading edge while the other columns, of equal fixed width, scroll horizontally.
+- A "Scroll for more columns →" hint SHALL be shown while columns are hidden past the trailing edge, and the trailing edge SHALL fade into the background.
+- Empty cells SHALL read "—" at reduced opacity.
+- The header row SHALL stay visible while the rows scroll vertically.
+
+Below 720px each record SHALL be a card showing up to its first three active fields in form order, each with its type icon, name and value, followed by "+ N more fields · <creation date>" when more fields exist, or by the creation date alone. The records section SHALL read "Newest first".
 
 #### Scenario: No explicit list configuration
 - **WHEN** a new schema has records but no chosen display fields
-- **THEN** the UI lists them predictably using active field order and record ID fallback
+- **THEN** the UI lists them predictably, newest first by creation time, with record ID as the tie breaker
+
+#### Scenario: Table keeps its first column
+- **WHEN** a collection with nine fields is shown on a 1240px-wide screen and the user scrolls the table sideways
+- **THEN** the first column and the header row stay in place, the other columns move, and the hint "Scroll for more columns →" is shown while columns remain hidden
+
+#### Scenario: Typed column headers
+- **WHEN** the table shows an Integer field "integer slider" and a required Text field "text multiline"
+- **THEN** their headers show the `hash` icon with "integer slider" and the `text-aa` icon with "text multiline" and a required mark
+
+#### Scenario: Mobile card
+- **WHEN** a record with nine fields created on 22 Sep 2026 is listed on a 390px-wide screen
+- **THEN** its card shows the first three fields with type icons and ends with "+ 6 more fields · Sep 22, 2026"
 
 ### Requirement: Reactive projection refresh
 Collection and record controllers SHALL react to typed data/projection events by rereading SQLite-backed queries, and stream lag SHALL recover through a complete refresh.

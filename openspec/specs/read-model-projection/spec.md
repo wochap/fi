@@ -69,3 +69,26 @@ The projector SHALL consume root change notifications with bounded memory and SH
 #### Scenario: Subscriber lags
 - **WHEN** the projector misses one or more retained document events
 - **THEN** it ignores patch deltas and performs a full-state projection that reaches current authoritative heads
+
+### Requirement: Collection summaries
+The read model SHALL project, for every active collection, a summary holding its active record count, its active field count, its incomplete record count (active records projected invalid), and its last-edited time. The last-edited time SHALL be the latest wall-clock component of the hybrid logical clock stamps that the collection's authoritative state carries: every record field value, and record deletions and schema changes wherever those carry a stamp. It is therefore the same on every device that holds the same state. A collection whose state carries no stamp SHALL have no last-edited time. Summaries SHALL be written in the same transaction as the rows they describe and rebuilt with the rest of the read model. The collection list query SHALL return the summary with each collection.
+
+#### Scenario: Counts follow records
+- **WHEN** a collection with 3 active fields holds 6 active records and 1 logically deleted record
+- **THEN** its summary reports 6 records and 3 fields
+
+#### Scenario: Incomplete records counted
+- **WHEN** a field is made required and one active record has no value for it
+- **THEN** after projection the collection's summary reports 1 incomplete record
+
+#### Scenario: Last edited follows the newest write
+- **WHEN** a record in the collection is edited on another device and the change syncs here
+- **THEN** the collection's last-edited time equals the wall-clock part of that edit's stamp
+
+#### Scenario: New empty collection
+- **WHEN** a collection has just been created and holds no records
+- **THEN** its summary reports 0 records and no last-edited time, unless its schema changes carry a stamp
+
+#### Scenario: Rebuild preserves summaries
+- **WHEN** the read model is deleted and rebuilt from Automerge
+- **THEN** every collection's summary equals its value before the rebuild
