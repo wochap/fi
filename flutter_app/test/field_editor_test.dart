@@ -336,7 +336,7 @@ void main() {
 
     await tester.tap(find.text('7'));
     await tester.pumpAndSettle();
-    expect(find.text('Edit record'), findsOneWidget);
+    expect(find.text('Edit record · 1 field needed'), findsOneWidget);
     expect(find.text('required field is missing'), findsOneWidget);
   });
 
@@ -588,8 +588,17 @@ void main() {
       'updateField default=${medium.id}',
     ]);
     expect(find.text('Choice · Low, Medium, High'), findsOneWidget);
-    // Options live in the field editor only.
-    expect(find.byIcon(FiIcons.choice), findsNothing);
+    // Options live in the field editor only: the only Choice glyphs are the records table's
+    // column type icons.
+    final glyphs = find.byIcon(FiIcons.choice).evaluate().length;
+    final inTable = find
+        .descendant(
+          of: find.byKey(const Key('records-table')),
+          matching: find.byIcon(FiIcons.choice),
+        )
+        .evaluate()
+        .length;
+    expect(glyphs, inTable);
   });
 
   testWidgets('editing options sends only what changed', (tester) async {

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:fi/bridge/collection_bridge.dart';
 import 'package:fi/file_dialogs.dart';
 import 'package:fi/src/rust/api/models.dart';
+import 'package:fi/ui_prefs.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
@@ -214,9 +215,20 @@ final class CollectionsController extends ChangeNotifier {
   CollectionsController(
     this.bridge, {
     this.fileDialogs = const PlatformFileDialogs(),
+    this.uiPrefs,
   });
 
   final CollectionBridge bridge;
+
+  /// Device-local list preferences; none are remembered when null.
+  final UiPrefsStore? uiPrefs;
+
+  /// The collections list order, remembered through [uiPrefs].
+  CollectionSort collectionSort = CollectionSort.lastEdited;
+  UiPrefs _prefs = const UiPrefs();
+
+  /// Bumped by [setCollectionSort], so a slow initial load never overrides a newer choice.
+  var _sortChanges = 0;
 
   /// Save and open dialogs for export and import.
   final FileDialogs fileDialogs;
@@ -246,6 +258,8 @@ final class CollectionsController extends ChangeNotifier {
   StreamSubscription<BridgeErrorEventDto>? _errorSubscription;
 
   Future<void> start() async {
+    // Not awaited: the list must never wait on a preferences file.
+    unawaited(_loadPrefs());
     projection = await bridge.projectionState();
     _listenForInvalidations();
     _listenForProjection();
@@ -256,6 +270,31 @@ final class CollectionsController extends ChangeNotifier {
     widgetDescriptors = await bridge.listWidgetDescriptors();
     await refresh();
   }
+
+  Future<void> _loadPrefs() async {
+    final store = uiPrefs;
+    if (store == null) return;
+    final changes = _sortChanges;
+    final loaded = await store.load();
+    if (_disposed || changes != _sortChanges) return;
+    _prefs = loaded;
+    collectionSort = loaded.collectionSort;
+    notifyListeners();
+  }
+
+  /// Switches the list order and remembers it on this device.
+  void setCollectionSort(CollectionSort sort) {
+    _sortChanges++;
+    if (sort == collectionSort) return;
+    collectionSort = sort;
+    _prefs = _prefs.copyWith(collectionSort: sort);
+    notifyListeners();
+    unawaited(uiPrefs?.save(_prefs));
+  }
+
+  /// [collections] in the chosen order, ties broken by id.
+  List<CollectionDto> get sortedCollections =>
+      sortCollections(collections, collectionSort);
 
   void _listenForInvalidations() {
     _dataSubscription = bridge.dataChangedEvents().listen(
@@ -298,7 +337,7 @@ final class CollectionsController extends ChangeNotifier {
       collections = await bridge.listCollections();
       if (selectedCollectionId case final id?) {
         schema = await bridge.getCollectionSchema(id);
-        records = await bridge.listRecords(id);
+        records = newestFirst(await bridge.listRecords(id));
         computedFields = await bridge.listComputedFields(id);
         queryDefinitions = await bridge.listQueryDefinitions(id);
         widgetDefinitions = await bridge.listWidgets(id);
@@ -783,9 +822,92 @@ final class CollectionsController extends ChangeNotifier {
   }
 }
 
-/// Footer text naming the running build, e.g. `fi 0.1.21 (a1b2c3d-dirty)`.
-String buildLabel(BuildInfoDto build) =>
-    'fi ${build.version} (${build.gitHash}${build.dirty ? '-dirty' : ''})';
+/// [collections] ordered by [sort]: most recently edited first (never edited last), or A–Z
+/// ignoring case; ties are broken by id.
+List<CollectionDto> sortCollections(
+  List<CollectionDto> collections,
+  CollectionSort sort,
+) {
+  int byId(CollectionDto a, CollectionDto b) => a.id.compareTo(b.id);
+  return [...collections]..sort(switch (sort) {
+    CollectionSort.name => (a, b) {
+      final order = a.name.toLowerCase().compareTo(b.name.toLowerCase());
+      return order != 0 ? order : byId(a, b);
+    },
+    CollectionSort.lastEdited => (a, b) {
+      final order = switch ((a.lastEditedMs, b.lastEditedMs)) {
+        (final x?, final y?) => y.compareTo(x),
+        (null, null) => 0,
+        (null, _) => 1,
+        (_, null) => -1,
+      };
+      return order != 0 ? order : byId(a, b);
+    },
+  });
+}
+
+/// The default record order: newest first by creation time, records without one last; ties and
+/// the undated tail by id.
+List<RecordDto> newestFirst(List<RecordDto> records) =>
+    [...records]..sort((a, b) {
+      final order = switch ((a.createdAtMs, b.createdAtMs)) {
+        (final x?, final y?) => y.compareTo(x),
+        (null, null) => 0,
+        (null, _) => 1,
+        (_, null) => -1,
+      };
+      return order != 0 ? order : a.id.compareTo(b.id);
+    });
+
+/// The active required fields [record] is missing, in form order: those its `record_validation`
+/// diagnostics name.
+List<FieldDefinitionDto> missingRequiredFields(
+  RecordDto record,
+  List<FieldDefinitionDto> orderedFields,
+) {
+  if (record.valid) return const [];
+  final named = {
+    for (final item in record.diagnostics)
+      if (item.kind == 'record_validation') ?item.fieldId,
+  };
+  return [
+    for (final field in orderedFields)
+      if (named.contains(field.id)) field,
+  ];
+}
+
+/// Footer text naming the running build, e.g. `fi 0.1.21 · a1b2c3d-dirty`, or
+/// `fi 0.1.21 · unknown` when the build carries no hash.
+String buildLabel(BuildInfoDto build) {
+  final hash = build.gitHash.trim();
+  if (hash.isEmpty || hash == 'unknown') return 'fi ${build.version} · unknown';
+  return 'fi ${build.version} · $hash${build.dirty ? '-dirty' : ''}';
+}
+
+/// What a connection log line is about.
+enum LogCategory { pairing, address, peer, device }
+
+/// The category of a retained log event, from its event name.
+LogCategory logCategory(LogEventDto event) {
+  final name = event.event ?? '';
+  if (name.startsWith('pairing_')) return LogCategory.pairing;
+  if (name == 'peer_address_observed' ||
+      name == 'peer_endpoint_discovered' ||
+      name.startsWith('discovery_')) {
+    return LogCategory.address;
+  }
+  if (name.startsWith('peer_') || name.startsWith('sync')) {
+    return LogCategory.peer;
+  }
+  return LogCategory.device;
+}
+
+/// A log event's message: its technical text and fields, unformatted.
+String logMessage(LogEventDto event) => [
+  ?event.event,
+  if (event.message.isNotEmpty) event.message,
+  for (final (name, value) in event.fields) '$name=$value',
+].join(' ');
 
 /// One retained log event as `at_ms level event message key=value ...`,
 /// matching the lines of the Rust diagnostic block.

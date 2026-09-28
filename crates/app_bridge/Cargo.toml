@@ -18,6 +18,7 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
+uuid.workspace = true
 
 [target.'cfg(target_os = "android")'.dependencies]
 android_log-sys.workspace = true

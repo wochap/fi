@@ -283,7 +283,25 @@ final class FakeCollectionBridge implements CollectionBridge {
   @override
   Future<List<CollectionDto>> listCollections() async {
     _fail();
-    return List.of(collections);
+    // Counts come from what this fake holds, the way Rust projects them; the edit time is kept
+    // from the stored entry so tests can set it.
+    return [
+      for (final item in collections)
+        CollectionDto(
+          id: item.id,
+          name: item.name,
+          description: item.description,
+          recordCount: records[item.id]?.length ?? 0,
+          fieldCount:
+              schemas[item.id]?.fields
+                  .where((field) => !field.deleted)
+                  .length ??
+              0,
+          incompleteCount:
+              records[item.id]?.where((record) => !record.valid).length ?? 0,
+          lastEditedMs: item.lastEditedMs,
+        ),
+    ];
   }
 
   @override
@@ -294,7 +312,14 @@ final class FakeCollectionBridge implements CollectionBridge {
     _fail();
     final id = 'collection-${_next++}';
     collections.add(
-      CollectionDto(id: id, name: name, description: description),
+      CollectionDto(
+        id: id,
+        name: name,
+        description: description,
+        recordCount: 0,
+        fieldCount: 0,
+        incompleteCount: 0,
+      ),
     );
     schemas[id] = CollectionSchemaDto(
       id: id,
@@ -317,6 +342,10 @@ final class FakeCollectionBridge implements CollectionBridge {
       id: id,
       name: name,
       description: old.description,
+      recordCount: old.recordCount,
+      fieldCount: old.fieldCount,
+      incompleteCount: old.incompleteCount,
+      lastEditedMs: old.lastEditedMs,
     );
     final schema = schemas[id]!;
     schemas[id] = CollectionSchemaDto(
@@ -343,7 +372,14 @@ final class FakeCollectionBridge implements CollectionBridge {
     final trimmed = name.trim();
     clones.add((sourceId, trimmed));
     collections.add(
-      CollectionDto(id: id, name: trimmed, description: source.description),
+      CollectionDto(
+        id: id,
+        name: trimmed,
+        description: source.description,
+        recordCount: 0,
+        fieldCount: 0,
+        incompleteCount: 0,
+      ),
     );
     schemas[id] = CollectionSchemaDto(
       id: id,
@@ -475,7 +511,16 @@ final class FakeCollectionBridge implements CollectionBridge {
     for (final name in text.split('\n').where((line) => line.isNotEmpty)) {
       final id = 'collection-${_next++}';
       ids.add(id);
-      collections.add(CollectionDto(id: id, name: name, description: ''));
+      collections.add(
+        CollectionDto(
+          id: id,
+          name: name,
+          description: '',
+          recordCount: 0,
+          fieldCount: 0,
+          incompleteCount: 0,
+        ),
+      );
       schemas[id] = CollectionSchemaDto(
         id: id,
         description: '',
@@ -752,6 +797,7 @@ final class FakeCollectionBridge implements CollectionBridge {
       ],
       valid: true,
       diagnostics: const [],
+      createdAtMs: old.createdAtMs,
     );
     changed(collectionId);
   }

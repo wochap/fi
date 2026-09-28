@@ -60,6 +60,14 @@ pub struct CollectionView {
     pub id: CollectionSchemaId,
     pub name: String,
     pub description: String,
+    /// Active (not logically deleted) records.
+    pub record_count: u32,
+    /// Active fields in the schema.
+    pub field_count: u32,
+    /// Active records projected invalid.
+    pub incomplete_count: u32,
+    /// Wall-clock part of the newest HLC stamp in the collection's state, if any.
+    pub last_edited_ms: Option<i64>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

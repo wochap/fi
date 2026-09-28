@@ -4008,12 +4008,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   CollectionDto dco_decode_collection_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 3)
-      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    if (arr.length != 7)
+      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
     return CollectionDto(
       id: dco_decode_String(arr[0]),
       name: dco_decode_String(arr[1]),
       description: dco_decode_String(arr[2]),
+      recordCount: dco_decode_u_32(arr[3]),
+      fieldCount: dco_decode_u_32(arr[4]),
+      incompleteCount: dco_decode_u_32(arr[5]),
+      lastEditedMs: dco_decode_opt_CastedPrimitive_i_64(arr[6]),
     );
   }
 
@@ -4991,14 +4995,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   RecordDto dco_decode_record_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 5)
-      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    if (arr.length != 6)
+      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
     return RecordDto(
       id: dco_decode_String(arr[0]),
       collectionId: dco_decode_String(arr[1]),
       values: dco_decode_list_record_value_dto(arr[2]),
       valid: dco_decode_bool(arr[3]),
       diagnostics: dco_decode_list_diagnostic_dto(arr[4]),
+      createdAtMs: dco_decode_opt_CastedPrimitive_i_64(arr[5]),
     );
   }
 
@@ -5905,10 +5910,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_id = sse_decode_String(deserializer);
     var var_name = sse_decode_String(deserializer);
     var var_description = sse_decode_String(deserializer);
+    var var_recordCount = sse_decode_u_32(deserializer);
+    var var_fieldCount = sse_decode_u_32(deserializer);
+    var var_incompleteCount = sse_decode_u_32(deserializer);
+    var var_lastEditedMs = sse_decode_opt_CastedPrimitive_i_64(deserializer);
     return CollectionDto(
       id: var_id,
       name: var_name,
       description: var_description,
+      recordCount: var_recordCount,
+      fieldCount: var_fieldCount,
+      incompleteCount: var_incompleteCount,
+      lastEditedMs: var_lastEditedMs,
     );
   }
 
@@ -7357,12 +7370,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_values = sse_decode_list_record_value_dto(deserializer);
     var var_valid = sse_decode_bool(deserializer);
     var var_diagnostics = sse_decode_list_diagnostic_dto(deserializer);
+    var var_createdAtMs = sse_decode_opt_CastedPrimitive_i_64(deserializer);
     return RecordDto(
       id: var_id,
       collectionId: var_collectionId,
       values: var_values,
       valid: var_valid,
       diagnostics: var_diagnostics,
+      createdAtMs: var_createdAtMs,
     );
   }
 
@@ -8394,6 +8409,10 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_String(self.id, serializer);
     sse_encode_String(self.name, serializer);
     sse_encode_String(self.description, serializer);
+    sse_encode_u_32(self.recordCount, serializer);
+    sse_encode_u_32(self.fieldCount, serializer);
+    sse_encode_u_32(self.incompleteCount, serializer);
+    sse_encode_opt_CastedPrimitive_i_64(self.lastEditedMs, serializer);
   }
 
   @protected
@@ -9660,6 +9679,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_list_record_value_dto(self.values, serializer);
     sse_encode_bool(self.valid, serializer);
     sse_encode_list_diagnostic_dto(self.diagnostics, serializer);
+    sse_encode_opt_CastedPrimitive_i_64(self.createdAtMs, serializer);
   }
 
   @protected

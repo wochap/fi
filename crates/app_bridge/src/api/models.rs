@@ -74,6 +74,12 @@ pub struct CollectionDto {
     pub id: String,
     pub name: String,
     pub description: String,
+    pub record_count: u32,
+    pub field_count: u32,
+    pub incomplete_count: u32,
+    /// Unix milliseconds of the newest edit the collection's state carries; `None` when it has
+    /// none (a new, empty collection).
+    pub last_edited_ms: Option<i64>,
 }
 
 /// Result of a CSV or JSON import. When `imported` is false the file was rejected and nothing
@@ -247,6 +253,9 @@ pub struct RecordDto {
     pub values: Vec<RecordValueDto>,
     pub valid: bool,
     pub diagnostics: Vec<DiagnosticDto>,
+    /// Creation time in Unix milliseconds, read from the UUIDv7 record id; `None` when the id
+    /// carries no timestamp.
+    pub created_at_ms: Option<i64>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1216,6 +1225,10 @@ impl From<app_core::CollectionView> for CollectionDto {
             id: value.id.to_string(),
             name: value.name,
             description: value.description,
+            record_count: value.record_count,
+            field_count: value.field_count,
+            incomplete_count: value.incomplete_count,
+            last_edited_ms: value.last_edited_ms,
         }
     }
 }
@@ -1440,8 +1453,21 @@ impl From<app_core::RecordView> for RecordDto {
                 .collect(),
             valid: value.valid,
             diagnostics: value.diagnostics.into_iter().map(Into::into).collect(),
+            created_at_ms: uuid_v7_millis(value.record.id.as_uuid()),
         }
     }
+}
+
+/// The Unix-millisecond timestamp embedded in a UUIDv7, or `None` for any other version.
+pub(crate) fn uuid_v7_millis(id: uuid::Uuid) -> Option<i64> {
+    if id.get_version_num() != 7 {
+        return None;
+    }
+    let (seconds, nanos) = id.get_timestamp()?.to_unix();
+    i64::try_from(seconds)
+        .ok()?
+        .checked_mul(1000)?
+        .checked_add(i64::from(nanos / 1_000_000))
 }
 
 impl From<DomainKind> for DomainKindDto {
@@ -1601,6 +1627,22 @@ mod tests {
         BootstrapDto, BootstrapKindDto, BridgeError, BridgeErrorKind, RecoveryOutcomeDto,
         RecoveryReasonDto,
     };
+
+    #[test]
+    fn creation_time_comes_from_a_v7_id_only() {
+        use super::uuid_v7_millis;
+        // 2026-09-22T10:15:00.000Z
+        let millis: i64 = 1_790_072_100_000;
+        let v7 = uuid::Uuid::new_v7(uuid::Timestamp::from_unix(
+            uuid::NoContext,
+            u64::try_from(millis / 1000).unwrap(),
+            0,
+        ));
+        assert_eq!(uuid_v7_millis(v7), Some(millis));
+        let v4 = uuid::Uuid::from_u128(0x6f1c_2a3b_4c5d_4e6f_8a7b_9c8d_7e6f_5a4b);
+        assert_eq!(v4.get_version_num(), 4);
+        assert_eq!(uuid_v7_millis(v4), None);
+    }
 
     #[test]
     fn exhausted_ports_cross_the_bridge_as_their_own_kind() {

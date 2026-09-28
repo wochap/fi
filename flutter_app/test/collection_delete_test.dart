@@ -67,7 +67,7 @@ Future<void> chooseDelete(
   await tester.tap(find.byIcon(FiIcons.more));
   await tester.pumpAndSettle();
   bridge.nextError = countError;
-  await tester.tap(find.text('Delete'));
+  await tester.tap(find.text('Delete…'));
   await tester.pumpAndSettle();
 }
 

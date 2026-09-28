@@ -280,8 +280,11 @@ void main() {
     await pumpPage(tester, narrow.controller);
     expect(find.byTooltip('New record'), findsOneWidget);
     expect(find.byTooltip('Schema'), findsOneWidget);
-    expect(find.byTooltip('Queries'), findsOneWidget);
     expect(find.text('New record'), findsNothing);
+    // Queries moves into the phone header's ⋮ menu.
+    await tester.tap(find.byKey(const Key('collection-more')));
+    await tester.pumpAndSettle();
+    expect(find.text('Queries'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

@@ -4057,10 +4057,18 @@ impl SseDecode for crate::api::models::CollectionDto {
         let mut var_id = <String>::sse_decode(deserializer);
         let mut var_name = <String>::sse_decode(deserializer);
         let mut var_description = <String>::sse_decode(deserializer);
+        let mut var_recordCount = <u32>::sse_decode(deserializer);
+        let mut var_fieldCount = <u32>::sse_decode(deserializer);
+        let mut var_incompleteCount = <u32>::sse_decode(deserializer);
+        let mut var_lastEditedMs = <Option<i64>>::sse_decode(deserializer);
         return crate::api::models::CollectionDto {
             id: var_id,
             name: var_name,
             description: var_description,
+            record_count: var_recordCount,
+            field_count: var_fieldCount,
+            incomplete_count: var_incompleteCount,
+            last_edited_ms: var_lastEditedMs,
         };
     }
 }
@@ -5630,12 +5638,14 @@ impl SseDecode for crate::api::models::RecordDto {
         let mut var_valid = <bool>::sse_decode(deserializer);
         let mut var_diagnostics =
             <Vec<crate::api::models::DiagnosticDto>>::sse_decode(deserializer);
+        let mut var_createdAtMs = <Option<i64>>::sse_decode(deserializer);
         return crate::api::models::RecordDto {
             id: var_id,
             collection_id: var_collectionId,
             values: var_values,
             valid: var_valid,
             diagnostics: var_diagnostics,
+            created_at_ms: var_createdAtMs,
         };
     }
 }
@@ -6802,6 +6812,10 @@ impl flutter_rust_bridge::IntoDart for crate::api::models::CollectionDto {
             self.id.into_into_dart().into_dart(),
             self.name.into_into_dart().into_dart(),
             self.description.into_into_dart().into_dart(),
+            self.record_count.into_into_dart().into_dart(),
+            self.field_count.into_into_dart().into_dart(),
+            self.incomplete_count.into_into_dart().into_dart(),
+            self.last_edited_ms.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -7867,6 +7881,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::models::RecordDto {
             self.values.into_into_dart().into_dart(),
             self.valid.into_into_dart().into_dart(),
             self.diagnostics.into_into_dart().into_dart(),
+            self.created_at_ms.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -8875,6 +8890,10 @@ impl SseEncode for crate::api::models::CollectionDto {
         <String>::sse_encode(self.id, serializer);
         <String>::sse_encode(self.name, serializer);
         <String>::sse_encode(self.description, serializer);
+        <u32>::sse_encode(self.record_count, serializer);
+        <u32>::sse_encode(self.field_count, serializer);
+        <u32>::sse_encode(self.incomplete_count, serializer);
+        <Option<i64>>::sse_encode(self.last_edited_ms, serializer);
     }
 }
 
@@ -10129,6 +10148,7 @@ impl SseEncode for crate::api::models::RecordDto {
         <Vec<crate::api::models::RecordValueDto>>::sse_encode(self.values, serializer);
         <bool>::sse_encode(self.valid, serializer);
         <Vec<crate::api::models::DiagnosticDto>>::sse_encode(self.diagnostics, serializer);
+        <Option<i64>>::sse_encode(self.created_at_ms, serializer);
     }
 }
 

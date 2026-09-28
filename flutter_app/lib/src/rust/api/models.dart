@@ -6,7 +6,7 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `from_app`, `from_core`, `from_core`, `from_core`, `from_core`, `from_core`, `from_core`, `from_core`, `hex_id`, `initialization`, `into_core`, `issues`, `lifecycle`, `new`, `new`, `safe`, `validation`
+// These functions are ignored because they are not marked as `pub`: `from_app`, `from_core`, `from_core`, `from_core`, `from_core`, `from_core`, `from_core`, `from_core`, `hex_id`, `initialization`, `into_core`, `issues`, `lifecycle`, `new`, `new`, `safe`, `uuid_v7_millis`, `validation`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `QueryValidationErrorDto`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `try_from`, `try_from`
 
@@ -259,15 +259,33 @@ class CollectionDto {
   final String id;
   final String name;
   final String description;
+  final int recordCount;
+  final int fieldCount;
+  final int incompleteCount;
+
+  /// Unix milliseconds of the newest edit the collection's state carries; `None` when it has
+  /// none (a new, empty collection).
+  final int? lastEditedMs;
 
   const CollectionDto({
     required this.id,
     required this.name,
     required this.description,
+    required this.recordCount,
+    required this.fieldCount,
+    required this.incompleteCount,
+    this.lastEditedMs,
   });
 
   @override
-  int get hashCode => id.hashCode ^ name.hashCode ^ description.hashCode;
+  int get hashCode =>
+      id.hashCode ^
+      name.hashCode ^
+      description.hashCode ^
+      recordCount.hashCode ^
+      fieldCount.hashCode ^
+      incompleteCount.hashCode ^
+      lastEditedMs.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -276,7 +294,11 @@ class CollectionDto {
           runtimeType == other.runtimeType &&
           id == other.id &&
           name == other.name &&
-          description == other.description;
+          description == other.description &&
+          recordCount == other.recordCount &&
+          fieldCount == other.fieldCount &&
+          incompleteCount == other.incompleteCount &&
+          lastEditedMs == other.lastEditedMs;
 }
 
 class CollectionQueryDto {
@@ -1334,12 +1356,17 @@ class RecordDto {
   final bool valid;
   final List<DiagnosticDto> diagnostics;
 
+  /// Creation time in Unix milliseconds, read from the UUIDv7 record id; `None` when the id
+  /// carries no timestamp.
+  final int? createdAtMs;
+
   const RecordDto({
     required this.id,
     required this.collectionId,
     required this.values,
     required this.valid,
     required this.diagnostics,
+    this.createdAtMs,
   });
 
   @override
@@ -1348,7 +1375,8 @@ class RecordDto {
       collectionId.hashCode ^
       values.hashCode ^
       valid.hashCode ^
-      diagnostics.hashCode;
+      diagnostics.hashCode ^
+      createdAtMs.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -1359,7 +1387,8 @@ class RecordDto {
           collectionId == other.collectionId &&
           values == other.values &&
           valid == other.valid &&
-          diagnostics == other.diagnostics;
+          diagnostics == other.diagnostics &&
+          createdAtMs == other.createdAtMs;
 }
 
 class RecordValueDto {

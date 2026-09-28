@@ -20,6 +20,10 @@ is the target and this guide should be updated to match.
 | `lib/theme/side_sheet.dart` | `showSideSheet()`: a 480px sheet from the right, or a bottom sheet on a phone |
 | `lib/theme/form_surface.dart` | `showFormSurface()` + `FormSurface`: every create/edit form, a bottom sheet on a phone and a dialog (optionally two-pane with an aside) otherwise |
 | `lib/theme/inputs.dart` | `FiTextInput`, `FiSelect`, `FiPickerInput`: every text, number, search, select and picker input, at the small or normal height token |
+| `lib/theme/action_sheet.dart` | `showActionSheet()` + `ActionSheet`: a phone row menu as a bottom sheet, headed by what it acts on (icon tile, title, subtitle), with 48px action rows in optionally labelled groups (mock 4f) |
+| `lib/device_details.dart` | A trusted device's Details: `DeviceDetails` (state grid, failure, DeviceId with copy, categorized connection log with the All / Pairing / Peer filter, Reconnect and Copy log), `DeviceDetailsScreen` (the pushed phone screen, mock 5f), `DeviceStateTag`, `LogLineRow`, `seenSyncedLine()`, `shortDeviceId()` / `groupedDeviceId()`, `copyWithConfirmation()` |
+| `lib/ui_prefs.dart` | `UiPrefs` and its stores: device-local presentation choices (the collections sort) in `ui_prefs.json` in the app support directory; never sent to Rust or synced |
+| `lib/collections_page.dart` `_RecordTable` | The desktop records table (mock 4c): a `two_dimensional_scrollables` `TableView` with a pinned header row and first column (170px, others 150px), typed headers with the required mark, incomplete-row marks, and the "Scroll for more columns →" hint with a trailing fade |
 | `lib/theme/form_errors.dart` | `FieldErrorLines`, `FormErrorLines`, `RequiredLegend`, `requiredLabel()`, `errorTextOf()` / `errorLinesOf()`: how forms show errors and required inputs |
 | `assets/fonts/` | Inter (400, 500) and JetBrains Mono (400), with OFL licences |
 
@@ -116,7 +120,8 @@ must write one, use these sizes:
 | Where | Breakpoint | Behavior |
 | --- | --- | --- |
 | Screen width (`MediaQuery`) | 720 | ≥720: 216px sidebar (`_Sidebar` in `app.dart`). <720: slim logo row plus `NavigationBar`, bottom sheets instead of side sheets, larger touch targets (44–48px), create/edit forms as bottom sheets |
-| Collection content width (`LayoutBuilder`) | 760 | ≥760: records table and labelled header buttons. <760: record card list, icon buttons, floating "+ Record" button |
+| Screen width, collection screen | 720 | ≥720: records table. <720: record cards (newest first), a phone header with Schema and a ⋮ menu (Queries, Select records, Collection actions…), floating "+ Record" button, row menus as action sheets, device Details as a pushed screen |
+| Collection content width (`LayoutBuilder`) | 760 | Above the phone breakpoint: ≥760 labelled header buttons, <760 the same actions as icon buttons |
 | Form surface screen width | 820 | ≥820: a form with an aside (the widget editor's preview) shows it as a 280px pane beside the form; below, the aside is pinned above the buttons |
 
 - Page padding: desktop 32 horizontal / 22 top; phone 16–18 horizontal. Layouts are left-aligned

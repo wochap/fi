@@ -24,6 +24,10 @@ abstract final class FiIcons {
   static const IconData selectAll = PhosphorIconsRegular.checks;
   static const IconData reorder = PhosphorIconsRegular.arrowsDownUp;
   static const IconData importExport = PhosphorIconsRegular.arrowsDownUp;
+  static const IconData check = PhosphorIconsRegular.check;
+  static const IconData sort = PhosphorIconsRegular.sortAscending;
+  static const IconData importFile = PhosphorIconsRegular.downloadSimple;
+  static const IconData exportFile = PhosphorIconsRegular.uploadSimple;
   static const IconData dragHandle = PhosphorIconsRegular.dotsSixVertical;
 
   // Navigation and disclosure.
@@ -60,6 +64,8 @@ abstract final class FiIcons {
   static const IconData devices = PhosphorIconsRegular.devices;
   static const IconData phone = PhosphorIconsRegular.deviceMobile;
   static const IconData network = PhosphorIconsRegular.broadcast;
+  static const IconData dot = PhosphorIconsFill.circle;
+  static const IconData chevronRight = PhosphorIconsRegular.caretRight;
 
   // Collections, widgets and queries.
   static const IconData collection = PhosphorIconsRegular.squaresFour;

@@ -3,6 +3,7 @@ import 'package:fi/theme/nocturne_widgets.dart';
 import 'package:fi/app.dart';
 import 'package:fi/pairing_card.dart';
 import 'package:fi/src/rust/api/models.dart';
+import 'package:fi/ui_prefs.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -14,6 +15,7 @@ Widget testApp(FakeCollectionBridge bridge) => CollectionApp(
   initializeRust: () async {},
   dataDirProvider: () async => '/test',
   setPlatformForeground: (_) async {},
+  uiPrefs: MemoryUiPrefsStore(),
 );
 
 Future<void> pumpUntilFound(WidgetTester tester, Finder finder) async {
@@ -106,18 +108,25 @@ Future<void> tapVisible(WidgetTester tester, Finder finder) async {
 }
 
 void diagnosticsTests() {
-  testWidgets('this device shows its full id and pairing name', (tester) async {
+  testWidgets('this device shows its grouped id, pairing name and Copy ID', (
+    tester,
+  ) async {
+    final copied = mockClipboard(tester);
     final bridge = FakeCollectionBridge();
     await openDevices(tester, bridge);
     await pumpUntilFound(tester, find.byKey(const Key('local-device-id')));
-    expect(
-      tester
-          .widget<SelectableText>(find.byKey(const Key('local-device-id')))
-          .data,
-      bridge.localIdentity!.deviceId,
-    );
+    final id = bridge.localIdentity!.deviceId;
+    final shown = tester
+        .widget<Text>(find.byKey(const Key('local-device-id')))
+        .data!;
+    expect(shown, startsWith(id.substring(0, 8)));
+    expect(shown, endsWith(id.substring(id.length - 8)));
     expect(find.text(bridge.localIdentity!.pairingName), findsOneWidget);
     expect(find.byKey(const Key('local-device-missing')), findsNothing);
+
+    await tapVisible(tester, find.byKey(const Key('copy-local-id')));
+    expect(copied, [id]);
+    expect(find.text('ID copied'), findsOneWidget);
   });
 
   testWidgets('this device says networking is not set up without an id', (
@@ -158,21 +167,28 @@ void diagnosticsTests() {
       tester,
       find.byKey(const Key('device-details-$failedPeerId')),
     );
-    expect(find.text('Failure: TLS failed: bad certificate'), findsOneWidget);
-    expect(find.text('Endpoint: 192.168.1.20:47380'), findsOneWidget);
-    expect(find.textContaining('Last attempt: '), findsOneWidget);
-    expect(find.text('Sync port: ${bridge.ports.syncPort}'), findsOneWidget);
-    final log = tester
-        .widget<SelectableText>(
-          find.byKey(const Key('device-log-$failedPeerId')),
-        )
-        .data!;
+    expect(find.text('TLS failed: bad certificate'), findsOneWidget);
+    String fact(String name) =>
+        tester.widget<Text>(find.byKey(Key('device-fact-$name'))).data!;
+    expect(fact('Endpoint'), '192.168.1.20:47380');
+    expect(fact('State'), 'Error');
+    expect(find.text('LAST ATTEMPT'), findsOneWidget);
+    expect(fact('Sync port'), '${bridge.ports.syncPort}');
+    expect(find.text('Connection log · 1 event'), findsOneWidget);
+    final log = find.byKey(const Key('device-log-$failedPeerId'));
     expect(
-      log,
-      contains(
-        '7 INFO peer_dial_failed dial to peer endpoint failed '
-        'endpoint=192.168.1.20:47380',
+      find.descendant(
+        of: log,
+        matching: find.text(
+          'peer_dial_failed dial to peer endpoint failed '
+          'endpoint=192.168.1.20:47380',
+        ),
       ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: log, matching: find.text('peer')),
+      findsOneWidget,
     );
 
     await tapVisible(
@@ -203,7 +219,7 @@ void diagnosticsTests() {
     expect(bridge.diagnosticBlockCalls, [failedPeerId]);
     expect(copied, hasLength(1));
     expect(copied.single, startsWith('Version: unknown\n'));
-    expect(find.text('Diagnostics copied'), findsOneWidget);
+    expect(find.text('Log copied'), findsOneWidget);
   });
 
   testWidgets('a revoked row offers copy but no reconnect', (tester) async {
@@ -344,11 +360,8 @@ void main() {
     expect(find.textContaining('Connected'), findsOneWidget);
     // Status times read relatively, and a persisted sync time is never
     // "never".
-    expect(
-      find.textContaining('Last seen 30 min ago · Last sync 3 h ago'),
-      findsOneWidget,
-    );
-    expect(find.textContaining('Last sync never'), findsNothing);
+    expect(find.text('Seen 30 min ago · Synced 3 h ago'), findsOneWidget);
+    expect(find.textContaining('Never synced'), findsNothing);
 
     await tester.tap(find.byType(PopupMenuButton<String>));
     await tester.pumpAndSettle();
@@ -388,10 +401,10 @@ void main() {
         ),
       );
     await openDevices(tester, bridge);
-    expect(find.textContaining('Last seen just now'), findsOneWidget);
+    expect(find.text('Seen just now · Never synced'), findsOneWidget);
 
     await tester.pump(const Duration(seconds: 61));
-    expect(find.textContaining('Last seen 1 min ago'), findsOneWidget);
+    expect(find.text('Seen 1 min ago · Never synced'), findsOneWidget);
   });
 
   testWidgets('a revocation whose rotation failed stays revoked and retries', (
@@ -495,6 +508,10 @@ void main() {
 
     bool switchValue(String key) =>
         tester.widget<FiSwitchTile>(find.byKey(Key(key))).value;
+    Finder switchOf(String key) => find.descendant(
+      of: find.byKey(Key(key)),
+      matching: find.byType(FiSwitch),
+    );
     expect(switchValue('pref-discoverable'), isFalse);
     expect(switchValue('pref-sync'), isTrue);
 
@@ -508,7 +525,7 @@ void main() {
       revoked: false,
       connection: PeerConnectionKindDto.paused,
     );
-    await tester.tap(find.byKey(const Key('pref-sync')));
+    await tester.tap(switchOf('pref-sync'));
     await tester.pumpAndSettle();
     expect(bridge.preferenceCalls, ['sync=false']);
     expect(switchValue('pref-sync'), isFalse);
@@ -532,7 +549,7 @@ void main() {
       message: 'Local data could not be saved or loaded.',
       resetResolvable: false,
     );
-    await tester.tap(find.byKey(const Key('pref-discoverable')));
+    await tester.tap(switchOf('pref-discoverable'));
     await tester.pumpAndSettle();
     expect(switchValue('pref-discoverable'), isFalse);
     expect(
@@ -549,13 +566,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('pref-discoverable')), findsOneWidget);
     expect(find.byKey(const Key('pref-sync')), findsOneWidget);
-    expect(find.text('No devices have been paired yet.'), findsOneWidget);
+    expect(find.text('No devices paired yet'), findsOneWidget);
   });
 
   for (final discoverable in [true, false]) {
-    testWidgets('idle pairing card with discoverable=$discoverable', (
-      tester,
-    ) async {
+    testWidgets('empty state with discoverable=$discoverable', (tester) async {
       final bridge = FakeCollectionBridge()
         ..preferences = NetworkPreferencesDto(
           discoverable: discoverable,
@@ -563,15 +578,22 @@ void main() {
         );
       await openDevices(tester, bridge);
       await tester.pumpAndSettle();
-      final body = tester.widget<Text>(
-        find.byKey(const Key('pairing-idle-body')),
+      expect(find.byKey(const Key('no-devices')), findsOneWidget);
+      expect(find.text('Trusted devices · 0'.toUpperCase()), findsOneWidget);
+      expect(
+        tester.widget<Text>(find.byKey(const Key('no-devices-body'))).data,
+        "Start pairing on both devices while they're nearby. "
+        'Pairing turns itself off after 2 minutes.',
       );
-      expect(body.data, startsWith('Pairing is off.'));
-      expect(body.data!.contains(PairingCard.discoveryOffNote), !discoverable);
+      expect(
+        find.text(PairingCard.discoveryOffNote),
+        discoverable ? findsNothing : findsOneWidget,
+      );
       final start = tester.widget<ButtonStyleButton>(
         find.byKey(const Key('start-pairing')),
       );
       expect(start.onPressed, isNotNull);
+      expect(find.byKey(const Key('pairing-card')), findsNothing);
     });
   }
 
@@ -710,30 +732,50 @@ void main() {
     expect(find.textContaining('1 paired'), findsOneWidget);
   });
 
-  group('build version footer', () {
+  group('build label', () {
     Future<void> openWithBuild(
       WidgetTester tester,
-      FakeCollectionBridge bridge,
-    ) async {
+      FakeCollectionBridge bridge, {
+      Size size = const Size(800, 1200),
+    }) async {
       await openDevices(tester, bridge);
+      tester.view.physicalSize = size;
       await tester.pump(const Duration(milliseconds: 50));
+      await tester.pump();
     }
 
-    testWidgets('shows a clean build as version and hash, last on the page', (
+    const clean = BuildInfoDto(
+      version: '0.1.21',
+      gitHash: 'a1b2c3d',
+      dirty: false,
+    );
+
+    testWidgets('sits under the sidebar status on a wide screen', (
       tester,
     ) async {
-      final bridge = FakeCollectionBridge()
-        ..buildIdentity = const BuildInfoDto(
-          version: '0.1.21',
-          gitHash: 'a1b2c3d',
-          dirty: false,
-        );
-      await openWithBuild(tester, bridge);
-      final footer = find.byKey(const Key('build-version'));
-      await pumpUntilFound(tester, footer);
-      expect(find.text('fi 0.1.21 (a1b2c3d)'), findsOneWidget);
+      final bridge = FakeCollectionBridge()..buildIdentity = clean;
+      await openWithBuild(tester, bridge, size: const Size(1240, 900));
+      final label = find.byKey(const Key('build-version'));
+      await pumpUntilFound(tester, label);
+      expect(find.text('fi 0.1.21 · a1b2c3d'), findsOneWidget);
+      expect(
+        find.descendant(of: find.byKey(const Key('sidebar')), matching: label),
+        findsOneWidget,
+      );
+      expect(
+        tester.getTopLeft(label).dy,
+        greaterThan(
+          tester.getTopLeft(find.byKey(const Key('app-bar-sync-status'))).dy,
+        ),
+      );
+    });
+
+    testWidgets('ends the devices screen on a phone', (tester) async {
+      final bridge = FakeCollectionBridge()..buildIdentity = clean;
+      await openWithBuild(tester, bridge, size: const Size(390, 900));
+      final label = find.byKey(const Key('build-version'));
       await tester.scrollUntilVisible(
-        footer,
+        label,
         200,
         scrollable: find
             .descendant(
@@ -742,13 +784,11 @@ void main() {
             )
             .first,
       );
-      final thisDevice = find.text('This device');
-      if (thisDevice.evaluate().isNotEmpty) {
-        expect(
-          tester.getTopLeft(footer).dy,
-          greaterThan(tester.getTopLeft(thisDevice).dy),
-        );
-      }
+      expect(find.text('fi 0.1.21 · a1b2c3d'), findsOneWidget);
+      expect(
+        tester.getTopLeft(label).dy,
+        greaterThan(tester.getTopLeft(find.text('THIS DEVICE')).dy),
+      );
     });
 
     testWidgets('marks a dirty build', (tester) async {
@@ -760,20 +800,26 @@ void main() {
         );
       await openWithBuild(tester, bridge);
       await pumpUntilFound(tester, find.byKey(const Key('build-version')));
-      expect(find.text('fi 0.1.21 (a1b2c3d-dirty)'), findsOneWidget);
+      expect(find.text('fi 0.1.21 · a1b2c3d-dirty'), findsOneWidget);
     });
 
-    testWidgets('is shown below the empty device list', (tester) async {
-      final bridge = FakeCollectionBridge();
+    testWidgets('reads unknown without a hash', (tester) async {
+      final bridge = FakeCollectionBridge()
+        ..buildIdentity = const BuildInfoDto(
+          version: '0.1.21',
+          gitHash: 'unknown',
+          dirty: false,
+        );
       await openWithBuild(tester, bridge);
-      final footer = find.byKey(const Key('build-version'));
-      await pumpUntilFound(tester, footer);
-      final empty = find.text('No devices have been paired yet.');
-      expect(empty, findsOneWidget);
-      expect(
-        tester.getTopLeft(footer).dy,
-        greaterThan(tester.getTopLeft(empty).dy),
-      );
+      await pumpUntilFound(tester, find.byKey(const Key('build-version')));
+      expect(find.text('fi 0.1.21 · unknown'), findsOneWidget);
+    });
+
+    testWidgets('is shown with no device paired', (tester) async {
+      final bridge = FakeCollectionBridge()..buildIdentity = clean;
+      await openWithBuild(tester, bridge);
+      await pumpUntilFound(tester, find.byKey(const Key('build-version')));
+      expect(find.text('No devices paired yet'), findsOneWidget);
     });
 
     testWidgets('is absent when the query fails; the rest still renders', (
@@ -782,11 +828,8 @@ void main() {
       final bridge = FakeCollectionBridge()
         ..buildInfoError = StateError('no build info');
       await openWithBuild(tester, bridge);
-      await pumpUntilFound(
-        tester,
-        find.text('No devices have been paired yet.'),
-      );
-      expect(find.byKey(const Key('pairing-card')), findsOneWidget);
+      await pumpUntilFound(tester, find.text('No devices paired yet'));
+      expect(find.byKey(const Key('start-pairing')), findsOneWidget);
       expect(find.byKey(const Key('build-version')), findsNothing);
     });
   });

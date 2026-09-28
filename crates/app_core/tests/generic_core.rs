@@ -1254,3 +1254,146 @@ async fn in_memory_two_device_clone_sync() {
     a.shutdown().await.unwrap();
     b.shutdown().await.unwrap();
 }
+
+fn summary(app: &AppCore, id: app_core::CollectionSchemaId) -> app_core::CollectionView {
+    app.collections()
+        .unwrap()
+        .into_iter()
+        .find(|item| item.id == id)
+        .expect("collection listed")
+}
+
+fn newest_stamp(app: &AppCore, records: &[app_core::RecordId]) -> Option<i64> {
+    records
+        .iter()
+        .filter_map(|id| app.record(*id).unwrap())
+        .flat_map(|view| view.record.stamps.into_values())
+        .map(|stamp| stamp.physical_time_ms)
+        .max()
+}
+
+#[tokio::test]
+async fn collection_summaries_count_records_fields_and_incomplete_and_survive_rebuild() {
+    let directory = tempfile::tempdir().unwrap();
+    let app = AppCore::open(directory.path()).await.unwrap();
+    app.create_new_dataset().await.unwrap();
+    let collection = app
+        .create_collection("test".into(), String::new())
+        .await
+        .unwrap();
+
+    // A new collection has no records and no edit time.
+    let empty = summary(&app, collection);
+    assert_eq!(
+        (
+            empty.record_count,
+            empty.field_count,
+            empty.incomplete_count
+        ),
+        (0, 0, 0)
+    );
+    assert_eq!(empty.last_edited_ms, None);
+
+    let a = field("A", FieldType::Integer, false, 0);
+    let b = field("B", FieldType::Text, false, 1);
+    let c = field("C", FieldType::Boolean, false, 2);
+    for item in [&a, &b, &c] {
+        app.add_field(collection, item.clone()).await.unwrap();
+    }
+    let mut records = Vec::new();
+    for value in 0..7 {
+        let values = if value == 0 {
+            BTreeMap::new()
+        } else {
+            BTreeMap::from([(a.id, FieldValue::Integer(value))])
+        };
+        records.push(app.create_record(collection, values).await.unwrap());
+    }
+    let newest = newest_stamp(&app, &records);
+    // Deleted records are excluded from the counts.
+    app.delete_record(records[6], collection).await.unwrap();
+    let counted = summary(&app, collection);
+    assert_eq!((counted.record_count, counted.field_count), (6, 3));
+    assert_eq!(counted.incomplete_count, 0);
+    assert!(newest.is_some());
+    assert_eq!(counted.last_edited_ms, newest);
+
+    // Making a field required marks the record lacking it incomplete.
+    let mut required = a.clone();
+    required.required = true;
+    app.update_field(collection, required).await.unwrap();
+    assert_eq!(summary(&app, collection).incomplete_count, 1);
+
+    let before = app.collections().unwrap();
+    app.shutdown().await.unwrap();
+    std::fs::remove_file(directory.path().join("read-model.sqlite")).unwrap();
+    let reopened = AppCore::open(directory.path()).await.unwrap();
+    assert_eq!(reopened.collections().unwrap(), before);
+    reopened.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn collection_last_edited_follows_a_synced_edit() {
+    let a_dir = tempfile::tempdir().unwrap();
+    let b_dir = tempfile::tempdir().unwrap();
+    let (a_network, b_network) = MemoryTransport::pair("summary-a", "summary-b", 256);
+    let a = AppCore::open_with_transport(a_dir.path(), a_network.clone())
+        .await
+        .unwrap();
+    let b = AppCore::open_with_transport(b_dir.path(), b_network.clone())
+        .await
+        .unwrap();
+    let root = a.create_new_dataset().await.unwrap();
+    let collection = a
+        .create_collection("Shared".into(), String::new())
+        .await
+        .unwrap();
+    let title = field("Title", FieldType::Text, false, 0);
+    a.add_field(collection, title.clone()).await.unwrap();
+    let record = a
+        .create_record(
+            collection,
+            BTreeMap::from([(title.id, FieldValue::Text("hello".into()))]),
+        )
+        .await
+        .unwrap();
+    a_network.connect().await;
+    drive_memory(&a_network, &b_network).await;
+    b.join_existing(root).await.unwrap();
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            if b.record(record).is_ok_and(|value| value.is_some()) {
+                break;
+            }
+            drive_memory(&a_network, &b_network).await;
+        }
+    })
+    .await
+    .unwrap();
+
+    b.update_record_field(
+        record,
+        collection,
+        title.id,
+        FieldValue::Text("edited on b".into()),
+    )
+    .await
+    .unwrap();
+    let edited = b.record(record).unwrap().unwrap().record.stamps[&title.id];
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            if a.record(record).unwrap().unwrap().record.stamps[&title.id] == edited {
+                break;
+            }
+            drive_memory(&a_network, &b_network).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(
+        summary(&a, collection).last_edited_ms,
+        Some(edited.physical_time_ms)
+    );
+    a.shutdown().await.unwrap();
+    b.shutdown().await.unwrap();
+}

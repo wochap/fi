@@ -63,7 +63,14 @@ FakeCollectionBridge _seeded(
       rootId: 'root',
     );
   bridge.collections.add(
-    const CollectionDto(id: _collection, name: 'Headaches', description: ''),
+    const CollectionDto(
+      id: _collection,
+      name: 'Headaches',
+      description: '',
+      recordCount: 0,
+      fieldCount: 0,
+      incompleteCount: 0,
+    ),
   );
   bridge.schemas[_collection] = CollectionSchemaDto(
     id: _collection,
@@ -194,7 +201,7 @@ void main() {
     await _openCollection(tester, bridge);
     await tester.tap(find.text('Office').first);
     await tester.pumpAndSettle();
-    expect(find.text('Edit record'), findsOneWidget);
+    expect(find.text('Edit record · 1 field needed'), findsOneWidget);
     expect(find.byKey(const Key('slider-unset')), findsOneWidget);
     expect(_sliderError(tester), 'Required');
   });

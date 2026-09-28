@@ -1,6 +1,11 @@
 import 'dart:async';
+import 'dart:math' as math;
 
+import 'package:clock/clock.dart';
+import 'package:fi/status_time.dart';
+import 'package:fi/theme/action_sheet.dart';
 import 'package:fi/theme/fi_icons.dart';
+import 'package:fi/ui_prefs.dart';
 import 'package:fi/controllers.dart';
 import 'package:fi/field_registry.dart';
 import 'package:fi/help_button.dart';
@@ -19,6 +24,8 @@ import 'package:fi/widgets/query_editor_dialog.dart';
 import 'package:fi/widgets/widget_dashboard.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
+import 'package:two_dimensional_scrollables/two_dimensional_scrollables.dart';
 
 /// Below this content width the collection screen drops the table for a card list and the
 /// header actions collapse to icons.
@@ -26,6 +33,95 @@ const double _wideContent = 760;
 
 /// Below this screen width the app is laid out for a phone.
 const double _phoneScreen = 720;
+
+/// `1 record`, `6 records`.
+String _plural(int count, String noun) =>
+    '$count ${count == 1 ? noun : '${noun}s'}';
+
+/// What a collection row's menu can do.
+enum _CollectionAction {
+  rename('Rename', FiIcons.edit),
+  duplicate('Duplicate', FiIcons.copy),
+  importCsv('Import CSV…', FiIcons.importFile),
+  exportCsv('Export CSV', FiIcons.exportFile),
+  exportJson('Export JSON', FiIcons.exportFile),
+  delete('Delete…', FiIcons.delete);
+
+  const _CollectionAction(this.label, this.icon);
+
+  final String label;
+  final IconData icon;
+
+  /// The "Data" group.
+  static const data = [importCsv, exportCsv, exportJson];
+
+  ActionSheetItem<_CollectionAction> get sheetItem =>
+      ActionSheetItem(value: this, label: label, icon: icon);
+}
+
+/// The collections list order control: the current order, and a menu of both.
+class _SortButton extends StatelessWidget {
+  const _SortButton({
+    required this.sort,
+    required this.compact,
+    required this.onSelected,
+  });
+
+  final CollectionSort sort;
+  final bool compact;
+  final ValueChanged<CollectionSort> onSelected;
+
+  static String label(CollectionSort sort) => switch (sort) {
+    CollectionSort.lastEdited => 'Last edited',
+    CollectionSort.name => 'Name',
+  };
+
+  @override
+  Widget build(BuildContext context) => PopupMenuButton<CollectionSort>(
+    key: const Key('collections-sort'),
+    tooltip: 'Sort',
+    initialValue: sort,
+    onSelected: onSelected,
+    itemBuilder: (_) => [
+      for (final value in CollectionSort.values)
+        PopupMenuItem(
+          value: value,
+          child: Row(
+            children: [
+              SizedBox(
+                width: 24,
+                child: value == sort
+                    ? const Icon(
+                        FiIcons.check,
+                        size: 16,
+                        color: Nocturne.accent,
+                      )
+                    : null,
+              ),
+              Text(label(value)),
+            ],
+          ),
+        ),
+    ],
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(FiIcons.sort, size: 16, color: Nocturne.muted(.7)),
+          if (!compact) ...[
+            const SizedBox(width: 6),
+            Text(
+              label(sort),
+              key: const Key('collections-sort-label'),
+              style: TextStyle(fontSize: 13, color: Nocturne.muted(.7)),
+            ),
+          ],
+        ],
+      ),
+    ),
+  );
+}
 
 class CollectionsPage extends StatelessWidget {
   const CollectionsPage({super.key, required this.controller});
@@ -39,6 +135,9 @@ class CollectionsPage extends StatelessWidget {
   Widget _collectionList(BuildContext context) {
     final phone = MediaQuery.sizeOf(context).width < _phoneScreen;
     final theme = Theme.of(context);
+    // `clock` rather than `DateTime.now()` so widget tests can pin the time.
+    final now = clock.now();
+    final collections = controller.sortedCollections;
     return LayoutBuilder(
       builder: (context, constraints) {
         final padding = phone
@@ -54,15 +153,27 @@ class CollectionsPage extends StatelessWidget {
                   Expanded(
                     child: Text(
                       'Collections',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: phone
                           ? theme.textTheme.headlineSmall
                           : theme.textTheme.headlineMedium,
                     ),
                   ),
+                  _SortButton(
+                    sort: controller.collectionSort,
+                    compact: phone,
+                    onSelected: controller.setCollectionSort,
+                  ),
+                  const SizedBox(width: 4),
                   PopupMenuButton<String>(
                     key: const Key('collections-transfer-menu'),
                     tooltip: 'Import and export',
-                    icon: Icon(FiIcons.importExport, color: Nocturne.muted(.7)),
+                    icon: Icon(
+                      FiIcons.importExport,
+                      size: 18,
+                      color: Nocturne.muted(.7),
+                    ),
                     onSelected: (action) => unawaited(switch (action) {
                       'import-json' => _importJson(context),
                       'export-all' => _exportAll(context),
@@ -114,15 +225,20 @@ class CollectionsPage extends StatelessWidget {
                     )
                   : ListView.separated(
                       padding: padding.copyWith(top: 0),
-                      itemCount: controller.collections.length,
+                      itemCount: collections.length,
                       separatorBuilder: (_, _) => const SizedBox(height: 8),
                       itemBuilder: (context, index) {
-                        final item = controller.collections[index];
+                        final item = collections[index];
                         return Align(
                           alignment: Alignment.topLeft,
                           child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 720),
-                            child: _collectionCard(context, item),
+                            constraints: const BoxConstraints(maxWidth: 816),
+                            child: _collectionCard(
+                              context,
+                              item,
+                              now,
+                              phone: phone,
+                            ),
                           ),
                         );
                       },
@@ -134,75 +250,231 @@ class CollectionsPage extends StatelessWidget {
     );
   }
 
+  /// One collection (mock 4a; 4f on a phone): icon tile, name with an incomplete tag, its size,
+  /// when it was last edited, and its menu. F2 on a focused row renames it.
   Widget _collectionCard(
     BuildContext context,
     CollectionDto item,
-  ) => NocturneCard(
-    key: ValueKey(item.id),
-    padding: const EdgeInsets.fromLTRB(14, 12, 4, 12),
-    onTap: () => unawaited(controller.selectCollection(item.id)),
-    child: ConstrainedBox(
-      constraints: const BoxConstraints(minHeight: 36),
-      child: Row(
+    DateTime now, {
+    required bool phone,
+  }) {
+    final muted = TextStyle(
+      fontSize: 12,
+      fontFeatures: Nocturne.tabular,
+      color: Nocturne.muted(.55),
+    );
+    final edited = item.lastEditedMs == null
+        ? null
+        : formatStatusTime(item.lastEditedMs, now: now);
+    final Widget details;
+    if (phone) {
+      details = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const IconTile(FiIcons.collection),
-          const SizedBox(width: 12),
+          Text(
+            item.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            [
+              _plural(item.recordCount, 'record'),
+              if (item.incompleteCount > 0)
+                '${item.incompleteCount} incomplete'
+              else if (edited != null)
+                'edited $edited',
+            ].join(' · '),
+            key: Key('collection-subtitle-${item.id}'),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: muted,
+          ),
+        ],
+      );
+    } else {
+      details = Row(
+        children: [
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        item.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                    if (item.incompleteCount > 0) ...[
+                      const SizedBox(width: 8),
+                      Tag.outline(
+                        '${item.incompleteCount} incomplete',
+                        key: Key('collection-incomplete-${item.id}'),
+                        leading: FiIcons.warning,
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 2),
                 Text(
-                  item.name,
+                  '${_plural(item.recordCount, 'record')} · '
+                  '${_plural(item.fieldCount, 'field')}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w500,
-                  ),
+                  style: muted,
                 ),
-                if (item.description.isNotEmpty)
-                  Text(
-                    item.description,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 12, color: Nocturne.muted(.55)),
+              ],
+            ),
+          ),
+          if (edited != null) ...[
+            const SizedBox(width: 12),
+            Text(
+              'Edited $edited',
+              key: Key('collection-edited-${item.id}'),
+              style: muted,
+            ),
+          ],
+        ],
+      );
+    }
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.f2): () =>
+            unawaited(_editCollection(context, item)),
+      },
+      child: CardListRow(
+        key: ValueKey(item.id),
+        child: NocturneCard(
+          padding: const EdgeInsets.fromLTRB(14, 12, 4, 12),
+          onTap: () => unawaited(controller.selectCollection(item.id)),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: phone ? 40 : 36),
+            child: Row(
+              children: [
+                const IconTile(FiIcons.collection),
+                const SizedBox(width: 12),
+                Expanded(child: details),
+                if (phone)
+                  FiIconButton(
+                    icon: FiIcons.more,
+                    tooltip: 'Collection actions',
+                    color: Nocturne.muted(.7),
+                    onPressed: () =>
+                        unawaited(_collectionActionSheet(context, item)),
+                  )
+                else
+                  PopupMenuButton<_CollectionAction>(
+                    tooltip: 'Collection actions',
+                    icon: Icon(FiIcons.more, color: Nocturne.muted(.7)),
+                    onSelected: (action) =>
+                        _runCollectionAction(context, item, action),
+                    itemBuilder: (_) => _collectionMenuItems(),
                   ),
               ],
             ),
           ),
-          PopupMenuButton<String>(
-            icon: Icon(FiIcons.more, color: Nocturne.muted(.7)),
-            onSelected: (action) {
-              switch (action) {
-                case 'rename':
-                  _editCollection(context, item);
-                case 'duplicate':
-                  unawaited(_duplicateCollection(context, item));
-                case 'export-csv':
-                  unawaited(_export(context, () => controller.exportCsv(item)));
-                case 'export-json':
-                  unawaited(
-                    _export(context, () => controller.exportJson([item])),
-                  );
-                case 'import-csv':
-                  unawaited(_importCsv(context, item));
-                default:
-                  unawaited(_confirmDeleteCollection(context, item));
-              }
-            },
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'rename', child: Text('Rename')),
-              PopupMenuItem(value: 'duplicate', child: Text('Duplicate')),
-              PopupMenuItem(value: 'export-csv', child: Text('Export CSV')),
-              PopupMenuItem(value: 'export-json', child: Text('Export JSON')),
-              PopupMenuItem(value: 'import-csv', child: Text('Import CSV')),
-              PopupMenuItem(value: 'delete', child: Text('Delete')),
-            ],
+        ),
+      ),
+    );
+  }
+
+  /// The row menu on wide screens: Rename (F2), Duplicate, the "Data" group, then Delete….
+  List<PopupMenuEntry<_CollectionAction>> _collectionMenuItems() => [
+    PopupMenuItem(
+      value: _CollectionAction.rename,
+      child: Row(
+        children: [
+          const Expanded(child: Text('Rename')),
+          const SizedBox(width: 24),
+          Text(
+            'F2',
+            style: TextStyle(
+              fontSize: 12,
+              fontFamily: Nocturne.monoFamily,
+              color: Nocturne.muted(.45),
+            ),
           ),
         ],
       ),
     ),
-  );
+    const PopupMenuItem(
+      value: _CollectionAction.duplicate,
+      child: Text('Duplicate'),
+    ),
+    const PopupMenuDivider(),
+    const PopupMenuItem(
+      enabled: false,
+      height: 28,
+      child: SectionLabel('Data'),
+    ),
+    for (final action in _CollectionAction.data)
+      PopupMenuItem(value: action, child: Text(action.label)),
+    const PopupMenuDivider(),
+    PopupMenuItem(
+      value: _CollectionAction.delete,
+      child: Text(_CollectionAction.delete.label),
+    ),
+  ];
+
+  void _runCollectionAction(
+    BuildContext context,
+    CollectionDto item,
+    _CollectionAction action,
+  ) {
+    switch (action) {
+      case _CollectionAction.rename:
+        unawaited(_editCollection(context, item));
+      case _CollectionAction.duplicate:
+        unawaited(_duplicateCollection(context, item));
+      case _CollectionAction.importCsv:
+        unawaited(_importCsv(context, item));
+      case _CollectionAction.exportCsv:
+        unawaited(_export(context, () => controller.exportCsv(item)));
+      case _CollectionAction.exportJson:
+        unawaited(_export(context, () => controller.exportJson([item])));
+      case _CollectionAction.delete:
+        unawaited(_confirmDeleteCollection(context, item));
+    }
+  }
+
+  /// The row menu on a phone (mock 4f): an action sheet headed by the collection, with the same
+  /// actions in the same groups as the wide popup.
+  Future<void> _collectionActionSheet(
+    BuildContext context,
+    CollectionDto item,
+  ) async {
+    final chosen = await showActionSheet<_CollectionAction>(
+      context,
+      icon: FiIcons.collection,
+      title: item.name,
+      subtitle:
+          '${_plural(item.recordCount, 'record')} · '
+          '${_plural(item.fieldCount, 'field')}',
+      groups: [
+        ActionSheetGroup([
+          for (final action in [
+            _CollectionAction.rename,
+            _CollectionAction.duplicate,
+          ])
+            action.sheetItem,
+        ]),
+        ActionSheetGroup([
+          for (final action in _CollectionAction.data) action.sheetItem,
+        ], label: 'Data'),
+        ActionSheetGroup([_CollectionAction.delete.sheetItem]),
+      ],
+    );
+    if (chosen == null || !context.mounted) return;
+    _runCollectionAction(context, item, chosen);
+  }
 
   /// Runs one export and reports the written file. A dismissed save dialog reports nothing; a
   /// failed export (for example two columns sharing a name) reports Rust's reason.
@@ -349,18 +621,25 @@ class CollectionsPage extends StatelessWidget {
     final phone = MediaQuery.sizeOf(context).width < _phoneScreen;
     return LayoutBuilder(
       builder: (context, constraints) {
-        // Narrow widths cannot fit four labelled buttons next to the title or a column per
-        // field, so the same actions collapse to icons and records become a card list.
-        final wide = constraints.maxWidth >= _wideContent;
+        // Between the phone breakpoint and a content width that fits four labelled buttons, the
+        // header's actions collapse to icons; the records stay a table.
+        final wide = !phone && constraints.maxWidth >= _wideContent;
         final selecting = controller.selecting;
-        final horizontal = wide ? 32.0 : 16.0;
+        final horizontal = phone ? 16.0 : (wide ? 32.0 : 24.0);
         final records = controller.records;
+        final incomplete = records.where((record) => !record.valid).length;
+        // The table scrolls inside its own viewport so its header row can stay pinned; it is
+        // never taller than the screen leaves room for.
+        final tableHeight = math.min(
+          _RecordTable.headerHeight + records.length * _RecordTable.rowHeight,
+          math.max(constraints.maxHeight - 160, 280.0),
+        );
         final list = CustomScrollView(
           slivers: [
             SliverPadding(
               padding: EdgeInsets.fromLTRB(
                 horizontal,
-                wide ? 22 : 8,
+                phone ? 8 : 22,
                 horizontal,
                 0,
               ),
@@ -368,10 +647,12 @@ class CollectionsPage extends StatelessWidget {
                 children: [
                   if (selecting)
                     _selectionBar(context, schema, wide: wide)
+                  else if (phone)
+                    _phoneHeader(context, schema, fields)
                   else if (wide)
                     _wideHeader(context, schema, fields)
                   else
-                    _narrowHeader(context, schema, phone: phone),
+                    _narrowHeader(context, schema, fields),
                   if (controller.errorMessage case final error?)
                     Padding(
                       padding: const EdgeInsets.only(top: 12),
@@ -392,10 +673,25 @@ class CollectionsPage extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 22),
-                  const SectionLabel('Records'),
-                  const SizedBox(height: 6),
-                  if (wide && records.isNotEmpty)
-                    _TableHeader(fields: fields, selecting: selecting),
+                  Row(
+                    children: [
+                      const SectionLabel('Records'),
+                      const Spacer(),
+                      if (phone && records.isNotEmpty)
+                        Text(
+                          'Newest first',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Nocturne.muted(.5),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  if (phone && incomplete > 0) ...[
+                    _IncompleteLine(count: incomplete, phone: true),
+                    const SizedBox(height: 10),
+                  ],
                 ],
               ),
             ),
@@ -412,43 +708,44 @@ class CollectionsPage extends StatelessWidget {
                   ),
                 ),
               )
-            else if (wide)
+            else if (!phone) ...[
               SliverPadding(
                 padding: EdgeInsets.symmetric(horizontal: horizontal),
-                sliver: SliverList.builder(
-                  itemCount: records.length,
-                  itemBuilder: (context, index) =>
-                      _recordRow(context, schema, fields, records[index]),
-                ),
-              )
-            else
-              SliverPadding(
-                padding: EdgeInsets.symmetric(horizontal: horizontal),
-                sliver: DecoratedSliver(
-                  decoration: BoxDecoration(
-                    color: Nocturne.surface,
-                    borderRadius: BorderRadius.circular(Nocturne.radius),
-                    border: Border.all(color: Nocturne.neutral800),
-                  ),
-                  sliver: SliverPadding(
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
-                    sliver: SliverList.builder(
-                      itemCount: records.length,
-                      itemBuilder: (context, index) => _recordCard(
-                        context,
-                        schema,
-                        fields,
-                        records[index],
-                        last: index == records.length - 1,
-                      ),
-                    ),
+                sliver: SliverToBoxAdapter(
+                  child: _RecordTable(
+                    height: tableHeight,
+                    fields: fields,
+                    records: records,
+                    selecting: selecting,
+                    selectedIds: controller.selectedRecordIds,
+                    onOpen: (record) => _openRecord(context, schema, record),
+                    onToggle: controller.toggleSelected,
+                    onDelete: (record) =>
+                        unawaited(controller.deleteRecord(record.id)),
                   ),
                 ),
               ),
-            SliverToBoxAdapter(child: SizedBox(height: wide ? 32 : 96)),
+              if (incomplete > 0)
+                SliverPadding(
+                  padding: EdgeInsets.fromLTRB(horizontal, 12, horizontal, 0),
+                  sliver: SliverToBoxAdapter(
+                    child: _IncompleteLine(count: incomplete, phone: false),
+                  ),
+                ),
+            ] else
+              SliverPadding(
+                padding: EdgeInsets.symmetric(horizontal: horizontal),
+                sliver: SliverList.separated(
+                  itemCount: records.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 8),
+                  itemBuilder: (context, index) =>
+                      _recordCard(context, schema, fields, records[index]),
+                ),
+              ),
+            SliverToBoxAdapter(child: SizedBox(height: phone ? 96 : 32)),
           ],
         );
-        if (wide || selecting) return list;
+        if (!phone || selecting) return list;
         return Stack(
           children: [
             Positioned.fill(child: list),
@@ -477,14 +774,48 @@ class CollectionsPage extends StatelessWidget {
     );
   }
 
+  /// Opens [record] for editing, or toggles it while selecting. An incomplete record opens on
+  /// its first missing required field.
+  void _openRecord(
+    BuildContext context,
+    CollectionSchemaDto schema,
+    RecordDto record,
+  ) {
+    if (controller.selecting) {
+      controller.toggleSelected(record.id);
+      return;
+    }
+    final fields = schema.fields.where((field) => !field.deleted).toList()
+      ..sort(_fieldOrder);
+    final missing = missingRequiredFields(record, fields);
+    unawaited(_recordEditor(context, schema, record, missing.firstOrNull?.id));
+  }
+
   String _countLine(
     CollectionSchemaDto schema,
     List<FieldDefinitionDto> fields,
-  ) {
-    final records = controller.records.length;
-    return '$records ${records == 1 ? 'record' : 'records'} · '
-        '${fields.length} ${fields.length == 1 ? 'field' : 'fields'}';
-  }
+  ) =>
+      '${_plural(controller.records.length, 'record')} · '
+      '${_plural(fields.length, 'field')}';
+
+  /// The list row's entry for the open collection, for the actions it shares with the list.
+  CollectionDto _openCollectionEntry(
+    CollectionSchemaDto schema,
+    List<FieldDefinitionDto> fields,
+  ) =>
+      controller.collections
+          .where((item) => item.id == schema.id)
+          .firstOrNull ??
+      CollectionDto(
+        id: schema.id,
+        name: schema.name,
+        description: schema.description,
+        recordCount: controller.records.length,
+        fieldCount: fields.length,
+        incompleteCount: controller.records
+            .where((record) => !record.valid)
+            .length,
+      );
 
   /// Sends an inline title rename. The input is already closed, so a rejection keeps the
   /// previous name and is reported in a snackbar rather than under a field.
@@ -559,7 +890,11 @@ class CollectionsPage extends StatelessWidget {
                   const SizedBox(width: 12),
                   Text(
                     _countLine(schema, fields),
-                    style: TextStyle(fontSize: 13, color: Nocturne.muted(.55)),
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontFeatures: Nocturne.tabular,
+                      color: Nocturne.muted(.55),
+                    ),
                   ),
                 ],
               ),
@@ -597,77 +932,148 @@ class CollectionsPage extends StatelessWidget {
     );
   }
 
-  /// Back, title with the record count, and the actions as icons (mock 2g). New record is the
-  /// floating button below.
+  /// Back and title with the counts, and the actions as icons: the wide header when the content
+  /// is too narrow for labelled buttons but the screen is not a phone.
   Widget _narrowHeader(
     BuildContext context,
-    CollectionSchemaDto schema, {
-    required bool phone,
-  }) {
-    final records = controller.records.length;
-    final large = phone ? 44.0 : 36.0;
-    final button = IconButton.styleFrom(
-      minimumSize: Size(large, large),
-      foregroundColor: Nocturne.text,
-    );
-    return Row(
-      children: [
-        IconButton(
-          style: button,
-          tooltip: 'Back to collections',
-          onPressed: () => unawaited(controller.selectCollection(null)),
-          icon: const Icon(FiIcons.back, size: 20),
-        ),
-        const SizedBox(width: 2),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _EditableTitle(
-                name: schema.name,
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w500,
-                  height: 1.2,
-                ),
-                onRename: (name) =>
-                    unawaited(_renameInline(context, schema.id, name)),
-              ),
-              Text(
-                '$records ${records == 1 ? 'record' : 'records'}',
-                style: TextStyle(fontSize: 11, color: Nocturne.muted(.55)),
-              ),
-            ],
-          ),
-        ),
-        IconButton(
-          style: button,
-          tooltip: 'Schema',
-          onPressed: () => _schemaEditor(context, schema),
-          icon: const Icon(FiIcons.filter, size: 20),
-        ),
-        IconButton(
-          style: button,
-          tooltip: 'Queries',
-          onPressed: () => _queryEditor(context, schema),
-          icon: const Icon(FiIcons.query, size: 20),
-        ),
-        IconButton(
-          style: button,
-          key: const Key('select-records'),
-          tooltip: 'Select',
-          onPressed: controller.records.isEmpty
-              ? null
-              : controller.startSelection,
-          icon: const Icon(FiIcons.select, size: 20),
-        ),
-      ],
-    );
-  }
+    CollectionSchemaDto schema,
+    List<FieldDefinitionDto> fields,
+  ) => Row(
+    children: [
+      FiIconButton(
+        icon: FiIcons.back,
+        tooltip: 'Back to collections',
+        size: 20,
+        onPressed: () => unawaited(controller.selectCollection(null)),
+      ),
+      const SizedBox(width: 2),
+      Expanded(child: _compactTitle(context, schema, fields)),
+      FiIconButton(
+        icon: FiIcons.filter,
+        tooltip: 'Schema',
+        size: 20,
+        onPressed: () => _schemaEditor(context, schema),
+      ),
+      FiIconButton(
+        icon: FiIcons.query,
+        tooltip: 'Queries',
+        size: 20,
+        onPressed: () => _queryEditor(context, schema),
+      ),
+      FiIconButton(
+        key: const Key('select-records'),
+        icon: FiIcons.select,
+        tooltip: 'Select',
+        size: 20,
+        onPressed: controller.records.isEmpty
+            ? null
+            : controller.startSelection,
+      ),
+      FiIconButton(
+        icon: FiIcons.add,
+        tooltip: 'New record',
+        size: 20,
+        onPressed: () => _recordEditor(context, schema),
+      ),
+    ],
+  );
 
-  /// One table row (mock 1a). Long press is the way into selection mode; once in it, a tap
-  /// toggles instead of opening the editor.
-  Widget _recordRow(
+  /// The phone top bar (mock 7f): back, title with the counts, Schema, and a ⋮ menu holding
+  /// Queries, Select records and Collection actions…. New record is the floating button below.
+  Widget _phoneHeader(
+    BuildContext context,
+    CollectionSchemaDto schema,
+    List<FieldDefinitionDto> fields,
+  ) => Row(
+    key: const Key('collection-phone-header'),
+    children: [
+      FiIconButton(
+        icon: FiIcons.back,
+        tooltip: 'Back to collections',
+        size: 20,
+        onPressed: () => unawaited(controller.selectCollection(null)),
+      ),
+      const SizedBox(width: 2),
+      Expanded(child: _compactTitle(context, schema, fields)),
+      FiIconButton(
+        icon: FiIcons.filter,
+        tooltip: 'Schema',
+        size: 20,
+        onPressed: () => _schemaEditor(context, schema),
+      ),
+      PopupMenuButton<String>(
+        key: const Key('collection-more'),
+        tooltip: 'More actions',
+        icon: const Icon(FiIcons.more, size: 20),
+        style: IconButton.styleFrom(
+          minimumSize: const Size(Nocturne.touchTarget, Nocturne.touchTarget),
+          foregroundColor: Nocturne.text,
+        ),
+        onSelected: (action) {
+          switch (action) {
+            case 'queries':
+              unawaited(_queryEditor(context, schema));
+            case 'select':
+              controller.startSelection();
+            default:
+              unawaited(
+                _collectionActionSheet(
+                  context,
+                  _openCollectionEntry(schema, fields),
+                ),
+              );
+          }
+        },
+        itemBuilder: (_) => [
+          const PopupMenuItem(value: 'queries', child: Text('Queries')),
+          PopupMenuItem(
+            key: const Key('select-records'),
+            value: 'select',
+            enabled: controller.records.isNotEmpty,
+            child: const Text('Select records'),
+          ),
+          const PopupMenuItem(
+            value: 'actions',
+            child: Text('Collection actions…'),
+          ),
+        ],
+      ),
+    ],
+  );
+
+  Widget _compactTitle(
+    BuildContext context,
+    CollectionSchemaDto schema,
+    List<FieldDefinitionDto> fields,
+  ) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      _EditableTitle(
+        name: schema.name,
+        style: const TextStyle(
+          fontSize: 18,
+          fontWeight: FontWeight.w500,
+          height: 1.2,
+        ),
+        onRename: (name) => unawaited(_renameInline(context, schema.id, name)),
+      ),
+      Text(
+        _countLine(schema, fields),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontSize: 11,
+          fontFeatures: Nocturne.tabular,
+          color: Nocturne.muted(.55),
+        ),
+      ),
+    ],
+  );
+
+  /// One phone record card (mock 7f): the first three fields with their type icons, then how
+  /// many more there are and when the record was created. Long press starts selection; while
+  /// selecting a tap toggles.
+  Widget _recordCard(
     BuildContext context,
     CollectionSchemaDto schema,
     List<FieldDefinitionDto> fields,
@@ -677,87 +1083,130 @@ class CollectionsPage extends StatelessWidget {
     final selected =
         selecting && controller.selectedRecordIds.contains(record.id);
     const registry = FieldRendererRegistry();
-    return Column(
+    final missing = {
+      for (final field in missingRequiredFields(record, fields)) field.id,
+    };
+    final shown = fields.take(3).toList();
+    final more = fields.length - shown.length;
+    final created = switch (record.createdAtMs) {
+      final ms? => DateFormat(
+        'MMM d, y',
+      ).format(DateTime.fromMillisecondsSinceEpoch(ms)),
+      null => null,
+    };
+    final footer = [
+      if (more > 0) '+ $more more ${more == 1 ? 'field' : 'fields'}',
+      ?created,
+    ].join(' · ');
+    final muted = TextStyle(fontSize: 12, color: Nocturne.muted(.55));
+    return Material(
       key: ValueKey(record.id),
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Material(
-          color: selected ? Nocturne.accent900 : Colors.transparent,
-          child: InkWell(
-            onLongPress: () => controller.toggleSelected(record.id),
-            onTap: selecting
-                ? () => controller.toggleSelected(record.id)
-                : () => _recordEditor(context, schema, record),
-            child: Container(
-              constraints: const BoxConstraints(minHeight: 44),
-              decoration: selected
-                  ? const BoxDecoration(
-                      border: Border(
-                        left: BorderSide(color: Nocturne.accent, width: 2),
+      color: selected ? Nocturne.accent900 : Nocturne.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(Nocturne.radius),
+        side: BorderSide(
+          color: selected ? Nocturne.accent700 : Nocturne.neutral800,
+        ),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(Nocturne.radius),
+        onLongPress: () => controller.toggleSelected(record.id),
+        onTap: () => _openRecord(context, schema, record),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 10, 4, 12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (selecting)
+                Padding(
+                  padding: const EdgeInsets.only(right: 4),
+                  child: Checkbox(
+                    value: selected,
+                    onChanged: (_) => controller.toggleSelected(record.id),
+                  ),
+                ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  spacing: 6,
+                  children: [
+                    if (!record.valid)
+                      Tag.outline(
+                        'Incomplete',
+                        key: Key('record-incomplete-${record.id}'),
+                        leading: FiIcons.warning,
                       ),
-                    )
-                  : null,
-              padding: EdgeInsets.only(left: selected ? 4 : 6, right: 4),
-              child: Row(
-                children: [
-                  if (selecting)
-                    SizedBox(
-                      width: 40,
-                      child: Checkbox(
-                        value: selected,
-                        onChanged: (_) => controller.toggleSelected(record.id),
+                    if (fields.isEmpty)
+                      Text(
+                        record.id,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontFamily: Nocturne.monoFamily,
+                        ),
                       ),
-                    ),
-                  if (!record.valid)
-                    const Padding(
-                      padding: EdgeInsets.only(right: 6),
-                      child: Icon(
-                        FiIcons.warning,
-                        size: 16,
-                        color: Nocturne.error,
-                      ),
-                    ),
-                  if (fields.isEmpty)
-                    Expanded(child: Text(record.id))
-                  else
-                    for (final field in fields)
-                      Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 6),
-                          child: _cell(
-                            registry.displayText(
-                              field,
-                              _recordValue(record, field.id),
-                              human: true,
-                            ),
-                            selected: selected,
+                    for (final field in shown)
+                      Row(
+                        children: [
+                          Icon(
+                            fieldTypeIcon(field.fieldType.kind),
+                            size: 14,
+                            color: Nocturne.muted(.5),
                           ),
-                        ),
+                          const SizedBox(width: 8),
+                          SizedBox(
+                            width: 96,
+                            child: Text(
+                              field.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: muted,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: missing.contains(field.id)
+                                ? const Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: NeededMarker(),
+                                  )
+                                : _cell(
+                                    registry.displayText(
+                                      field,
+                                      _recordValue(record, field.id),
+                                      human: true,
+                                      short: true,
+                                    ),
+                                    selected: selected,
+                                  ),
+                          ),
+                        ],
                       ),
-                  if (!selecting)
-                    SizedBox(
-                      width: 48,
-                      child: IconButton(
-                        tooltip: 'Delete record',
-                        style: IconButton.styleFrom(
-                          foregroundColor: Nocturne.muted(.5),
-                        ),
-                        icon: const Icon(FiIcons.delete),
-                        onPressed: () =>
-                            unawaited(controller.deleteRecord(record.id)),
+                    if (footer.isNotEmpty)
+                      Text(
+                        footer,
+                        style: muted.copyWith(fontFeatures: Nocturne.tabular),
                       ),
-                    ),
-                ],
+                  ],
+                ),
               ),
-            ),
+              // The two delete affordances never coexist: single delete is immediate, the batch
+              // one is confirmed.
+              if (!selecting)
+                FiIconButton(
+                  icon: FiIcons.delete,
+                  tooltip: 'Delete record',
+                  color: Nocturne.muted(.45),
+                  onPressed: () =>
+                      unawaited(controller.deleteRecord(record.id)),
+                ),
+            ],
           ),
         ),
-        FadedRule(color: Nocturne.muted(.08)),
-      ],
+      ),
     );
   }
 
-  Widget _cell(String? text, {bool selected = false}) => Text(
+  static Widget _cell(String? text, {bool selected = false}) => Text(
     text ?? '—',
     maxLines: 1,
     overflow: TextOverflow.ellipsis,
@@ -771,111 +1220,6 @@ class CollectionsPage extends StatelessWidget {
           : Nocturne.text,
     ),
   );
-
-  /// One row of the phone record list (mock 2g): first field large, second small on the right.
-  Widget _recordCard(
-    BuildContext context,
-    CollectionSchemaDto schema,
-    List<FieldDefinitionDto> fields,
-    RecordDto record, {
-    required bool last,
-  }) {
-    final selecting = controller.selecting;
-    final selected =
-        selecting && controller.selectedRecordIds.contains(record.id);
-    const registry = FieldRendererRegistry();
-    final primary = fields.isEmpty ? null : fields.first;
-    final secondary = fields.length < 2 ? null : fields[1];
-    final primaryText = primary == null
-        ? record.id
-        : registry.displayText(
-            primary,
-            _recordValue(record, primary.id),
-            human: true,
-          );
-    final secondaryText = secondary == null
-        ? null
-        : registry.displayText(
-            secondary,
-            _recordValue(record, secondary.id),
-            human: true,
-            short: true,
-          );
-    return InkWell(
-      key: ValueKey(record.id),
-      onLongPress: () => controller.toggleSelected(record.id),
-      onTap: selecting
-          ? () => controller.toggleSelected(record.id)
-          : () => _recordEditor(context, schema, record),
-      child: Container(
-        constraints: const BoxConstraints(minHeight: 56),
-        decoration: last
-            ? null
-            : BoxDecoration(
-                border: Border(bottom: BorderSide(color: Nocturne.muted(.08))),
-              ),
-        child: Row(
-          children: [
-            if (selecting)
-              Padding(
-                padding: const EdgeInsets.only(right: 4),
-                child: Checkbox(
-                  value: selected,
-                  onChanged: (_) => controller.toggleSelected(record.id),
-                ),
-              ),
-            if (!record.valid)
-              const Padding(
-                padding: EdgeInsets.only(right: 8),
-                child: Icon(FiIcons.warning, size: 16, color: Nocturne.error),
-              ),
-            Expanded(
-              child: Text(
-                primaryText ?? '—',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 15,
-                  fontFeatures: Nocturne.tabular,
-                  color: primaryText == null
-                      ? Nocturne.muted(.4)
-                      : selected
-                      ? Nocturne.accent100
-                      : Nocturne.text,
-                ),
-              ),
-            ),
-            if (secondaryText != null) ...[
-              const SizedBox(width: 10),
-              Flexible(
-                child: Text(
-                  secondaryText,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontFeatures: Nocturne.tabular,
-                    color: Nocturne.muted(.55),
-                  ),
-                ),
-              ),
-            ],
-            // The two delete affordances never coexist: single delete is immediate, the batch
-            // one is confirmed.
-            if (!selecting)
-              IconButton(
-                tooltip: 'Delete record',
-                style: IconButton.styleFrom(
-                  foregroundColor: Nocturne.muted(.45),
-                ),
-                icon: const Icon(FiIcons.delete, size: 18),
-                onPressed: () => unawaited(controller.deleteRecord(record.id)),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
 
   Future<void> _editCollection(
     BuildContext context, [
@@ -1343,12 +1687,17 @@ class CollectionsPage extends StatelessWidget {
             icon: const Icon(FiIcons.close),
           ),
           const SizedBox(width: 8),
-          Text(
-            '$count selected',
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w500,
-              color: Nocturne.accent100,
+          Flexible(
+            flex: 2,
+            child: Text(
+              '$count selected',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w500,
+                color: Nocturne.accent100,
+              ),
             ),
           ),
           const SizedBox(width: 12),
@@ -1560,12 +1909,14 @@ class CollectionsPage extends StatelessWidget {
     BuildContext context,
     CollectionSchemaDto schema, [
     RecordDto? existing,
+    String? focusFieldId,
   ]) => showFormSurface<void>(
     context,
     builder: (route) => _RecordEditorForm(
       controller: controller,
       schema: schema,
       existing: existing,
+      focusFieldId: focusFieldId,
     ),
   );
 }
@@ -1693,11 +2044,15 @@ class _RecordEditorForm extends StatefulWidget {
     required this.controller,
     required this.schema,
     this.existing,
+    this.focusFieldId,
   });
 
   final CollectionsController controller;
   final CollectionSchemaDto schema;
   final RecordDto? existing;
+
+  /// The field to scroll to and focus on open: an incomplete record's first missing one.
+  final String? focusFieldId;
 
   @override
   State<_RecordEditorForm> createState() => _RecordEditorFormState();
@@ -1743,6 +2098,44 @@ class _RecordEditorFormState extends State<_RecordEditorForm> {
   /// Bumped per validation or save, so a slower, older answer never replaces a newer one.
   var _request = 0;
 
+  /// The required fields the opened record was missing; each shows Needed until it holds a value.
+  late final _needed = {
+    if (widget.existing case final record?)
+      for (final field in missingRequiredFields(record, fields)) field.id,
+  };
+
+  /// Wraps the focused field's input, so focus can go to its first focusable descendant.
+  final _focusGroup = FocusNode(skipTraversal: true, canRequestFocus: false);
+  final _focusKey = GlobalKey();
+
+  bool _stillNeeded(String fieldId) =>
+      _needed.contains(fieldId) &&
+      (values[fieldId]?.kind ?? FieldValueKindDto.null_) ==
+          FieldValueKindDto.null_;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.focusFieldId != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _focusField());
+    }
+  }
+
+  Future<void> _focusField() async {
+    final target = _focusKey.currentContext;
+    if (!mounted || target == null) return;
+    await Scrollable.ensureVisible(
+      target,
+      alignment: .1,
+      duration: const Duration(milliseconds: 200),
+    );
+    if (!mounted) return;
+    _focusGroup.descendants
+        .where((node) => node.canRequestFocus && !node.skipTraversal)
+        .firstOrNull
+        ?.requestFocus();
+  }
+
   List<RecordValueDto> get _submitted => [
     for (final MapEntry(:key, :value) in values.entries)
       RecordValueDto(fieldId: key, value: value),
@@ -1751,11 +2144,14 @@ class _RecordEditorFormState extends State<_RecordEditorForm> {
   @override
   void dispose() {
     _debounce?.cancel();
+    _focusGroup.dispose();
     super.dispose();
   }
 
   void _changed(String fieldId, FieldValueDto value) {
+    final wasNeeded = _stillNeeded(fieldId);
     values[fieldId] = value;
+    if (wasNeeded != _stillNeeded(fieldId)) setState(() {});
     if (!attempted) return;
     _debounce?.cancel();
     _debounce = Timer(_draftValidationDelay, () => unawaited(_validate()));
@@ -1810,31 +2206,58 @@ class _RecordEditorFormState extends State<_RecordEditorForm> {
   }
 
   @override
-  Widget build(BuildContext context) => FormSurface(
-    title: widget.existing == null ? 'New record' : 'Edit record',
-    contextLabel: 'in ${widget.schema.name}',
-    showRequiredLegend: fields.any(FieldRendererRegistry.marksRequired),
-    body: Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      spacing: 14,
-      children: [
-        for (final field in fields)
-          const FieldRendererRegistry().editor(
-            field,
-            values[field.id],
-            (value) => _changed(field.id, value),
-            errors: issues.of(field.id),
-            quickFill: true,
+  Widget build(BuildContext context) {
+    final dialog = FormSurfaceScope.modeOf(context) != FormSurfaceMode.sheet;
+    final needed = fields.where((field) => _stillNeeded(field.id)).length;
+    final title = widget.existing == null ? 'New record' : 'Edit record';
+    return FormSurface(
+      // Wide screens say how much is left to finish an incomplete record.
+      title: dialog && needed > 0
+          ? '$title · $needed ${needed == 1 ? 'field' : 'fields'} needed'
+          : title,
+      contextLabel: 'in ${widget.schema.name}',
+      showRequiredLegend: fields.any(FieldRendererRegistry.marksRequired),
+      body: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: 14,
+        children: [for (final field in fields) _fieldEditor(field)],
+      ),
+      errors: issues.form,
+      primaryLabel: dialog ? 'Save' : 'Save record',
+      onPrimary: _save,
+    );
+  }
+
+  Widget _fieldEditor(FieldDefinitionDto field) {
+    Widget editor = const FieldRendererRegistry().editor(
+      field,
+      values[field.id],
+      (value) => _changed(field.id, value),
+      errors: issues.of(field.id),
+      quickFill: true,
+    );
+    if (_stillNeeded(field.id)) {
+      editor = Column(
+        key: Key('needed-${field.id}'),
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: 4,
+        children: [
+          const Align(alignment: Alignment.centerRight, child: NeededMarker()),
+          editor,
+          const Text(
+            'Needed to complete this record',
+            style: TextStyle(fontSize: 12, color: Nocturne.accent300),
           ),
-      ],
-    ),
-    errors: issues.form,
-    primaryLabel: FormSurfaceScope.modeOf(context) == FormSurfaceMode.sheet
-        ? 'Save record'
-        : 'Save',
-    onPrimary: _save,
-  );
+        ],
+      );
+    }
+    if (field.id != widget.focusFieldId) return editor;
+    return Focus(
+      focusNode: _focusGroup,
+      child: KeyedSubtree(key: _focusKey, child: editor),
+    );
+  }
 }
 
 /// A record's projected diagnostics as form issues: those naming a field go under it.
@@ -1847,54 +2270,333 @@ FormIssues _diagnosticIssues(RecordDto record) => FormIssues.fromIssues([
     ),
 ]);
 
-class _TableHeader extends StatelessWidget {
-  const _TableHeader({required this.fields, required this.selecting});
+/// The desktop records table (mock 4c): a pinned header row and first column, fixed-width
+/// columns that scroll sideways, incomplete rows marked by an accent edge, a warning icon and
+/// "Required" cells, and a hint while columns are hidden past the trailing edge.
+class _RecordTable extends StatefulWidget {
+  const _RecordTable({
+    required this.height,
+    required this.fields,
+    required this.records,
+    required this.selecting,
+    required this.selectedIds,
+    required this.onOpen,
+    required this.onToggle,
+    required this.onDelete,
+  });
 
+  static const headerHeight = 40.0;
+  static const rowHeight = 44.0;
+  static const firstColumnWidth = 170.0;
+  static const columnWidth = 150.0;
+  static const actionWidth = 48.0;
+  static const checkboxWidth = 40.0;
+
+  /// The table viewport's height; the scroll hint goes below it.
+  final double height;
   final List<FieldDefinitionDto> fields;
+  final List<RecordDto> records;
   final bool selecting;
+  final Set<String> selectedIds;
+  final ValueChanged<RecordDto> onOpen;
+  final ValueChanged<String> onToggle;
+  final ValueChanged<RecordDto> onDelete;
 
   @override
-  Widget build(BuildContext context) => Column(
-    children: [
-      Padding(
-        padding: const EdgeInsets.fromLTRB(6, 6, 4, 6),
-        child: Row(
-          children: [
-            if (selecting) const SizedBox(width: 40),
-            for (final field in fields)
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 6),
-                  child: Text.rich(
-                    TextSpan(
-                      children: [
-                        TextSpan(text: '${field.name.toUpperCase()} '),
-                        TextSpan(
-                          text: fieldKindLabel(field.fieldType.kind),
-                          style: TextStyle(
-                            letterSpacing: 0,
-                            color: Nocturne.muted(.36),
-                          ),
+  State<_RecordTable> createState() => _RecordTableState();
+}
+
+class _RecordTableState extends State<_RecordTable> {
+  final _horizontal = ScrollController();
+  var _moreColumns = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _horizontal.addListener(_measure);
+  }
+
+  @override
+  void dispose() {
+    _horizontal
+      ..removeListener(_measure)
+      ..dispose();
+    super.dispose();
+  }
+
+  /// Whether columns remain hidden past the trailing edge.
+  void _measure() {
+    if (!mounted || !_horizontal.hasClients) return;
+    final position = _horizontal.position;
+    final more = position.hasContentDimensions && position.extentAfter > .5;
+    if (more != _moreColumns) setState(() => _moreColumns = more);
+  }
+
+  int get _dataColumns => math.max(widget.fields.length, 1);
+  bool get _hasActions => !widget.selecting;
+
+  @override
+  Widget build(BuildContext context) {
+    // Content or width changes can reveal or hide columns without a scroll.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _measure());
+    final table = TableView.builder(
+      key: const Key('records-table'),
+      horizontalDetails: ScrollableDetails.horizontal(controller: _horizontal),
+      pinnedRowCount: 1,
+      pinnedColumnCount: 1,
+      rowCount: widget.records.length + 1,
+      columnCount: _dataColumns + (_hasActions ? 1 : 0),
+      columnBuilder: (index) => TableSpan(
+        extent: FixedTableSpanExtent(
+          index == 0
+              ? _RecordTable.firstColumnWidth +
+                    (widget.selecting ? _RecordTable.checkboxWidth : 0)
+              : index >= _dataColumns
+              ? _RecordTable.actionWidth
+              : _RecordTable.columnWidth,
+        ),
+      ),
+      rowBuilder: (index) => TableSpan(
+        extent: FixedTableSpanExtent(
+          index == 0 ? _RecordTable.headerHeight : _RecordTable.rowHeight,
+        ),
+        backgroundDecoration: TableSpanDecoration(
+          color: index == 0
+              ? Nocturne.bg
+              : widget.selectedIds.contains(widget.records[index - 1].id)
+              ? Nocturne.accent900
+              : null,
+        ),
+        foregroundDecoration: TableSpanDecoration(
+          border: TableSpanBorder(
+            trailing: index == 0
+                ? const BorderSide(color: Nocturne.divider)
+                : BorderSide(color: Nocturne.muted(.08)),
+          ),
+        ),
+      ),
+      cellBuilder: (context, vicinity) => TableViewCell(
+        child: vicinity.row == 0
+            ? _header(vicinity.column)
+            : _cell(widget.records[vicinity.row - 1], vicinity.column),
+      ),
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SizedBox(
+          height: widget.height,
+          child: Stack(
+            children: [
+              Positioned.fill(child: table),
+              if (_moreColumns)
+                Positioned(
+                  top: 0,
+                  bottom: 0,
+                  right: 0,
+                  width: 64,
+                  child: IgnorePointer(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            Nocturne.bg.withValues(alpha: 0),
+                            Nocturne.bg,
+                          ],
                         ),
-                      ],
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 11,
-                      letterSpacing: .88,
-                      color: Nocturne.muted(.6),
+                      ),
                     ),
                   ),
                 ),
-              ),
-            if (!selecting) const SizedBox(width: 48),
-          ],
+            ],
+          ),
         ),
+        if (_moreColumns)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+              'Scroll for more columns →',
+              key: const Key('table-scroll-hint'),
+              textAlign: TextAlign.right,
+              style: TextStyle(fontSize: 12, color: Nocturne.muted(.5)),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _header(int column) {
+    if (column >= _dataColumns || widget.fields.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    final field = widget.fields[column];
+    return Container(
+      key: Key('column-header-${field.id}'),
+      color: Nocturne.bg,
+      padding: EdgeInsets.only(
+        left: column == 0 && widget.selecting ? 52 : 12,
+        right: 8,
       ),
-      const FadedRule(),
-    ],
-  );
+      alignment: Alignment.centerLeft,
+      child: Row(
+        children: [
+          Icon(
+            fieldTypeIcon(field.fieldType.kind),
+            size: 13,
+            color: Nocturne.muted(.5),
+          ),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              field.name.toUpperCase(),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 11,
+                letterSpacing: .88,
+                color: Nocturne.muted(.6),
+              ),
+            ),
+          ),
+          if (FieldRendererRegistry.marksRequired(field))
+            const Text(
+              ' *',
+              key: Key('required-mark'),
+              style: TextStyle(fontSize: 11, color: Nocturne.accent300),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _cell(RecordDto record, int column) {
+    final selected = widget.selectedIds.contains(record.id);
+    Widget content;
+    if (column >= _dataColumns) {
+      content = Center(
+        child: FiIconButton(
+          icon: FiIcons.delete,
+          tooltip: 'Delete record',
+          color: Nocturne.muted(.5),
+          onPressed: () => widget.onDelete(record),
+        ),
+      );
+      return content;
+    }
+    final missing = !record.valid && widget.fields.isNotEmpty
+        ? missingRequiredFields(record, widget.fields).map((f) => f.id).toSet()
+        : const <String>{};
+    if (widget.fields.isEmpty) {
+      content = CollectionsPage._cell(record.id, selected: selected);
+    } else {
+      final field = widget.fields[column];
+      content = missing.contains(field.id)
+          ? const Align(
+              alignment: Alignment.centerLeft,
+              child: Tag('Required', key: Key('required-cell')),
+            )
+          : CollectionsPage._cell(
+              const FieldRendererRegistry().displayText(
+                field,
+                _recordValue(record, field.id),
+                human: true,
+              ),
+              selected: selected,
+            );
+    }
+    final first = column == 0;
+    if (first) {
+      content = Row(
+        children: [
+          if (widget.selecting)
+            SizedBox(
+              width: _RecordTable.checkboxWidth,
+              child: Checkbox(
+                value: selected,
+                onChanged: (_) => widget.onToggle(record.id),
+              ),
+            ),
+          if (!record.valid)
+            const Padding(
+              padding: EdgeInsets.only(right: 6),
+              child: Icon(FiIcons.warning, size: 15, color: Nocturne.accent),
+            ),
+          Expanded(child: content),
+        ],
+      );
+    }
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => widget.onOpen(record),
+      onLongPress: () => widget.onToggle(record.id),
+      child: Container(
+        // The pinned column is opaque so scrolled cells pass beneath it.
+        decoration: first
+            ? BoxDecoration(
+                color: selected ? Nocturne.accent900 : Nocturne.bg,
+                border: !record.valid || selected
+                    ? const Border(
+                        left: BorderSide(color: Nocturne.accent, width: 2),
+                      )
+                    : null,
+              )
+            : null,
+        padding: EdgeInsets.only(
+          left: first && (!record.valid || selected) ? 10 : 12,
+          right: 8,
+        ),
+        alignment: Alignment.centerLeft,
+        child: content,
+      ),
+    );
+  }
+}
+
+/// The line under (or, on a phone, above) the records saying how many are incomplete.
+class _IncompleteLine extends StatelessWidget {
+  const _IncompleteLine({required this.count, required this.phone});
+
+  final int count;
+  final bool phone;
+
+  @override
+  Widget build(BuildContext context) {
+    final lead = count == 1
+        ? '1 record is missing a required field'
+        : '$count records are missing a required field';
+    final action = phone
+        ? (count == 1 ? 'Tap it to finish.' : 'Tap one to finish.')
+        : (count == 1 ? 'Click it to finish.' : 'Click one to finish.');
+    const style = TextStyle(fontSize: 13, color: Nocturne.accent300);
+    return Row(
+      key: const Key('incomplete-status'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.only(top: 1),
+          child: Icon(FiIcons.warning, size: 15, color: Nocturne.accent),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: phone
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(lead, style: style),
+                    Text(
+                      action,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Nocturne.muted(.55),
+                      ),
+                    ),
+                  ],
+                )
+              : Text('$lead. $action', style: style),
+        ),
+      ],
+    );
+  }
 }
 
 /// A row in a side sheet: an accent icon, a name with an optional line under it, an optional

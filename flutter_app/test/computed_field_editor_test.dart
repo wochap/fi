@@ -92,6 +92,11 @@ Future<Ledger> openDialog(
   );
   await tester.pump();
   // Wide layouts label the button; narrow ones show an icon with the same tooltip.
+  // A phone keeps Queries in the header's ⋮ menu.
+  if (find.byKey(const Key('collection-more')).evaluate().isNotEmpty) {
+    await tester.tap(find.byKey(const Key('collection-more')));
+    await tester.pumpAndSettle();
+  }
   final queries = find.text('Queries');
   await tester.tap(
     queries.evaluate().isEmpty ? find.byTooltip('Queries') : queries,

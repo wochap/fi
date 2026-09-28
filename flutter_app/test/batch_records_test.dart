@@ -17,7 +17,14 @@ FakeCollectionBridge seeded(int count) {
       rootId: 'root',
     );
   bridge.collections.add(
-    const CollectionDto(id: _collection, name: 'Headaches', description: ''),
+    const CollectionDto(
+      id: _collection,
+      name: 'Headaches',
+      description: '',
+      recordCount: 0,
+      fieldCount: 0,
+      incompleteCount: 0,
+    ),
   );
   bridge.schemas[_collection] = const CollectionSchemaDto(
     id: _collection,

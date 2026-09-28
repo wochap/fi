@@ -9,12 +9,13 @@ import 'package:fi/help_button.dart';
 import 'package:fi/help_copy.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/collections_page.dart';
+import 'package:fi/device_details.dart';
 import 'package:fi/pairing_card.dart';
 import 'package:fi/reset_dialog.dart';
-import 'package:fi/status_time.dart';
 import 'package:fi/theme/inputs.dart';
 import 'package:fi/theme/nocturne.dart';
 import 'package:fi/theme/nocturne_widgets.dart';
+import 'package:fi/ui_prefs.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -26,11 +27,15 @@ class CollectionApp extends StatefulWidget {
     required this.dataDirProvider,
     this.setPlatformForeground,
     this.fileDialogs = const PlatformFileDialogs(),
+    this.uiPrefs,
     super.key,
   });
 
   final CollectionBridge bridge;
   final Future<void> Function() initializeRust;
+
+  /// Device-local list preferences; by default `ui_prefs.json` in the data directory.
+  final UiPrefsStore? uiPrefs;
   final Future<String> Function() dataDirProvider;
   final Future<void> Function(bool foreground)? setPlatformForeground;
 
@@ -202,6 +207,7 @@ class _CollectionAppState extends State<CollectionApp>
           BootstrapKindDto.ready => CollectionShell(
             bridge: widget.bridge,
             fileDialogs: widget.fileDialogs,
+            uiPrefs: widget.uiPrefs ?? FileUiPrefsStore(widget.dataDirProvider),
             devices: devices,
             onResetDataset: _resetDataset,
           ),
@@ -561,10 +567,12 @@ class CollectionShell extends StatefulWidget {
     required this.devices,
     this.onResetDataset,
     this.fileDialogs = const PlatformFileDialogs(),
+    this.uiPrefs,
     super.key,
   });
   final CollectionBridge bridge;
   final FileDialogs fileDialogs;
+  final UiPrefsStore? uiPrefs;
   final DevicesController devices;
   final ResetDatasetAction? onResetDataset;
 
@@ -583,6 +591,7 @@ class _CollectionShellState extends State<CollectionShell> {
     controller = CollectionsController(
       widget.bridge,
       fileDialogs: widget.fileDialogs,
+      uiPrefs: widget.uiPrefs,
     );
     unawaited(controller.start());
   }
@@ -723,6 +732,11 @@ class _Sidebar extends StatelessWidget {
         ),
         const Spacer(),
         _SidebarStatus(devices: devices),
+        if (devices.buildInfo case final build?)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(10, 10, 10, 0),
+            child: BuildLabel(build),
+          ),
       ],
     ),
   );
@@ -917,6 +931,9 @@ class _DevicesPageState extends State<DevicesPage> {
   /// Device ids whose Details disclosure is open.
   final Set<String> _openDetails = {};
 
+  /// The pairing session whose "Paired with …" banner was dismissed.
+  String? _dismissedBanner;
+
   DevicesController get controller => widget.controller;
   ResetDatasetAction? get onResetDataset => widget.onResetDataset;
 
@@ -935,6 +952,10 @@ class _DevicesPageState extends State<DevicesPage> {
     super.dispose();
   }
 
+  bool get _pairedBanner =>
+      controller.pairing.kind == PairingKindDto.trusted &&
+      _dismissedBanner != (controller.pairing.sessionId ?? '');
+
   @override
   Widget build(BuildContext context) {
     // `clock` rather than `DateTime.now()` so widget tests can advance time.
@@ -942,27 +963,12 @@ class _DevicesPageState extends State<DevicesPage> {
     final phone = MediaQuery.sizeOf(context).width < 720;
     final theme = Theme.of(context);
     final trusted = controller.devices;
-    final info = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          "Reset this device's data",
-          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          'Abandon the dataset here to create a new one or join '
-          "another device's. Your device identity is kept.",
-          style: TextStyle(fontSize: 13, color: Nocturne.muted(.6)),
-        ),
-      ],
-    );
-    final button = OutlinedButton.icon(
-      key: const Key('reset-dataset'),
-      onPressed: controller.busy ? null : () => _resetDataset(context),
-      icon: const Icon(FiIcons.reset),
-      label: const Text('Reset data…'),
-    );
+    final pairingKind = controller.pairing.kind;
+    // A finished pairing is announced by the banner; the card only runs a pairing.
+    final pairing =
+        pairingKind != PairingKindDto.idle &&
+        pairingKind != PairingKindDto.trusted;
+    final discoveryOff = !controller.preferences.discoverable;
     return ListView(
       key: const Key('devices-page'),
       padding: phone
@@ -1013,34 +1019,79 @@ class _DevicesPageState extends State<DevicesPage> {
                     ],
                   ),
                 _ConnectionSwitches(controller: controller),
-                const SizedBox(height: 22),
-                PairingCard(
-                  controller: controller,
-                  onResetDataset: onResetDataset,
-                ),
                 const SizedBox(height: 26),
+                if (_pairedBanner) ...[
+                  _PairedBanner(
+                    name: controller.peerName ?? 'the other device',
+                    onDismiss: () => setState(
+                      () =>
+                          _dismissedBanner = controller.pairing.sessionId ?? '',
+                    ),
+                    onPairAnother: controller.busy
+                        ? null
+                        : controller.beginPairing,
+                  ),
+                  const SizedBox(height: 14),
+                ],
                 Row(
-                  crossAxisAlignment: CrossAxisAlignment.baseline,
-                  textBaseline: TextBaseline.alphabetic,
                   children: [
-                    const SectionLabel('Trusted devices'),
-                    const SizedBox(width: 10),
-                    Text(
-                      '${trusted.length}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Nocturne.muted(.45),
+                    Expanded(
+                      child: SectionLabel(
+                        'Trusted devices · ${trusted.length}',
+                        key: const Key('trusted-heading'),
                       ),
                     ),
+                    if (trusted.isNotEmpty && !pairing) ...[
+                      if (discoveryOff && !phone)
+                        Flexible(
+                          flex: 2,
+                          child: Text(
+                            PairingCard.discoveryOffNote,
+                            key: const Key('discovery-off-note'),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.right,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Nocturne.muted(.5),
+                            ),
+                          ),
+                        ),
+                      const SizedBox(width: 8),
+                      TextButton.icon(
+                        key: const Key('start-pairing'),
+                        onPressed: controller.busy
+                            ? null
+                            : controller.beginPairing,
+                        icon: const Icon(FiIcons.link, size: 16),
+                        label: const Text('Pair device'),
+                      ),
+                    ],
                   ],
                 ),
+                if (trusted.isNotEmpty && !pairing && discoveryOff && phone)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      PairingCard.discoveryOffNote,
+                      key: const Key('discovery-off-note'),
+                      style: TextStyle(fontSize: 12, color: Nocturne.muted(.5)),
+                    ),
+                  ),
                 const SizedBox(height: 10),
-                if (trusted.isEmpty)
-                  Text(
-                    'No devices have been paired yet.',
-                    style: TextStyle(fontSize: 13, color: Nocturne.muted(.6)),
-                  )
-                else
+                if (pairing) ...[
+                  PairingCard(
+                    controller: controller,
+                    onResetDataset: onResetDataset,
+                  ),
+                  if (trusted.isNotEmpty) const SizedBox(height: 12),
+                ] else if (trusted.isEmpty)
+                  _NoDevices(
+                    phone: phone,
+                    discoveryOff: discoveryOff,
+                    onStart: controller.busy ? null : controller.beginPairing,
+                  ),
+                if (trusted.isNotEmpty)
                   NocturneCard(
                     padding: EdgeInsets.zero,
                     child: Column(
@@ -1055,41 +1106,20 @@ class _DevicesPageState extends State<DevicesPage> {
                 const SizedBox(height: 26),
                 const SectionLabel('This device'),
                 const SizedBox(height: 10),
-                _LocalIdentity(device: controller.localDevice),
-                if (onResetDataset != null) ...[
-                  const SizedBox(height: 10),
-                  Container(
-                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(Nocturne.radius),
-                      border: Border.all(color: Nocturne.divider),
-                    ),
-                    child: phone
-                        ? Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              info,
-                              const SizedBox(height: 12),
-                              button,
-                            ],
-                          )
-                        : Row(
-                            children: [
-                              Expanded(child: info),
-                              const SizedBox(width: 16),
-                              button,
-                            ],
-                          ),
-                  ),
-                ],
-                if (controller.buildInfo case final build?) ...[
-                  const SizedBox(height: 26),
-                  SelectableText(
-                    buildLabel(build),
-                    key: const Key('build-version'),
-                    style: TextStyle(fontSize: 12, color: Nocturne.muted(.45)),
-                  ),
-                ],
+                _LocalIdentity(
+                  device: controller.localDevice,
+                  phone: phone,
+                  onReset: onResetDataset == null || controller.busy
+                      ? null
+                      : () => _resetDataset(context),
+                  showReset: onResetDataset != null,
+                ),
+                // Wide screens show the build under the sidebar status instead.
+                if (phone)
+                  if (controller.buildInfo case final build?) ...[
+                    const SizedBox(height: 26),
+                    BuildLabel(build),
+                  ],
               ],
             ),
           ),
@@ -1098,138 +1128,106 @@ class _DevicesPageState extends State<DevicesPage> {
     );
   }
 
-  /// One trusted device (mocks 1b, 2i): kind tile, name with its connection tag, the id in mono
-  /// with when it was last seen and synced, and its actions.
+  /// One trusted device (mocks 4b, 4g): icon tile, name with its state tag, when it was last
+  /// seen and synced, Details, and the ⋮ menu. Details expand inline on wide screens and open as
+  /// a pushed screen on a phone.
   Widget _deviceRow(
     BuildContext context,
     TrustedDeviceDto device,
     DateTime now, {
     required bool phone,
-  }) => Padding(
-    key: Key('device-${device.deviceId}'),
-    padding: const EdgeInsets.fromLTRB(16, 12, 6, 12),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _deviceSummary(context, device, now, phone: phone),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: TextButton.icon(
-            key: Key('device-details-${device.deviceId}'),
-            onPressed: () => _toggleDetails(device),
-            icon: Icon(
-              _openDetails.contains(device.deviceId)
-                  ? FiIcons.collapse
-                  : FiIcons.expand,
-              size: 18,
-            ),
-            label: const Text('Details'),
-          ),
-        ),
-        if (_openDetails.contains(device.deviceId))
-          _DeviceDetails(
-            device: device,
-            controller: controller,
-            now: now,
-            onCopy: () => _copyDiagnostics(context, device),
-          ),
-      ],
-    ),
-  );
-
-  void _toggleDetails(TrustedDeviceDto device) {
-    setState(() {
-      if (!_openDetails.remove(device.deviceId)) {
-        _openDetails.add(device.deviceId);
-      }
-    });
-    if (_openDetails.contains(device.deviceId)) {
-      unawaited(controller.loadDetails(device));
-    } else {
-      controller.closeDetails(device.deviceId);
-    }
-  }
-
-  Future<void> _copyDiagnostics(
-    BuildContext context,
-    TrustedDeviceDto device,
-  ) async {
-    final messenger = ScaffoldMessenger.maybeOf(context);
-    if (await controller.copyDiagnostics(device)) {
-      messenger?.showSnackBar(
-        const SnackBar(content: Text('Diagnostics copied')),
-      );
-    }
-  }
-
-  Widget _deviceSummary(
-    BuildContext context,
-    TrustedDeviceDto device,
-    DateTime now, {
-    required bool phone,
-  }) => Row(
-    children: [
-      IconTile(
-        device.revoked ? FiIcons.blocked : FiIcons.devices,
-        fill: Nocturne.neutral800,
-        color: Nocturne.text,
-      ),
-      const SizedBox(width: 14),
-      Expanded(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+  }) {
+    final open = _openDetails.contains(device.deviceId);
+    return Padding(
+      key: Key('device-${device.deviceId}'),
+      padding: const EdgeInsets.fromLTRB(16, 12, 6, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ConstrainedBox(
+            constraints: BoxConstraints(minHeight: phone ? 40 : 0),
+            child: Row(
               children: [
-                Flexible(
-                  child: Text(
-                    device.friendlyName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                    ),
+                IconTile(
+                  device.revoked ? FiIcons.blocked : FiIcons.devices,
+                  fill: Nocturne.neutral800,
+                  color: Nocturne.text,
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              device.friendlyName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Flexible(child: DeviceStateTag(device: device)),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        seenSyncedLine(device, now),
+                        key: Key('device-times-${device.deviceId}'),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontFeatures: Nocturne.tabular,
+                          color: Nocturne.muted(.55),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(width: 8),
-                switch ((device.revoked, device.connection)) {
-                  (true, _) => const Tag.neutral('Revoked'),
-                  (
-                    _,
-                    PeerConnectionKindDto.offline ||
-                        PeerConnectionKindDto.error ||
-                        PeerConnectionKindDto.paused,
-                  ) =>
-                    Tag.neutral(_connectionText(device.connection)),
-                  _ => Tag(_connectionText(device.connection)),
-                },
+                TextButton.icon(
+                  key: Key('device-details-${device.deviceId}'),
+                  onPressed: () => phone
+                      ? unawaited(_pushDetails(context, device))
+                      : _toggleDetails(device),
+                  icon: Icon(
+                    phone
+                        ? FiIcons.chevronRight
+                        : open
+                        ? FiIcons.collapse
+                        : FiIcons.expand,
+                    size: 16,
+                  ),
+                  label: const Text('Details'),
+                ),
+                _deviceMenu(context, device),
               ],
             ),
-            const SizedBox(height: 2),
-            Text.rich(
-              TextSpan(
-                children: [
-                  if (!phone) ...[
-                    TextSpan(
-                      text: _shortDeviceId(device.deviceId),
-                      style: const TextStyle(fontFamily: Nocturne.monoFamily),
-                    ),
-                    const TextSpan(text: ' · '),
-                  ],
-                  TextSpan(
-                    text:
-                        'Last seen ${formatStatusTime(device.lastSeenMs, now: now)} · '
-                        'Last sync ${formatStatusTime(device.lastSyncMs, now: now)}',
-                  ),
-                ],
+          ),
+          if (open && !phone)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(50, 12, 10, 4),
+              child: DeviceDetails(
+                device: device,
+                controller: controller,
+                now: now,
+                onCopyLog: () => _copyDiagnostics(context, device),
               ),
-              style: TextStyle(fontSize: 12, color: Nocturne.muted(.55)),
             ),
-          ],
-        ),
+        ],
       ),
+    );
+  }
+
+  /// The row's rename, revoke and delete actions.
+  Widget _deviceMenu(BuildContext context, TrustedDeviceDto device) =>
       PopupMenuButton<String>(
+        tooltip: 'Device actions',
         icon: const Icon(FiIcons.more),
         onSelected: (action) {
           if (action == 'rename') _renameDevice(context, device);
@@ -1246,9 +1244,49 @@ class _DevicesPageState extends State<DevicesPage> {
           if (device.revoked)
             const PopupMenuItem(value: 'delete', child: Text('Delete')),
         ],
+      );
+
+  void _toggleDetails(TrustedDeviceDto device) {
+    setState(() {
+      if (!_openDetails.remove(device.deviceId)) {
+        _openDetails.add(device.deviceId);
+      }
+    });
+    if (_openDetails.contains(device.deviceId)) {
+      unawaited(controller.loadDetails(device));
+    } else {
+      controller.closeDetails(device.deviceId);
+    }
+  }
+
+  /// Details as a pushed screen on a phone (mock 5f).
+  Future<void> _pushDetails(
+    BuildContext context,
+    TrustedDeviceDto device,
+  ) async {
+    unawaited(controller.loadDetails(device));
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => DeviceDetailsScreen(
+          deviceId: device.deviceId,
+          controller: controller,
+          menu: _deviceMenu,
+          onCopyLog: _copyDiagnostics,
+        ),
       ),
-    ],
-  );
+    );
+    controller.closeDetails(device.deviceId);
+  }
+
+  Future<void> _copyDiagnostics(
+    BuildContext context,
+    TrustedDeviceDto device,
+  ) async {
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    if (await controller.copyDiagnostics(device)) {
+      messenger?.showSnackBar(const SnackBar(content: Text('Log copied')));
+    }
+  }
 
   Future<void> _resetDataset(BuildContext context) async {
     final action = onResetDataset;
@@ -1378,15 +1416,18 @@ class _ConnectionSwitches extends StatelessWidget {
                 key: const Key('pref-discoverable'),
                 value: preferences.discoverable,
                 onChanged: enabled ? controller.setDiscoverable : null,
+                leading: const IconTile(FiIcons.network, size: 32),
                 title: const _SwitchTitle('Discoverable', HelpId.discoverable),
                 subtitle: const Text(
                   'Announce this device to paired devices on the local network.',
                 ),
               ),
+              const FadedRule(indent: 16),
               FiSwitchTile(
                 key: const Key('pref-sync'),
                 value: preferences.syncEnabled,
                 onChanged: enabled ? controller.setSyncEnabled : null,
+                leading: const IconTile(FiIcons.syncing, size: 32),
                 title: const _SwitchTitle(
                   'Sync with paired devices',
                   HelpId.syncEnabled,
@@ -1437,19 +1478,6 @@ class _SyncChip extends StatelessWidget {
   );
 }
 
-String _shortDeviceId(String id) => id.length <= 16
-    ? id
-    : '${id.substring(0, 8)}…${id.substring(id.length - 8)}';
-String _connectionText(PeerConnectionKindDto state) => switch (state) {
-  PeerConnectionKindDto.offline => 'Offline',
-  PeerConnectionKindDto.searching => 'Searching',
-  PeerConnectionKindDto.connected => 'Connected',
-  PeerConnectionKindDto.syncing => 'Syncing',
-  PeerConnectionKindDto.synced => 'Synced',
-  PeerConnectionKindDto.error => 'Error',
-  PeerConnectionKindDto.paused => 'Paused',
-};
-
 class _ErrorBanner extends StatelessWidget {
   const _ErrorBanner(this.message);
   final String message;
@@ -1461,139 +1489,264 @@ class _ErrorBanner extends StatelessWidget {
   );
 }
 
-/// The "This device" identity: full DeviceId and pairing name, or a note that
-/// networking is not set up.
+/// The dashed "Trusted devices" empty state (mocks 4b, 4g) with the one way into pairing.
+class _NoDevices extends StatelessWidget {
+  const _NoDevices({
+    required this.phone,
+    required this.discoveryOff,
+    required this.onStart,
+  });
+
+  final bool phone;
+  final bool discoveryOff;
+  final VoidCallback? onStart;
+
+  @override
+  Widget build(BuildContext context) => DashedSlot(
+    key: const Key('no-devices'),
+    child: Padding(
+      padding: const EdgeInsets.fromLTRB(20, 22, 20, 22),
+      child: Column(
+        children: [
+          const IconTile(FiIcons.devices),
+          const SizedBox(height: 12),
+          const Text(
+            'No devices paired yet',
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            phone
+                ? "Start pairing on both devices while they're nearby."
+                : "Start pairing on both devices while they're nearby. "
+                      'Pairing turns itself off after 2 minutes.',
+            key: const Key('no-devices-body'),
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 13, color: Nocturne.muted(.6)),
+          ),
+          if (discoveryOff) ...[
+            const SizedBox(height: 6),
+            Text(
+              PairingCard.discoveryOffNote,
+              key: const Key('discovery-off-note'),
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 12, color: Nocturne.muted(.5)),
+            ),
+          ],
+          const SizedBox(height: 14),
+          FilledButton.icon(
+            key: const Key('start-pairing'),
+            style: phone
+                ? FilledButton.styleFrom(minimumSize: const Size(0, 46))
+                : null,
+            onPressed: onStart,
+            icon: const Icon(FiIcons.link),
+            label: const Text('Start pairing'),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+/// Announces a finished pairing until dismissed or pairing starts again.
+class _PairedBanner extends StatelessWidget {
+  const _PairedBanner({
+    required this.name,
+    required this.onDismiss,
+    required this.onPairAnother,
+  });
+
+  final String name;
+  final VoidCallback onDismiss;
+  final VoidCallback? onPairAnother;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    key: const Key('paired-banner'),
+    padding: const EdgeInsets.fromLTRB(14, 8, 4, 8),
+    decoration: BoxDecoration(
+      color: Nocturne.accent900,
+      borderRadius: BorderRadius.circular(Nocturne.radius),
+      border: Border.all(color: Nocturne.accent700),
+    ),
+    child: Row(
+      children: [
+        const Icon(FiIcons.verified, size: 18, color: Nocturne.accent),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            'Paired with $name. The first sync starts automatically.',
+            style: const TextStyle(fontSize: 13, color: Nocturne.accent100),
+          ),
+        ),
+        TextButton(
+          key: const Key('pair-another'),
+          onPressed: onPairAnother,
+          child: const Text('Pair another'),
+        ),
+        FiIconButton(
+          key: const Key('dismiss-paired-banner'),
+          icon: FiIcons.close,
+          tooltip: 'Dismiss',
+          color: Nocturne.accent100,
+          onPressed: onDismiss,
+        ),
+      ],
+    ),
+  );
+}
+
+/// The "This device" section (mocks 4b, 4g): pairing name, the DeviceId grouped (shortened on a
+/// phone) with Copy ID, and the reset entry. Without an identity it says networking is not set
+/// up.
 class _LocalIdentity extends StatelessWidget {
-  const _LocalIdentity({required this.device});
+  const _LocalIdentity({
+    required this.device,
+    required this.phone,
+    required this.showReset,
+    required this.onReset,
+  });
   final LocalDeviceDto? device;
+  final bool phone;
+  final bool showReset;
+  final VoidCallback? onReset;
 
   @override
   Widget build(BuildContext context) {
     final device = this.device;
-    if (device == null) {
-      return Text(
-        'Networking is not set up on this device.',
-        key: const Key('local-device-missing'),
-        style: TextStyle(fontSize: 13, color: Nocturne.muted(.6)),
-      );
-    }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          device.pairingName,
-          key: const Key('local-device-name'),
-          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-        ),
-        const SizedBox(height: 2),
-        SelectableText(
-          device.deviceId,
-          key: const Key('local-device-id'),
-          style: TextStyle(
-            fontSize: 12,
-            fontFamily: Nocturne.monoFamily,
-            color: Nocturne.muted(.7),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// A trusted row's diagnostic detail: identity, attempt state, bound port,
-/// retained log lines, and the Reconnect and Copy all actions.
-class _DeviceDetails extends StatelessWidget {
-  const _DeviceDetails({
-    required this.device,
-    required this.controller,
-    required this.now,
-    required this.onCopy,
-  });
-  final TrustedDeviceDto device;
-  final DevicesController controller;
-  final DateTime now;
-  final VoidCallback onCopy;
-
-  @override
-  Widget build(BuildContext context) {
-    final id = device.deviceId;
-    final logs = controller.details[id];
-    final lines = [
-      if (logs != null) ...[
-        ...logs.peer.map(logLine),
-        if (logs.peer.isEmpty) '(no lines for this device)',
-        '-- this device --',
-        ...logs.local.map(logLine),
-      ],
-    ];
-    const mono = TextStyle(fontFamily: Nocturne.monoFamily, fontSize: 12);
-    final muted = TextStyle(fontSize: 12, color: Nocturne.muted(.7));
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(54, 0, 10, 4),
+    return NocturneCard(
+      padding: EdgeInsets.zero,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SelectableText(id, style: mono),
-          const SizedBox(height: 6),
-          Text(
-            'State: ${device.revoked ? 'Revoked' : _connectionText(device.connection)}',
-            style: muted,
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+            child: device == null
+                ? Text(
+                    'Networking is not set up on this device.',
+                    key: const Key('local-device-missing'),
+                    style: TextStyle(fontSize: 13, color: Nocturne.muted(.6)),
+                  )
+                : Row(
+                    children: [
+                      const IconTile(FiIcons.phone, size: 32),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              device.pairingName,
+                              key: const Key('local-device-name'),
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              phone
+                                  ? shortDeviceId(device.deviceId)
+                                  : groupedDeviceId(device.deviceId),
+                              key: const Key('local-device-id'),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontFamily: Nocturne.monoFamily,
+                                color: Nocturne.muted(.7),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      TextButton.icon(
+                        key: const Key('copy-local-id'),
+                        onPressed: () => unawaited(
+                          copyWithConfirmation(
+                            context,
+                            device.deviceId,
+                            'ID copied',
+                          ),
+                        ),
+                        icon: const Icon(FiIcons.copy, size: 16),
+                        label: const Text('Copy ID'),
+                      ),
+                    ],
+                  ),
           ),
-          Text('Endpoint: ${device.attemptEndpoint ?? 'none'}', style: muted),
-          Text(
-            'Last attempt: ${formatStatusTime(device.lastAttemptMs, now: now)}',
-            style: muted,
-          ),
-          if (device.failure case final failure?)
-            Text(
-              'Failure: $failure',
-              key: Key('device-failure-$id'),
-              style: muted,
-            ),
-          Text(
-            'Sync port: ${controller.syncPort ?? 'not bound'}',
-            style: muted,
-          ),
-          const SizedBox(height: 8),
-          Container(
-            width: double.infinity,
-            constraints: const BoxConstraints(maxHeight: 240),
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(Nocturne.radius),
-              border: Border.all(color: Nocturne.divider),
-            ),
-            child: SingleChildScrollView(
-              child: SelectableText(
-                logs == null ? 'Loading…' : lines.join('\n'),
-                key: Key('device-log-$id'),
-                style: mono,
+          if (showReset) ...[
+            const FadedRule(indent: 16),
+            InkWell(
+              key: const Key('reset-dataset'),
+              onTap: onReset,
+              borderRadius: const BorderRadius.vertical(
+                bottom: Radius.circular(Nocturne.radius),
               ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            children: [
-              if (!device.revoked)
-                OutlinedButton.icon(
-                  key: Key('device-reconnect-$id'),
-                  onPressed: controller.reconnecting.contains(id)
-                      ? null
-                      : () => controller.reconnect(device),
-                  icon: const Icon(FiIcons.refresh, size: 18),
-                  label: const Text('Reconnect'),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+                child: Row(
+                  children: [
+                    const IconTile(
+                      FiIcons.reset,
+                      size: 32,
+                      fill: Nocturne.neutral800,
+                      color: Nocturne.text,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            "Reset this device's data",
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Abandon the dataset here to create a new one or join '
+                            "another device's. Your device identity is kept.",
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Nocturne.muted(.6),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Icon(
+                      FiIcons.chevronRight,
+                      size: 16,
+                      color: Nocturne.muted(.5),
+                    ),
+                  ],
                 ),
-              OutlinedButton.icon(
-                key: Key('device-copy-$id'),
-                onPressed: onCopy,
-                icon: const Icon(FiIcons.copy, size: 18),
-                label: const Text('Copy all'),
               ),
-            ],
-          ),
+            ),
+          ],
         ],
       ),
     );
   }
+}
+
+/// The muted, selectable build label: `fi <version> · <hash>`.
+class BuildLabel extends StatelessWidget {
+  const BuildLabel(this.info, {super.key});
+  final BuildInfoDto info;
+
+  @override
+  Widget build(BuildContext context) => SelectableText(
+    buildLabel(info),
+    key: const Key('build-version'),
+    style: TextStyle(
+      fontSize: 11,
+      fontFamily: Nocturne.monoFamily,
+      color: Nocturne.muted(.45),
+    ),
+  );
 }

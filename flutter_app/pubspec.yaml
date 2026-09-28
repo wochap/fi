@@ -45,6 +45,7 @@ dependencies:
   fl_chart: ^1.2.0
   file_selector: ^1.1.0
   phosphor_flutter: ^2.1.0
+  two_dimensional_scrollables: ^0.5.5
 
 dev_dependencies:
   flutter_test:

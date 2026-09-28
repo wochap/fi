@@ -433,13 +433,22 @@ mod tests {
                 app_core::DomainKind::Schemas
             ]
         );
-        assert!(
-            collections::list_collections()
-                .await
-                .unwrap()
-                .iter()
-                .any(|item| item.id == collection)
+        let listed = collections::list_collections().await.unwrap();
+        let food = listed.iter().find(|item| item.id == collection).unwrap();
+        assert_eq!(
+            (food.record_count, food.field_count, food.incomplete_count),
+            (0, 0, 0)
         );
+        assert_eq!(food.last_edited_ms, None);
+        let record = collections::create_record(collection.clone(), vec![])
+            .await
+            .unwrap();
+        let listed = collections::list_collections().await.unwrap();
+        let food = listed.iter().find(|item| item.id == collection).unwrap();
+        assert_eq!(food.record_count, 1);
+        let records = collections::list_records(collection.clone()).await.unwrap();
+        assert_eq!(records[0].id, record);
+        assert!(records[0].created_at_ms.is_some());
 
         let error = collections::create_collection(" ".into(), String::new())
             .await

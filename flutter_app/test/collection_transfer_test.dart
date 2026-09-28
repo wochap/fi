@@ -25,7 +25,14 @@ const _csvAbort = ImportOutcomeDto(
 FakeCollectionBridge _bridge([int records = 2]) {
   final bridge = seeded(records);
   bridge.collections.add(
-    const CollectionDto(id: 'collection-2', name: 'Sleep', description: ''),
+    const CollectionDto(
+      id: 'collection-2',
+      name: 'Sleep',
+      description: '',
+      recordCount: 0,
+      fieldCount: 0,
+      incompleteCount: 0,
+    ),
   );
   bridge.schemas['collection-2'] = const CollectionSchemaDto(
     id: 'collection-2',
@@ -269,7 +276,7 @@ void main() {
       final bridge = _bridge();
       final dialogs = FakeFileDialogs()..openResult = 'Title\na\nb\n';
       await _showList(tester, bridge, dialogs);
-      await _collectionAction(tester, 'Import CSV');
+      await _collectionAction(tester, 'Import CSV…');
       expect(bridge.imports, [(_collection, 'Title\na\nb\n')]);
       expect(bridge.records[_collection], hasLength(4));
       expect(find.text('2 records imported'), findsOneWidget);
@@ -280,7 +287,7 @@ void main() {
       final dialogs = FakeFileDialogs()..openResult = 'Onset\nyesterday\n';
       bridge.nextImportOutcome = _csvAbort;
       await _showList(tester, bridge, dialogs);
-      await _collectionAction(tester, 'Import CSV');
+      await _collectionAction(tester, 'Import CSV…');
       expect(
         find.text(
           'Import stopped. Row 12, column Onset: '

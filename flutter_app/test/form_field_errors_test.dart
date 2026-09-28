@@ -45,7 +45,14 @@ FakeCollectionBridge _seeded({List<RecordDto> records = const []}) {
       rootId: 'root',
     );
   bridge.collections.add(
-    const CollectionDto(id: _collection, name: 'Headaches', description: ''),
+    const CollectionDto(
+      id: _collection,
+      name: 'Headaches',
+      description: '',
+      recordCount: 0,
+      fieldCount: 0,
+      incompleteCount: 0,
+    ),
   );
   bridge.schemas[_collection] = CollectionSchemaDto(
     id: _collection,
@@ -233,7 +240,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('3').first);
     await tester.pumpAndSettle();
-    expect(find.text('Edit record'), findsOneWidget);
+    expect(find.text('Edit record · 1 field needed'), findsOneWidget);
     expect(_errorUnder(tester, 'Title'), 'Required');
   });
 

@@ -389,12 +389,16 @@ class FiSwitchTile extends StatelessWidget {
     this.title,
     this.subtitle,
     this.secondary,
+    this.leading,
     this.contentPadding,
     super.key,
   });
 
   final bool value;
   final ValueChanged<bool>? onChanged;
+
+  /// A widget before the title, such as an [IconTile].
+  final Widget? leading;
   final Widget? title;
   final Widget? subtitle;
 
@@ -409,6 +413,7 @@ class FiSwitchTile extends StatelessWidget {
       child: ListTile(
         contentPadding: contentPadding,
         enabled: enabled,
+        leading: leading,
         title: title,
         subtitle: subtitle,
         onTap: enabled ? () => onChanged!(!value) : null,

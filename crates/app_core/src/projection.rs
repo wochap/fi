@@ -22,7 +22,7 @@ use crate::{
     widgets::{WidgetDefinition, WidgetId},
 };
 
-pub const PROJECTION_SCHEMA_VERSION: i64 = 4;
+pub const PROJECTION_SCHEMA_VERSION: i64 = 5;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProjectionCheckpoint {
@@ -155,6 +155,11 @@ impl ReadModel {
                 kind TEXT NOT NULL, entity_id TEXT NOT NULL, field_id TEXT NOT NULL, message TEXT NOT NULL,
                 PRIMARY KEY(kind,entity_id,field_id,message)
              ) STRICT;
+             CREATE TABLE IF NOT EXISTS collection_summaries (
+                collection_id TEXT PRIMARY KEY NOT NULL, record_count INTEGER NOT NULL,
+                field_count INTEGER NOT NULL, incomplete_count INTEGER NOT NULL, last_edited_ms INTEGER,
+                FOREIGN KEY(collection_id) REFERENCES collections(id)
+             ) STRICT;
              CREATE TABLE IF NOT EXISTS projection_metadata (
                 singleton INTEGER PRIMARY KEY CHECK(singleton=1), root_id TEXT NOT NULL,
                 schema_version INTEGER NOT NULL, heads TEXT NOT NULL
@@ -265,6 +270,16 @@ impl ReadModel {
                 &["kind", "entity_id", "field_id", "message"][..],
             ),
             (
+                "collection_summaries",
+                &[
+                    "collection_id",
+                    "record_count",
+                    "field_count",
+                    "incomplete_count",
+                    "last_edited_ms",
+                ][..],
+            ),
+            (
                 "projection_metadata",
                 &["singleton", "root_id", "schema_version", "heads"][..],
             ),
@@ -321,7 +336,7 @@ impl ReadModel {
         let transaction = connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(|error| projection_db(&self.path, error))?;
-        transaction.execute_batch("DELETE FROM record_values; DELETE FROM projection_diagnostics; DELETE FROM widgets; DELETE FROM query_definitions; DELETE FROM computed_fields; DELETE FROM records; DELETE FROM enum_options; DELETE FROM fields; DELETE FROM collections;").map_err(|error| projection_db(&self.path, error))?;
+        transaction.execute_batch("DELETE FROM collection_summaries; DELETE FROM record_values; DELETE FROM projection_diagnostics; DELETE FROM widgets; DELETE FROM query_definitions; DELETE FROM computed_fields; DELETE FROM records; DELETE FROM enum_options; DELETE FROM fields; DELETE FROM collections;").map_err(|error| projection_db(&self.path, error))?;
         for schema in &snapshot.collections {
             transaction
                 .execute(
@@ -386,6 +401,22 @@ impl ReadModel {
             // without a field is stored as an empty string rather than NULL.
             transaction.execute("INSERT INTO projection_diagnostics(kind,entity_id,field_id,message) VALUES(?1,?2,?3,?4)", params![diagnostic.kind, diagnostic.entity_id, diagnostic.field_id.map_or_else(String::new, |id| id.to_string()), diagnostic.message]).map_err(|error| projection_db(&self.path, error))?;
         }
+        // Summaries are derived from the rows written above, inside the same transaction, so they
+        // always describe exactly the projected state. The last-edited time is the wall-clock part
+        // of the newest HLC stamp the snapshot exposes for the collection: its record values,
+        // including values of records deleted later.
+        transaction
+            .execute_batch(
+                "INSERT INTO collection_summaries(collection_id,record_count,field_count,incomplete_count,last_edited_ms)
+                 SELECT c.id,
+                    (SELECT COUNT(*) FROM records r WHERE r.collection_id=c.id AND r.deleted=0),
+                    (SELECT COUNT(*) FROM fields f WHERE f.collection_id=c.id AND f.deleted=0),
+                    (SELECT COUNT(*) FROM records r WHERE r.collection_id=c.id AND r.deleted=0
+                        AND EXISTS(SELECT 1 FROM projection_diagnostics d WHERE d.kind='record_validation' AND d.entity_id=r.id)),
+                    (SELECT MAX(v.physical_time_ms) FROM record_values v WHERE v.collection_id=c.id)
+                 FROM collections c WHERE c.deleted=0;",
+            )
+            .map_err(|error| projection_db(&self.path, error))?;
         transaction.execute("INSERT INTO projection_metadata(singleton,root_id,schema_version,heads) VALUES(1,?1,?2,?3) ON CONFLICT(singleton) DO UPDATE SET root_id=excluded.root_id,schema_version=excluded.schema_version,heads=excluded.heads", params![checkpoint.root.to_string(), checkpoint.schema_version, checkpoint.heads]).map_err(|error| projection_db(&self.path, error))?;
         transaction
             .commit()
@@ -398,19 +429,34 @@ impl ReadModel {
 
     pub fn collections(&self) -> Result<Vec<CollectionView>> {
         let connection = self.lock()?;
-        let mut statement = connection.prepare("SELECT id,name,description FROM collections WHERE deleted=0 ORDER BY name COLLATE NOCASE,id").map_err(|error| projection_db(&self.path, error))?;
+        let mut statement = connection.prepare("SELECT c.id,c.name,c.description,COALESCE(s.record_count,0),COALESCE(s.field_count,0),COALESCE(s.incomplete_count,0),s.last_edited_ms FROM collections c LEFT JOIN collection_summaries s ON s.collection_id=c.id WHERE c.deleted=0 ORDER BY c.name COLLATE NOCASE,c.id").map_err(|error| projection_db(&self.path, error))?;
         statement
             .query_map([], |row| {
-                Ok((row.get::<_, String>(0)?, row.get(1)?, row.get(2)?))
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get::<_, i64>(3)?,
+                    row.get::<_, i64>(4)?,
+                    row.get::<_, i64>(5)?,
+                    row.get::<_, Option<i64>>(6)?,
+                ))
             })
             .map_err(|error| projection_db(&self.path, error))?
             .map(|row| {
-                let (id, name, description) =
+                let (id, name, description, records, fields, incomplete, last_edited_ms) =
                     row.map_err(|error| projection_db(&self.path, error))?;
+                let count = |value: i64| {
+                    u32::try_from(value).map_err(|error| projection_db(&self.path, error))
+                };
                 Ok(CollectionView {
                     id: id.parse()?,
                     name,
                     description,
+                    record_count: count(records)?,
+                    field_count: count(fields)?,
+                    incomplete_count: count(incomplete)?,
+                    last_edited_ms,
                 })
             })
             .collect()
