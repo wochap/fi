@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=JetBrains+Mono:wght@400&display=swap">
+<link rel="stylesheet" href="_ds/nocturne-53929d40-05df-499c-bc14-17884e999fc5/styles.css">
+<script src="_ds/nocturne-53929d40-05df-499c-bc14-17884e999fc5/_ds_bundle.js"></script>
+<script src="https://unpkg.com/@phosphor-icons/web@2.1.1"></script>
+</helmet>
+<div style="width:390px;height:844px;border-radius:28px;overflow:hidden;position:relative;background:var(--color-bg);color:var(--color-text);font-family:var(--font-body)">
+  <div style="padding:18px 20px;opacity:.35"><div style="font-size:18px;font-weight:500">expenses</div></div>
+  <div style="position:absolute;inset:0;background:color-mix(in srgb,var(--color-neutral-900) 70%,transparent)"></div>
+  <div role="dialog" aria-label="New record in expenses" style="position:absolute;top:40px;left:0;right:0;bottom:0;display:flex;flex-direction:column;border-radius:20px 20px 28px 28px;background:var(--color-surface);box-shadow:var(--shadow-lg)">
+    <span style="align-self:center;width:36px;height:4px;border-radius:2px;background:var(--color-divider);margin-top:10px"></span>
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 8px 10px 18px">
+      <div style="flex:1;display:flex;align-items:baseline;gap:8px"><span class="dialog-title">New record</span><span style="font-size:12px;color:color-mix(in srgb,var(--color-text) 55%,transparent)">in expenses</span></div>
+      <button class="btn btn-ghost" aria-label="Close" style="width:44px;height:44px;color:var(--color-text)"><i class="ph ph-x" style="font-size:20px"></i></button>
+    </div>
+    <div style="flex:1;min-height:0;overflow:hidden;padding:0 16px 12px;display:flex;flex-direction:column;gap:14px">
+
+      <div role="status" aria-live="polite" style="display:flex;flex-direction:column">
+      <sc-if value="{{ p.idle }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:var(--radius-md);background:var(--color-bg)">
+          <i class="ph ph-sparkle" style="font-size:20px;color:var(--color-accent)"></i>
+          <div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:500">Fill by voice</div><div style="font-size:12px;margin-top:2px;color:color-mix(in srgb,var(--color-text) 60%,transparent)">Tap the mic below and say the details. You review before saving.</div></div>
+          <button class="btn btn-ghost" aria-label="Dismiss tip" style="width:44px;height:44px;margin:-8px -10px -8px 0;color:color-mix(in srgb,var(--color-text) 60%,transparent)"><i class="ph ph-x"></i></button>
+        </div>
+      </sc-if>
+      <sc-if value="{{ p.primer }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:12px;padding:16px;border-radius:var(--radius-md);background:radial-gradient(100% 140% at 0% 0%,var(--color-accent-900),var(--color-bg) 60%);box-shadow:inset 0 0 0 1px var(--color-accent-700)">
+          <div style="width:44px;height:44px;border-radius:50%;box-shadow:inset 0 0 0 1px var(--color-accent);display:grid;place-items:center;color:var(--color-accent);font-size:22px"><i class="ph ph-microphone"></i></div>
+          <div><div style="font-size:16px;font-weight:500">Speak to fill records</div><div style="font-size:13px;line-height:1.45;margin-top:4px;color:color-mix(in srgb,var(--color-text) 70%,transparent)">Audio is processed on this device and never saved. English only for now.</div></div>
+          <div style="font-size:12px;color:color-mix(in srgb,var(--color-text) 55%,transparent)">Next, Android will ask for microphone access.</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><button class="btn btn-secondary" style="min-height:48px">Not now</button><button class="btn btn-primary" style="min-height:48px">Continue</button></div>
+        </div>
+      </sc-if>
+      <sc-if value="{{ p.offer }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:12px;padding:16px;border-radius:var(--radius-md);background:var(--color-bg);box-shadow:inset 0 0 0 1px var(--color-accent-700)">
+          <div style="display:flex;align-items:center;gap:10px"><i class="ph ph-download-simple" style="font-size:22px;color:var(--color-accent)"></i><span style="flex:1;font-size:16px;font-weight:500">Download voice model</span></div>
+          <div style="font-size:13px;line-height:1.45;color:color-mix(in srgb,var(--color-text) 70%,transparent)">A one-time 1.3 GB download so speech can be understood on this phone.</div>
+          <div style="display:flex;flex-direction:column;gap:6px;font-size:13px">
+            <div style="display:flex;align-items:center;gap:8px"><i class="ph ph-wifi-slash" style="color:var(--color-accent-300)"></i><span style="flex:1">You're on mobile data</span><span style="font-size:12px;color:var(--color-accent-300)">Wi-Fi recommended</span></div>
+            <div style="display:flex;align-items:center;gap:8px"><i class="ph ph-hard-drives" style="opacity:.7"></i><span style="flex:1">Storage</span><span style="font-size:12px;color:color-mix(in srgb,var(--color-text) 60%,transparent)">12.4 GB free</span></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><button class="btn btn-secondary" style="min-height:48px">Later</button><button class="btn btn-primary" style="min-height:48px"><i class="ph ph-download-simple"></i>Download</button></div>
+        </div>
+      </sc-if>
+      <sc-if value="{{ p.downloading }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:10px;padding:12px 14px;border-radius:var(--radius-md);background:var(--color-bg)">
+          <div style="display:flex;align-items:center;gap:10px"><i class="ph ph-download-simple" style="font-size:18px;color:var(--color-accent)"></i><span style="flex:1;font-size:14px;font-weight:500">Downloading voice model</span><button class="btn btn-ghost" aria-label="Pause download" style="width:44px;height:44px;margin:-10px -4px;color:var(--color-text)"><i class="ph ph-pause" style="font-size:18px"></i></button><button class="btn btn-ghost" aria-label="Hide" style="width:44px;height:44px;margin:-10px -10px -10px -4px;color:color-mix(in srgb,var(--color-text) 60%,transparent)"><i class="ph ph-caret-up" style="font-size:18px"></i></button></div>
+          <div role="progressbar" aria-valuenow="38" aria-valuemin="0" aria-valuemax="100" style="height:4px;border-radius:2px;background:var(--color-neutral-700);overflow:hidden"><div style="width:38%;height:100%;background:var(--color-accent)"></div></div>
+          <div style="display:flex;font-size:12px;color:color-mix(in srgb,var(--color-text) 60%,transparent);font-variant-numeric:tabular-nums"><span style="flex:1">494 MB of 1.3 GB · 38%</span><span>about 4 min</span></div>
+          <div style="font-size:12px;color:color-mix(in srgb,var(--color-text) 55%,transparent)">Keep filling by hand. The mic turns on when it's ready.</div>
+        </div>
+      </sc-if>
+      <sc-if value="{{ p.listening }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:12px;padding:14px;border-radius:var(--radius-md);background:radial-gradient(100% 160% at 50% 0%,var(--color-accent-900),var(--color-bg) 70%);box-shadow:inset 0 0 0 1px var(--color-accent-700)">
+          <div style="display:flex;align-items:center;gap:10px"><span style="width:8px;height:8px;border-radius:50%;background:var(--color-accent);box-shadow:0 0 0 4px var(--color-accent-900),0 0 10px var(--color-accent)"></span><span style="flex:1;font-size:14px;font-weight:500">Listening</span><span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--color-accent-200)">0:04</span></div>
+          <div aria-hidden="true" style="display:flex;align-items:center;justify-content:center;gap:3px;height:40px">
+            <sc-for list="{{ bars }}" as="b" hint-placeholder-count="28"><span style="width:4px;border-radius:2px;background:var(--color-accent);height:{{ b }}px"></span></sc-for>
+          </div>
+          <div style="font-size:13px;line-height:1.45;color:color-mix(in srgb,var(--color-text) 70%,transparent)">Try: <span style="color:var(--color-accent-100)">“Lunch, 12.50, category food, yesterday”</span></div>
+          <div style="display:flex;align-items:center;gap:8px"><span style="flex:1;font-size:12px;color:color-mix(in srgb,var(--color-text) 55%,transparent)">Tap stop when done, or hold the mic to talk</span><button class="btn btn-ghost" style="min-height:44px;color:var(--color-text)">Cancel</button></div>
+        </div>
+      </sc-if>
+      <sc-if value="{{ p.processing }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:12px;padding:14px;border-radius:var(--radius-md);background:var(--color-bg);box-shadow:inset 0 0 0 1px var(--color-accent-700)">
+          <div style="display:flex;flex-direction:column;gap:8px;font-size:14px">
+            <div style="display:flex;align-items:center;gap:10px;color:color-mix(in srgb,var(--color-text) 60%,transparent)"><span style="width:20px;height:20px;border-radius:50%;display:grid;place-items:center;background:var(--color-neutral-800);font-size:11px"><i class="ph-bold ph-check"></i></span>Transcribed</div>
+            <div style="display:flex;align-items:center;gap:10px;font-weight:500"><span style="width:20px;height:20px;border-radius:50%;background:conic-gradient(var(--color-accent) 0 30%,var(--color-neutral-700) 30% 100%);-webkit-mask:radial-gradient(circle,transparent 6px,#000 7px);mask:radial-gradient(circle,transparent 6px,#000 7px)"></span>Filling fields…</div>
+          </div>
+          <div style="padding:10px 12px;border-radius:var(--radius-sm);background:var(--color-surface);font-size:14px;line-height:1.45">“Lunch at Nando's, twelve fifty, food, yesterday”</div>
+          <div style="display:flex;align-items:center"><span style="flex:1;font-size:12px;color:color-mix(in srgb,var(--color-text) 55%,transparent)">Usually 4–8 seconds</span><button class="btn btn-ghost" style="min-height:44px;color:var(--color-text)">Cancel</button></div>
+        </div>
+      </sc-if>
+      <sc-if value="{{ p.filled }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:10px;padding:12px 14px;border-radius:var(--radius-md);background:var(--color-bg)">
+          <div style="display:flex;align-items:center;gap:10px"><i class="ph ph-sparkle" style="font-size:18px;color:var(--color-accent)"></i><span style="flex:1;font-size:14px;font-weight:500">Filled 4 fields</span><button class="btn btn-ghost" aria-expanded="false" style="min-height:44px;margin:-10px -8px;color:color-mix(in srgb,var(--color-text) 65%,transparent)">Heard<i class="ph ph-caret-down"></i></button></div>
+          <div style="display:flex;align-items:center;gap:8px"><span style="flex:1;font-size:12px;color:color-mix(in srgb,var(--color-text) 55%,transparent)">Check the fields, then save.</span><button class="btn btn-secondary" style="min-height:44px"><i class="ph ph-microphone"></i>Speak again</button></div>
+        </div>
+      </sc-if>
+      <sc-if value="{{ p.need }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:10px;padding:12px 14px;border-radius:var(--radius-md);background:var(--color-bg);box-shadow:inset 0 0 0 1px var(--color-accent-700)">
+          <div style="display:flex;align-items:center;gap:10px"><i class="ph ph-warning-circle" style="font-size:18px;color:var(--color-accent)"></i><span style="flex:1;font-size:14px;font-weight:500">Still need: amount, category</span><span style="font-size:11px;color:color-mix(in srgb,var(--color-text) 50%,transparent)">1 of 2</span></div>
+          <div style="font-size:12px;color:color-mix(in srgb,var(--color-text) 60%,transparent)">Filled 2 fields. Say the rest, or type into the marked fields.</div>
+          <button class="btn btn-secondary" style="min-height:44px;align-self:flex-start"><i class="ph ph-microphone"></i>Answer by voice</button>
+        </div>
+      </sc-if>
+      <sc-if value="{{ p.exhausted }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:8px;padding:12px 14px;border-radius:var(--radius-md);background:var(--color-bg)">
+          <div style="display:flex;align-items:center;gap:10px"><i class="ph ph-warning-circle" style="font-size:18px;color:var(--color-accent)"></i><span style="flex:1;font-size:14px;font-weight:500">Couldn't get the amount</span></div>
+          <div style="font-size:12px;color:color-mix(in srgb,var(--color-text) 60%,transparent)">Type it in the marked field, then save. The mic still works if you want to try again.</div>
+        </div>
+      </sc-if>
+      <sc-if value="{{ p.followup }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:10px;padding:12px 14px;border-radius:var(--radius-md);background:var(--color-bg)">
+          <div style="display:flex;align-items:center;gap:10px"><i class="ph ph-sparkle" style="font-size:18px;color:var(--color-accent)"></i><span style="flex:1;font-size:14px;font-weight:500">Updated amount, category</span><button class="btn btn-ghost" aria-expanded="true" style="min-height:44px;margin:-10px -8px;color:color-mix(in srgb,var(--color-text) 65%,transparent)">Heard<i class="ph ph-caret-up"></i></button></div>
+          <div style="display:flex;flex-direction:column;gap:8px;padding-left:28px;font-size:13px;line-height:1.4">
+            <div style="color:color-mix(in srgb,var(--color-text) 55%,transparent)"><span style="font-size:11px;letter-spacing:.06em;text-transform:uppercase">1st</span> “Taxi home yesterday”</div>
+            <div><span style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:color-mix(in srgb,var(--color-text) 55%,transparent)">2nd</span> “Twenty two forty, transport”</div>
+          </div>
+          <div style="font-size:12px;color:color-mix(in srgb,var(--color-text) 55%,transparent)">Your edit to description was kept.</div>
+        </div>
+      </sc-if>
+      <sc-if value="{{ p.speaking }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:var(--radius-md);background:var(--color-bg);box-shadow:inset 0 0 0 1px var(--color-accent-700)">
+          <div aria-hidden="true" style="display:flex;align-items:center;gap:2px;height:20px;flex:none"><span style="width:3px;height:8px;border-radius:2px;background:var(--color-accent)"></span><span style="width:3px;height:16px;border-radius:2px;background:var(--color-accent)"></span><span style="width:3px;height:11px;border-radius:2px;background:var(--color-accent)"></span><span style="width:3px;height:18px;border-radius:2px;background:var(--color-accent)"></span></div>
+          <div style="flex:1;min-width:0"><div style="font-size:12px;color:var(--color-accent-200)">Speaking</div><div style="font-size:14px;margin-top:2px">4 fields filled. Tap Save record when ready.</div></div>
+          <button class="btn btn-ghost" aria-label="Mute spoken feedback" style="width:44px;height:44px;margin-right:-8px;color:var(--color-text)"><i class="ph ph-speaker-simple-slash" style="font-size:20px"></i></button>
+        </div>
+      </sc-if>
+      </div>
+
+      <sc-for list="{{ fields }}" as="f" hint-placeholder-count="5">
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div style="display:flex;align-items:center;gap:6px;min-height:28px;font-size:13px">
+            <span style="color:color-mix(in srgb,var(--color-text) 75%,transparent)">{{ f.label }}</span>
+            <sc-if value="{{ f.required }}"><span style="color:var(--color-accent-300)">*</span></sc-if>
+            <span style="flex:1"></span>
+            <sc-if value="{{ f.isAi }}"><button aria-label="{{ f.aiLabel }}" style="all:unset;display:flex;align-items:center;gap:4px;min-height:28px;padding:0 8px;margin:-8px -4px;border-radius:14px;font-size:11px;cursor:pointer;color:var(--color-accent-100);background:var(--color-accent-900);box-shadow:inset 0 0 0 1px var(--color-accent-700)"><i class="ph-fill ph-sparkle"></i>Voice</button></sc-if>
+            <sc-if value="{{ f.isDefault }}"><span style="display:flex;align-items:center;gap:4px;font-size:11px;color:color-mix(in srgb,var(--color-text) 55%,transparent)"><i class="ph ph-arrow-bend-down-right"></i>Default</span></sc-if>
+            <sc-if value="{{ f.isNeed }}"><span style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--color-accent-200)"><i class="ph ph-warning-circle"></i>Needed</span></sc-if>
+          </div>
+          <sc-if value="{{ f.showEvidence }}">
+            <div role="dialog" aria-label="What was heard" style="display:flex;flex-direction:column;gap:6px;padding:10px 12px;border-radius:var(--radius-md);background:var(--color-neutral-800);box-shadow:var(--shadow-md)">
+              <div style="display:flex;align-items:center;gap:6px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:color-mix(in srgb,var(--color-text) 55%,transparent)"><i class="ph-fill ph-sparkle" style="color:var(--color-accent)"></i>Heard</div>
+              <div style="font-size:14px;line-height:1.45">{{ f.evB }}<span style="padding:0 3px;border-radius:4px;background:var(--color-accent-900);color:var(--color-accent-100);text-decoration:underline;text-underline-offset:3px">{{ f.evM }}</span>{{ f.evA }}</div>
+              <div style="display:flex;gap:8px"><button class="btn btn-ghost" style="min-height:44px;margin-left:-8px">Clear field</button><span style="flex:1"></span><button class="btn btn-ghost" style="min-height:44px;margin-right:-8px;color:var(--color-text)">Done</button></div>
+            </div>
+          </sc-if>
+          <sc-if value="{{ f.isInput }}">
+            <div class="input" style="min-height:46px;display:flex;align-items:center;gap:8px;font-size:16px;border-color:{{ f.border }};border-style:{{ f.borderStyle }};background:{{ f.bg }}">
+              <sc-if value="{{ f.hasIcon }}"><i class="{{ f.icon }}" style="color:var(--color-accent)"></i></sc-if>
+              <span style="flex:1;opacity:{{ f.valOpacity }}">{{ f.shown }}</span>
+              <sc-if value="{{ f.hasSuffix }}"><span style="font-size:11px;opacity:.5">{{ f.suffix }}</span></sc-if>
+              <sc-if value="{{ f.clearable }}"><span aria-label="Clear" style="width:22px;height:22px;border-radius:50%;display:grid;place-items:center;background:var(--color-neutral-700);font-size:11px"><i class="ph ph-x"></i></span></sc-if>
+            </div>
+          </sc-if>
+          <sc-if value="{{ f.isSeg }}">
+            <div style="display:flex;align-items:center;gap:8px;padding:{{ f.segPad }};border-radius:var(--radius-md);border:1px {{ f.borderStyle }} {{ f.segBorder }};background:{{ f.bg }}">
+              <div class="seg" style="display:flex;flex:1">
+                <sc-for list="{{ f.opts }}" as="o"><label class="seg-opt" style="flex:1;justify-content:center;min-height:44px"><input type="radio" name="{{ o.group }}" checked="{{ o.on }}" readOnly="{{ true }}">{{ o.label }}</label></sc-for>
+              </div>
+              <sc-if value="{{ f.clearable }}"><span aria-label="Clear" style="width:22px;height:22px;flex:none;border-radius:50%;display:grid;place-items:center;background:var(--color-neutral-700);font-size:11px"><i class="ph ph-x"></i></span></sc-if>
+            </div>
+          </sc-if>
+        </div>
+      </sc-for>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:12px;padding:12px 16px 22px;box-shadow:inset 0 1px 0 var(--color-divider)">
+      <sc-if value="{{ m.idle }}"><button aria-label="Fill by voice" style="all:unset;width:56px;height:56px;flex:none;border-radius:50%;display:grid;place-items:center;font-size:24px;color:var(--color-accent);box-shadow:inset 0 0 0 1px var(--color-accent);cursor:pointer"><i class="ph ph-microphone"></i></button></sc-if>
+      <sc-if value="{{ m.ready }}"><button aria-label="Answer by voice" style="all:unset;width:56px;height:56px;flex:none;border-radius:50%;display:grid;place-items:center;font-size:24px;color:var(--color-accent);background:var(--color-accent-900);box-shadow:inset 0 0 0 1px var(--color-accent),0 0 0 5px color-mix(in srgb,var(--color-accent) 18%,transparent);cursor:pointer"><i class="ph ph-microphone"></i></button></sc-if>
+      <sc-if value="{{ m.listening }}"><button aria-label="Stop listening" style="all:unset;width:56px;height:56px;flex:none;border-radius:50%;display:grid;place-items:center;font-size:22px;color:var(--color-accent-100);background:var(--color-accent-900);box-shadow:inset 0 0 0 2px var(--color-accent),0 0 0 6px color-mix(in srgb,var(--color-accent) 22%,transparent),0 0 24px var(--color-accent-700);cursor:pointer"><i class="ph-fill ph-stop"></i></button></sc-if>
+      <sc-if value="{{ m.processing }}"><button aria-label="Processing speech" aria-busy="true" style="all:unset;position:relative;width:56px;height:56px;flex:none;border-radius:50%;display:grid;place-items:center;font-size:22px;color:var(--color-accent-200)"><span style="position:absolute;inset:0;border-radius:50%;background:conic-gradient(var(--color-accent) 0 28%,var(--color-neutral-700) 28% 100%);-webkit-mask:radial-gradient(circle,transparent 26px,#000 27px);mask:radial-gradient(circle,transparent 26px,#000 27px)"></span><i class="ph ph-dots-three"></i></button></sc-if>
+      <sc-if value="{{ m.downloading }}"><button aria-label="Voice model downloading, 38 percent" style="all:unset;position:relative;width:56px;height:56px;flex:none;border-radius:50%;display:grid;place-items:center;font-size:20px;color:color-mix(in srgb,var(--color-text) 70%,transparent)"><span style="position:absolute;inset:0;border-radius:50%;background:conic-gradient(var(--color-accent) 0 38%,var(--color-neutral-700) 38% 100%);-webkit-mask:radial-gradient(circle,transparent 26px,#000 27px);mask:radial-gradient(circle,transparent 26px,#000 27px)"></span><i class="ph ph-download-simple"></i></button></sc-if>
+      <sc-if value="{{ saveOn }}"><button class="btn btn-primary" style="flex:1;min-height:52px;font-size:15px">Save record</button></sc-if>
+      <sc-if value="{{ saveOff }}"><button class="btn btn-primary" disabled style="flex:1;min-height:52px;font-size:15px">Save record</button></sc-if>
+    </div>
+  </div>
+
+  <sc-if value="{{ p.discard }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;inset:0;display:flex;align-items:center;padding:24px;background:color-mix(in srgb,var(--color-neutral-900) 72%,transparent)">
+      <div class="dialog" role="alertdialog" style="width:100%;gap:12px;padding:20px">
+        <div class="dialog-title">Discard this record?</div>
+        <div style="font-size:14px;line-height:1.45;color:color-mix(in srgb,var(--color-text) 70%,transparent)">Voice processing will stop and the fields you changed will be lost.</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:4px"><button class="btn btn-secondary" style="min-height:48px">Discard</button><button class="btn btn-primary" style="min-height:48px">Keep editing</button></div>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:390,&quot;height&quot;:844},&quot;state&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;idle&quot;,&quot;primer&quot;,&quot;offer&quot;,&quot;downloading&quot;,&quot;listening&quot;,&quot;processing&quot;,&quot;filled&quot;,&quot;need&quot;,&quot;exhausted&quot;,&quot;followup&quot;,&quot;speaking&quot;,&quot;discard&quot;],&quot;default&quot;:&quot;idle&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const s = this.props.state ?? 'idle';
+    const P = ['idle','primer','offer','downloading','listening','processing','filled','need','exhausted','followup','speaking','discard'];
+    const p = {}; P.forEach(k => p[k] = k === s);
+    if (s === 'discard') p.processing = true;
+    const micMap = { downloading:'downloading', listening:'listening', processing:'processing', discard:'processing', need:'ready' };
+    const mk = micMap[s] || 'idle';
+    const m = { idle: mk==='idle', ready: mk==='ready', listening: mk==='listening', processing: mk==='processing', downloading: mk==='downloading' };
+    const Y = 'Yesterday · Sep 27';
+    const st = {
+      description:['empty'], amount:['empty'], category:['empty'], date:['default','Today · Sep 28'], reimb:['empty']
+    };
+    const ai = (v) => ['ai', v];
+    if (s === 'downloading') st.description = ['user','Lunch'];
+    if (s === 'filled' || s === 'speaking') Object.assign(st, { description: ai("Lunch at Nando's"), amount: ai('12.50'), category: ai('food'), date: ai(Y) });
+    if (s === 'need') Object.assign(st, { description: ai('Taxi home'), date: ai(Y), amount:['need'], category:['need'] });
+    if (s === 'exhausted') Object.assign(st, { description: ai('Taxi home'), date: ai(Y), amount:['need'], category: ai('transport') });
+    if (s === 'followup') Object.assign(st, { description:['user','Taxi home from airport'], amount: ai('22.40'), category: ai('transport'), date: ai(Y) });
+    const defs = [
+      { id:'description', label:'description', kind:'input', ph:'e.g. Coffee' },
+      { id:'amount', label:'amount', kind:'input', required:true, ph:'0.00', suffix:'2 dp' },
+      { id:'category', label:'category', kind:'seg', required:true, options:['food','transport','home','other'] },
+      { id:'date', label:'date', kind:'input', ph:'Pick a date', icon:'ph ph-calendar-blank' },
+      { id:'reimb', label:'reimbursable', kind:'seg', options:['Yes','No'] }
+    ];
+    const fields = defs.map(d => {
+      const [status, value] = st[d.id];
+      const isAi = status==='ai', isNeed = status==='need', has = value != null;
+      const ev = s==='filled' && d.id==='amount';
+      return {
+        label: d.label, required: !!d.required, isAi, isNeed, isDefault: status==='default',
+        aiLabel: d.label + ', filled by voice. Show what was heard',
+        isInput: d.kind==='input', isSeg: d.kind==='seg',
+        shown: has ? value : (d.ph || ''), valOpacity: has ? 1 : 0.4,
+        hasIcon: !!d.icon, icon: d.icon, hasSuffix: !!d.suffix, suffix: d.suffix,
+        clearable: has && !d.required && d.kind==='input',
+        border: isNeed ? 'var(--color-accent)' : isAi ? 'var(--color-accent-700)' : 'var(--color-divider)',
+        segBorder: isNeed ? 'var(--color-accent)' : isAi ? 'var(--color-accent-700)' : 'transparent',
+        borderStyle: isNeed ? 'dashed' : 'solid',
+        bg: isAi ? 'var(--color-accent-900)' : 'transparent',
+        segPad: (isNeed || isAi) ? '3px' : '0',
+        showEvidence: ev, evB: "“Lunch at Nando's, ", evM: 'twelve fifty', evA: ', food, yesterday”',
+        opts: (d.options || []).map(o => ({ label:o, on: o===value, group: s + '-' + d.id }))
+      };
+    });
+    const bars = [6,10,18,26,14,30,36,22,12,28,34,20,16,8,12,24,32,38,26,14,10,20,28,18,10,6,8,4];
+    const saveOff = s==='listening' || s==='processing' || s==='discard';
+    return { p, m, fields, bars, saveOn: !saveOff, saveOff };
+  }
+}
+</script>
+</body>
+</html>
