@@ -254,7 +254,8 @@ ThemeData nocturneTheme() {
   final inputBorder = WidgetStateInputBorder.resolveWith((states) {
     final Color color;
     if (states.contains(WidgetState.error)) {
-      color = Nocturne.error;
+      // A field error is marked by the accent border, beside its warning icon and message.
+      color = Nocturne.accent;
     } else if (states.contains(WidgetState.focused)) {
       color = Nocturne.accent;
     } else if (states.contains(WidgetState.disabled)) {

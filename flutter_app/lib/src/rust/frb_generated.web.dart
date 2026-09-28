@@ -8,6 +8,7 @@
 
 import 'api/collections.dart';
 import 'api/diagnostics.dart';
+import 'api/durations.dart';
 import 'api/lifecycle.dart';
 import 'api/models.dart';
 import 'api/pairing.dart';
@@ -145,6 +146,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   GroupingDto dco_decode_box_autoadd_grouping_dto(dynamic raw);
+
+  @protected
+  int dco_decode_box_autoadd_i_32(dynamic raw);
 
   @protected
   LocalDeviceDto dco_decode_box_autoadd_local_device_dto(dynamic raw);
@@ -494,6 +498,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   GroupingDto? dco_decode_opt_box_autoadd_grouping_dto(dynamic raw);
+
+  @protected
+  int? dco_decode_opt_box_autoadd_i_32(dynamic raw);
 
   @protected
   LocalDeviceDto? dco_decode_opt_box_autoadd_local_device_dto(dynamic raw);
@@ -858,6 +865,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   GroupingDto sse_decode_box_autoadd_grouping_dto(SseDeserializer deserializer);
+
+  @protected
+  int sse_decode_box_autoadd_i_32(SseDeserializer deserializer);
 
   @protected
   LocalDeviceDto sse_decode_box_autoadd_local_device_dto(
@@ -1311,6 +1321,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   GroupingDto? sse_decode_opt_box_autoadd_grouping_dto(
     SseDeserializer deserializer,
   );
+
+  @protected
+  int? sse_decode_opt_box_autoadd_i_32(SseDeserializer deserializer);
 
   @protected
   LocalDeviceDto? sse_decode_opt_box_autoadd_local_device_dto(
@@ -1767,6 +1780,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
     GroupingDto self,
     SseSerializer serializer,
   );
+
+  @protected
+  void sse_encode_box_autoadd_i_32(int self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_local_device_dto(
@@ -2334,6 +2350,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
     GroupingDto? self,
     SseSerializer serializer,
   );
+
+  @protected
+  void sse_encode_opt_box_autoadd_i_32(int? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_box_autoadd_local_device_dto(

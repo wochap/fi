@@ -11,7 +11,8 @@ const double sideSheetBreakpoint = Nocturne.phoneBreakpoint;
 /// Opens a 480px sheet sliding in from the right, or a bottom sheet on a phone.
 ///
 /// The sheet has a header ([kicker] over [title] with a close button), a scrolling [body] and a
-/// footer holding [footerNote] and a primary Done. [body] is built with the sheet's own context,
+/// footer holding [footerNote] and a primary Done. [kickerView] replaces the [kicker] text, for a
+/// kicker that follows live data. [body] is built with the sheet's own context,
 /// so dialogs it opens stack above the sheet.
 Future<void> showSideSheet(
   BuildContext context, {
@@ -19,11 +20,13 @@ Future<void> showSideSheet(
   required String title,
   required WidgetBuilder body,
   String? footerNote,
+  Widget? kickerView,
   Key? key,
 }) {
   Widget frame(BuildContext sheet) => _SideSheetFrame(
     key: key,
     kicker: kicker,
+    kickerView: kickerView,
     title: title,
     body: body(sheet),
     footerNote: footerNote,
@@ -90,10 +93,12 @@ class _SideSheetFrame extends StatelessWidget {
     required this.title,
     required this.body,
     this.footerNote,
+    this.kickerView,
     super.key,
   });
 
   final String kicker;
+  final Widget? kickerView;
   final String title;
   final Widget body;
   final String? footerNote;
@@ -110,7 +115,7 @@ class _SideSheetFrame extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Kicker(kicker),
+                  kickerView ?? Kicker(kicker),
                   Text(title, style: Theme.of(context).textTheme.titleLarge),
                 ],
               ),

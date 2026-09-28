@@ -2154,14 +2154,41 @@ impl AppCore {
                 .filter(|field| !field.deleted)
                 .map(|field| field.id)
                 .collect();
+            // Draft values that differ from the stored ones: only these may not hold a removed
+            // option.
+            let newly_set: std::collections::HashSet<_> = record
+                .values
+                .iter()
+                .filter(|(id, value)| existing.record.values.get(id) != Some(value))
+                .map(|(id, _)| *id)
+                .collect();
             for (field_id, value) in existing.record.values {
                 if active.contains(&field_id) {
                     record.values.entry(field_id).or_insert(value);
                 }
             }
+            let mut issues = match crate::records::validate_record(&mut record, &schema, false) {
+                Ok(()) => Vec::new(),
+                Err(error) => error.issues(),
+            };
+            // A record keeps a removed option it holds, but an edit may not newly pick one.
+            for field in schema.fields.iter().filter(|field| !field.deleted) {
+                let Some(value) = record.values.get(&field.id) else {
+                    continue;
+                };
+                if !newly_set.contains(&field.id) {
+                    continue;
+                }
+                if field.validate_kept_value(value).is_ok()
+                    && let Err(issue) = field.validate_value(value)
+                {
+                    issues.push(issue.on(field.id));
+                }
+            }
+            return Ok(issues);
         }
         Ok(
-            match crate::records::validate_record(&mut record, &schema, record_id.is_none()) {
+            match crate::records::validate_record(&mut record, &schema, true) {
                 Ok(()) => Vec::new(),
                 Err(error) => error.issues(),
             },

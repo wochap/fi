@@ -114,6 +114,10 @@ pub struct FieldDefinition {
     pub field_type: FieldType,
     pub required: bool,
     pub default: Option<FieldValue>,
+    /// Date-only default: whole days added to the record's creation day. Stored as an
+    /// additive key so a device that does not know it reads the field as having no default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_relative_days: Option<i32>,
     pub validation: ValidationMetadata,
     pub display: DisplayMetadata,
     pub order: i64,
@@ -226,7 +230,38 @@ impl FieldDefinition {
             self.validate_value(default)
                 .map_err(|issue| invalid("default", issue.message))?;
         }
+        // The resolved date depends on each record's creation day, so its range is checked when
+        // a record is created, not here.
+        if self.default_relative_days.is_some() {
+            if !matches!(self.field_type, FieldType::Date) {
+                return Err(invalid(
+                    "default",
+                    "a relative default is valid only for Date fields",
+                ));
+            }
+            if self.default.is_some() {
+                return Err(invalid(
+                    "default",
+                    "cannot have both a fixed and a relative default",
+                ));
+            }
+        }
         Ok(())
+    }
+
+    /// Whether the field reads as having a default, fixed or relative.
+    #[must_use]
+    pub fn has_default(&self) -> bool {
+        self.default.is_some() || self.default_relative_days.is_some()
+    }
+
+    /// The default for a record created on `creation_day` (days since the Unix epoch, UTC).
+    #[must_use]
+    pub fn resolved_default(&self, creation_day: i64) -> Option<FieldValue> {
+        self.default.clone().or_else(|| {
+            self.default_relative_days
+                .map(|days| FieldValue::Date(creation_day.saturating_add(i64::from(days))))
+        })
     }
 
     /// Checks one value against this field. The returned issue carries a
@@ -310,6 +345,21 @@ impl FieldDefinition {
             FieldValue::Null | FieldValue::Boolean(_) => {}
         }
         Ok(())
+    }
+
+    /// Like [`Self::validate_value`], but a Choice value pointing at a removed option of this
+    /// field is accepted: a stored record keeps the option it already holds.
+    pub fn validate_kept_value(&self, value: &FieldValue) -> Result<(), ValidationIssue> {
+        if let FieldValue::Enum(id) = value
+            && matches!(self.field_type, FieldType::Enum)
+            && self
+                .enum_options
+                .iter()
+                .any(|option| option.id == *id && option.deleted)
+        {
+            return Ok(());
+        }
+        self.validate_value(value)
     }
 
     fn format_bound(&self, bound: i64) -> String {
@@ -521,6 +571,77 @@ mod tests {
         field.validate().unwrap();
     }
 
+    #[test]
+    fn relative_default_is_date_only_and_exclusive_with_a_fixed_default() {
+        let mut field = text_field("Due", 1);
+        field.default_relative_days = Some(7);
+        assert!(matches!(
+            field.validate(),
+            Err(DomainError::Invalid {
+                field: "default",
+                ..
+            })
+        ));
+        field.field_type = FieldType::Date;
+        field.validate().unwrap();
+        field.default = Some(FieldValue::Date(20_000));
+        assert!(matches!(
+            field.validate(),
+            Err(DomainError::Invalid {
+                field: "default",
+                ..
+            })
+        ));
+        field.default = None;
+        field.default_relative_days = Some(-3);
+        field.validate().unwrap();
+        assert!(field.has_default());
+        assert_eq!(field.resolved_default(100), Some(FieldValue::Date(97)));
+    }
+
+    #[test]
+    fn relative_default_is_additive_for_older_and_newer_decoders() {
+        // The field shape before the relative default existed.
+        #[derive(Deserialize)]
+        #[allow(dead_code)]
+        struct OlderFieldDefinition {
+            id: FieldId,
+            name: String,
+            field_type: FieldType,
+            required: bool,
+            default: Option<FieldValue>,
+            validation: ValidationMetadata,
+            display: DisplayMetadata,
+            order: i64,
+            deleted: bool,
+            enum_options: Vec<EnumOption>,
+        }
+        let mut field = text_field("Due", 1);
+        field.field_type = FieldType::Date;
+        field.default_relative_days = Some(7);
+        let encoded = serde_json::to_string(&field).unwrap();
+        assert!(encoded.contains(r#""default_relative_days":7"#));
+        let older: OlderFieldDefinition = serde_json::from_str(&encoded).unwrap();
+        assert_eq!(older.default, None);
+        assert_eq!(older.id, field.id);
+        assert_eq!(
+            serde_json::from_str::<FieldDefinition>(&encoded).unwrap(),
+            field
+        );
+
+        // A definition written without the key reads as no relative default, and a field
+        // without one does not write the key.
+        field.default_relative_days = None;
+        let plain = serde_json::to_string(&field).unwrap();
+        assert!(!plain.contains("default_relative_days"));
+        assert_eq!(
+            serde_json::from_str::<FieldDefinition>(&plain)
+                .unwrap()
+                .default_relative_days,
+            None
+        );
+    }
+
     fn assert_step_rejected(field: &FieldDefinition) {
         assert!(matches!(
             field.validate(),
@@ -548,6 +669,7 @@ mod tests {
             field_type: FieldType::Text,
             required: false,
             default: None,
+            default_relative_days: None,
             validation: ValidationMetadata::default(),
             display: DisplayMetadata::default(),
             order,

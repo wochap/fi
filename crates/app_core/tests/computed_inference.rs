@@ -11,6 +11,7 @@ fn field(name: &str, field_type: FieldType, required: bool, order: i64) -> Field
         field_type,
         required,
         default: None,
+        default_relative_days: None,
         validation: ValidationMetadata::default(),
         display: DisplayMetadata::default(),
         order,

@@ -90,19 +90,25 @@ Future<void> _openNewRecord(
   await tester.pumpAndSettle();
 }
 
-Finder _input(String label) =>
-    find.ancestor(of: find.text(label), matching: find.byType(TextFormField));
+const _ids = {'Title': _title, 'Intensity': _intensity, 'Mood': _mood};
+
+/// The record form's text input for the field named [label].
+Finder _input(String label) => find.descendant(
+  of: find.byKey(ValueKey('record-field-${_ids[label]}')),
+  matching: find.byType(TextFormField),
+);
 
 /// The error text rendered under the input labelled [label], or null.
-String? _errorUnder(WidgetTester tester, String label) => tester
-    .widget<TextField>(
-      find.descendant(of: _input(label), matching: find.byType(TextField)),
-    )
-    .decoration
-    ?.errorText;
+String? _errorUnder(WidgetTester tester, String label) => decorationErrorText(
+  tester
+      .widget<TextField>(
+        find.descendant(of: _input(label), matching: find.byType(TextField)),
+      )
+      .decoration,
+);
 
 Future<void> _save(WidgetTester tester) async {
-  await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+  await tester.tap(find.widgetWithText(FilledButton, 'Save record'));
   await tester.pumpAndSettle();
 }
 
@@ -114,8 +120,15 @@ void main() {
     await _openNewRecord(tester, _seeded());
     expect(find.text('New record'), findsOneWidget);
     expect(find.text('Required'), findsNothing);
-    expect(find.byType(RequiredLegend), findsOneWidget);
-    expect(find.text('* required'), findsOneWidget);
+    // The desktop footer carries the one legend.
+    expect(find.byType(RequiredLegend), findsNothing);
+    expect(
+      tester
+          .widget<Text>(find.byKey(const Key('form-footer-hint')))
+          .textSpan!
+          .toPlainText(),
+      '* Required · Ctrl+Enter to save',
+    );
     // Title is required without a default: marked, in accent300, announced as required.
     expect(find.bySemanticsLabel('Title, required'), findsOneWidget);
     // Mood is required but has a default, and Intensity is optional: neither is marked.
@@ -180,10 +193,9 @@ void main() {
       ),
     );
     expect(
-      intensity.decoration?.errorText,
+      decorationErrorText(intensity.decoration),
       'Must be between 1 and 10\nMust be even',
     );
-    expect(intensity.decoration?.errorMaxLines, 2);
     expect(_errorUnder(tester, 'Title'), isNull);
     final slot = find.byType(FormErrorLines);
     expect(slot, findsOneWidget);
@@ -201,7 +213,9 @@ void main() {
     // The slot sits above the buttons.
     expect(
       tester.getBottomLeft(slot).dy,
-      lessThan(tester.getTopLeft(find.widgetWithText(FilledButton, 'Save')).dy),
+      lessThan(
+        tester.getTopLeft(find.widgetWithText(FilledButton, 'Save record')).dy,
+      ),
     );
   });
 
@@ -242,6 +256,64 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Edit record · 1 field needed'), findsOneWidget);
     expect(_errorUnder(tester, 'Title'), 'Required');
+  });
+
+  testWidgets('the pinned summary counts fields and Show focuses the first', (
+    tester,
+  ) async {
+    final bridge = _seeded()
+      ..draftIssues = (_, _, _) => const [
+        BridgeIssueDto(fields: [_title], code: 'required', message: 'Required'),
+        BridgeIssueDto(
+          fields: [_intensity],
+          code: 'out_of_range',
+          message: 'Must be between 1 and 10',
+        ),
+      ];
+    await _openNewRecord(tester, bridge);
+    expect(find.byType(FormErrorSummary), findsNothing);
+    await _save(tester);
+    expect(
+      find.text("Couldn't save. 2 fields need attention."),
+      findsOneWidget,
+    );
+    // Pinned above the footer, outside the scrolling body.
+    expect(
+      find.ancestor(
+        of: find.byType(FormErrorSummary),
+        matching: find.byType(SingleChildScrollView),
+      ),
+      findsNothing,
+    );
+    // The field keeps an accent border, a warning icon and the message.
+    expect(_errorUnder(tester, 'Title'), 'Required');
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('record-field-$_title')),
+        matching: find.byType(FieldErrorMessage),
+      ),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Show'));
+    await tester.pumpAndSettle();
+    final focused = FocusManager.instance.primaryFocus?.context;
+    expect(focused, isNotNull);
+    expect(
+      find
+          .descendant(
+            of: find.byKey(const ValueKey('record-field-$_title')),
+            matching: find.byWidget(focused!.widget),
+          )
+          .evaluate(),
+      isNotEmpty,
+    );
+
+    // Once no field has an error the summary goes.
+    bridge.draftIssues = (_, _, _) => const [];
+    await tester.enterText(_input('Title'), 'Aura');
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.pumpAndSettle();
+    expect(find.byType(FormErrorSummary), findsNothing);
   });
 
   test('FormIssues splits by field count and keeps unknown keys', () {

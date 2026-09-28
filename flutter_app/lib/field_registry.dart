@@ -3,8 +3,10 @@ import 'package:fi/theme/nocturne_widgets.dart';
 import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/exact_format.dart';
 import 'package:fi/src/rust/api/models.dart';
+import 'package:fi/theme/choice_input.dart';
 import 'package:fi/theme/form_errors.dart';
 import 'package:fi/theme/inputs.dart';
+import 'package:fi/theme/nocturne.dart';
 import 'package:flutter/material.dart';
 
 export 'package:fi/exact_format.dart' show formatScaled, parseScaled;
@@ -31,7 +33,27 @@ final class FieldRendererRegistry {
   /// Whether a record editor for [field] marks it required: required and without a default,
   /// because a default already satisfies it. Callers use it to decide on the form's legend.
   static bool marksRequired(FieldDefinitionDto field) =>
-      field.required_ && field.defaultValue == null;
+      field.required_ &&
+      field.defaultValue == null &&
+      field.defaultRelativeDays == null;
+
+  /// [field]'s options that can be picked, in order: removed options are not offered.
+  static List<EnumOptionDto> activeOptions(FieldDefinitionDto field) =>
+      field.enumOptions.where((option) => !option.deleted).toList()
+        ..sort((a, b) {
+          final order = a.order.compareTo(b.order);
+          return order == 0 ? a.id.compareTo(b.id) : order;
+        });
+
+  /// The label a Choice value reads as: the option's label, with " (deleted)" for a removed
+  /// option a record still holds. Null for an unknown option.
+  static String? optionLabel(FieldDefinitionDto field, String? optionId) {
+    final option = field.enumOptions
+        .where((option) => option.id == optionId)
+        .firstOrNull;
+    if (option == null) return null;
+    return option.deleted ? '${option.label} (deleted)' : option.label;
+  }
 
   /// [errors] are this field's issues, shown below the input one per line (for example the
   /// projected diagnostic, so a record opened from the list shows which value is at fault).
@@ -44,6 +66,12 @@ final class FieldRendererRegistry {
   ///
   /// [quickFill] adds "Today" to a date and "Now" to a date and time. Only record values ask for
   /// it: in a schema default or range bound it would freeze the moment the schema was edited.
+  ///
+  /// [showLabel] off leaves the name out of the input, for a form that draws the label beside or
+  /// above the control ([RecordFormBody]).
+  ///
+  /// Every control clears only where the value is optional: a record field that is not
+  /// required, or any schema slot ([allowClear]).
   Widget editor(
     FieldDefinitionDto field,
     FieldValueDto? initial,
@@ -52,8 +80,10 @@ final class FieldRendererRegistry {
     String? label,
     bool allowClear = false,
     bool quickFill = false,
+    bool showLabel = true,
+    Key? key,
   }) => _FieldEditor(
-    key: ValueKey(field.id),
+    key: key ?? ValueKey(field.id),
     field: field,
     initial: initial,
     onChanged: onChanged,
@@ -61,6 +91,7 @@ final class FieldRendererRegistry {
     label: label,
     allowClear: allowClear,
     quickFill: quickFill,
+    showLabel: showLabel,
   );
 
   /// A stored value as text. [human] reads dates as `Sep 22, 2026 · 14:05` for tables and lists,
@@ -103,13 +134,7 @@ final class FieldRendererRegistry {
       FieldValueKindDto.null_ => '—',
       FieldValueKindDto.text => value.textValue ?? '—',
       FieldValueKindDto.enum_ =>
-        field.enumOptions
-                .where(
-                  (option) => option.id == value.textValue && !option.deleted,
-                )
-                .map((option) => option.label)
-                .firstOrNull ??
-            '—',
+        FieldRendererRegistry.optionLabel(field, value.textValue) ?? '—',
       FieldValueKindDto.fixedDecimal => formatScaled(
         value.integerValue ?? 0,
         field.fieldType.scale ?? 0,
@@ -138,6 +163,7 @@ final class _FieldEditor extends StatefulWidget {
     this.label,
     this.allowClear = false,
     this.quickFill = false,
+    this.showLabel = true,
   });
   final FieldDefinitionDto field;
   final FieldValueDto? initial;
@@ -146,41 +172,56 @@ final class _FieldEditor extends StatefulWidget {
   final String? label;
   final bool allowClear;
   final bool quickFill;
+  final bool showLabel;
   @override
   State<_FieldEditor> createState() => _FieldEditorState();
 }
 
+const _null = FieldValueDto(kind: FieldValueKindDto.null_);
+
 final class _FieldEditorState extends State<_FieldEditor> {
   late final TextEditingController text;
   late bool boolean;
+  bool? optionalBoolean;
   int? sliderValue;
+  int? durationValue;
+  String? choice;
   @override
   void initState() {
     super.initState();
     final value = widget.initial;
     boolean = value?.booleanValue ?? false;
+    optionalBoolean = value?.kind == FieldValueKindDto.boolean
+        ? value?.booleanValue
+        : null;
     sliderValue = value?.kind == FieldValueKindDto.integer
         ? value?.integerValue
         : null;
+    durationValue = value?.kind == FieldValueKindDto.duration
+        ? value?.integerValue
+        : null;
+    choice = value?.kind == FieldValueKindDto.enum_ ? value?.textValue : null;
     text = TextEditingController(
       text: switch (widget.field.fieldType.kind) {
         FieldTypeKindDto.fixedDecimal =>
-          value == null
+          value == null || value.integerValue == null
               ? ''
               : formatScaled(
-                  value.integerValue ?? 0,
+                  value.integerValue!,
                   widget.field.fieldType.scale ?? 0,
                 ),
         FieldTypeKindDto.text ||
         FieldTypeKindDto.enum_ => value?.textValue ?? '',
         FieldTypeKindDto.date =>
-          value == null
+          value?.integerValue == null
               ? ''
               : _dateFromDays(
-                  value.integerValue ?? 0,
+                  value!.integerValue!,
                 ).toIso8601String().split('T').first,
         FieldTypeKindDto.dateTime =>
-          value == null ? '' : formatDateTime(value.integerValue ?? 0),
+          value?.integerValue == null
+              ? ''
+              : formatDateTime(value!.integerValue!),
         _ => value?.integerValue?.toString() ?? '',
       },
     );
@@ -194,14 +235,16 @@ final class _FieldEditorState extends State<_FieldEditor> {
 
   String get _label => widget.label ?? widget.field.name;
 
+  String? get _inputLabel => widget.showLabel ? _label : null;
+
   bool get _required =>
       !widget.allowClear && FieldRendererRegistry.marksRequired(widget.field);
 
+  /// Whether the value may be emptied: any schema slot, or a record value that is optional.
+  bool get _canClear => widget.allowClear || !widget.field.required_;
+
   /// Reports "no value", which [_FieldEditor.allowClear] callers read as leaving the slot unset.
-  void _clear() {
-    text.clear();
-    widget.onChanged(const FieldValueDto(kind: FieldValueKindDto.null_));
-  }
+  void _clear() => widget.onChanged(_null);
 
   /// Fills a local calendar day, from the picker or "Today", as a timezone-free epoch day.
   void _setDate(DateTime local) {
@@ -231,29 +274,8 @@ final class _FieldEditorState extends State<_FieldEditor> {
     );
   }
 
-  /// The clear button a picker shows in place of its icon when [_FieldEditor.allowClear] has a
-  /// value to clear.
-  Widget? get _clearButton => widget.allowClear && text.text.isNotEmpty
-      ? IconButton(
-          tooltip: 'Clear',
-          icon: const Icon(FiIcons.clear),
-          onPressed: () => setState(_clear),
-        )
-      : null;
-
-  /// The quick-fill [action] ("Today" / "Now") when the caller asked for one.
-  List<Widget> _quickFill(String action, VoidCallback fill) => [
-    if (widget.quickFill)
-      TextButton(
-        key: ValueKey('field-${widget.field.id}-${action.toLowerCase()}'),
-        style: TextButton.styleFrom(
-          visualDensity: VisualDensity.compact,
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        ),
-        onPressed: fill,
-        child: Text(action),
-      ),
-  ];
+  Key _quickKey(String action) =>
+      ValueKey('field-${widget.field.id}-${action.toLowerCase()}');
 
   @override
   Widget build(BuildContext context) {
@@ -265,7 +287,7 @@ final class _FieldEditorState extends State<_FieldEditor> {
           value: widget.initial?.kind == FieldValueKindDto.boolean
               ? widget.initial!.booleanValue
               : null,
-          label: _label,
+          label: _inputLabel,
           required: _required,
           errors: widget.errors,
           items: const [
@@ -275,7 +297,7 @@ final class _FieldEditorState extends State<_FieldEditor> {
           ],
           onChanged: (value) => widget.onChanged(
             value == null
-                ? const FieldValueDto(kind: FieldValueKindDto.null_)
+                ? _null
                 : FieldValueDto(
                     kind: FieldValueKindDto.boolean,
                     booleanValue: value,
@@ -283,48 +305,107 @@ final class _FieldEditorState extends State<_FieldEditor> {
           ),
         );
       }
+      if (!field.required_) {
+        // Yes, No or not set.
+        return FiSegmented<bool>(
+          segments: const [FiSegment(true, 'Yes'), FiSegment(false, 'No')],
+          value: optionalBoolean,
+          allowClear: true,
+          label: _inputLabel,
+          errors: widget.errors,
+          onChanged: (value) {
+            setState(() => optionalBoolean = value);
+            widget.onChanged(
+              value == null
+                  ? _null
+                  : FieldValueDto(
+                      kind: FieldValueKindDto.boolean,
+                      booleanValue: value,
+                    ),
+            );
+          },
+        );
+      }
+      void toggle(bool value) {
+        setState(() => boolean = value);
+        widget.onChanged(
+          FieldValueDto(kind: FieldValueKindDto.boolean, booleanValue: value),
+        );
+      }
+
+      if (!widget.showLabel) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              height: Nocturne.inputHeight(context, InputSize.normal),
+              child: Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: FiSwitch(value: boolean, onChanged: toggle),
+              ),
+            ),
+            if (widget.errors.isNotEmpty) FieldErrorLines(widget.errors),
+          ],
+        );
+      }
       return FiSwitchTile(
         title: _required ? requiredLabel(_label) : Text(_label),
         subtitle: widget.errors.isEmpty ? null : FieldErrorLines(widget.errors),
         value: boolean,
-        onChanged: (value) {
-          setState(() => boolean = value);
-          widget.onChanged(
-            FieldValueDto(kind: FieldValueKindDto.boolean, booleanValue: value),
-          );
-        },
+        onChanged: toggle,
       );
     }
     if (field.fieldType.kind == FieldTypeKindDto.enum_) {
-      final active =
-          field.enumOptions.where((option) => !option.deleted).toList()
-            ..sort((a, b) {
-              final order = a.order.compareTo(b.order);
-              return order == 0 ? a.id.compareTo(b.id) : order;
-            });
-      return FiSelect<String>(
-        value: active.any((option) => option.id == text.text)
-            ? text.text
-            : null,
-        label: _label,
+      final active = FieldRendererRegistry.activeOptions(field);
+      if (widget.allowClear) {
+        // A schema default: chosen by label, with an explicit None.
+        return FiSelect<String>(
+          value: active.any((option) => option.id == choice) ? choice : null,
+          label: _inputLabel,
+          required: _required,
+          errors: widget.errors,
+          items: [
+            const DropdownMenuItem<String>(value: null, child: Text('None')),
+            ...active.map(
+              (option) =>
+                  DropdownMenuItem(value: option.id, child: Text(option.label)),
+            ),
+          ],
+          onChanged: (value) {
+            setState(() => choice = value);
+            widget.onChanged(
+              value == null
+                  ? _null
+                  : FieldValueDto(
+                      kind: FieldValueKindDto.enum_,
+                      textValue: value,
+                    ),
+            );
+          },
+        );
+      }
+      return FiChoiceInput(
+        title: _label,
+        label: _inputLabel,
         required: _required,
         errors: widget.errors,
-        items: [
-          if (widget.allowClear)
-            const DropdownMenuItem<String>(value: null, child: Text('None')),
-          ...active.map(
-            (option) =>
-                DropdownMenuItem(value: option.id, child: Text(option.label)),
-          ),
+        allowClear: _canClear,
+        options: [
+          for (final option in active)
+            ChoiceOption(id: option.id, label: option.label),
         ],
+        value: choice,
+        heldLabel: FieldRendererRegistry.optionLabel(field, choice),
         onChanged: (value) {
-          if (value == null) {
-            if (widget.allowClear) _clear();
-            return;
-          }
-          text.text = value;
+          setState(() => choice = value);
           widget.onChanged(
-            FieldValueDto(kind: FieldValueKindDto.enum_, textValue: value),
+            value == null
+                ? _null
+                : FieldValueDto(
+                    kind: FieldValueKindDto.enum_,
+                    textValue: value,
+                  ),
           );
         },
       );
@@ -332,12 +413,15 @@ final class _FieldEditorState extends State<_FieldEditor> {
     if (field.fieldType.kind == FieldTypeKindDto.date) {
       return FiPickerInput(
         controller: text,
-        label: _label,
+        label: _inputLabel,
+        hint: Nocturne.isPhone(context) ? 'Pick a date' : 'YYYY-MM-DD',
         required: _required,
         errors: widget.errors,
         icon: FiIcons.date,
-        actions: _quickFill('Today', () => _setDate(clock.now())),
-        replaceIcon: _clearButton,
+        quickAction: widget.quickFill ? 'Today' : null,
+        quickActionKey: _quickKey('Today'),
+        onQuickAction: () => _setDate(clock.now()),
+        onClear: _canClear ? _clear : null,
         onTap: () async {
           final initial = widget.initial?.integerValue == null
               ? DateTime.now()
@@ -356,12 +440,17 @@ final class _FieldEditorState extends State<_FieldEditor> {
     if (field.fieldType.kind == FieldTypeKindDto.dateTime) {
       return FiPickerInput(
         controller: text,
-        label: _label,
+        label: _inputLabel,
+        hint: Nocturne.isPhone(context)
+            ? 'Pick date & time'
+            : 'YYYY-MM-DD HH:MM',
         required: _required,
         errors: widget.errors,
         icon: FiIcons.dateTime,
-        actions: _quickFill('Now', () => _setDateTime(clock.now())),
-        replaceIcon: _clearButton,
+        quickAction: widget.quickFill ? 'Now' : null,
+        quickActionKey: _quickKey('Now'),
+        onQuickAction: () => _setDateTime(clock.now()),
+        onClear: _canClear ? _clear : null,
         onTap: () async {
           final initial = widget.initial?.integerValue == null
               ? DateTime.now()
@@ -387,6 +476,26 @@ final class _FieldEditorState extends State<_FieldEditor> {
         },
       );
     }
+    if (field.fieldType.kind == FieldTypeKindDto.duration) {
+      return FiDurationInput(
+        value: durationValue,
+        label: _inputLabel,
+        required: _required,
+        allowClear: _canClear,
+        errors: widget.errors,
+        onChanged: (value) {
+          durationValue = value;
+          widget.onChanged(
+            value == null
+                ? _null
+                : FieldValueDto(
+                    kind: FieldValueKindDto.duration,
+                    integerValue: value,
+                  ),
+          );
+        },
+      );
+    }
     final minimum = field.validation.minInteger;
     final maximum = field.validation.maxInteger;
     if (field.fieldType.kind == FieldTypeKindDto.integer &&
@@ -401,15 +510,16 @@ final class _FieldEditorState extends State<_FieldEditor> {
         // An off-range step from an older or malformed definition falls back to whole numbers.
         step: step > 0 && (maximum - minimum) % step == 0 ? step : 1,
         value: sliderValue,
-        label: _label,
-        required: _required,
+        label: _inputLabel,
+        // A required value never offers the clear mark, even when a default fills it.
+        required: !_canClear,
         errors: widget.errors,
         allowClear: widget.allowClear,
         onChanged: (value) {
           setState(() => sliderValue = value);
           widget.onChanged(
             value == null
-                ? const FieldValueDto(kind: FieldValueKindDto.null_)
+                ? _null
                 : FieldValueDto(
                     kind: FieldValueKindDto.integer,
                     integerValue: value,
@@ -421,6 +531,8 @@ final class _FieldEditorState extends State<_FieldEditor> {
     final multiline =
         field.fieldType.kind == FieldTypeKindDto.text &&
         field.display.multiline;
+    final decimal = field.fieldType.kind == FieldTypeKindDto.fixedDecimal;
+    final scale = field.fieldType.scale ?? 0;
     return FiTextInput(
       controller: text,
       maxLines: multiline ? 6 : 1,
@@ -429,13 +541,30 @@ final class _FieldEditorState extends State<_FieldEditor> {
           : multiline
           ? TextInputType.multiline
           : TextInputType.text,
-      label: _label,
+      label: _inputLabel,
+      hint: decimal
+          ? formatScaled(0, scale)
+          : widget.showLabel
+          ? null
+          : 'Empty',
       required: _required,
       errors: widget.errors,
-      helperText: _unitHelp(field.fieldType.kind, field.fieldType.scale),
+      // The scale is the contract for what the typed digits mean, so it is stated where they
+      // are typed.
+      suffixIcon: decimal
+          ? Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: Text(
+                '$scale dp',
+                key: const Key('decimal-scale'),
+                style: TextStyle(fontSize: 12, color: Nocturne.muted(.55)),
+              ),
+            )
+          : null,
+      onClear: _canClear ? _clear : null,
       onChanged: (raw) {
-        if (raw.isEmpty && (widget.allowClear || !field.required_)) {
-          widget.onChanged(const FieldValueDto(kind: FieldValueKindDto.null_));
+        if (raw.isEmpty && _canClear) {
+          widget.onChanged(_null);
           return;
         }
         final value = switch (field.fieldType.kind) {
@@ -449,19 +578,7 @@ final class _FieldEditorState extends State<_FieldEditor> {
           ),
           FieldTypeKindDto.fixedDecimal => FieldValueDto(
             kind: FieldValueKindDto.fixedDecimal,
-            integerValue: parseScaled(raw, field.fieldType.scale ?? 0),
-          ),
-          FieldTypeKindDto.date => FieldValueDto(
-            kind: FieldValueKindDto.date,
-            integerValue: int.tryParse(raw),
-          ),
-          FieldTypeKindDto.dateTime => FieldValueDto(
-            kind: FieldValueKindDto.dateTime,
-            integerValue: int.tryParse(raw),
-          ),
-          FieldTypeKindDto.duration => FieldValueDto(
-            kind: FieldValueKindDto.duration,
-            integerValue: int.tryParse(raw),
+            integerValue: parseScaled(raw, scale),
           ),
           _ => null,
         };
@@ -471,14 +588,6 @@ final class _FieldEditorState extends State<_FieldEditor> {
   }
 }
 
-String? _unitHelp(FieldTypeKindDto kind, int? scale) => switch (kind) {
-  FieldTypeKindDto.date => 'UTC epoch days',
-  FieldTypeKindDto.dateTime => 'UTC epoch milliseconds',
-  FieldTypeKindDto.duration => 'Signed milliseconds',
-  // The scale is the contract for what the typed digits mean, so it is stated where they are typed.
-  FieldTypeKindDto.fixedDecimal => 'Exact to $scale decimal places',
-  _ => null,
-};
 DateTime _dateFromDays(int days) => DateTime.fromMillisecondsSinceEpoch(
   days * Duration.millisecondsPerDay,
   isUtc: true,

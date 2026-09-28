@@ -1,5 +1,7 @@
+import 'package:clock/clock.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/theme/inputs.dart';
+import 'package:fi/theme/form_errors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -102,7 +104,7 @@ Future<void> _openNewRecord(
 }
 
 Future<void> _save(WidgetTester tester) async {
-  await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+  await tester.tap(find.widgetWithText(FilledButton, 'Save record'));
   await tester.pumpAndSettle();
 }
 
@@ -113,17 +115,18 @@ FieldValueDto? _stored(FakeCollectionBridge bridge, String fieldId) {
   return null;
 }
 
-String? _sliderError(WidgetTester tester) => tester
-    .widget<InputDecorator>(
-      find
-          .descendant(
-            of: find.byType(FiSlider),
-            matching: find.byType(InputDecorator),
-          )
-          .first,
-    )
-    .decoration
-    .errorText;
+String? _sliderError(WidgetTester tester) => decorationErrorText(
+  tester
+      .widget<InputDecorator>(
+        find
+            .descendant(
+              of: find.byType(FiSlider),
+              matching: find.byType(InputDecorator),
+            )
+            .first,
+      )
+      .decoration,
+);
 
 void main() {
   testWidgets('a Text default appears in its input', (tester) async {
@@ -234,5 +237,52 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Edit record'), findsOneWidget);
     expect(find.byKey(const Key('slider-unset')), findsOneWidget);
+  });
+
+  testWidgets('a relative Date default seeds local today plus its days', (
+    tester,
+  ) async {
+    final bridge = _seeded([
+      const FieldDefinitionDto(
+        id: 'field-due',
+        name: 'due',
+        fieldType: FieldTypeDto(kind: FieldTypeKindDto.date),
+        required_: false,
+        defaultRelativeDays: 7,
+        validation: ValidationMetadataDto(),
+        display: DisplayMetadataDto(multiline: false, slider: false),
+        order: 0,
+        deleted: false,
+        enumOptions: [],
+      ),
+    ]);
+    await withClock(Clock.fixed(DateTime(2026, 9, 28, 23, 30)), () async {
+      await _openNewRecord(tester, bridge);
+    });
+    expect(find.widgetWithText(TextFormField, '2026-10-05'), findsOneWidget);
+    expect(find.byKey(const Key('default-field-due')), findsOneWidget);
+    await _save(tester);
+    final expected =
+        DateTime.utc(2026, 10, 5).millisecondsSinceEpoch ~/
+        Duration.millisecondsPerDay;
+    expect(_stored(bridge, 'field-due')?.integerValue, expected);
+  });
+
+  testWidgets('changing a defaulted field drops its Default marker', (
+    tester,
+  ) async {
+    final bridge = _seeded([
+      _placeField(
+        defaultValue: const FieldValueDto(
+          kind: FieldValueKindDto.text,
+          textValue: 'Home',
+        ),
+      ),
+    ]);
+    await _openNewRecord(tester, bridge);
+    expect(find.byKey(const Key('default-$_place')), findsOneWidget);
+    await tester.enterText(find.widgetWithText(TextFormField, 'Home'), 'Work');
+    await tester.pump();
+    expect(find.byKey(const Key('default-$_place')), findsNothing);
   });
 }

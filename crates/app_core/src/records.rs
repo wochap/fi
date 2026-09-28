@@ -131,6 +131,11 @@ impl From<RecordValidationError> for DomainError {
 
 /// Validates a record against its schema, reporting every field issue found.
 /// A wrong collection is an early exit; nothing else is meaningful then.
+///
+/// `apply_defaults` marks a creation: absent fields take their defaults (a relative Date default
+/// resolves from the record's creation day) and every value must be pickable now. Without it the
+/// record is a stored one being projected, so a Choice value that points at a removed option of
+/// the same field is kept as valid.
 pub fn validate_record(
     record: &mut GenericRecord,
     schema: &CollectionSchema,
@@ -155,17 +160,18 @@ pub fn validate_record(
             message: "This field is no longer available".into(),
         })
         .collect();
+    let creation_day = record.creation_day();
     for field in schema.fields.iter().filter(|field| !field.deleted) {
         if !record.values.contains_key(&field.id)
             && apply_defaults
-            && let Some(default) = &field.default
+            && let Some(default) = field.resolved_default(creation_day)
         {
-            record.values.insert(field.id, default.clone());
+            record.values.insert(field.id, default);
         }
         match record.values.get(&field.id) {
             // A default satisfies requiredness even on the projection path, where defaults are not
             // inserted: the field reads as its default everywhere, so the record is not missing it.
-            None if field.required && field.default.is_none() => {
+            None if field.required && !field.has_default() => {
                 issues.push(RecordFieldIssue {
                     field: field.id,
                     code: IssueCode::Required,
@@ -173,7 +179,12 @@ pub fn validate_record(
                 });
             }
             Some(value) => {
-                if let Err(issue) = field.validate_value(value) {
+                let checked = if apply_defaults {
+                    field.validate_value(value)
+                } else {
+                    field.validate_kept_value(value)
+                };
+                if let Err(issue) = checked {
                     issues.push(RecordFieldIssue::new(field.id, issue));
                 }
             }
@@ -184,6 +195,22 @@ pub fn validate_record(
         Ok(())
     } else {
         Err(RecordValidationError::Fields(issues))
+    }
+}
+
+impl GenericRecord {
+    /// The UTC calendar day (days since the Unix epoch) the record was created, read from its
+    /// UUIDv7 id.
+    #[must_use]
+    pub fn creation_day(&self) -> i64 {
+        let seconds = self
+            .id
+            .as_uuid()
+            .get_timestamp()
+            .map_or(0, |timestamp| timestamp.to_unix().0);
+        i64::try_from(seconds)
+            .unwrap_or(i64::MAX)
+            .div_euclid(86_400)
     }
 }
 
@@ -351,6 +378,7 @@ mod tests {
                 field_type: FieldType::Integer,
                 required: true,
                 default: Some(FieldValue::Integer(1)),
+                default_relative_days: None,
                 validation: ValidationMetadata {
                     min_integer: Some(1),
                     max_integer: Some(10),
@@ -392,6 +420,7 @@ mod tests {
                 field_type: FieldType::DateTime,
                 required: true,
                 default: None,
+                default_relative_days: None,
                 validation: ValidationMetadata::default(),
                 display: DisplayMetadata::default(),
                 order: 0,
@@ -425,6 +454,7 @@ mod tests {
             field_type,
             required,
             default: None,
+            default_relative_days: None,
             validation: ValidationMetadata::default(),
             display: DisplayMetadata::default(),
             order: 0,
@@ -498,6 +528,82 @@ mod tests {
             assert_eq!(issue.fields.len(), 1);
         }
         assert_eq!(error.to_string(), "3 problems need attention");
+    }
+
+    #[test]
+    fn relative_date_default_resolves_from_the_creation_day() {
+        use uuid::{NoContext, Timestamp};
+        let day = |year, month, date| {
+            chrono::NaiveDate::from_ymd_opt(year, month, date)
+                .unwrap()
+                .signed_duration_since(chrono::NaiveDate::from_ymd_opt(1970, 1, 1).unwrap())
+                .num_days()
+        };
+        let collection_id = CollectionSchemaId::new();
+        let due = FieldDefinition {
+            default_relative_days: Some(7),
+            ..field("Due", FieldType::Date, true)
+        };
+        let schema = CollectionSchema {
+            id: collection_id,
+            name: "Tasks".into(),
+            description: String::new(),
+            deleted: false,
+            fields: vec![due.clone()],
+        };
+        // 2026-09-28 at 23:59:59 UTC.
+        let created = u64::try_from(day(2026, 9, 28) * 86_400 + 86_399).unwrap();
+        let mut record = GenericRecord {
+            id: RecordId(Uuid::new_v7(Timestamp::from_unix(NoContext, created, 0))),
+            collection_id,
+            values: BTreeMap::new(),
+            stamps: BTreeMap::new(),
+            deleted: false,
+        };
+        assert_eq!(record.creation_day(), day(2026, 9, 28));
+        validate_record(&mut record, &schema, true).unwrap();
+        assert_eq!(
+            record.values.get(&due.id),
+            Some(&FieldValue::Date(day(2026, 10, 5)))
+        );
+
+        // On read a relative default satisfies Required without being inserted.
+        record.values.clear();
+        validate_record(&mut record, &schema, false).unwrap();
+        assert!(record.values.is_empty());
+    }
+
+    #[test]
+    fn a_resolved_relative_default_is_checked_against_the_range() {
+        let collection_id = CollectionSchemaId::new();
+        let due = FieldDefinition {
+            default_relative_days: Some(7),
+            validation: ValidationMetadata {
+                max_integer: Some(0),
+                ..ValidationMetadata::default()
+            },
+            ..field("Due", FieldType::Date, false)
+        };
+        let schema = CollectionSchema {
+            id: collection_id,
+            name: "Tasks".into(),
+            description: String::new(),
+            deleted: false,
+            fields: vec![due.clone()],
+        };
+        let mut record = GenericRecord {
+            id: RecordId::new(),
+            collection_id,
+            values: BTreeMap::new(),
+            stamps: BTreeMap::new(),
+            deleted: false,
+        };
+        let Err(RecordValidationError::Fields(issues)) =
+            validate_record(&mut record, &schema, true)
+        else {
+            panic!("expected an out-of-range default");
+        };
+        assert_eq!(issues[0].code, IssueCode::OutOfRange);
     }
 
     #[test]

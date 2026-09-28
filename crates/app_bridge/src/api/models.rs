@@ -228,6 +228,8 @@ pub struct FieldDefinitionDto {
     pub field_type: FieldTypeDto,
     pub required: bool,
     pub default_value: Option<FieldValueDto>,
+    /// Date-only default in whole days from the record's creation day.
+    pub default_relative_days: Option<i32>,
     pub validation: ValidationMetadataDto,
     pub display: DisplayMetadataDto,
     pub order: i64,
@@ -1350,6 +1352,7 @@ impl From<app_core::FieldDefinition> for FieldDefinitionDto {
             field_type: value.field_type.into(),
             required: value.required,
             default_value: value.default.map(Into::into),
+            default_relative_days: value.default_relative_days,
             validation: ValidationMetadataDto {
                 min_integer: value.validation.min_integer,
                 max_integer: value.validation.max_integer,
@@ -1382,6 +1385,7 @@ impl TryFrom<FieldDefinitionDto> for app_core::FieldDefinition {
                 .default_value
                 .map(FieldValueDto::into_core)
                 .transpose()?,
+            default_relative_days: value.default_relative_days,
             validation: app_core::ValidationMetadata {
                 min_integer: value.validation.min_integer,
                 max_integer: value.validation.max_integer,
@@ -1642,6 +1646,47 @@ mod tests {
         let v4 = uuid::Uuid::from_u128(0x6f1c_2a3b_4c5d_4e6f_8a7b_9c8d_7e6f_5a4b);
         assert_eq!(v4.get_version_num(), 4);
         assert_eq!(uuid_v7_millis(v4), None);
+    }
+
+    #[test]
+    fn field_dto_carries_removed_options_and_the_relative_default() {
+        use super::FieldDefinitionDto;
+        let removed = app_core::EnumOption {
+            id: app_core::EnumOptionId::new(),
+            label: "option 3".into(),
+            order: 2,
+            deleted: true,
+        };
+        let choice = app_core::FieldDefinition {
+            id: app_core::FieldId::new(),
+            name: "Kind".into(),
+            field_type: app_core::FieldType::Enum,
+            required: false,
+            default: None,
+            default_relative_days: None,
+            validation: app_core::ValidationMetadata::default(),
+            display: app_core::DisplayMetadata::default(),
+            order: 0,
+            deleted: false,
+            enum_options: vec![removed.clone()],
+        };
+        let dto = FieldDefinitionDto::from(choice.clone());
+        assert_eq!(dto.enum_options.len(), 1);
+        assert!(dto.enum_options[0].deleted);
+        assert_eq!(dto.enum_options[0].label, "option 3");
+        assert_eq!(app_core::FieldDefinition::try_from(dto).unwrap(), choice);
+
+        let due = app_core::FieldDefinition {
+            name: "Due".into(),
+            field_type: app_core::FieldType::Date,
+            default_relative_days: Some(7),
+            enum_options: vec![],
+            ..choice
+        };
+        let dto = FieldDefinitionDto::from(due.clone());
+        assert_eq!(dto.default_relative_days, Some(7));
+        assert_eq!(dto.default_value, None);
+        assert_eq!(app_core::FieldDefinition::try_from(dto).unwrap(), due);
     }
 
     #[test]

@@ -1027,6 +1027,7 @@ mod tests {
             field_type: FieldType::Integer,
             required: true,
             default: None,
+            default_relative_days: None,
             validation: ValidationMetadata::default(),
             display: DisplayMetadata::default(),
             order: 0,

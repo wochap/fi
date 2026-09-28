@@ -2,6 +2,7 @@ import 'package:fi/app.dart';
 import 'package:fi/file_dialogs.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/ui_prefs.dart';
+import 'package:fi/theme/form_errors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -63,10 +64,10 @@ void main() {
     expect(find.byTooltip('New record'), findsOneWidget);
     await tester.tap(find.byTooltip('Schema'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Add field'));
+    await tester.tap(find.byKey(const Key('new-field')));
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const Key('field-name')), 'Title');
-    await tester.tap(find.text('Save'));
+    await tester.tap(find.byKey(const Key('field-save')));
     await tester.pumpAndSettle();
     expect(find.text('Title'), findsOneWidget);
     await tester.tap(find.text('Done'));
@@ -74,7 +75,7 @@ void main() {
     await tester.tap(find.byTooltip('New record'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextFormField).first, 'After lunch');
-    await tester.tap(find.text('Save'));
+    await tester.tap(find.text('Save record'));
     await tester.pumpAndSettle();
     expect(find.text('After lunch'), findsOneWidget);
     await tester.tap(find.byTooltip('Delete record'));
@@ -117,7 +118,7 @@ void main() {
         matching: find.byType(TextField),
       ),
     );
-    expect(name.decoration?.errorText, 'Name is required.');
+    expect(decorationErrorText(name.decoration), 'Name is required.');
     expect(find.text('* required'), findsOneWidget);
     // Editing the name drops the issue about the old text.
     await tester.enterText(find.byKey(const Key('collection-name')), 'Better');
@@ -157,7 +158,7 @@ void main() {
     expect(find.byType(Dialog), findsOneWidget);
     expect(find.byType(BottomSheet), findsNothing);
     expect(find.widgetWithText(TextButton, 'Cancel'), findsOneWidget);
-    expect(find.widgetWithText(FilledButton, 'Save'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Save record'), findsOneWidget);
   });
 
   testWidgets('navigation switches between compact and wide layouts', (

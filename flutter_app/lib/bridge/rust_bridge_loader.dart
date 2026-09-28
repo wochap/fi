@@ -1,6 +1,8 @@
 import 'dart:io';
 
+import 'package:fi/bridge/duration_grammar.dart';
 import 'package:fi/src/rust/frb_generated.dart';
+import 'package:fi/theme/inputs.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
     show ExternalLibrary;
 
@@ -14,6 +16,7 @@ Future<void> initializeRustBridge() async {
           )
         : null,
   );
+  FiDurationInput.grammar = const RustDurationGrammar();
 }
 
 String linuxRustLibraryPath(String executablePath) => File(

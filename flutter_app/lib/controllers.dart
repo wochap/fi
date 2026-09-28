@@ -191,6 +191,7 @@ FieldDefinitionDto _fieldWith(
   fieldType: field.fieldType,
   required_: field.required_,
   defaultValue: defaultValue,
+  defaultRelativeDays: field.defaultRelativeDays,
   validation: field.validation,
   display: field.display,
   order: field.order,

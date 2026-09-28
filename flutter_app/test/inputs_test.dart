@@ -1,6 +1,10 @@
+import 'dart:ui' show Tristate;
+
 import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/theme/inputs.dart';
 import 'package:fi/theme/nocturne.dart';
+import 'package:fi/theme/nocturne_widgets.dart';
+import 'package:fi/theme/form_errors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -37,7 +41,7 @@ double _box(WidgetTester tester, Finder finder) {
       .first;
   final height = tester.getSize(decorator).height;
   final decoration = tester.widget<InputDecorator>(decorator).decoration;
-  final subtext = decoration.errorText ?? decoration.helperText;
+  final subtext = decorationErrorText(decoration) ?? decoration.helperText;
   if (subtext == null) return height;
   // The subtext sits 4px (Material 3's gap) below the box.
   return height -
@@ -109,17 +113,25 @@ final _kinds = <String, Widget Function(InputSize size)>{
     onChanged: (_) {},
     size: size,
   ),
-  'picker with actions': (size) => FiPickerInput(
+  'picker with a clear mark': (size) => FiPickerInput(
     key: const Key('input'),
     controller: TextEditingController(text: '2026-09-24'),
     label: 'Date',
     icon: FiIcons.date,
-    actions: [TextButton(onPressed: () {}, child: const Text('Today'))],
-    replaceIcon: IconButton(
-      tooltip: 'Clear',
-      icon: const Icon(FiIcons.clear),
-      onPressed: () {},
-    ),
+    quickAction: 'Today',
+    onQuickAction: () {},
+    onClear: () {},
+    onTap: () {},
+    size: size,
+  ),
+  'picker with Today': (size) => FiPickerInput(
+    key: const Key('input'),
+    controller: TextEditingController(),
+    label: 'Date',
+    icon: FiIcons.date,
+    quickAction: 'Today',
+    onQuickAction: () {},
+    onClear: () {},
     onTap: () {},
     size: size,
   ),
@@ -528,15 +540,32 @@ void main() {
     await _pump(tester, 1280, _SliderHost(reported: reported));
     expect(find.byKey(const Key('slider-unset')), findsOneWidget);
     expect(find.byType(Slider), findsOneWidget);
-    expect(find.byKey(const Key('slider-set')), findsNothing);
+    expect(find.byKey(const Key('slider-dashed-track')), findsOneWidget);
     expect(find.byKey(const Key('slider-value')), findsNothing);
-    expect(find.byKey(const Key('slider-placeholder')), findsOneWidget);
+    expect(find.byKey(const Key('slider-set-action')), findsOneWidget);
+    expect(find.text('Set'), findsOneWidget);
     expect(reported, isEmpty);
     await tester.tap(find.byType(Slider));
     await tester.pump();
     expect(reported, [3]);
     expect(find.byKey(const Key('slider-value')), findsOneWidget);
     expect(_value(tester), '3');
+  });
+
+  testWidgets('Set puts the slider at its minimum', (tester) async {
+    final reported = <int?>[];
+    await _pump(
+      tester,
+      1280,
+      _SliderHost(reported: reported, min: 5, max: 30, step: 5),
+    );
+    await tester.tap(find.byKey(const Key('slider-set-action')));
+    await tester.pump();
+    expect(reported, [5]);
+    expect(_value(tester), '5');
+    expect(find.byKey(const Key('slider-set-track')), findsOneWidget);
+    expect(find.byKey(const Key('slider-set-action')), findsNothing);
+    expect(find.byKey(const Key('slider-dashed-track')), findsNothing);
   });
 
   testWidgets('the unset track spans the same width as the set track', (
@@ -552,8 +581,8 @@ void main() {
     );
     final set = tester.getRect(find.byType(Slider));
     expect(unset.left, set.left);
-    // The set state gives up the clear icon's width at the trailing edge.
-    expect(unset.width, greaterThanOrEqualTo(set.width));
+    // The trailing "Set" action and the value with its clear mark take similar room.
+    expect((unset.width - set.width).abs(), lessThan(40));
     await _pump(
       tester,
       1280,
@@ -614,6 +643,250 @@ void main() {
     );
     expect(find.bySemanticsLabel('Type, required'), findsOneWidget);
     expect(find.text(' *'), findsOneWidget);
+  });
+
+  group('FiSegmented', () {
+    Widget host(List<String?> reported, {required bool allowClear}) {
+      String? value = 'mid';
+      return StatefulBuilder(
+        builder: (context, setState) => FiSegmented<String>(
+          segments: const [
+            FiSegment('low', 'Low'),
+            FiSegment('mid', 'Mid'),
+            FiSegment('high', 'High'),
+          ],
+          value: value,
+          allowClear: allowClear,
+          onChanged: (next) => setState(() {
+            reported.add(next);
+            value = next;
+          }),
+        ),
+      );
+    }
+
+    bool selected(WidgetTester tester, String label) =>
+        tester
+            .getSemantics(find.byKey(ValueKey('segment-$label')))
+            .flagsCollection
+            .isSelected ==
+        Tristate.isTrue;
+
+    testWidgets('an optional choice clears on a second tap', (tester) async {
+      final reported = <String?>[];
+      await _pump(tester, 1280, host(reported, allowClear: true));
+      expect(selected(tester, 'Mid'), isTrue);
+      await tester.tap(find.text('Mid'));
+      await tester.pump();
+      expect(reported, [null]);
+      expect(selected(tester, 'Mid'), isFalse);
+      await tester.tap(find.text('High'));
+      await tester.pump();
+      expect(reported, [null, 'high']);
+    });
+
+    testWidgets('a required choice does not clear', (tester) async {
+      final reported = <String?>[];
+      await _pump(tester, 1280, host(reported, allowClear: false));
+      await tester.tap(find.text('Mid'));
+      await tester.pump();
+      expect(reported, isEmpty);
+      expect(selected(tester, 'Mid'), isTrue);
+    });
+
+    testWidgets('segments are equal and at least 44px tall on a phone', (
+      tester,
+    ) async {
+      await _pump(tester, 390, host([], allowClear: true));
+      final low = tester.getSize(find.byKey(const ValueKey('segment-Low')));
+      final high = tester.getSize(find.byKey(const ValueKey('segment-High')));
+      expect(low.width, high.width);
+      expect(low.height, greaterThanOrEqualTo(40));
+      expect(
+        tester.getSize(find.byType(FiSegmented<String>)).height,
+        greaterThanOrEqualTo(44),
+      );
+    });
+  });
+
+  group('FiDurationInput', () {
+    testWidgets('parses unit text on a phone and previews it', (tester) async {
+      final reported = <int?>[];
+      await _pump(tester, 390, FiDurationInput(onChanged: reported.add));
+      await tester.enterText(find.byType(TextField), '1h 30m');
+      await tester.pump();
+      expect(find.text('= 1 h 30 min'), findsOneWidget);
+      expect(reported.last, 5400000);
+    });
+
+    testWidgets('shows how to type text that does not parse', (tester) async {
+      final reported = <int?>[];
+      await _pump(tester, 390, FiDurationInput(onChanged: reported.add));
+      await tester.enterText(find.byType(TextField), 'an hour');
+      await tester.pump();
+      expect(find.text('Use units like 1h 30m'), findsOneWidget);
+      expect(reported, isEmpty);
+    });
+
+    testWidgets('shows the sign and four boxes on desktop', (tester) async {
+      await _pump(
+        tester,
+        1240,
+        FiDurationInput(value: -45000, onChanged: (_) {}),
+        childWidth: 480,
+      );
+      String box(String unit) => tester
+          .widget<TextField>(
+            find.descendant(
+              of: find.byKey(Key('duration-$unit')),
+              matching: find.byType(TextField),
+            ),
+          )
+          .controller!
+          .text;
+      expect(
+        tester
+            .getSemantics(find.byKey(const ValueKey('segment-−')))
+            .flagsCollection
+            .isSelected,
+        Tristate.isTrue,
+      );
+      expect([box('h'), box('m'), box('s'), box('ms')], ['0', '0', '45', '0']);
+      for (final unit in ['h', 'm', 's', 'ms']) {
+        expect(find.text(unit), findsOneWidget);
+      }
+    });
+
+    testWidgets('boxes combine into signed milliseconds', (tester) async {
+      final reported = <int?>[];
+      await _pump(
+        tester,
+        1240,
+        FiDurationInput(onChanged: reported.add),
+        childWidth: 480,
+      );
+      await tester.enterText(
+        find.descendant(
+          of: find.byKey(const Key('duration-h')),
+          matching: find.byType(TextField),
+        ),
+        '1',
+      );
+      await tester.enterText(
+        find.descendant(
+          of: find.byKey(const Key('duration-m')),
+          matching: find.byType(TextField),
+        ),
+        '30',
+      );
+      expect(reported.last, 5400000);
+      await tester.tap(find.text('−'));
+      await tester.pump();
+      expect(reported.last, -5400000);
+    });
+  });
+
+  group('clear rule', () {
+    for (final width in [1280.0, 390.0]) {
+      testWidgets('Today hides once set at ${width.toInt()}px', (tester) async {
+        final controller = TextEditingController();
+        await _pump(
+          tester,
+          width,
+          FiPickerInput(
+            controller: controller,
+            label: 'Date',
+            icon: FiIcons.date,
+            quickAction: 'Today',
+            onQuickAction: () => controller.text = '2026-09-28',
+            onClear: () {},
+            onTap: () {},
+          ),
+        );
+        expect(find.text('Today'), findsOneWidget);
+        expect(find.byType(ClearMark), findsNothing);
+        await tester.tap(find.text('Today'));
+        await tester.pump();
+        expect(find.text('Today'), findsNothing);
+        expect(find.byType(ClearMark), findsOneWidget);
+        await tester.tap(find.byType(ClearMark));
+        await tester.pump();
+        expect(controller.text, isEmpty);
+        expect(find.text('Today'), findsOneWidget);
+      });
+    }
+
+    testWidgets('Today sits beside the box on desktop and inside it on a '
+        'phone', (tester) async {
+      Widget picker() => FiPickerInput(
+        controller: TextEditingController(),
+        label: 'Date',
+        icon: FiIcons.date,
+        quickAction: 'Today',
+        onQuickAction: () {},
+        onTap: () {},
+      );
+      await _pump(tester, 1280, picker());
+      final box = tester.getRect(find.byType(InputDecorator));
+      expect(tester.getRect(find.text('Today')).left, greaterThan(box.right));
+      await _pump(tester, 390, picker());
+      final phoneBox = tester.getRect(find.byType(InputDecorator));
+      expect(phoneBox.contains(tester.getCenter(find.text('Today'))), isTrue);
+    });
+
+    testWidgets('a text input shows the clear mark only while it holds text', (
+      tester,
+    ) async {
+      final controller = TextEditingController();
+      var cleared = 0;
+      await _pump(
+        tester,
+        1280,
+        FiTextInput(
+          controller: controller,
+          label: 'Note',
+          onClear: () => cleared++,
+        ),
+      );
+      expect(find.byType(ClearMark), findsNothing);
+      await tester.enterText(find.byType(TextField), 'Groceries');
+      await tester.pump();
+      expect(find.byType(ClearMark), findsOneWidget);
+      await tester.tap(find.byType(ClearMark));
+      await tester.pump();
+      expect(controller.text, isEmpty);
+      expect(cleared, 1);
+      expect(find.byType(ClearMark), findsNothing);
+    });
+
+    testWidgets('a required input never shows the clear mark', (tester) async {
+      await _pump(
+        tester,
+        1280,
+        FiTextInput(
+          controller: TextEditingController(text: 'Buy oat milk'),
+          label: 'Note',
+          required: true,
+        ),
+      );
+      expect(find.byType(ClearMark), findsNothing);
+    });
+
+    testWidgets('a select shows the clear mark only with a value', (
+      tester,
+    ) async {
+      Widget select(int? value) => FiSelect<int>(
+        label: 'Day',
+        value: value,
+        items: const [DropdownMenuItem(value: 1, child: Text('Monday'))],
+        onChanged: (_) {},
+        onClear: () {},
+      );
+      await _pump(tester, 1280, select(null));
+      expect(find.byType(ClearMark), findsNothing);
+      await _pump(tester, 1280, select(1));
+      expect(find.byType(ClearMark), findsOneWidget);
+    });
   });
 
   group('FiEditableText', () {

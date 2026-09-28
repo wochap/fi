@@ -19,12 +19,15 @@ is the target and this guide should be updated to match.
 | `lib/theme/fi_icons.dart` | `FiIcons`: every icon the app draws, named by meaning and pointing at a Phosphor glyph; `fieldTypeIcon()` for the eight field types |
 | `lib/theme/side_sheet.dart` | `showSideSheet()`: a 480px sheet from the right, or a bottom sheet on a phone |
 | `lib/theme/form_surface.dart` | `showFormSurface()` + `FormSurface`: every create/edit form, a bottom sheet on a phone and a dialog (optionally two-pane with an aside) otherwise |
-| `lib/theme/inputs.dart` | `FiTextInput`, `FiSelect`, `FiPickerInput`: every text, number, search, select and picker input, at the small or normal height token |
+| `lib/theme/inputs.dart` | `FiTextInput`, `FiSelect`, `FiPickerInput`, `FiSlider`, `FiSegmented`, `FiDurationInput`: every text, number, search, select, picker, slider, segmented and duration input, at the small or normal height token; `DurationGrammar` (set once at startup to the core's grammar, `lib/bridge/duration_grammar.dart`) and `formatDurationPreview()` |
+| `lib/theme/choice_input.dart` | `FiChoiceInput`: a Choice picked by option count (segmented up to 4, select or phone picker sheet up to 10, search above that), with `showChoicePickerSheet()` and the full-height `showChoiceSearchSheet()` |
+| `lib/record_form.dart` | `RecordFormBody`: the record editor's fields, labels in a 140px column beside the controls at ≥720 and above them below, with the Default / Needed markers in the label row |
+| `lib/field_editor.dart` | `FieldEditorBody` (name, 4×2 type grid, option chips with a settings block per chip, Choice options, default checks), hosted as a desktop inline panel or by `FieldEditorScreen` (the pushed phone screen); `fieldSummary()` for schema rows |
 | `lib/theme/action_sheet.dart` | `showActionSheet()` + `ActionSheet`: a phone row menu as a bottom sheet, headed by what it acts on (icon tile, title, subtitle), with 48px action rows in optionally labelled groups (mock 4f) |
 | `lib/device_details.dart` | A trusted device's Details: `DeviceDetails` (state grid, failure, DeviceId with copy, categorized connection log with the All / Pairing / Peer filter, Reconnect and Copy log), `DeviceDetailsScreen` (the pushed phone screen, mock 5f), `DeviceStateTag`, `LogLineRow`, `seenSyncedLine()`, `shortDeviceId()` / `groupedDeviceId()`, `copyWithConfirmation()` |
 | `lib/ui_prefs.dart` | `UiPrefs` and its stores: device-local presentation choices (the collections sort) in `ui_prefs.json` in the app support directory; never sent to Rust or synced |
 | `lib/collections_page.dart` `_RecordTable` | The desktop records table (mock 4c): a `two_dimensional_scrollables` `TableView` with a pinned header row and first column (170px, others 150px), typed headers with the required mark, incomplete-row marks, and the "Scroll for more columns →" hint with a trailing fade |
-| `lib/theme/form_errors.dart` | `FieldErrorLines`, `FormErrorLines`, `RequiredLegend`, `requiredLabel()`, `errorTextOf()` / `errorLinesOf()`: how forms show errors and required inputs |
+| `lib/theme/form_errors.dart` | `FieldErrorMessage` / `FieldErrorLines` (warning icon + message under a control), `FormErrorLines`, `FormErrorSummary` ("Couldn't save. N fields need attention." + Show), `RequiredLegend`, `requiredLabel()`, `errorOf()` / `decorationErrorText()`: how forms show errors and required inputs |
 | `assets/fonts/` | Inter (400, 500) and JetBrains Mono (400), with OFL licences |
 
 Before building something new, look for an existing piece that already does it. Add a new shared
@@ -60,12 +63,19 @@ widget to `nocturne_widgets.dart` only when a second screen needs it.
    widget would draw its own Material glyph (a default back button, for example), pass the
    `FiIcons` icon explicitly. Tests find icons by `FiIcons.*` too. Switches are `FiSwitch` /
    `FiSwitchTile`, never Material's `Switch` or `SwitchListTile`.
-9. **Inputs come from the shared widgets.** Build text, integer, decimal, search, select and
-   Date / Date & time / time inputs with `FiTextInput`, `FiSelect` and `FiPickerInput`
-   (`lib/theme/inputs.dart`), never a raw `TextField`, `TextFormField`, `DropdownButton` or
-   `DropdownButtonFormField` in feature code. Pass `label`, `required` and `errors` to them
-   rather than building an `InputDecoration`. Switches, checkboxes and buttons are not inputs
-   here.
+9. **Inputs come from the shared widgets.** Build text, integer, decimal, search, select,
+   slider, segmented choice, duration and Date / Date & time / time inputs with `FiTextInput`,
+   `FiSelect`, `FiPickerInput`, `FiSlider`, `FiSegmented`, `FiDurationInput` and (for a Choice)
+   `FiChoiceInput`, never a raw `TextField`, `TextFormField`, `DropdownButton`,
+   `DropdownButtonFormField` or `SegmentedButton` in feature code. Pass `label`, `required` and
+   `errors` to them rather than building an `InputDecoration`. Switches, checkboxes and buttons
+   are not inputs here.
+10. **Clear only what is optional.** An input that edits an optional value shows the one
+   `ClearMark` only while it holds a value (`onClear:` on `FiTextInput` / `FiSelect` /
+   `FiPickerInput`, `allowClear:` on `FiSlider` / `FiSegmented` / `FiDurationInput`); a
+   required value never shows it. A `FiSegmented` that allows clearing clears on a second tap of
+   the selected segment. An unset `FiSlider` shows a dashed track and "Set" (which picks the
+   minimum).
 
 ## Input sizes
 
@@ -137,7 +147,8 @@ must write one, use these sizes:
 - **Secondary editors are side sheets, not dialogs.** Collection-level editors (Schema, Queries)
   open through `showSideSheet(kicker: collectionName, title: …)`, which has a footer note and a
   primary Done. Don't stack dialogs: add or create inline inside the sheet (see the "New field"
-  panel, which has an `accent700` border).
+  and field edit panels, which have an `accent700` border). On a phone, where the sheet is too
+  short for a form, an item opens as its own pushed screen instead (`FieldEditorScreen`).
 - **Dialogs** are for focused edits and confirmations. The title is 20/500, and actions are
   Cancel (`TextButton`) then the primary (`FilledButton`), right-aligned.
 - **Create and edit forms use `FormSurface`**, opened with `showFormSurface()`. Don't build a
@@ -145,7 +156,15 @@ must write one, use these sizes:
   presentation from the screen width:
   - On a phone (<720) it is a bottom sheet with a drag handle, title plus context
     (`contextLabel: 'in <collection>'`), and Cancel (1 part) beside the primary (2 parts). Its
-    inputs are 48px from the input tokens; the surface doesn't restyle them.
+    inputs are 48px from the input tokens; the surface doesn't restyle them. The record editor
+    instead sets `closeInHeader` (a ✕ ends the title row), `menuActions` (one ⋮ menu) and
+    `fullWidthPrimaryOnPhone` (only the primary, full width, 52px).
+  - In a dialog, `footerHint` ("* Required · Ctrl+Enter to save") and `leadingFooterAction` (a
+    destructive "Delete…") sit at the footer's leading edge, apart from Cancel and the primary;
+    `submitOnCtrlEnter` runs the primary on Ctrl+Enter; `showContextInDialog` shows the context
+    beside the title.
+  - `summary` is pinned above the footer, outside the scrolling body (the record editor's
+    `FormErrorSummary`).
   - Otherwise it is a dialog, and with an `aside` at ≥820 a two-pane dialog.
   - `headerActions` (such as Remove) are icon buttons in the sheet's title row, and text buttons
     before Cancel in a dialog. Give each a `Key`; it is applied in both modes.
@@ -157,11 +176,14 @@ must write one, use these sizes:
   - Confirmations stay `AlertDialog`s.
 - **Form errors** follow one model, `FormIssues` (`controllers.dart`), built from a `BridgeError`
   with `FormIssues.from(error)` or from a list of issues:
-  - An issue that names exactly one field (or form key) shows directly under that input, in the
-    error color. Pass the lines as `errors:` to the shared input, which applies
-    `errorTextOf` / `errorLinesOf` so each issue is its own line; switch rows use
+  - An issue that names exactly one field (or form key) shows directly under that input: an
+    accent border on the control, a warning icon and the message in `accent200`. Pass the lines
+    as `errors:` to the shared input, which draws them with `FieldErrorMessage` so each issue is
+    its own line; controls without a decoration (a switch, a segmented choice) use
     `FieldErrorLines`. Several issues on one field are several lines, in Rust's order, with no
-    bullets.
+    bullets. Tests read them back with `decorationErrorText()`.
+  - After a save leaves fields with errors, the record editor pins a `FormErrorSummary` above the
+    footer; Show scrolls to the first field in error, in form order, and focuses it.
   - An issue that names no field or several, and any non-validation failure, goes in the
     form-level slot above Cancel / primary (`FormSurface.errors`, or `FormErrorLines` placed just
     before a custom form's actions), one line per issue.
@@ -177,11 +199,13 @@ must write one, use these sizes:
   marks it invalid starts in the attempted state.
 - **Required inputs** get an `*` after the label in `accent300`, never the error color, via
   `requiredLabel(name)` (the shared inputs apply it with `required: true`; a switch row uses it as
-  its title; it reads "name, required" to screen readers). A form with any marked input shows one `RequiredLegend` ("* required") line. A
-  required schema field with a default is not marked (`FieldRendererRegistry.marksRequired`).
+  its title; it reads "name, required" to screen readers). A form with any marked input shows one `RequiredLegend` ("* required") line; the record editor
+  says it in its desktop footer hint instead. A required schema field with a default, fixed or
+  relative, is not marked (`FieldRendererRegistry.marksRequired`).
 - **Date and Date & time record editors offer Today / Now.** Pass `quickFill: true` to
   `FieldRendererRegistry.editor` wherever a record value is entered (new, edit, batch edit); it
-  adds a compact text action before the picker icon. Today fills the local calendar day; Now fills
+  adds the action as a button beside the box at ≥720 and an inline accent link inside the box
+  below, hidden while the input holds a value. Today fills the local calendar day; Now fills
   the current local minute. Schema metadata slots (default, minimum, maximum) and query inputs
   never pass it, because a quick fill there would freeze the moment the schema was edited. The
   Date & time editor always shows local time as `yyyy-MM-dd HH:mm` (`formatDateTime`).

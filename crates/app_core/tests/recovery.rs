@@ -130,6 +130,7 @@ fn field(name: &str, order: i64) -> FieldDefinition {
         field_type: FieldType::Text,
         required: false,
         default: None,
+        default_relative_days: None,
         validation: ValidationMetadata::default(),
         display: DisplayMetadata::default(),
         order,

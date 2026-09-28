@@ -387,7 +387,7 @@ void main() {
       );
       await tester.pump();
       expect(find.text('Needed to complete this record'), findsNothing);
-      await tester.tap(find.text('Save'));
+      await tester.tap(find.text('Save changes'));
       await tester.pumpAndSettle();
       expect(find.text('Edit record · 1 field needed'), findsNothing);
       expect(find.byKey(const Key('required-cell')), findsNothing);

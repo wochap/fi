@@ -731,6 +731,9 @@ final class FakeCollectionBridge implements CollectionBridge {
     return id;
   }
 
+  /// Every single-field record update, oldest first: (record id, field id, value).
+  final List<(String, String, FieldValueDto)> fieldUpdates = [];
+
   /// Every draft handed to [validateRecordDraft], newest last.
   final List<List<RecordValueDto>> draftValidations = [];
 
@@ -785,6 +788,7 @@ final class FakeCollectionBridge implements CollectionBridge {
     String fieldId,
     FieldValueDto value,
   ) async {
+    fieldUpdates.add((recordId, fieldId, value));
     final items = records[collectionId]!;
     final index = items.indexWhere((item) => item.id == recordId);
     final old = items[index];
@@ -1371,6 +1375,7 @@ FieldDefinitionDto _copyField(
   fieldType: field.fieldType,
   required_: field.required_,
   defaultValue: field.defaultValue,
+  defaultRelativeDays: field.defaultRelativeDays,
   validation: field.validation,
   display: field.display,
   order: order ?? field.order,

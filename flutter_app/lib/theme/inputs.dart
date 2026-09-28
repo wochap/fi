@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/theme/form_errors.dart';
 import 'package:fi/theme/nocturne.dart';
+import 'package:fi/theme/nocturne_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -77,8 +78,8 @@ InputDecoration _decoration(
     hintText: hint,
     helperText: helperText,
     helperMaxLines: 2,
-    errorText: errorTextOf(errors),
-    errorMaxLines: errorLinesOf(errors),
+    // The theme draws the box of an input in error with the accent border.
+    error: errorOf(errors),
     contentPadding: EdgeInsets.symmetric(
       horizontal: size == InputSize.small ? 10 : 12,
       vertical: vertical,
@@ -119,6 +120,7 @@ class FiTextInput extends StatelessWidget {
     this.prefixIcon,
     this.suffixIcon,
     this.style,
+    this.onClear,
     super.key,
   });
 
@@ -145,6 +147,7 @@ class FiTextInput extends StatelessWidget {
     this.prefixIcon,
     this.suffixIcon,
     this.style,
+    this.onClear,
     super.key,
   }) : size = InputSize.small;
 
@@ -181,8 +184,41 @@ class FiTextInput extends StatelessWidget {
   /// Overrides the value's text style, for example a monospace font for formulas.
   final TextStyle? style;
 
+  /// Offers the clear mark while [controller] holds text; null for a required value. Clearing
+  /// empties [controller] and then calls this.
+  final VoidCallback? onClear;
+
   @override
-  Widget build(BuildContext context) => TextFormField(
+  Widget build(BuildContext context) {
+    final controller = this.controller;
+    if (onClear == null || controller == null) {
+      return _field(context, suffixIcon);
+    }
+    return ValueListenableBuilder(
+      valueListenable: controller,
+      builder: (context, value, _) => _field(
+        context,
+        value.text.isEmpty
+            ? suffixIcon
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ClearMark(
+                    key: const Key('input-clear'),
+                    onPressed: () {
+                      controller.clear();
+                      onClear!();
+                    },
+                  ),
+                  ?suffixIcon,
+                  if (suffixIcon == null) const SizedBox(width: 8),
+                ],
+              ),
+      ),
+    );
+  }
+
+  Widget _field(BuildContext context, Widget? suffixIcon) => TextFormField(
     controller: controller,
     initialValue: initialValue,
     keyboardType:
@@ -231,6 +267,7 @@ class FiSelect<T> extends StatelessWidget {
     this.selectedItemBuilder,
     this.suffixIcon,
     this.style,
+    this.onClear,
     super.key,
   });
 
@@ -247,6 +284,7 @@ class FiSelect<T> extends StatelessWidget {
     this.selectedItemBuilder,
     this.suffixIcon,
     this.style,
+    this.onClear,
     super.key,
   }) : size = InputSize.small;
 
@@ -267,8 +305,25 @@ class FiSelect<T> extends StatelessWidget {
   final Widget? suffixIcon;
   final TextStyle? style;
 
+  /// Offers the clear mark before the arrow while [value] is set; null for a required value.
+  final VoidCallback? onClear;
+
   @override
   Widget build(BuildContext context) {
+    final suffixIcon = onClear != null && value != null
+        ? Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ClearMark(key: const Key('input-clear'), onPressed: onClear!),
+              Padding(
+                padding: const EdgeInsets.only(left: 4, right: 10),
+                child:
+                    this.suffixIcon ??
+                    const Icon(FiIcons.expand, size: _selectIconSize),
+              ),
+            ],
+          )
+        : this.suffixIcon;
     final decoration = _decoration(
       context,
       size: size,
@@ -305,15 +360,19 @@ class FiSelect<T> extends StatelessWidget {
 
 /// A read-only input that opens a picker (Date, Date & time, time) when tapped.
 ///
-/// [icon] is the trailing picker icon; [actions] (such as a "Today" text button or a clear
-/// button) sit before it, or replace it when [replaceIcon] is set.
+/// [quickAction] ("Today", "Now") is offered only while the input is empty: at 720px and wider
+/// as a text button beside the box, below that as an inline accent link at the box's trailing
+/// edge. [onClear] offers the clear mark while the input holds a value; leave it null for a
+/// required value. [quickActionKey] keys the quick action in both places.
 class FiPickerInput extends StatelessWidget {
   const FiPickerInput({
     required this.controller,
     required this.onTap,
     required this.icon,
-    this.actions = const [],
-    this.replaceIcon,
+    this.quickAction,
+    this.onQuickAction,
+    this.quickActionKey,
+    this.onClear,
     this.label,
     this.hint,
     this.required = false,
@@ -327,11 +386,13 @@ class FiPickerInput extends StatelessWidget {
   final GestureTapCallback? onTap;
   final IconData icon;
 
-  /// Compact actions before the trailing icon.
-  final List<Widget> actions;
+  /// The quick-fill label, such as "Today"; shown only while the input is empty.
+  final String? quickAction;
+  final VoidCallback? onQuickAction;
+  final Key? quickActionKey;
 
-  /// Shown instead of [icon], for example a clear button once there is a value.
-  final Widget? replaceIcon;
+  /// Clears the value; the input empties [controller] first.
+  final VoidCallback? onClear;
   final String? label;
   final String? hint;
   final bool required;
@@ -340,38 +401,453 @@ class FiPickerInput extends StatelessWidget {
   final InputSize size;
 
   @override
-  Widget build(BuildContext context) {
-    final trailing = replaceIcon ?? Icon(icon, size: 20);
-    return FiTextInput(
-      controller: controller,
-      readOnly: true,
-      onTap: onTap,
-      label: label,
-      hint: hint,
-      required: required,
-      errors: errors,
-      helperText: helperText,
-      size: size,
-      suffixIcon: actions.isEmpty
-          ? trailing
-          : Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ...actions,
-                Padding(
-                  padding: const EdgeInsets.only(right: 10),
-                  child: trailing,
-                ),
-              ],
+  Widget build(BuildContext context) => ValueListenableBuilder(
+    valueListenable: controller,
+    builder: (context, value, _) {
+      final empty = value.text.isEmpty;
+      final phone = Nocturne.isPhone(context);
+      final quick = empty && quickAction != null && onQuickAction != null;
+      final trailing = <Widget>[
+        if (!empty && onClear != null)
+          ClearMark(
+            key: const Key('input-clear'),
+            onPressed: () {
+              controller.clear();
+              onClear!();
+            },
+          )
+        else if (quick && phone)
+          TextButton(
+            key: quickActionKey,
+            style: TextButton.styleFrom(
+              foregroundColor: Nocturne.accent300,
+              visualDensity: VisualDensity.compact,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
             ),
+            onPressed: onQuickAction,
+            child: Text(quickAction!),
+          ),
+        Padding(
+          padding: const EdgeInsets.only(left: 4, right: 10),
+          child: Icon(icon, size: 20),
+        ),
+      ];
+      final input = FiTextInput(
+        controller: controller,
+        readOnly: true,
+        onTap: onTap,
+        label: label,
+        hint: hint,
+        required: required,
+        errors: errors,
+        helperText: helperText,
+        size: size,
+        suffixIcon: Row(mainAxisSize: MainAxisSize.min, children: trailing),
+      );
+      if (!quick || phone) return input;
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(child: input),
+          const SizedBox(width: 8),
+          SizedBox(
+            height: Nocturne.inputHeight(context, size),
+            child: OutlinedButton(
+              key: quickActionKey,
+              onPressed: onQuickAction,
+              child: Text(quickAction!),
+            ),
+          ),
+        ],
+      );
+    },
+  );
+}
+
+/// One option of a [FiSegmented].
+final class FiSegment<T> {
+  const FiSegment(this.value, this.label);
+
+  final T value;
+  final String label;
+}
+
+/// A choice among a few options drawn as equal-width segments of one control, as tall as a
+/// normal input (so at least 44px on a phone).
+///
+/// Activating the selected segment again clears the value when [allowClear] is set, and does
+/// nothing otherwise. [label] (with `*` when [required]) is drawn above the control when given.
+class FiSegmented<T> extends StatelessWidget {
+  const FiSegmented({
+    required this.segments,
+    required this.onChanged,
+    this.value,
+    this.allowClear = false,
+    this.label,
+    this.required = false,
+    this.errors = const [],
+    this.size = InputSize.normal,
+    super.key,
+  });
+
+  final List<FiSegment<T>> segments;
+  final T? value;
+
+  /// Receives the picked value, or null when cleared. Null disables the control.
+  final ValueChanged<T?>? onChanged;
+  final bool allowClear;
+  final String? label;
+  final bool required;
+  final List<String> errors;
+  final InputSize size;
+
+  void _tap(T picked) {
+    if (picked == value) {
+      if (allowClear) onChanged?.call(null);
+      return;
+    }
+    onChanged?.call(picked);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final height = math.max(
+      Nocturne.inputHeight(context, size),
+      Nocturne.isPhone(context) ? Nocturne.touchTarget : 0.0,
+    );
+    final error = errors.isNotEmpty;
+    final enabled = onChanged != null;
+    final radius = BorderRadius.circular(Nocturne.radius);
+    final control = Container(
+      height: height,
+      decoration: BoxDecoration(
+        borderRadius: radius,
+        border: Border.all(color: error ? Nocturne.accent : Nocturne.divider),
+      ),
+      padding: const EdgeInsets.all(3),
+      child: Row(
+        children: [
+          for (final segment in segments)
+            Expanded(
+              child: Semantics(
+                button: true,
+                selected: segment.value == value,
+                child: Material(
+                  color: segment.value == value
+                      ? Nocturne.accent900
+                      : Colors.transparent,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(Nocturne.radius - 3),
+                    side: segment.value == value
+                        ? const BorderSide(color: Nocturne.accent700)
+                        : BorderSide.none,
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: InkWell(
+                    key: ValueKey('segment-${segment.label}'),
+                    onTap: enabled ? () => _tap(segment.value) : null,
+                    child: Center(
+                      child: Text(
+                        segment.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: _fontSize,
+                          color: segment.value == value
+                              ? Nocturne.accent100
+                              : Nocturne.muted(enabled ? .7 : .4),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (label case final label?)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: DefaultTextStyle.merge(
+              style: TextStyle(fontSize: 12, color: Nocturne.muted(.7)),
+              child: required ? requiredLabel(label) : Text(label),
+            ),
+          ),
+        control,
+        if (error) FieldErrorLines(errors),
+      ],
+    );
+  }
+}
+
+/// Parses and formats duration text. The app uses the core's grammar through the bridge; tests
+/// install their own through [FiDurationInput.grammar].
+abstract interface class DurationGrammar {
+  /// Signed milliseconds, or null when [text] does not parse.
+  int? parse(String text);
+
+  /// The canonical short form, such as "1h 30m".
+  String format(int milliseconds);
+}
+
+/// A duration as a person reads it beside the phone input: "1 h 30 min", "−45 s", "0 s".
+String formatDurationPreview(int milliseconds) {
+  if (milliseconds == 0) return '0 s';
+  var remaining = milliseconds.abs();
+  final parts = <String>[];
+  for (final (size, unit) in const [
+    (3600000, 'h'),
+    (60000, 'min'),
+    (1000, 's'),
+    (1, 'ms'),
+  ]) {
+    final count = remaining ~/ size;
+    remaining %= size;
+    if (count > 0) parts.add('$count $unit');
+  }
+  return '${milliseconds < 0 ? '−' : ''}${parts.join(' ')}';
+}
+
+/// A signed duration held as whole milliseconds.
+///
+/// At 720px and wider: a +/− [FiSegmented] sign and four boxes for hours, minutes, seconds and
+/// milliseconds. Below 720px: one text input taking unit text ("1h 30m", "90m", "−45s"), with the
+/// parsed value shown beside the text ("= 1 h 30 min") and "Use units like 1h 30m" as its error
+/// while the text does not parse. [onChanged] receives null when the input is emptied.
+class FiDurationInput extends StatefulWidget {
+  const FiDurationInput({
+    required this.onChanged,
+    this.value,
+    this.label,
+    this.required = false,
+    this.allowClear = false,
+    this.errors = const [],
+    this.size = InputSize.normal,
+    super.key,
+  });
+
+  /// The grammar every duration input parses and formats with, set once at startup.
+  static DurationGrammar? grammar;
+
+  final int? value;
+  final ValueChanged<int?> onChanged;
+  final String? label;
+  final bool required;
+
+  /// Offers the clear mark while the input holds a value.
+  final bool allowClear;
+  final List<String> errors;
+  final InputSize size;
+
+  @override
+  State<FiDurationInput> createState() => _FiDurationInputState();
+}
+
+class _FiDurationInputState extends State<FiDurationInput> {
+  static const _unitSizes = [3600000, 60000, 1000, 1];
+  static const _units = ['h', 'm', 's', 'ms'];
+
+  late final TextEditingController _text = TextEditingController(
+    text: widget.value == null ? '' : _grammar.format(widget.value!),
+  );
+  late final List<TextEditingController> _boxes = _split(widget.value);
+  late bool _negative = (widget.value ?? 0) < 0;
+  bool _unparsed = false;
+
+  DurationGrammar get _grammar =>
+      FiDurationInput.grammar ??
+      (throw StateError('FiDurationInput.grammar is not set'));
+
+  List<TextEditingController> _split(int? value) {
+    if (value == null) {
+      return [for (final _ in _units) TextEditingController()];
+    }
+    var remaining = value.abs();
+    return [
+      for (final size in _unitSizes)
+        TextEditingController(
+          text: () {
+            final count = remaining ~/ size;
+            remaining %= size;
+            return '$count';
+          }(),
+        ),
+    ];
+  }
+
+  @override
+  void dispose() {
+    _text.dispose();
+    for (final box in _boxes) {
+      box.dispose();
+    }
+    super.dispose();
+  }
+
+  void _boxesChanged() {
+    if (_boxes.every((box) => box.text.isEmpty)) {
+      widget.onChanged(null);
+      return;
+    }
+    var total = 0;
+    for (final (index, box) in _boxes.indexed) {
+      total += (int.tryParse(box.text) ?? 0) * _unitSizes[index];
+    }
+    widget.onChanged(_negative ? -total : total);
+  }
+
+  void _textChanged(String raw) {
+    if (raw.trim().isEmpty) {
+      setState(() => _unparsed = false);
+      widget.onChanged(null);
+      return;
+    }
+    final parsed = _grammar.parse(raw);
+    setState(() => _unparsed = parsed == null);
+    if (parsed != null) widget.onChanged(parsed);
+  }
+
+  void _clear() {
+    setState(() {
+      _text.clear();
+      for (final box in _boxes) {
+        box.clear();
+      }
+      _negative = false;
+      _unparsed = false;
+    });
+    widget.onChanged(null);
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      Nocturne.isPhone(context) ? _phone(context) : _wide(context);
+
+  Widget _phone(BuildContext context) => ValueListenableBuilder(
+    valueListenable: _text,
+    builder: (context, value, _) {
+      final parsed = value.text.trim().isEmpty
+          ? null
+          : _grammar.parse(value.text);
+      return FiTextInput(
+        key: const Key('duration-text'),
+        controller: _text,
+        label: widget.label,
+        hint: 'e.g. 1h 30m or −45s',
+        required: widget.required,
+        size: widget.size,
+        errors: [
+          if (_unparsed && value.text.trim().isNotEmpty)
+            'Use units like 1h 30m',
+          ...widget.errors,
+        ],
+        prefixIcon: const Icon(FiIcons.duration, size: 18),
+        suffixIcon: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (parsed != null)
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: Text(
+                  '= ${formatDurationPreview(parsed)}',
+                  key: const Key('duration-preview'),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Nocturne.muted(.55),
+                    fontFeatures: Nocturne.tabular,
+                  ),
+                ),
+              ),
+            if (widget.allowClear && value.text.isNotEmpty)
+              ClearMark(key: const Key('input-clear'), onPressed: _clear),
+            const SizedBox(width: 8),
+          ],
+        ),
+        onChanged: _textChanged,
+      );
+    },
+  );
+
+  Widget _wide(BuildContext context) {
+    final holds = _boxes.any((box) => box.text.isNotEmpty);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (widget.label case final label?)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: DefaultTextStyle.merge(
+              style: TextStyle(fontSize: 12, color: Nocturne.muted(.7)),
+              child: widget.required ? requiredLabel(label) : Text(label),
+            ),
+          ),
+        Row(
+          children: [
+            SizedBox(
+              width: 76,
+              child: FiSegmented<bool>(
+                key: const Key('duration-sign'),
+                size: widget.size,
+                segments: const [FiSegment(false, '+'), FiSegment(true, '−')],
+                value: _negative,
+                onChanged: (negative) {
+                  if (negative == null) return;
+                  setState(() => _negative = negative);
+                  _boxesChanged();
+                },
+              ),
+            ),
+            for (final (index, unit) in _units.indexed) ...[
+              const SizedBox(width: 6),
+              Expanded(
+                child: FiTextInput(
+                  key: Key('duration-$unit'),
+                  controller: _boxes[index],
+                  hint: '0',
+                  size: widget.size,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  suffixIcon: Padding(
+                    padding: const EdgeInsets.only(right: 10),
+                    child: Text(
+                      unit,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Nocturne.muted(.55),
+                      ),
+                    ),
+                  ),
+                  onChanged: (_) {
+                    setState(() {});
+                    _boxesChanged();
+                  },
+                ),
+              ),
+            ],
+            if (widget.allowClear && holds) ...[
+              const SizedBox(width: 4),
+              ClearMark(key: const Key('input-clear'), onPressed: _clear),
+            ],
+          ],
+        ),
+        if (widget.errors.isNotEmpty) FieldErrorLines(widget.errors),
+      ],
     );
   }
 }
 
 /// A whole-number slider between [min] and [max], with the value as text on the trailing side.
 ///
-/// With no [value] it shows an unset state and a "Set" action that picks [min]. Once set, a clear
-/// icon returns it to unset when [allowClear] is on or the input is not [required]. [onChanged]
+/// With no [value] it shows a dashed track with no thumb and a "Set" action that picks [min]; a
+/// first touch on the track picks the nearest step. Once set, the clear mark returns it to unset
+/// when [allowClear] is on or the input is not [required]. [onChanged]
 /// only ever receives integers inside the bounds, or null when cleared; the slider's double stays
 /// inside this widget.
 class FiSlider extends StatelessWidget {
@@ -437,8 +913,13 @@ class FiSlider extends StatelessWidget {
           ? SliderComponentShape.noOverlay
           : const RoundSliderOverlayShape(overlayRadius: 14),
       showValueIndicator: ShowValueIndicator.never,
+      // Unset, the track is drawn dashed underneath instead.
+      activeTrackColor: unset ? Colors.transparent : null,
+      inactiveTrackColor: unset ? Colors.transparent : null,
+      activeTickMarkColor: unset ? Colors.transparent : null,
+      inactiveTickMarkColor: unset ? Colors.transparent : null,
     );
-    final Widget content = SliderTheme(
+    final slider = SliderTheme(
       data: theme,
       child: Slider(
         key: Key(unset ? 'slider-unset' : 'slider-set-track'),
@@ -461,26 +942,56 @@ class FiSlider extends StatelessWidget {
             : null,
       ),
     );
+    final Widget content = unset
+        ? Stack(
+            alignment: Alignment.center,
+            children: [
+              Positioned.fill(
+                child: CustomPaint(
+                  key: const Key('slider-dashed-track'),
+                  painter: _DashedTrackPainter(
+                    color: Nocturne.muted(enabled ? .35 : .2),
+                  ),
+                ),
+              ),
+              slider,
+            ],
+          )
+        : slider;
     final trailing = <Widget>[
-      Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8),
-        child: Text(
-          unset ? '–' : '$value',
-          key: Key(unset ? 'slider-placeholder' : 'slider-value'),
-          strutStyle: _strut,
-          style: TextStyle(
-            fontSize: _fontSize,
-            color: unset ? Theme.of(context).hintColor : null,
-            fontFeatures: const [FontFeature.tabularFigures()],
+      if (unset)
+        TextButton.icon(
+          key: const Key('slider-set-action'),
+          style: TextButton.styleFrom(
+            foregroundColor: Nocturne.accent300,
+            visualDensity: VisualDensity.compact,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+          ),
+          onPressed: interactive ? () => _report(min) : null,
+          icon: const Icon(FiIcons.add, size: 14),
+          label: const Text('Set'),
+        )
+      else
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: Text(
+            '$value',
+            key: const Key('slider-value'),
+            strutStyle: _strut,
+            style: const TextStyle(
+              fontSize: _fontSize,
+              fontFeatures: [FontFeature.tabularFigures()],
+            ),
           ),
         ),
-      ),
       if (!unset && (allowClear || !required))
-        IconButton(
-          key: const Key('slider-clear'),
-          tooltip: 'Clear',
-          icon: const Icon(FiIcons.clear, size: 18),
-          onPressed: enabled ? () => onChanged!(null) : null,
+        Padding(
+          padding: const EdgeInsets.only(right: 8),
+          child: ClearMark(
+            key: const Key('slider-clear'),
+            onPressed: enabled ? () => onChanged!(null) : () {},
+          ),
         ),
     ];
     final labelRowHeight = _sliderLabelRowHeight(context);
@@ -524,6 +1035,34 @@ class FiSlider extends StatelessWidget {
       ),
     );
   }
+}
+
+/// The unset slider's track: a dashed line across the middle, inset like the real track.
+final class _DashedTrackPainter extends CustomPainter {
+  const _DashedTrackPainter({required this.color});
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 2
+      ..strokeCap = StrokeCap.round;
+    final y = size.height / 2;
+    const inset = 2.0;
+    for (var x = inset; x < size.width - inset; x += 8) {
+      canvas.drawLine(
+        Offset(x, y),
+        Offset(math.min(x + 4, size.width - inset), y),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DashedTrackPainter oldDelegate) =>
+      color != oldDelegate.color;
 }
 
 const double _sliderLabelFontSize = 12;

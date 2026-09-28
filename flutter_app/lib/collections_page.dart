@@ -7,9 +7,11 @@ import 'package:fi/theme/action_sheet.dart';
 import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/ui_prefs.dart';
 import 'package:fi/controllers.dart';
+import 'package:fi/field_editor.dart';
 import 'package:fi/field_registry.dart';
 import 'package:fi/help_button.dart';
 import 'package:fi/help_copy.dart';
+import 'package:fi/record_form.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/theme/form_errors.dart';
 import 'package:fi/theme/form_surface.dart';
@@ -1331,16 +1333,37 @@ class CollectionsPage extends StatelessWidget {
 
   /// The schema as a side sheet (mock 1c): reorderable field rows, and a new field added inline
   /// below them rather than in a second, stacked dialog.
+  /// The collection schema (mocks 5b, 5c, 4h): a side sheet of field rows on desktop, where a
+  /// new field and an edited one open as inline panels; a bottom sheet of rows on a phone, where
+  /// each field opens as its own pushed screen.
   Future<void> _schemaEditor(
     BuildContext context,
     CollectionSchemaDto schema,
   ) async {
-    var adding = false;
+    final phone = MediaQuery.sizeOf(context).width < _phoneScreen;
+
+    /// The field whose inline panel is open: its id, '' for a new field, null for none.
+    String? editing;
     await showSideSheet(
       context,
       kicker: schema.name,
+      kickerView: ListenableBuilder(
+        listenable: controller,
+        builder: (_, _) {
+          final count =
+              controller.schema?.fields
+                  .where((field) => !field.deleted)
+                  .length ??
+              0;
+          return Kicker(
+            '${controller.schema?.name ?? schema.name} · ${_plural(count, 'field')}',
+          );
+        },
+      ),
       title: 'Collection schema',
-      footerNote: 'Drag to reorder fields',
+      footerNote: phone
+          ? 'Long-press to reorder'
+          : 'Drag to reorder · click a field to edit',
       body: (sheet) => StatefulBuilder(
         builder: (sheet, setState) => ListenableBuilder(
           listenable: controller,
@@ -1348,6 +1371,56 @@ class CollectionsPage extends StatelessWidget {
             final fields = [
               ...?controller.schema?.fields.where((field) => !field.deleted),
             ]..sort(_fieldOrder);
+            void reorder(int oldIndex, int newIndex) {
+              if (newIndex > oldIndex) newIndex--;
+              final moved = fields.removeAt(oldIndex);
+              fields.insert(newIndex, moved);
+              unawaited(
+                controller.reorderFields(
+                  fields.map((field) => field.id).toList(),
+                ),
+              );
+            }
+
+            if (phone) {
+              return ListView(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                children: [
+                  ReorderableListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    buildDefaultDragHandles: false,
+                    itemCount: fields.length,
+                    onReorder: reorder,
+                    itemBuilder: (context, index) =>
+                        ReorderableDelayedDragStartListener(
+                          key: ValueKey(fields[index].id),
+                          index: index,
+                          child: Padding(
+                            padding: const EdgeInsets.only(bottom: 6),
+                            child: _phoneSchemaRow(sheet, fields[index]),
+                          ),
+                        ),
+                  ),
+                  const SizedBox(height: 4),
+                  SizedBox(
+                    height: 52,
+                    child: DashedSlot(
+                      key: const Key('add-field'),
+                      onTap: () => _openFieldScreen(sheet),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(FiIcons.add),
+                          SizedBox(width: 8),
+                          Text('Add field'),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            }
             return ListView(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
               children: [
@@ -1356,36 +1429,37 @@ class CollectionsPage extends StatelessWidget {
                   physics: const NeverScrollableScrollPhysics(),
                   buildDefaultDragHandles: false,
                   itemCount: fields.length,
-                  onReorder: (oldIndex, newIndex) {
-                    if (newIndex > oldIndex) newIndex--;
-                    final moved = fields.removeAt(oldIndex);
-                    fields.insert(newIndex, moved);
-                    unawaited(
-                      controller.reorderFields(
-                        fields.map((field) => field.id).toList(),
-                      ),
-                    );
-                  },
+                  onReorder: reorder,
                   itemBuilder: (context, index) => Padding(
                     key: ValueKey(fields[index].id),
                     padding: const EdgeInsets.only(bottom: 6),
-                    child: _schemaRow(sheet, fields[index], index),
+                    child: editing == fields[index].id
+                        ? FieldEditorBody(
+                            controller: controller,
+                            existing: fields[index],
+                            onClosed: () => setState(() => editing = null),
+                          )
+                        : _schemaRow(
+                            fields[index],
+                            index,
+                            () => setState(() => editing = fields[index].id),
+                          ),
                   ),
                 ),
                 const SizedBox(height: 4),
-                if (adding)
-                  _FieldEditorForm(
+                if (editing == '')
+                  FieldEditorBody(
                     controller: controller,
-                    inline: true,
-                    onClosed: () => setState(() => adding = false),
+                    onClosed: () => setState(() => editing = null),
                   )
                 else
                   Align(
                     alignment: Alignment.centerLeft,
                     child: TextButton.icon(
-                      onPressed: () => setState(() => adding = true),
+                      key: const Key('new-field'),
+                      onPressed: () => setState(() => editing = ''),
                       icon: const Icon(FiIcons.add),
-                      label: const Text('Add field'),
+                      label: const Text('New field'),
                     ),
                   ),
               ],
@@ -1396,15 +1470,16 @@ class CollectionsPage extends StatelessWidget {
     );
   }
 
-  Widget _schemaRow(BuildContext sheet, FieldDefinitionDto field, int index) =>
+  /// A desktop schema row: drag handle, type icon, name with the required mark, and summary.
+  Widget _schemaRow(FieldDefinitionDto field, int index, VoidCallback onTap) =>
       Material(
         color: Nocturne.bg,
         borderRadius: BorderRadius.circular(Nocturne.radius),
         child: InkWell(
           borderRadius: BorderRadius.circular(Nocturne.radius),
-          onTap: () => _fieldEditor(sheet, field),
+          onTap: onTap,
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(4, 4, 4, 4),
+            padding: const EdgeInsets.fromLTRB(4, 6, 12, 6),
             child: Row(
               children: [
                 ReorderableDragStartListener(
@@ -1418,29 +1493,79 @@ class CollectionsPage extends StatelessWidget {
                     ),
                   ),
                 ),
-                Expanded(
-                  child: Text(
-                    field.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 14),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Flexible(child: Tag(_fieldSubtitle(field))),
-                IconButton(
-                  tooltip: 'Remove field',
-                  style: IconButton.styleFrom(
-                    foregroundColor: Nocturne.muted(.5),
-                  ),
-                  icon: const Icon(FiIcons.delete),
-                  onPressed: () => unawaited(controller.removeField(field.id)),
-                ),
+                IconTile(fieldTypeIcon(field.fieldType.kind)),
+                const SizedBox(width: 12),
+                Expanded(child: _schemaRowText(field)),
               ],
             ),
           ),
         ),
       );
+
+  Widget _schemaRowText(FieldDefinitionDto field) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      DefaultTextStyle.merge(
+        style: const TextStyle(fontSize: 14),
+        child: field.required_
+            ? requiredLabel(field.name)
+            : Text(field.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+      ),
+      Text(
+        fieldSummary(field),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(fontSize: 12, color: Nocturne.muted(.55)),
+      ),
+    ],
+  );
+
+  /// A phone schema row: at least 52px, type icon, name and summary, and a chevron. Tapping it
+  /// pushes the field's screen; a long press drags it.
+  Widget _phoneSchemaRow(BuildContext sheet, FieldDefinitionDto field) =>
+      Material(
+        color: Nocturne.bg,
+        borderRadius: BorderRadius.circular(Nocturne.radius),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(Nocturne.radius),
+          onTap: () => _openFieldScreen(sheet, field),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 52),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              child: Row(
+                children: [
+                  Icon(
+                    fieldTypeIcon(field.fieldType.kind),
+                    size: 18,
+                    color: Nocturne.muted(.6),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(child: _schemaRowText(field)),
+                  Icon(
+                    FiIcons.chevronRight,
+                    size: 16,
+                    color: Nocturne.muted(.45),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
+  Future<void> _openFieldScreen(
+    BuildContext sheet, [
+    FieldDefinitionDto? existing,
+  ]) => Navigator.of(sheet).push(
+    MaterialPageRoute<void>(
+      builder: (_) => FieldEditorScreen(
+        controller: controller,
+        collectionName: controller.schema?.name ?? '',
+        existing: existing,
+      ),
+    ),
+  );
 
   /// One computed field in the sheet. Tapping opens the editor pre-filled; a definition the
   /// builder cannot represent stays visible with its diagnostic but does not open.
@@ -1625,26 +1750,6 @@ class CollectionsPage extends StatelessWidget {
       ),
     );
   }
-
-  Future<void> _fieldEditor(
-    BuildContext context, [
-    FieldDefinitionDto? existing,
-  ]) => showDialog<void>(
-    context: context,
-    builder: (dialog) => Dialog(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 480),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(22),
-          child: _FieldEditorForm(
-            controller: controller,
-            existing: existing,
-            onClosed: () => Navigator.pop(dialog),
-          ),
-        ),
-      ),
-    ),
-  );
 
   /// Replaces the collection header while records are being selected (mock 2e).
   Widget _selectionBar(
@@ -1904,12 +2009,14 @@ class CollectionsPage extends StatelessWidget {
     );
   }
 
-  /// A dialog on a wide screen; on a phone, a bottom sheet with large inputs (mock 2h).
+  /// A dialog on a wide screen; on a phone, a bottom sheet with large inputs (mocks 7a–7e).
+  /// [prefill] opens a new record holding those values instead of the defaults (Duplicate).
   Future<void> _recordEditor(
     BuildContext context,
     CollectionSchemaDto schema, [
     RecordDto? existing,
     String? focusFieldId,
+    Map<String, FieldValueDto>? prefill,
   ]) => showFormSurface<void>(
     context,
     builder: (route) => _RecordEditorForm(
@@ -1917,6 +2024,12 @@ class CollectionsPage extends StatelessWidget {
       schema: schema,
       existing: existing,
       focusFieldId: focusFieldId,
+      prefill: prefill,
+      onDuplicate: (values) {
+        if (context.mounted) {
+          unawaited(_recordEditor(context, schema, null, null, values));
+        }
+      },
     ),
   );
 }
@@ -2045,6 +2158,8 @@ class _RecordEditorForm extends StatefulWidget {
     required this.schema,
     this.existing,
     this.focusFieldId,
+    this.prefill,
+    this.onDuplicate,
   });
 
   final CollectionsController controller;
@@ -2054,17 +2169,50 @@ class _RecordEditorForm extends StatefulWidget {
   /// The field to scroll to and focus on open: an incomplete record's first missing one.
   final String? focusFieldId;
 
+  /// A new record's values in place of the defaults, from Duplicate.
+  final Map<String, FieldValueDto>? prefill;
+
+  /// Opens a new-record editor holding these values, after this editor has closed.
+  final ValueChanged<Map<String, FieldValueDto>>? onDuplicate;
+
   @override
   State<_RecordEditorForm> createState() => _RecordEditorFormState();
 }
 
-/// The values a new record opens with: every declared default, plus the minimum for a required
-/// slider without one, since a slider has no empty position to leave it at. Rust applies the same
-/// defaults on create, so saving an untouched form stores what it did before seeding.
-Map<String, FieldValueDto> _newRecordSeeds(CollectionSchemaDto schema) => {
+/// Today in the device's local calendar, as a timezone-free epoch day.
+int _localEpochDay() {
+  final now = clock.now();
+  return DateTime.utc(now.year, now.month, now.day).millisecondsSinceEpoch ~/
+      Duration.millisecondsPerDay;
+}
+
+/// The value a field's declared default seeds a new record with: the fixed default, or for a
+/// relative Date default the local [today] plus the declared days. Null without a default.
+FieldValueDto? _seededDefault(FieldDefinitionDto field, int today) {
+  if (field.defaultValue case final value?
+      when value.kind != FieldValueKindDto.null_) {
+    return value;
+  }
+  if (field.defaultRelativeDays case final days?
+      when field.fieldType.kind == FieldTypeKindDto.date) {
+    return FieldValueDto(
+      kind: FieldValueKindDto.date,
+      integerValue: today + days,
+    );
+  }
+  return null;
+}
+
+/// The values a new record opens with: every declared default (a relative Date default resolved
+/// from the local [today]), plus the minimum for a required slider without one, since a slider
+/// has no empty position to leave it at. Rust applies the same defaults on create, so saving an
+/// untouched form stores what it did before seeding.
+Map<String, FieldValueDto> _newRecordSeeds(
+  CollectionSchemaDto schema, {
+  required int today,
+}) => {
   for (final field in schema.fields.where((field) => !field.deleted))
-    if (field.defaultValue case final value?
-        when value.kind != FieldValueKindDto.null_)
+    if (_seededDefault(field, today) case final value?)
       field.id: value
     else if (field.required_ &&
         field.fieldType.kind == FieldTypeKindDto.integer &&
@@ -2078,15 +2226,29 @@ Map<String, FieldValueDto> _newRecordSeeds(CollectionSchemaDto schema) => {
 };
 
 class _RecordEditorFormState extends State<_RecordEditorForm> {
-  late final values = <String, FieldValueDto>{
-    if (widget.existing == null) ..._newRecordSeeds(widget.schema),
+  late final _stored = <String, FieldValueDto>{
     for (final item in widget.existing?.values ?? const <RecordValueDto>[])
       item.fieldId: item.value,
+  };
+  late final _seeds = widget.existing == null && widget.prefill == null
+      ? _newRecordSeeds(widget.schema, today: _localEpochDay())
+      : const <String, FieldValueDto>{};
+  late final values = <String, FieldValueDto>{
+    ..._seeds,
+    ...?widget.prefill,
+    ..._stored,
   };
   late final fields =
       widget.schema.fields.where((field) => !field.deleted).toList()
         ..sort(_fieldOrder);
   late final _fieldIds = {for (final field in fields) field.id};
+
+  /// Fields still holding their seeded default; each shows the Default marker until changed.
+  late final _defaulted = {
+    for (final field in fields)
+      if (_seeds.containsKey(field.id) && _seededDefault(field, 0) != null)
+        field.id,
+  };
 
   /// A record opened because the list marks it invalid shows its problems straight away.
   late var attempted = widget.existing?.valid == false;
@@ -2104,9 +2266,13 @@ class _RecordEditorFormState extends State<_RecordEditorForm> {
       for (final field in missingRequiredFields(record, fields)) field.id,
   };
 
-  /// Wraps the focused field's input, so focus can go to its first focusable descendant.
-  final _focusGroup = FocusNode(skipTraversal: true, canRequestFocus: false);
-  final _focusKey = GlobalKey();
+  /// Per field: a node wrapping its control, so focus can go to its first focusable descendant,
+  /// and a key to scroll it into view.
+  late final _focusGroups = {
+    for (final field in fields)
+      field.id: FocusNode(skipTraversal: true, canRequestFocus: false),
+  };
+  late final _fieldKeys = {for (final field in fields) field.id: GlobalKey()};
 
   bool _stillNeeded(String fieldId) =>
       _needed.contains(fieldId) &&
@@ -2116,13 +2282,14 @@ class _RecordEditorFormState extends State<_RecordEditorForm> {
   @override
   void initState() {
     super.initState();
-    if (widget.focusFieldId != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _focusField());
+    if (widget.focusFieldId case final id?) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _focusField(id));
     }
   }
 
-  Future<void> _focusField() async {
-    final target = _focusKey.currentContext;
+  /// Scrolls [fieldId] into view and puts keyboard focus in its control.
+  Future<void> _focusField(String fieldId) async {
+    final target = _fieldKeys[fieldId]?.currentContext;
     if (!mounted || target == null) return;
     await Scrollable.ensureVisible(
       target,
@@ -2130,28 +2297,34 @@ class _RecordEditorFormState extends State<_RecordEditorForm> {
       duration: const Duration(milliseconds: 200),
     );
     if (!mounted) return;
-    _focusGroup.descendants
+    _focusGroups[fieldId]?.descendants
         .where((node) => node.canRequestFocus && !node.skipTraversal)
         .firstOrNull
         ?.requestFocus();
   }
 
+  /// What a save sends: every value for a new record; for an existing one only the fields whose
+  /// value changed, so an untouched field (for example one holding a removed option) is kept.
   List<RecordValueDto> get _submitted => [
     for (final MapEntry(:key, :value) in values.entries)
-      RecordValueDto(fieldId: key, value: value),
+      if (widget.existing == null || _stored[key] != value)
+        RecordValueDto(fieldId: key, value: value),
   ];
 
   @override
   void dispose() {
     _debounce?.cancel();
-    _focusGroup.dispose();
+    for (final node in _focusGroups.values) {
+      node.dispose();
+    }
     super.dispose();
   }
 
   void _changed(String fieldId, FieldValueDto value) {
     final wasNeeded = _stillNeeded(fieldId);
     values[fieldId] = value;
-    if (wasNeeded != _stillNeeded(fieldId)) setState(() {});
+    final wasDefaulted = _defaulted.remove(fieldId);
+    if (wasNeeded != _stillNeeded(fieldId) || wasDefaulted) setState(() {});
     if (!attempted) return;
     _debounce?.cancel();
     _debounce = Timer(_draftValidationDelay, () => unawaited(_validate()));
@@ -2193,7 +2366,7 @@ class _RecordEditorFormState extends State<_RecordEditorForm> {
       final existing = widget.existing;
       if (existing == null) {
         await widget.controller.createRecord(_submitted);
-      } else {
+      } else if (_submitted.isNotEmpty) {
         await widget.controller.updateRecord(existing.id, _submitted);
       }
       if (mounted) Navigator.pop(context);
@@ -2205,57 +2378,148 @@ class _RecordEditorFormState extends State<_RecordEditorForm> {
     }
   }
 
+  /// Asks, then logically deletes the record and closes the editor. Cancelling keeps the editor
+  /// open with its edits.
+  Future<void> _delete() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: const Text('Delete this record?'),
+        content: const Text('It is removed from the collection.'),
+        actions: [
+          TextButton(
+            key: const Key('dismiss-record-delete'),
+            onPressed: () => Navigator.pop(dialog, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            key: const Key('confirm-record-delete'),
+            onPressed: () => Navigator.pop(dialog, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await widget.controller.deleteRecord(widget.existing!.id);
+      if (mounted) Navigator.pop(context);
+    } catch (failure) {
+      if (mounted) setState(() => issues = FormIssues.from(failure));
+    }
+  }
+
+  /// Closes this editor and opens a new record holding the current values, except removed
+  /// options, which a new record can't pick.
+  void _duplicate() {
+    bool removed(FieldDefinitionDto field, FieldValueDto value) =>
+        value.kind == FieldValueKindDto.enum_ &&
+        field.enumOptions.any(
+          (option) => option.id == value.textValue && option.deleted,
+        );
+    final copy = <String, FieldValueDto>{};
+    for (final field in fields) {
+      final value = values[field.id];
+      if (value == null || value.kind == FieldValueKindDto.null_) continue;
+      if (!removed(field, value)) copy[field.id] = value;
+    }
+    Navigator.pop(context);
+    widget.onDuplicate?.call(copy);
+  }
+
+  String get _contextLabel {
+    final created = switch (widget.existing?.createdAtMs) {
+      final ms? => DateFormat(
+        'MMM d, y',
+      ).format(DateTime.fromMillisecondsSinceEpoch(ms)),
+      null => null,
+    };
+    return [
+      'in ${widget.schema.name}',
+      if (created != null) 'created $created',
+    ].join(' · ');
+  }
+
   @override
   Widget build(BuildContext context) {
     final dialog = FormSurfaceScope.modeOf(context) != FormSurfaceMode.sheet;
     final needed = fields.where((field) => _stillNeeded(field.id)).length;
-    final title = widget.existing == null ? 'New record' : 'Edit record';
+    final existing = widget.existing;
+    final title = existing == null ? 'New record' : 'Edit record';
+    final withErrors = attempted
+        ? fields.where((field) => issues.of(field.id).isNotEmpty).toList()
+        : const <FieldDefinitionDto>[];
     return FormSurface(
       // Wide screens say how much is left to finish an incomplete record.
       title: dialog && needed > 0
           ? '$title · $needed ${needed == 1 ? 'field' : 'fields'} needed'
           : title,
-      contextLabel: 'in ${widget.schema.name}',
-      showRequiredLegend: fields.any(FieldRendererRegistry.marksRequired),
-      body: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        spacing: 14,
-        children: [for (final field in fields) _fieldEditor(field)],
+      contextLabel: _contextLabel,
+      showContextInDialog: true,
+      closeInHeader: true,
+      fullWidthPrimaryOnPhone: true,
+      submitOnCtrlEnter: true,
+      footerHint: existing == null ? '* Required · Ctrl+Enter to save' : null,
+      leadingFooterAction: existing == null
+          ? null
+          : FormHeaderAction(
+              key: const Key('record-delete'),
+              icon: FiIcons.delete,
+              label: 'Delete…',
+              onPressed: _delete,
+            ),
+      menuActions: existing == null
+          ? const []
+          : [
+              FormMenuAction(
+                key: const Key('record-duplicate'),
+                label: 'Duplicate',
+                icon: FiIcons.copy,
+                onPressed: _duplicate,
+              ),
+              FormMenuAction(
+                key: const Key('record-delete-menu'),
+                label: 'Delete record…',
+                icon: FiIcons.delete,
+                onPressed: _delete,
+              ),
+            ],
+      summary: withErrors.isEmpty
+          ? null
+          : FormErrorSummary(
+              count: withErrors.length,
+              onShow: () => _focusField(withErrors.first.id),
+            ),
+      body: RecordFormBody(
+        rows: [
+          for (final field in fields)
+            RecordFormRow(
+              key: ValueKey('record-field-${field.id}'),
+              id: field.id,
+              name: field.name,
+              required: FieldRendererRegistry.marksRequired(field),
+              defaulted: _defaulted.contains(field.id),
+              needed: _stillNeeded(field.id),
+              control: Focus(
+                focusNode: _focusGroups[field.id],
+                child: KeyedSubtree(
+                  key: _fieldKeys[field.id],
+                  child: const FieldRendererRegistry().editor(
+                    field,
+                    values[field.id],
+                    (value) => _changed(field.id, value),
+                    errors: issues.of(field.id),
+                    quickFill: true,
+                    showLabel: false,
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
       errors: issues.form,
-      primaryLabel: dialog ? 'Save' : 'Save record',
+      primaryLabel: existing == null ? 'Save record' : 'Save changes',
       onPrimary: _save,
-    );
-  }
-
-  Widget _fieldEditor(FieldDefinitionDto field) {
-    Widget editor = const FieldRendererRegistry().editor(
-      field,
-      values[field.id],
-      (value) => _changed(field.id, value),
-      errors: issues.of(field.id),
-      quickFill: true,
-    );
-    if (_stillNeeded(field.id)) {
-      editor = Column(
-        key: Key('needed-${field.id}'),
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        spacing: 4,
-        children: [
-          const Align(alignment: Alignment.centerRight, child: NeededMarker()),
-          editor,
-          const Text(
-            'Needed to complete this record',
-            style: TextStyle(fontSize: 12, color: Nocturne.accent300),
-          ),
-        ],
-      );
-    }
-    if (field.id != widget.focusFieldId) return editor;
-    return Focus(
-      focusNode: _focusGroup,
-      child: KeyedSubtree(key: _focusKey, child: editor),
     );
   }
 }
@@ -2670,657 +2934,6 @@ class _SheetRow extends StatelessWidget {
 
 /// Creates or edits one field. Inline in the schema sheet for a new field (mock 1c), inside a
 /// dialog when editing an existing one.
-class _FieldEditorForm extends StatefulWidget {
-  const _FieldEditorForm({
-    required this.controller,
-    required this.onClosed,
-    this.existing,
-    this.inline = false,
-  });
-
-  final CollectionsController controller;
-  final FieldDefinitionDto? existing;
-  final VoidCallback onClosed;
-  final bool inline;
-
-  @override
-  State<_FieldEditorForm> createState() => _FieldEditorFormState();
-}
-
-class _FieldEditorFormState extends State<_FieldEditorForm> {
-  CollectionsController get controller => widget.controller;
-  FieldDefinitionDto? get existing => widget.existing;
-
-  late final name = TextEditingController(text: existing?.name);
-  late var kind = existing?.fieldType.kind ?? FieldTypeKindDto.text;
-  late var required = existing?.required_ ?? false;
-  late var multiline = existing?.display.multiline ?? false;
-  late var slider = existing?.display.slider ?? false;
-  late final sliderStep = TextEditingController(
-    text: existing?.display.sliderStep?.toString() ?? '',
-  );
-  late var scale = existing?.fieldType.scale ?? 2;
-  // Range bounds are compared against the stored integer, which is epoch days for a Date, epoch
-  // milliseconds for a DateTime, and the scaled representation for a FixedDecimal. Holding them
-  // as integers lets the same typed control that edits a record edit the bound.
-  late int? minimum = existing?.validation.minInteger;
-  late int? maximum = existing?.validation.maxInteger;
-  late final minLength = TextEditingController(
-    text: existing?.validation.minLength?.toString() ?? '',
-  );
-  late final maxLength = TextEditingController(
-    text: existing?.validation.maxLength?.toString() ?? '',
-  );
-  late FieldValueDto? defaultValue =
-      existing?.defaultValue?.kind == FieldValueKindDto.null_
-      ? null
-      : existing?.defaultValue;
-  // Choice options are held here until Save, so a new field can get options and a default in
-  // the same step and Cancel leaves the stored options untouched.
-  late final options = [
-    for (final option in [
-      ...?existing?.enumOptions.where((option) => !option.deleted),
-    ]..sort(_optionOrder))
-      _DraftOption(option.id, option.label),
-  ];
-  var addedOptions = 0;
-  late final order = existing?.order ?? controller.schema?.fields.length ?? 0;
-  // Survives a failed save, so retrying updates what the first attempt already created.
-  final session = FieldSaveSession();
-  var issues = FormIssues.none;
-
-  /// Rust's keys for field-definition problems, by the input that shows them. Anything else
-  /// lands in the slot above the buttons.
-  static const _issueInputs = {
-    'name': 'name',
-    'field_name': 'name',
-    'default': 'default',
-    'scale': 'scale',
-    'numeric_range': 'maximum',
-    'length_range': 'max-length',
-    'slider_step': 'slider-step',
-  };
-
-  /// A slider needs a whole-number track, so only an Integer with both bounds can offer one.
-  bool get _sliderAvailable =>
-      kind == FieldTypeKindDto.integer && minimum != null && maximum != null;
-
-  /// Turns the slider off once it can no longer apply, so a later bound does not revive it.
-  void _dropUnavailableSlider() {
-    if (!_sliderAvailable) _turnSliderOff();
-  }
-
-  void _turnSliderOff() {
-    slider = false;
-    sliderStep.clear();
-    issues = issues.without('slider-step');
-  }
-
-  /// The step to submit; null while the slider is off or the input is empty (step 1).
-  int? get _submittedStep =>
-      slider && _sliderAvailable ? int.tryParse(sliderStep.text) : null;
-
-  /// Mirrors Rust's slider step rule so the common mistake is caught under the input.
-  String? _sliderStepIssue() {
-    if (!slider || !_sliderAvailable || sliderStep.text.isEmpty) return null;
-    final step = int.tryParse(sliderStep.text);
-    if (step == null || step <= 0) {
-      return 'Step must be a positive whole number';
-    }
-    if ((maximum! - minimum!) % step != 0) {
-      return 'Step must divide the range from minimum to maximum exactly';
-    }
-    return null;
-  }
-
-  /// Drops the shown issues for [input] once it changes, since they describe the old value.
-  void _edited(String input) {
-    if (issues.of(input).isNotEmpty) issues = issues.without(input);
-  }
-
-  List<EnumOptionDto> draftOptions() => [
-    for (final (index, option) in options.indexed)
-      EnumOptionDto(
-        id: option.id,
-        label: option.label.text,
-        order: index,
-        deleted: false,
-      ),
-  ];
-
-  @override
-  void dispose() {
-    name.dispose();
-    sliderStep.dispose();
-    minLength.dispose();
-    maxLength.dispose();
-    super.dispose();
-  }
-
-  /// How many active records would be marked invalid by this field as it currently stands.
-  ///
-  /// The projected record list is already loaded in full for the collection, so this is a read of
-  /// what is on screen rather than another trip through the bridge. It is a disclosure, not a
-  /// guard: Rust accepts the command either way.
-  int _missingRequiredCount() {
-    if (!required || defaultValue != null) return 0;
-    // A brand new field has an id no record can hold a value for yet.
-    final existing = this.existing;
-    if (existing == null) return controller.records.length;
-    return controller.records
-        .where((record) => _recordValue(record, existing.id) == null)
-        .length;
-  }
-
-  Future<bool> _confirmInvalidating(int missing) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialog) => AlertDialog(
-        key: const Key('required-confirmation'),
-        title: const Text('Make this field required?'),
-        content: Text(
-          '$missing ${missing == 1 ? 'record has' : 'records have'} no value for this field. '
-          '${missing == 1 ? 'It' : 'They'} will be marked invalid until you fill the field in. '
-          'Nothing is deleted.',
-        ),
-        actions: [
-          TextButton(
-            key: const Key('required-cancel'),
-            onPressed: () => Navigator.pop(dialog, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            key: const Key('required-confirm'),
-            onPressed: () => Navigator.pop(dialog, true),
-            child: const Text('Make required'),
-          ),
-        ],
-      ),
-    );
-    return confirmed ?? false;
-  }
-
-  Future<void> _save() async {
-    final stepIssue = _sliderStepIssue();
-    if (stepIssue != null) {
-      setState(
-        () => issues = FormIssues.none.withField('slider-step', stepIssue),
-      );
-      return;
-    }
-    final missing = _missingRequiredCount();
-    // Rust no longer refuses this, so the disclosure has to happen here, before the
-    // command is sent and with the count the user is about to invalidate.
-    if (missing > 0 && !await _confirmInvalidating(missing)) return;
-    try {
-      final dto = FieldDefinitionDto(
-        id: existing?.id ?? '',
-        name: name.text,
-        fieldType: FieldTypeDto(
-          kind: kind,
-          scale: kind == FieldTypeKindDto.fixedDecimal ? scale : null,
-        ),
-        required_: required,
-        defaultValue: defaultValue,
-        validation: ValidationMetadataDto(
-          minInteger: minimum,
-          maxInteger: maximum,
-          minLength: int.tryParse(minLength.text),
-          maxLength: int.tryParse(maxLength.text),
-        ),
-        display: DisplayMetadataDto(
-          multiline: multiline,
-          slider: slider && _sliderAvailable,
-          sliderStep: _submittedStep,
-        ),
-        order: order,
-        deleted: false,
-        // Options travel separately; the controller keeps the stored ones here.
-        enumOptions: const [],
-      );
-      await controller.saveFieldWithOptions(
-        dto,
-        draftOptions(),
-        session: session,
-      );
-      if (mounted) widget.onClosed();
-    } catch (failure) {
-      if (mounted) {
-        setState(() => issues = FormIssues.from(failure).keyed(_issueInputs));
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    const gap = SizedBox(height: 14);
-    final nameField = FiTextInput(
-      key: const Key('field-name'),
-      controller: name,
-      autofocus: widget.inline,
-      label: 'Name',
-      required: true,
-      hint: 'e.g. note',
-      errors: issues.of('name'),
-      onChanged: (_) => setState(() => _edited('name')),
-    );
-    final typeField = FiSelect<FieldTypeKindDto>(
-      value: kind,
-      label: 'Type',
-      items: FieldTypeKindDto.values
-          .map(
-            (value) => DropdownMenuItem(
-              value: value,
-              child: Text(fieldKindLabel(value)),
-            ),
-          )
-          .toList(),
-      onChanged: existing == null
-          ? (value) => setState(() {
-              kind = value!;
-              // Default and bounds are typed by the kind, so they cannot survive it.
-              defaultValue = null;
-              if (kind != FieldTypeKindDto.enum_) options.clear();
-              minimum = null;
-              maximum = null;
-              _turnSliderOff();
-            })
-          : null,
-    );
-    final missing = _missingRequiredCount();
-    final form = Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (widget.inline)
-          const Padding(
-            padding: EdgeInsets.only(bottom: 14),
-            child: Row(
-              children: [
-                Icon(FiIcons.addCircle, size: 18, color: Nocturne.accent),
-                SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'New field',
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      color: Nocturne.accent200,
-                    ),
-                  ),
-                ),
-                RequiredLegend(key: Key('required-legend')),
-              ],
-            ),
-          )
-        else
-          Padding(
-            padding: const EdgeInsets.only(bottom: 18),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
-              children: [
-                Expanded(
-                  child: Text(
-                    existing == null ? 'Add field' : 'Edit field',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                ),
-                const RequiredLegend(key: Key('required-legend')),
-              ],
-            ),
-          ),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(child: nameField),
-            const SizedBox(width: 10),
-            SizedBox(width: 150, child: typeField),
-          ],
-        ),
-        if (kind == FieldTypeKindDto.fixedDecimal) ...[
-          gap,
-          FiTextInput(
-            initialValue: '$scale',
-            keyboardType: TextInputType.number,
-            label: 'Decimal scale',
-            suffixIcon: const HelpButton(HelpId.fieldDecimalScale),
-            errors: issues.of('scale'),
-            // The scale decides what the stored integer means, so a change to it
-            // cannot leave a default or a bound behind reading as something else.
-            onChanged: (value) => setState(() {
-              _edited('scale');
-              scale = int.tryParse(value) ?? 255;
-              defaultValue = null;
-              minimum = null;
-              maximum = null;
-            }),
-          ),
-        ],
-        const SizedBox(height: 6),
-        FiSwitchTile(
-          contentPadding: EdgeInsets.zero,
-          title: const Text('Required'),
-          subtitle: const Text("Records can't be saved without a value"),
-          secondary: const HelpButton(HelpId.fieldRequired),
-          value: required,
-          onChanged: (value) => setState(() => required = value),
-        ),
-        if (kind == FieldTypeKindDto.text) ...[
-          FiSwitchTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Multiline'),
-            subtitle: const Text('Show a text area instead of a single line'),
-            secondary: const HelpButton(HelpId.fieldMultiline),
-            value: multiline,
-            onChanged: (value) => setState(() => multiline = value),
-          ),
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              Expanded(
-                child: FiTextInput(
-                  controller: minLength,
-                  keyboardType: TextInputType.number,
-                  label: 'Minimum length',
-                  suffixIcon: const HelpButton(HelpId.fieldMinMaxLength),
-                  onChanged: (_) => setState(() => _edited('max-length')),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: FiTextInput(
-                  controller: maxLength,
-                  keyboardType: TextInputType.number,
-                  label: 'Maximum length',
-                  suffixIcon: const HelpButton(HelpId.fieldMinMaxLength),
-                  errors: issues.of('max-length'),
-                  onChanged: (_) => setState(() => _edited('max-length')),
-                ),
-              ),
-            ],
-          ),
-        ],
-        if (kind != FieldTypeKindDto.text &&
-            kind != FieldTypeKindDto.boolean &&
-            kind != FieldTypeKindDto.enum_) ...[
-          const SizedBox(height: 6),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: _metadataInput(
-                  slot: 'field-minimum',
-                  label: 'Minimum',
-                  help: HelpId.fieldMinMax,
-                  kind: kind,
-                  scale: scale,
-                  enumOptions: existing?.enumOptions ?? const [],
-                  value: _boundValue(minimum, kind, scale),
-                  onChanged: (value) => setState(() {
-                    _edited('maximum');
-                    minimum = value?.integerValue;
-                    _dropUnavailableSlider();
-                  }),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _metadataInput(
-                  slot: 'field-maximum',
-                  label: 'Maximum',
-                  help: HelpId.fieldMinMax,
-                  kind: kind,
-                  scale: scale,
-                  enumOptions: existing?.enumOptions ?? const [],
-                  value: _boundValue(maximum, kind, scale),
-                  errors: issues.of('maximum'),
-                  onChanged: (value) => setState(() {
-                    _edited('maximum');
-                    maximum = value?.integerValue;
-                    _dropUnavailableSlider();
-                  }),
-                ),
-              ),
-            ],
-          ),
-        ],
-        if (kind == FieldTypeKindDto.integer)
-          FiSwitchTile(
-            key: const Key('field-slider'),
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Show as slider'),
-            subtitle: Text(
-              _sliderAvailable
-                  ? 'Pick the value by dragging between the bounds'
-                  : 'Set a minimum and a maximum first',
-            ),
-            secondary: const HelpButton(HelpId.fieldSlider),
-            value: slider && _sliderAvailable,
-            onChanged: _sliderAvailable
-                ? (value) => setState(() {
-                    if (value) {
-                      slider = true;
-                    } else {
-                      _turnSliderOff();
-                    }
-                  })
-                : null,
-          ),
-        if (kind == FieldTypeKindDto.integer && slider && _sliderAvailable)
-          FiTextInput(
-            key: const Key('field-slider-step'),
-            controller: sliderStep,
-            label: 'Step (optional)',
-            hint: '1',
-            keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            errors: issues.of('slider-step'),
-            onChanged: (_) => setState(() => _edited('slider-step')),
-          ),
-        if (kind == FieldTypeKindDto.enum_) ..._optionsEditor(),
-        gap,
-        _metadataInput(
-          slot: 'field-default',
-          label: 'Default (optional)',
-          help: HelpId.fieldDefault,
-          kind: kind,
-          scale: scale,
-          enumOptions: draftOptions(),
-          value: defaultValue,
-          errors: issues.of('default'),
-          onChanged: (value) => setState(() {
-            _edited('default');
-            defaultValue = value;
-          }),
-          revision: [
-            for (final option in options) '${option.id}=${option.label.text}',
-          ].join('|'),
-        ),
-        if (missing > 0)
-          Padding(
-            padding: const EdgeInsets.only(top: 12),
-            child: Row(
-              key: const Key('required-warning'),
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(
-                  FiIcons.warning,
-                  size: 16,
-                  color: Nocturne.accent300,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    '$missing ${missing == 1 ? 'record has' : 'records have'} no value for '
-                    'this field and will be marked invalid until you fill them in. '
-                    'Add a default to avoid this.',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Nocturne.accent300,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        if (issues.form.isNotEmpty)
-          Padding(
-            key: const Key('field-editor-errors'),
-            padding: const EdgeInsets.only(top: 14),
-            child: FormErrorLines(issues.form),
-          ),
-        const SizedBox(height: 18),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            TextButton(onPressed: widget.onClosed, child: const Text('Cancel')),
-            const SizedBox(width: 8),
-            FilledButton(onPressed: _save, child: const Text('Save')),
-          ],
-        ),
-      ],
-    );
-    if (!widget.inline) return form;
-    return Container(
-      margin: const EdgeInsets.only(top: 10),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(Nocturne.radius),
-        border: Border.all(color: Nocturne.accent700),
-      ),
-      child: form,
-    );
-  }
-
-  /// The Options section of the field editor for a Choice field: one row per option in the order
-  /// it will be saved, each with a drag handle, its label, and a remove button.
-  List<Widget> _optionsEditor() => [
-    const Padding(
-      padding: EdgeInsets.only(top: 14, bottom: 4),
-      child: SectionLabel('Options'),
-    ),
-    ReorderableListView(
-      key: const Key('field-options'),
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      buildDefaultDragHandles: false,
-      onReorder: (from, to) => setState(() {
-        options.insert(to > from ? to - 1 : to, options.removeAt(from));
-      }),
-      children: [
-        for (final (index, option) in options.indexed)
-          Padding(
-            key: ValueKey(option.id),
-            padding: const EdgeInsets.only(bottom: 6),
-            child: Row(
-              children: [
-                ReorderableDragStartListener(
-                  index: index,
-                  child: Padding(
-                    padding: const EdgeInsets.all(8),
-                    child: Icon(FiIcons.dragHandle, color: Nocturne.muted(.45)),
-                  ),
-                ),
-                Expanded(
-                  child: FiTextInput(
-                    key: ValueKey('option-label-${option.id}'),
-                    controller: option.label,
-                    // A freshly added row is where the user is about to type.
-                    autofocus:
-                        isTempOptionId(option.id) && option.label.text.isEmpty,
-                    hint: 'Option label',
-                    onChanged: (_) => setState(() {}),
-                  ),
-                ),
-                IconButton(
-                  key: ValueKey('remove-option-${option.id}'),
-                  tooltip: 'Remove option',
-                  icon: const Icon(FiIcons.close),
-                  onPressed: () => setState(() {
-                    options.remove(option);
-                    if (defaultValue?.textValue == option.id) {
-                      defaultValue = null;
-                    }
-                  }),
-                ),
-              ],
-            ),
-          ),
-      ],
-    ),
-    Align(
-      alignment: Alignment.centerLeft,
-      child: TextButton.icon(
-        key: const Key('add-option'),
-        onPressed: () => setState(
-          () => options.add(_DraftOption(tempOptionId(++addedOptions), '')),
-        ),
-        icon: const Icon(FiIcons.add),
-        label: const Text('Add option'),
-      ),
-    ),
-  ];
-}
-
-/// A schema-metadata slot edited with the very control that edits a record of that type.
-///
-/// A default and a range bound are values of the field's own type, so typing an epoch day or a
-/// scaled integer by hand was never the right ask. The draft field carries only what the
-/// renderer needs; [slot] keys the control so switching type or scale rebuilds it empty rather
-/// than leaving digits that now mean something else. [revision] does the same when the Choice
-/// options held in the editor change, so the dropdown never keeps an option that is gone.
-Widget _metadataInput({
-  required String slot,
-  required String label,
-  required HelpId help,
-  required FieldTypeKindDto kind,
-  required int scale,
-  required List<EnumOptionDto> enumOptions,
-  required FieldValueDto? value,
-  required ValueChanged<FieldValueDto?> onChanged,
-  List<String> errors = const [],
-  String revision = '',
-}) => Row(
-  crossAxisAlignment: CrossAxisAlignment.start,
-  children: [
-    Expanded(
-      child: KeyedSubtree(
-        key: ValueKey('$slot-$kind-$scale-$revision'),
-        child: const FieldRendererRegistry().editor(
-          FieldDefinitionDto(
-            id: slot,
-            name: label,
-            fieldType: FieldTypeDto(
-              kind: kind,
-              scale: kind == FieldTypeKindDto.fixedDecimal ? scale : null,
-            ),
-            // Never required: the slot itself is optional whatever the field demands of records.
-            required_: false,
-            validation: const ValidationMetadataDto(),
-            display: const DisplayMetadataDto(
-              multiline: false,
-              slider: false,
-              sliderStep: null,
-            ),
-            order: 0,
-            deleted: false,
-            enumOptions: enumOptions,
-          ),
-          value,
-          (typed) =>
-              onChanged(typed.kind == FieldValueKindDto.null_ ? null : typed),
-          label: label,
-          allowClear: true,
-          errors: errors,
-        ),
-      ),
-    ),
-    Padding(padding: const EdgeInsets.only(top: 4), child: HelpButton(help)),
-  ],
-);
-
 String _usage(int count) => switch (count) {
   0 => 'used by no widgets',
   1 => 'used by 1 widget',
@@ -3337,53 +2950,11 @@ IconData _queryIcon(QueryDefinitionDto query) => switch (query.query?.shape) {
   _ => FiIcons.query,
 };
 
-/// A stored range bound as a typed value of the field's own kind, so the bound is edited with a
-/// date picker or a decimal box rather than as the raw integer it is compared as.
-FieldValueDto? _boundValue(int? bound, FieldTypeKindDto kind, int scale) {
-  if (bound == null) return null;
-  return FieldValueDto(
-    kind: switch (kind) {
-      FieldTypeKindDto.integer => FieldValueKindDto.integer,
-      FieldTypeKindDto.fixedDecimal => FieldValueKindDto.fixedDecimal,
-      FieldTypeKindDto.date => FieldValueKindDto.date,
-      FieldTypeKindDto.dateTime => FieldValueKindDto.dateTime,
-      FieldTypeKindDto.duration => FieldValueKindDto.duration,
-      // Text, boolean, and enum carry no numeric range; the control is not rendered for them.
-      _ => FieldValueKindDto.null_,
-    },
-    integerValue: bound,
-  );
-}
-
 FieldValueDto? _recordValue(RecordDto record, String fieldId) {
   for (final item in record.values) {
     if (item.fieldId == fieldId) return item.value;
   }
   return null;
-}
-
-/// A field's kind in words, and for a Choice field its option labels in order.
-String _fieldSubtitle(FieldDefinitionDto field) {
-  final label = fieldKindLabel(field.fieldType.kind);
-  if (field.fieldType.kind != FieldTypeKindDto.enum_) return label;
-  final options = [...field.enumOptions.where((option) => !option.deleted)]
-    ..sort(_optionOrder);
-  if (options.isEmpty) return label;
-  return '$label · ${options.map((option) => option.label).join(', ')}';
-}
-
-/// One Choice option as the field editor holds it until Save. [id] is the stored ID, or one made
-/// by [tempOptionId] for an option this editor added.
-final class _DraftOption {
-  _DraftOption(this.id, String label)
-    : label = TextEditingController(text: label);
-  final String id;
-  final TextEditingController label;
-}
-
-int _optionOrder(EnumOptionDto left, EnumOptionDto right) {
-  final order = left.order.compareTo(right.order);
-  return order == 0 ? left.id.compareTo(right.id) : order;
 }
 
 int _fieldOrder(FieldDefinitionDto left, FieldDefinitionDto right) {

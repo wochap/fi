@@ -2,7 +2,9 @@ import 'package:clock/clock.dart';
 import 'package:fi/exact_format.dart';
 import 'package:fi/field_registry.dart';
 import 'package:fi/src/rust/api/models.dart';
+import 'package:fi/theme/choice_input.dart';
 import 'package:fi/theme/inputs.dart';
+import 'package:fi/theme/nocturne_widgets.dart';
 import 'package:fi/theme/nocturne.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -253,12 +255,18 @@ void main() {
         ),
       );
       expect(inputText(tester), '2020-01-02 03:04');
+      // Now is hidden while the input holds a value; clearing brings it back.
+      expect(find.byKey(const ValueKey('field-seen-now')), findsNothing);
+      await tester.tap(find.byKey(const Key('input-clear')));
+      await tester.pump();
       await withClock(Clock.fixed(lateEvening), () async {
         await tester.tap(find.byKey(const ValueKey('field-seen-now')));
       });
       await tester.pump();
       expect(inputText(tester), '2026-09-24 23:30');
-      expect(emitted, hasLength(1));
+      expect(emitted, hasLength(2));
+      expect(emitted.first.kind, FieldValueKindDto.null_);
+      expect(emitted.last.kind, FieldValueKindDto.dateTime);
     });
 
     testWidgets('an existing DateTime opens as local yyyy-MM-dd HH:mm', (
@@ -494,6 +502,200 @@ void main() {
         ),
         '3',
       );
+    });
+  });
+
+  group('record controls by kind', () {
+    List<EnumOptionDto> options(int count, {List<String>? labels}) => [
+      for (var i = 0; i < count; i++)
+        EnumOptionDto(
+          id: 'o$i',
+          label: labels?[i] ?? 'option ${i + 1}',
+          order: i,
+          deleted: false,
+        ),
+    ];
+
+    Future<List<FieldValueDto>> pumpForm(
+      WidgetTester tester,
+      double width,
+      List<FieldDefinitionDto> fields, {
+      Map<String, FieldValueDto> initial = const {},
+    }) async {
+      tester.view.physicalSize = Size(width, 1600);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final emitted = <FieldValueDto>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: nocturneTheme(),
+          home: Scaffold(
+            body: SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                spacing: 12,
+                children: [
+                  for (final field in fields)
+                    const FieldRendererRegistry().editor(
+                      field,
+                      initial[field.id],
+                      emitted.add,
+                      quickFill: true,
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      return emitted;
+    }
+
+    const countries = [
+      'Albania', 'Andorra', 'Austria', 'Belarus', 'Belgium', 'Bosnia', //
+      'Bulgaria', 'Croatia', 'Cyprus', 'Czechia', 'Denmark', 'Estonia',
+      'Finland', 'France', 'Germany', 'Greece', 'Hungary', 'Iceland',
+      'Ireland', 'Italy', 'Kosovo', 'Latvia', 'Liechtenstein', 'Lithuania',
+      'Luxembourg', 'Malta', 'Moldova', 'Monaco', 'Montenegro', 'Netherlands',
+      'Norway', 'Poland', 'Portugal', 'Romania', 'Russia', 'San Marino',
+      'Serbia', 'Singapore', 'Slovakia', 'Slovenia', 'Spain', 'Sweden',
+      'Switzerland', 'Turkey', 'Ukraine', 'United Kingdom', 'Vatican', 'Wales',
+    ];
+
+    List<FieldDefinitionDto> choices() => [
+      field('priority', FieldTypeKindDto.enum_, options: options(3)),
+      field('weekday', FieldTypeKindDto.enum_, options: options(7)),
+      field(
+        'country',
+        FieldTypeKindDto.enum_,
+        options: options(48, labels: countries),
+      ),
+    ];
+
+    testWidgets('choice follows the option count on a phone', (tester) async {
+      final emitted = await pumpForm(tester, 390, choices());
+      expect(find.byType(FiSegmented<String>), findsOneWidget);
+      expect(find.text('option 1'), findsOneWidget);
+
+      // 7 options: a picker sheet titled with the field name, Clear, and a check.
+      await tester.tap(find.text('Choose…'));
+      await tester.pumpAndSettle();
+      expect(find.text('weekday'), findsWidgets);
+      expect(find.byKey(const Key('choice-sheet-clear')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('choice-row-o2')));
+      await tester.pumpAndSettle();
+      expect(emitted.last.textValue, 'o2');
+      await tester.tap(find.text('option 3').last);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('choice-selected')), findsOneWidget);
+      Navigator.of(tester.element(find.text('Clear'))).pop();
+      await tester.pumpAndSettle();
+
+      // 48 options: a full-height search sheet with highlighted matches.
+      await tester.tap(find.text('Search 48 options'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('choice-search-sheet')), findsOneWidget);
+      expect(find.text('48 options'), findsOneWidget);
+      expect(
+        tester.getSize(find.byKey(const Key('choice-search-sheet'))).height,
+        greaterThan(1000),
+      );
+      await tester.enterText(
+        find.descendant(
+          of: find.byKey(const Key('choice-search')),
+          matching: find.byType(TextField),
+        ),
+        'po',
+      );
+      await tester.pump();
+      expect(find.text('3 of 48 match'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('choice-row-o32')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('choice-search-sheet')), findsNothing);
+      expect(emitted.last.textValue, 'o32');
+      expect(find.text('Portugal'), findsOneWidget);
+    });
+
+    testWidgets('choice follows the option count on desktop', (tester) async {
+      final emitted = await pumpForm(tester, 1240, choices());
+      expect(find.byType(FiSegmented<String>), findsOneWidget);
+      expect(find.byType(FiSelect<String>), findsOneWidget);
+      expect(find.byType(RawAutocomplete<ChoiceOption>), findsOneWidget);
+      expect(find.text('Type to search 48 options'), findsOneWidget);
+      await tester.enterText(
+        find.descendant(
+          of: find.byType(RawAutocomplete<ChoiceOption>),
+          matching: find.byType(TextField),
+        ),
+        'po',
+      );
+      await tester.pumpAndSettle();
+      expect(find.textContaining('3 of 48'), findsOneWidget);
+      await tester.tap(find.textContaining('rtugal', findRichText: true).first);
+      await tester.pumpAndSettle();
+      expect(emitted.last.textValue, 'o32');
+    });
+
+    testWidgets('a removed option reads "(deleted)" and is not offered', (
+      tester,
+    ) async {
+      final kind = field(
+        'kind',
+        FieldTypeKindDto.enum_,
+        options: [
+          ...options(2),
+          const EnumOptionDto(
+            id: 'gone',
+            label: 'option 3',
+            order: 2,
+            deleted: true,
+          ),
+        ],
+      );
+      const held = FieldValueDto(
+        kind: FieldValueKindDto.enum_,
+        textValue: 'gone',
+      );
+      await pumpForm(tester, 1240, [kind], initial: {'kind': held});
+      expect(find.text('option 3 (deleted)'), findsOneWidget);
+      expect(find.byKey(const ValueKey('segment-option 3')), findsNothing);
+      expect(
+        const FieldRendererRegistry().displayText(kind, held),
+        'option 3 (deleted)',
+      );
+    });
+
+    testWidgets('booleans, decimals and durations use their controls', (
+      tester,
+    ) async {
+      final requiredFlag = FieldDefinitionDto(
+        id: 'done',
+        name: 'done',
+        fieldType: const FieldTypeDto(kind: FieldTypeKindDto.boolean),
+        required_: true,
+        validation: const ValidationMetadataDto(),
+        display: const DisplayMetadataDto(multiline: false, slider: false),
+        order: 0,
+        deleted: false,
+        enumOptions: const [],
+      );
+      final emitted = await pumpForm(tester, 1240, [
+        requiredFlag,
+        field('flag', FieldTypeKindDto.boolean),
+        field('amount', FieldTypeKindDto.fixedDecimal, scale: 2),
+        field('spent', FieldTypeKindDto.duration),
+      ]);
+      expect(find.byType(FiSwitch), findsOneWidget);
+      expect(find.text('Yes'), findsOneWidget);
+      expect(find.text('No'), findsOneWidget);
+      expect(find.text('2 dp'), findsOneWidget);
+      expect(find.byType(FiDurationInput), findsOneWidget);
+      await tester.tap(find.text('Yes'));
+      await tester.pump();
+      expect(emitted.last.booleanValue, isTrue);
+      await tester.tap(find.text('Yes'));
+      await tester.pump();
+      expect(emitted.last.kind, FieldValueKindDto.null_);
     });
   });
 }

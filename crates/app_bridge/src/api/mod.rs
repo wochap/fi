@@ -1,5 +1,6 @@
 pub mod collections;
 pub mod diagnostics;
+pub mod durations;
 pub mod lifecycle;
 pub mod models;
 pub mod pairing;

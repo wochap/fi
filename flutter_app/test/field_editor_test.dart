@@ -1,10 +1,15 @@
+import 'dart:ui' show Tristate;
+
+import 'package:clock/clock.dart';
 import 'package:fi/theme/nocturne_widgets.dart';
 import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/collections_page.dart';
 import 'package:fi/controllers.dart';
+import 'package:fi/field_editor.dart';
 import 'package:fi/field_registry.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/theme/nocturne.dart';
+import 'package:fi/theme/form_errors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -110,13 +115,18 @@ Future<void> openFieldEditor(WidgetTester tester, String fieldName) async {
   await tester.pumpAndSettle();
 }
 
-Future<void> toggleRequired(WidgetTester tester) async {
-  await tester.tap(find.widgetWithText(FiSwitchTile, 'Required'));
+Future<void> toggleRequired(WidgetTester tester) => tapChip(tester, 'required');
+
+/// Taps the field editor's option chip keyed `chip-<name>`, turning it on or off.
+Future<void> tapChip(WidgetTester tester, String name) async {
+  final chip = find.byKey(Key('chip-$name'));
+  await tester.ensureVisible(chip);
+  await tester.tap(chip);
   await tester.pumpAndSettle();
 }
 
 Future<void> save(WidgetTester tester) async {
-  await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+  await tester.tap(find.byKey(const Key('field-save')));
   await tester.pumpAndSettle();
 }
 
@@ -202,6 +212,14 @@ Future<Map<String, String>> seedChoice(
   };
 }
 
+/// Picks [kind] in the open field editor's type grid.
+Future<void> pickType(WidgetTester tester, FieldTypeKindDto kind) async {
+  final tile = find.byKey(Key('type-${kind.name}'));
+  await tester.ensureVisible(tile);
+  await tester.tap(tile);
+  await tester.pumpAndSettle();
+}
+
 void main() {
   testWidgets('the warning tracks Required, the default, and the record set', (
     tester,
@@ -220,6 +238,7 @@ void main() {
     );
 
     // A default satisfies the constraint, so nothing becomes invalid.
+    await tapChip(tester, 'default');
     await tester.enterText(find.byKey(const Key('field-default')), 'none');
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('required-warning')), findsNothing);
@@ -253,8 +272,7 @@ void main() {
     await tester.enterText(find.byKey(const Key('field-name')), 'Remarks');
     await tester.pumpAndSettle();
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
-    await tester.pumpAndSettle();
+    await save(tester);
     expect(find.byKey(const Key('required-confirmation')), findsOneWidget);
     expect(find.textContaining('1 record has no value'), findsWidgets);
 
@@ -273,8 +291,7 @@ void main() {
 
     // Confirming submits exactly one schema command.
     final fieldsBefore = seeded.controller.schema!.fields.length;
-    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
-    await tester.pumpAndSettle();
+    await save(tester);
     await tester.tap(find.byKey(const Key('required-confirm')));
     await tester.pumpAndSettle();
     expect(seeded.controller.schema!.fields, hasLength(fieldsBefore));
@@ -291,11 +308,11 @@ void main() {
     await pumpPage(tester, seeded.controller);
     await openFieldEditor(tester, 'Notes');
     await toggleRequired(tester);
+    await tapChip(tester, 'default');
     await tester.enterText(find.byKey(const Key('field-default')), 'none');
     await tester.pumpAndSettle();
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
-    await tester.pumpAndSettle();
+    await save(tester);
     expect(find.byKey(const Key('required-confirmation')), findsNothing);
     expect(
       seeded.controller.schema!.fields
@@ -348,15 +365,10 @@ void main() {
   ) async {
     await tester.tap(find.text('Schema'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Add field'));
+    await tester.tap(find.byKey(const Key('new-field')));
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const Key('field-name')), name);
-    await tester.tap(
-      find.widgetWithText(DropdownButtonFormField<FieldTypeKindDto>, 'Type'),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.text(fieldKindLabel(kind)).last);
-    await tester.pumpAndSettle();
+    await pickType(tester, kind);
   }
 
   testWidgets('a date default and range are picked, never typed as epoch days', (
@@ -365,6 +377,10 @@ void main() {
     final seeded = await seed(tester);
     await pumpPage(tester, seeded.controller);
     await addFieldOfKind(tester, 'Onset', FieldTypeKindDto.date);
+    await tapChip(tester, 'default');
+    await tester.tap(find.text('Fixed date'));
+    await tester.pumpAndSettle();
+    await tapChip(tester, 'date-range');
 
     // The control is the same read-only picker a record uses, not a free-text number box.
     final defaultInput = find.descendant(
@@ -392,8 +408,7 @@ void main() {
     await tester.tap(find.text('OK'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
-    await tester.pumpAndSettle();
+    await save(tester);
 
     final field = seeded.controller.schema!.fields.firstWhere(
       (item) => item.name == 'Onset',
@@ -417,6 +432,12 @@ void main() {
         final seeded = await seed(tester);
         await pumpPage(tester, seeded.controller);
         await addFieldOfKind(tester, 'Onset', kind);
+        await tapChip(tester, 'default');
+        if (kind == FieldTypeKindDto.date) {
+          await tester.tap(find.text('Fixed date'));
+          await tester.pumpAndSettle();
+        }
+        await tapChip(tester, 'date-range');
 
         for (final slot in [
           'field-default',
@@ -439,17 +460,18 @@ void main() {
     final seeded = await seed(tester);
     await pumpPage(tester, seeded.controller);
     await addFieldOfKind(tester, 'Dose', FieldTypeKindDto.fixedDecimal);
+    await tapChip(tester, 'range');
+    await tapChip(tester, 'default');
 
     // The scale is stated where the digits are typed.
-    expect(find.text('Exact to 2 decimal places'), findsWidgets);
+    expect(find.text('2 dp'), findsWidgets);
 
     await tester.enterText(find.byKey(const Key('field-default')), '10.25');
     await tester.enterText(find.byKey(const Key('field-minimum')), '1.50');
     await tester.enterText(find.byKey(const Key('field-maximum')), '99.99');
     await tester.pumpAndSettle();
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
-    await tester.pumpAndSettle();
+    await save(tester);
 
     final field = seeded.controller.schema!.fields.firstWhere(
       (item) => item.name == 'Dose',
@@ -466,6 +488,7 @@ void main() {
     final seeded = await seed(tester);
     await pumpPage(tester, seeded.controller);
     await addFieldOfKind(tester, 'Recurring', FieldTypeKindDto.boolean);
+    await tapChip(tester, 'default');
 
     // A switch cannot say "no default", so the control is a three-way choice.
     expect(
@@ -483,8 +506,7 @@ void main() {
     await tester.tap(find.text('True').last);
     await tester.pumpAndSettle();
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
-    await tester.pumpAndSettle();
+    await save(tester);
     final field = seeded.controller.schema!.fields.firstWhere(
       (item) => item.name == 'Recurring',
     );
@@ -506,6 +528,7 @@ void main() {
     await tester.tap(find.text('Kind'));
     await tester.pumpAndSettle();
     expect(find.text('Enum option UUID'), findsNothing);
+    await tapChip(tester, 'default');
     await tester.tap(find.byKey(const Key('field-default')));
     await tester.pumpAndSettle();
     expect(find.text('Migraine'), findsWidgets);
@@ -534,11 +557,7 @@ void main() {
     expect(find.text('Integer'), findsOneWidget);
     expect(find.text('Text'), findsOneWidget);
 
-    await tester.tap(find.text('Add field'));
-    await tester.pumpAndSettle();
-    await tester.tap(
-      find.widgetWithText(DropdownButtonFormField<FieldTypeKindDto>, 'Type'),
-    );
+    await tester.tap(find.byKey(const Key('new-field')));
     await tester.pumpAndSettle();
     for (final label in [
       'Integer',
@@ -567,6 +586,7 @@ void main() {
     await addOption(tester, 'Low');
     await addOption(tester, 'Medium');
     await addOption(tester, 'High');
+    await tapChip(tester, 'default');
     await tester.tap(find.byKey(const Key('field-default')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Medium').last);
@@ -589,7 +609,7 @@ void main() {
     ]);
     expect(find.text('Choice · Low, Medium, High'), findsOneWidget);
     // Options live in the field editor only: the only Choice glyphs are the records table's
-    // column type icons.
+    // column type icons and the field row's own type icon in the schema sheet.
     final glyphs = find.byIcon(FiIcons.choice).evaluate().length;
     final inTable = find
         .descendant(
@@ -598,7 +618,7 @@ void main() {
         )
         .evaluate()
         .length;
-    expect(glyphs, inTable);
+    expect(glyphs - inTable, 1);
   });
 
   testWidgets('editing options sends only what changed', (tester) async {
@@ -693,19 +713,15 @@ void main() {
     final seeded = await seed(tester);
     await pumpPage(tester, seeded.controller);
     await addFieldOfKind(tester, 'Switched', FieldTypeKindDto.integer);
+    await tapChip(tester, 'default');
+    await tapChip(tester, 'range');
     await tester.enterText(find.byKey(const Key('field-default')), '42');
     await tester.enterText(find.byKey(const Key('field-minimum')), '1');
     await tester.pumpAndSettle();
 
-    await tester.tap(
-      find.widgetWithText(DropdownButtonFormField<FieldTypeKindDto>, 'Type'),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Text').last);
-    await tester.pumpAndSettle();
+    await pickType(tester, FieldTypeKindDto.text);
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
-    await tester.pumpAndSettle();
+    await save(tester);
     final field = seeded.controller.schema!.fields.firstWhere(
       (item) => item.name == 'Switched',
     );
@@ -717,10 +733,11 @@ void main() {
   group('Show as slider', () {
     final sliderSwitch = find.byKey(const Key('field-slider'));
 
-    FiSwitchTile switchTile(WidgetTester tester) =>
-        tester.widget<FiSwitchTile>(sliderSwitch);
+    FieldOptionChip switchTile(WidgetTester tester) =>
+        tester.widget<FieldOptionChip>(sliderSwitch);
 
     Future<void> fillBounds(WidgetTester tester) async {
+      await tapChip(tester, 'range');
       await tester.enterText(find.byKey(const Key('field-minimum')), '1');
       await tester.enterText(find.byKey(const Key('field-maximum')), '5');
       await tester.pumpAndSettle();
@@ -741,11 +758,11 @@ void main() {
       await fillBounds(tester);
 
       expect(sliderSwitch, findsOneWidget);
-      expect(switchTile(tester).onChanged, isNotNull);
+      expect(switchTile(tester).onTap, isNotNull);
       await tester.ensureVisible(sliderSwitch);
       await tester.tap(sliderSwitch);
       await tester.pumpAndSettle();
-      expect(switchTile(tester).value, isTrue);
+      expect(switchTile(tester).selected, isTrue);
       await save(tester);
 
       final field = saved(seeded, 'Pain');
@@ -758,12 +775,13 @@ void main() {
       final seeded = await seed(tester);
       await pumpPage(tester, seeded.controller);
       await addFieldOfKind(tester, 'Pain', FieldTypeKindDto.integer);
+      await tapChip(tester, 'range');
       await tester.enterText(find.byKey(const Key('field-minimum')), '1');
       await tester.pumpAndSettle();
 
       expect(sliderSwitch, findsOneWidget);
-      expect(switchTile(tester).onChanged, isNull);
-      expect(switchTile(tester).value, isFalse);
+      expect(switchTile(tester).onTap, isNull);
+      expect(switchTile(tester).selected, isFalse);
     });
 
     testWidgets('clearing a bound turns it off for good', (tester) async {
@@ -774,17 +792,17 @@ void main() {
       await tester.ensureVisible(sliderSwitch);
       await tester.tap(sliderSwitch);
       await tester.pumpAndSettle();
-      expect(switchTile(tester).value, isTrue);
+      expect(switchTile(tester).selected, isTrue);
 
       await tester.enterText(find.byKey(const Key('field-minimum')), '');
       await tester.pumpAndSettle();
-      expect(switchTile(tester).value, isFalse);
-      expect(switchTile(tester).onChanged, isNull);
+      expect(switchTile(tester).selected, isFalse);
+      expect(switchTile(tester).onTap, isNull);
 
       // Filling the bound again does not bring the slider back on its own.
       await tester.enterText(find.byKey(const Key('field-minimum')), '1');
       await tester.pumpAndSettle();
-      expect(switchTile(tester).value, isFalse);
+      expect(switchTile(tester).selected, isFalse);
       await save(tester);
       expect(saved(seeded, 'Pain').display.slider, isFalse);
     });
@@ -798,14 +816,7 @@ void main() {
       await tester.tap(sliderSwitch);
       await tester.pumpAndSettle();
 
-      await tester.tap(
-        find.widgetWithText(DropdownButtonFormField<FieldTypeKindDto>, 'Type'),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(
-        find.text(fieldKindLabel(FieldTypeKindDto.fixedDecimal)).last,
-      );
-      await tester.pumpAndSettle();
+      await pickType(tester, FieldTypeKindDto.fixedDecimal);
       expect(sliderSwitch, findsNothing);
       await save(tester);
       expect(saved(seeded, 'Pain').display.slider, isFalse);
@@ -814,6 +825,7 @@ void main() {
     final stepInput = find.byKey(const Key('field-slider-step'));
 
     Future<void> turnOn(WidgetTester tester, {String min = '0'}) async {
+      await tapChip(tester, 'range');
       await tester.enterText(find.byKey(const Key('field-minimum')), min);
       await tester.enterText(find.byKey(const Key('field-maximum')), '100');
       await tester.pumpAndSettle();
@@ -822,12 +834,13 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    String? stepError(WidgetTester tester) => tester
-        .widget<TextField>(
-          find.descendant(of: stepInput, matching: find.byType(TextField)),
-        )
-        .decoration
-        ?.errorText;
+    String? stepError(WidgetTester tester) => decorationErrorText(
+      tester
+          .widget<TextField>(
+            find.descendant(of: stepInput, matching: find.byType(TextField)),
+          )
+          .decoration,
+    );
 
     testWidgets('the Step input shows only while the switch is on', (
       tester,
@@ -931,23 +944,262 @@ void main() {
     });
   });
 
-  testWidgets('the New field panel lines up Name and Type', (tester) async {
+  testWidgets('the New field panel shows Name at the normal height above the '
+      'type grid', (tester) async {
     final seeded = await seed(tester);
     await pumpPage(tester, seeded.controller, theme: nocturneTheme());
     await tester.tap(find.text('Schema'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Add field'));
+    await tester.tap(find.byKey(const Key('new-field')));
     await tester.pumpAndSettle();
 
-    Rect box(Finder input) => tester.getRect(
-      find.descendant(of: input, matching: find.byType(InputDecorator)).first,
-    );
-    final name = box(find.byKey(const Key('field-name')));
-    final type = box(
-      find.widgetWithText(DropdownButtonFormField<FieldTypeKindDto>, 'Type'),
+    final name = tester.getRect(
+      find
+          .descendant(
+            of: find.byKey(const Key('field-name')),
+            matching: find.byType(InputDecorator),
+          )
+          .first,
     );
     expect(name.height, 40);
-    expect(type.height, 40);
-    expect(name.top, type.top);
+    expect(
+      tester.getTopLeft(find.byKey(const Key('type-grid'))).dy,
+      greaterThan(name.bottom),
+    );
+  });
+
+  group('type grid and chips', () {
+    testWidgets('a Date field shows its chips, each opening a block', (
+      tester,
+    ) async {
+      final seeded = await seed(tester);
+      await pumpPage(tester, seeded.controller);
+      await addFieldOfKind(tester, 'due', FieldTypeKindDto.date);
+      final chips = tester
+          .widgetList<FieldOptionChip>(find.byType(FieldOptionChip))
+          .map((chip) => chip.label);
+      expect(chips, ['Required', 'Date range', 'Default value']);
+      await tapChip(tester, 'default');
+      await tapChip(tester, 'date-range');
+      expect(find.byKey(const Key('block-chip-default')), findsOneWidget);
+      expect(find.byKey(const Key('block-chip-date-range')), findsOneWidget);
+      expect(find.text('Earliest'), findsOneWidget);
+      expect(find.text('Latest'), findsOneWidget);
+      // The ✕ turns the chip off and closes its block.
+      await tester.tap(find.byKey(const Key('close-chip-date-range')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('block-chip-date-range')), findsNothing);
+      expect(
+        tester
+            .widget<FieldOptionChip>(find.byKey(const Key('chip-date-range')))
+            .selected,
+        isFalse,
+      );
+    });
+
+    testWidgets('the type is fixed for an existing field', (tester) async {
+      final seeded = await seed(tester);
+      await pumpPage(tester, seeded.controller);
+      await openFieldEditor(tester, 'Notes');
+      final grid = find.byKey(const Key('type-grid'));
+      expect(grid, findsOneWidget);
+      for (final kind in FieldTypeKindDto.values) {
+        final tile = tester.widget<InkWell>(
+          find.byKey(Key('type-${kind.name}')),
+        );
+        expect(
+          tile.onTap,
+          isNull,
+          reason: '${kind.name} tile is disabled for an existing field',
+        );
+      }
+      final text = tester.getSemantics(find.byKey(const Key('type-text')));
+      expect(text.flagsCollection.isSelected, Tristate.isTrue);
+    });
+  });
+
+  testWidgets('a relative date default previews and saves as days', (
+    tester,
+  ) async {
+    final seeded = await seed(tester);
+    await pumpPage(tester, seeded.controller);
+    await addFieldOfKind(tester, 'due', FieldTypeKindDto.date);
+    await tapChip(tester, 'default');
+    await withClock(Clock.fixed(DateTime(2026, 9, 28, 10)), () async {
+      await tester.enterText(find.byKey(const Key('default-days')), '7');
+      await tester.pumpAndSettle();
+      expect(find.text('→ Oct 5, 2026'), findsOneWidget);
+      await save(tester);
+    });
+    final field = seeded.controller.schema!.fields.firstWhere(
+      (item) => item.name == 'due',
+    );
+    expect(field.defaultRelativeDays, 7);
+    expect(field.defaultValue, isNull);
+  });
+
+  testWidgets('a default outside the length limits disables saving', (
+    tester,
+  ) async {
+    final seeded = await seed(tester);
+    await pumpPage(tester, seeded.controller);
+    await addFieldOfKind(tester, 'code', FieldTypeKindDto.text);
+    await tapChip(tester, 'length');
+    await tester.enterText(find.byKey(const Key('field-min-length')), '4');
+    await tester.enterText(find.byKey(const Key('field-max-length')), '8');
+    await tapChip(tester, 'default');
+    await tester.enterText(find.byKey(const Key('field-default')), 'AB');
+    await tester.pumpAndSettle();
+    expect(find.text('2 / 4–8'), findsOneWidget);
+    expect(find.text('Default must be 4–8 characters.'), findsOneWidget);
+    FilledButton saveButton() =>
+        tester.widget<FilledButton>(find.byKey(const Key('field-save')));
+    expect(saveButton().onPressed, isNull);
+
+    await tester.enterText(find.byKey(const Key('field-default')), 'ABCD');
+    await tester.pumpAndSettle();
+    expect(find.text('4 / 4–8'), findsOneWidget);
+    expect(find.text('Default must be 4–8 characters.'), findsNothing);
+    expect(saveButton().onPressed, isNotNull);
+  });
+
+  testWidgets('a default outside the range shows the range', (tester) async {
+    final seeded = await seed(tester);
+    await pumpPage(tester, seeded.controller);
+    await addFieldOfKind(tester, 'Pain', FieldTypeKindDto.integer);
+    await tapChip(tester, 'range');
+    await tester.enterText(find.byKey(const Key('field-minimum')), '5');
+    await tester.enterText(find.byKey(const Key('field-maximum')), '30');
+    await tapChip(tester, 'default');
+    await tester.enterText(find.byKey(const Key('field-default')), '2');
+    await tester.pumpAndSettle();
+    expect(find.text('Default must be between 5 and 30.'), findsOneWidget);
+    expect(
+      tester
+          .widget<FilledButton>(find.byKey(const Key('field-save')))
+          .onPressed,
+      isNull,
+    );
+  });
+
+  testWidgets('deleting a used option asks first and says records keep it', (
+    tester,
+  ) async {
+    final seeded = await seed(tester);
+    final ids = await seedChoice(seeded);
+    final priority = seeded.controller.schema!.fields
+        .firstWhere((field) => field.name == 'Priority')
+        .id;
+    for (var i = 0; i < 2; i++) {
+      await seeded.controller.createRecord([
+        RecordValueDto(
+          fieldId: priority,
+          value: FieldValueDto(
+            kind: FieldValueKindDto.enum_,
+            textValue: ids['Low'],
+          ),
+        ),
+      ]);
+    }
+    seeded.bridge.schemaCalls.clear();
+    await pumpPage(tester, seeded.controller);
+    await tester.tap(find.text('Schema'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Priority').last);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('deleted-option-note')), findsOneWidget);
+
+    await tester.tap(find.byKey(ValueKey('remove-option-${ids['Low']}')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('option-delete-confirmation')), findsOneWidget);
+    expect(find.textContaining('2 records use this option'), findsOneWidget);
+    expect(find.textContaining('“Low (deleted)”'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('option-delete-cancel')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(ValueKey('option-label-${ids['Low']}')), findsOneWidget);
+
+    await tester.tap(find.byKey(ValueKey('remove-option-${ids['Low']}')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('option-delete-confirm')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(ValueKey('option-label-${ids['Low']}')), findsNothing);
+    await save(tester);
+    expect(
+      seeded.bridge.schemaCalls,
+      contains('removeEnumOption ${ids['Low']}'),
+    );
+  });
+
+  testWidgets('the desktop schema sheet edits fields inline', (tester) async {
+    final seeded = await seed(tester);
+    tester.view.physicalSize = const Size(1240, 1400);
+    await pumpPage(tester, seeded.controller);
+    await tester.tap(find.text('Schema'));
+    await tester.pumpAndSettle();
+    expect(find.text('HEADACHES · 2 FIELDS'), findsOneWidget);
+    expect(find.text('Collection schema'), findsOneWidget);
+    expect(
+      find.text('Drag to reorder · click a field to edit'),
+      findsOneWidget,
+    );
+    expect(find.text('Done'), findsOneWidget);
+    expect(find.byIcon(FiIcons.integer), findsWidgets);
+
+    await tester.tap(find.text('Notes').last);
+    await tester.pumpAndSettle();
+    expect(find.byType(Dialog), findsNothing);
+    expect(find.byType(FieldEditorBody), findsOneWidget);
+    expect(find.text('Save field'), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('new-field')));
+    await tester.pumpAndSettle();
+    expect(find.text('Add field'), findsOneWidget);
+    await tester.enterText(find.byKey(const Key('field-name')), 'Mood');
+    await save(tester);
+    expect(find.text('HEADACHES · 3 FIELDS'), findsOneWidget);
+  });
+
+  testWidgets('a phone opens each field as its own screen', (tester) async {
+    final seeded = await seed(tester);
+    tester.view.physicalSize = const Size(390, 844);
+    await pumpPage(tester, seeded.controller);
+    await tester.tap(find.byTooltip('Schema').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Long-press to reorder'), findsOneWidget);
+    expect(find.byKey(const Key('add-field')), findsOneWidget);
+    final row = find
+        .ancestor(of: find.text('Notes').last, matching: find.byType(InkWell))
+        .first;
+    expect(tester.getSize(row).height, greaterThanOrEqualTo(52));
+    expect(find.byIcon(FiIcons.chevronRight), findsNWidgets(2));
+
+    await tester.tap(find.text('Notes').last);
+    await tester.pumpAndSettle();
+    expect(find.byType(FieldEditorScreen), findsOneWidget);
+    expect(find.text('Field in Headaches'), findsOneWidget);
+    expect(find.byTooltip('Back'), findsOneWidget);
+    expect(find.text('Save field'), findsOneWidget);
+    await tester.tap(find.byTooltip('More'));
+    await tester.pumpAndSettle();
+    expect(find.text('Delete field'), findsOneWidget);
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Back'));
+    await tester.pumpAndSettle();
+    expect(find.byType(FieldEditorScreen), findsNothing);
+
+    await tester.tap(find.byKey(const Key('add-field')));
+    await tester.pumpAndSettle();
+    expect(find.text('New field'), findsOneWidget);
+    expect(find.text('Add field'), findsOneWidget);
+    await tester.enterText(find.byKey(const Key('field-name')), 'Mood');
+    await save(tester);
+    expect(find.byType(FieldEditorScreen), findsNothing);
+    expect(
+      seeded.controller.schema!.fields.any((field) => field.name == 'Mood'),
+      isTrue,
+    );
   });
 }

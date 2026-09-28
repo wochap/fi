@@ -291,22 +291,13 @@ impl GenericCommand {
                 option_id,
             } => {
                 let field = active_field(snapshot, *collection_id, *field_id)?;
+                // Records holding the option keep it; see `FieldDefinition::validate_kept_value`.
                 if !field
                     .enum_options
                     .iter()
                     .any(|option| option.id == *option_id)
                 {
                     return Err(not_found("enum option", option_id));
-                }
-                if snapshot.records.iter().any(|record| {
-                    !record.deleted
-                        && record.collection_id == *collection_id
-                        && record.values.get(field_id) == Some(&FieldValue::Enum(*option_id))
-                }) {
-                    return Err(invalid(
-                        "enum_option_id",
-                        "cannot remove an option referenced by an active record",
-                    ));
                 }
             }
             Self::CreateRecord(record) => {
@@ -323,9 +314,14 @@ impl GenericCommand {
             } => {
                 let record = active_record(snapshot, *record_id)?;
                 let field = active_field(snapshot, record.collection_id, *field_id)?;
-                field
-                    .validate_value(value)
-                    .map_err(|issue| DomainError::InvalidMany(vec![issue.on(field_id)]))?;
+                // Rewriting the value a record already holds keeps a removed option valid;
+                // newly setting one is rejected.
+                let checked = if record.values.get(field_id) == Some(&*value) {
+                    field.validate_kept_value(value)
+                } else {
+                    field.validate_value(value)
+                };
+                checked.map_err(|issue| DomainError::InvalidMany(vec![issue.on(field_id)]))?;
             }
             Self::DeleteRecord(id) => {
                 record(snapshot, *id)?;
@@ -1889,6 +1885,7 @@ mod tests {
                 field_type: FieldType::Integer,
                 required: true,
                 default: None,
+                default_relative_days: None,
                 validation: ValidationMetadata {
                     min_integer: Some(1),
                     max_integer: Some(10),
@@ -1988,6 +1985,7 @@ mod tests {
             field_type: FieldType::Text,
             required: true,
             default: None,
+            default_relative_days: None,
             validation: ValidationMetadata::default(),
             display: DisplayMetadata::default(),
             order: 1,
@@ -2291,6 +2289,220 @@ mod tests {
         let mut tx = doc.transaction();
         apply_generic_command(&mut tx, command, stamp(time)).unwrap();
         tx.commit();
+    }
+
+    fn choice_collection() -> (Automerge, CollectionSchema, Vec<EnumOptionId>) {
+        let mut doc = initialized();
+        let mut collection = schema();
+        let options: Vec<_> = (1..=3)
+            .map(|index| EnumOption {
+                id: EnumOptionId::new(),
+                label: format!("option {index}"),
+                order: index,
+                deleted: false,
+            })
+            .collect();
+        collection.fields.push(FieldDefinition {
+            id: FieldId::new(),
+            name: "Kind".into(),
+            field_type: FieldType::Enum,
+            required: false,
+            default: None,
+            default_relative_days: None,
+            validation: ValidationMetadata::default(),
+            display: DisplayMetadata::default(),
+            order: 1,
+            deleted: false,
+            enum_options: options.clone(),
+        });
+        commit(
+            &mut doc,
+            &mut GenericCommand::CreateCollection(collection.clone()),
+            1,
+        );
+        let ids = options.iter().map(|option| option.id).collect();
+        (doc, collection, ids)
+    }
+
+    fn choice_record(schema: &CollectionSchema, option: EnumOptionId) -> GenericRecord {
+        GenericRecord {
+            id: RecordId::new(),
+            collection_id: schema.id,
+            values: BTreeMap::from([
+                (schema.fields[0].id, FieldValue::Integer(5)),
+                (schema.fields[1].id, FieldValue::Enum(option)),
+            ]),
+            stamps: BTreeMap::new(),
+            deleted: false,
+        }
+    }
+
+    fn record_diagnostics(doc: &Automerge, id: RecordId) -> Vec<GenericDiagnostic> {
+        decode_generic(doc)
+            .unwrap()
+            .diagnostics
+            .into_iter()
+            .filter(|diagnostic| diagnostic.entity_id == id.to_string())
+            .collect()
+    }
+
+    #[test]
+    fn removing_a_used_option_keeps_it_on_the_records_that_hold_it() {
+        let (mut doc, schema, options) = choice_collection();
+        let kind = schema.fields[1].id;
+        let first = choice_record(&schema, options[2]);
+        let second = choice_record(&schema, options[2]);
+        commit(
+            &mut doc,
+            &mut GenericCommand::CreateRecord(first.clone()),
+            2,
+        );
+        commit(
+            &mut doc,
+            &mut GenericCommand::CreateRecord(second.clone()),
+            3,
+        );
+        commit(
+            &mut doc,
+            &mut GenericCommand::RemoveEnumOption {
+                collection_id: schema.id,
+                field_id: kind,
+                option_id: options[2],
+            },
+            4,
+        );
+        let snapshot = decode_generic(&doc).unwrap();
+        assert!(snapshot.collections[0].fields[1].enum_options[2].deleted);
+        for record in [&first, &second] {
+            assert_eq!(
+                snapshot
+                    .records
+                    .iter()
+                    .find(|item| item.id == record.id)
+                    .unwrap()
+                    .values[&kind],
+                FieldValue::Enum(options[2])
+            );
+            assert!(record_diagnostics(&doc, record.id).is_empty());
+        }
+
+        // A new record cannot pick the removed option.
+        let Err(DomainError::InvalidMany(issues)) =
+            GenericCommand::CreateRecord(choice_record(&schema, options[2]))
+                .validate_against(&snapshot)
+        else {
+            panic!("expected the inactive-option issue");
+        };
+        assert_eq!(issues[0].code, crate::error::IssueCode::InactiveOption);
+        assert_eq!(issues[0].fields, vec![kind.to_string()]);
+
+        // Updating another field keeps the removed option valid.
+        commit(
+            &mut doc,
+            &mut GenericCommand::UpdateRecordField {
+                record_id: first.id,
+                field_id: schema.fields[0].id,
+                value: FieldValue::Integer(6),
+            },
+            5,
+        );
+        assert!(record_diagnostics(&doc, first.id).is_empty());
+
+        // Rewriting the held value is not newly setting it.
+        GenericCommand::UpdateRecordField {
+            record_id: first.id,
+            field_id: kind,
+            value: FieldValue::Enum(options[2]),
+        }
+        .validate_against(&decode_generic(&doc).unwrap())
+        .unwrap();
+
+        // Newly setting it on a record that holds another option is rejected.
+        let third = choice_record(&schema, options[0]);
+        commit(
+            &mut doc,
+            &mut GenericCommand::CreateRecord(third.clone()),
+            6,
+        );
+        let Err(DomainError::InvalidMany(issues)) = (GenericCommand::UpdateRecordField {
+            record_id: third.id,
+            field_id: kind,
+            value: FieldValue::Enum(options[2]),
+        })
+        .validate_against(&decode_generic(&doc).unwrap()) else {
+            panic!("expected the inactive-option issue");
+        };
+        assert_eq!(issues[0].code, crate::error::IssueCode::InactiveOption);
+    }
+
+    #[test]
+    fn an_unknown_option_id_still_raises_a_diagnostic() {
+        let (mut doc, schema, _) = choice_collection();
+        let record = choice_record(&schema, EnumOptionId::new());
+        let mut tx = doc.transaction();
+        apply_generic_command(
+            &mut tx,
+            &GenericCommand::CreateRecord(record.clone()),
+            stamp(2),
+        )
+        .unwrap();
+        tx.commit();
+        let diagnostics = record_diagnostics(&doc, record.id);
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(diagnostics[0].field_id, Some(schema.fields[1].id));
+    }
+
+    #[test]
+    fn relative_default_round_trips_and_satisfies_required_on_read() {
+        let mut doc = initialized();
+        let mut collection = schema();
+        let record = GenericRecord {
+            id: RecordId::new(),
+            collection_id: collection.id,
+            values: BTreeMap::from([(collection.fields[0].id, FieldValue::Integer(5))]),
+            stamps: BTreeMap::new(),
+            deleted: false,
+        };
+        commit(
+            &mut doc,
+            &mut GenericCommand::CreateCollection(collection.clone()),
+            1,
+        );
+        commit(
+            &mut doc,
+            &mut GenericCommand::CreateRecord(record.clone()),
+            2,
+        );
+        let due = FieldDefinition {
+            id: FieldId::new(),
+            name: "Due".into(),
+            field_type: FieldType::Date,
+            required: true,
+            default: None,
+            default_relative_days: Some(7),
+            validation: ValidationMetadata::default(),
+            display: DisplayMetadata::default(),
+            order: 1,
+            deleted: false,
+            enum_options: vec![],
+        };
+        commit(
+            &mut doc,
+            &mut GenericCommand::AddField {
+                collection_id: collection.id,
+                field: due.clone(),
+            },
+            3,
+        );
+        collection.fields.push(due.clone());
+        let snapshot = decode_generic(&doc).unwrap();
+        let read = &snapshot.collections[0].fields[1];
+        assert_eq!(read.default_relative_days, Some(7));
+        assert_eq!(read.default, None);
+        assert_eq!(*read, due);
+        // The older record lacks the field, and the relative default satisfies Required.
+        assert!(!snapshot.records[0].values.contains_key(&due.id));
+        assert!(record_diagnostics(&doc, record.id).is_empty());
     }
 
     fn with_collection_and_query() -> (Automerge, CollectionSchemaId, QueryId) {
@@ -2729,6 +2941,7 @@ mod tests {
             field_type: FieldType::Text,
             required: false,
             default: None,
+            default_relative_days: None,
             validation: ValidationMetadata::default(),
             display: DisplayMetadata::default(),
             order: 1,
@@ -3070,6 +3283,7 @@ mod tests {
             field_type: FieldType::Enum,
             required: false,
             default: Some(FieldValue::Enum(options[2].id)),
+            default_relative_days: None,
             validation: ValidationMetadata::default(),
             display: DisplayMetadata::default(),
             order: 1,
@@ -3082,6 +3296,7 @@ mod tests {
             field_type: FieldType::Text,
             required: false,
             default: None,
+            default_relative_days: None,
             validation: ValidationMetadata::default(),
             display: DisplayMetadata::default(),
             order: 2,

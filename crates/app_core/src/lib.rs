@@ -6,6 +6,7 @@ pub mod control;
 pub mod diagnostics;
 pub mod discovery;
 pub mod discovery_control;
+pub mod duration;
 pub mod error;
 pub mod events;
 pub mod generic;

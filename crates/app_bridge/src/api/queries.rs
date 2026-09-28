@@ -1039,6 +1039,7 @@ mod tests {
             field_type: FieldType::FixedDecimal { scale },
             required: true,
             default: None,
+            default_relative_days: None,
             validation: ValidationMetadata::default(),
             display: DisplayMetadata::default(),
             order: 0,

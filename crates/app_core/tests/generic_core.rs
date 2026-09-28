@@ -25,6 +25,7 @@ fn field(name: &str, field_type: FieldType, required: bool, order: i64) -> Field
         field_type,
         required,
         default: None,
+        default_relative_days: None,
         validation: ValidationMetadata::default(),
         display: DisplayMetadata::default(),
         order,
@@ -932,6 +933,116 @@ async fn record_draft_validation_reports_every_issue_and_commits_nothing() {
         .unwrap();
     assert_eq!(issues.len(), 1);
     assert_eq!(issues[0].message, "Required");
+    app.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn a_removed_option_stays_on_its_records_and_cannot_be_newly_picked() {
+    let directory = tempfile::tempdir().unwrap();
+    let app = AppCore::open(directory.path()).await.unwrap();
+    app.create_new_dataset().await.unwrap();
+    let collection = app
+        .create_collection("Tasks".into(), String::new())
+        .await
+        .unwrap();
+    let kind = field("Kind", FieldType::Enum, false, 0);
+    let note = field("Note", FieldType::Text, false, 1);
+    app.add_field(collection, kind.clone()).await.unwrap();
+    app.add_field(collection, note.clone()).await.unwrap();
+    let options: Vec<_> = (1..=3)
+        .map(|index| EnumOption {
+            id: EnumOptionId::new(),
+            label: format!("option {index}"),
+            order: index,
+            deleted: false,
+        })
+        .collect();
+    for option in &options {
+        app.upsert_enum_option(collection, kind.id, option.clone())
+            .await
+            .unwrap();
+    }
+    let mut held = Vec::new();
+    for _ in 0..2 {
+        held.push(
+            app.create_record(
+                collection,
+                BTreeMap::from([(kind.id, FieldValue::Enum(options[2].id))]),
+            )
+            .await
+            .unwrap(),
+        );
+    }
+    let other = app
+        .create_record(
+            collection,
+            BTreeMap::from([(kind.id, FieldValue::Enum(options[0].id))]),
+        )
+        .await
+        .unwrap();
+    app.remove_enum_option(collection, kind.id, options[2].id)
+        .await
+        .unwrap();
+
+    for id in &held {
+        let view = app.record(*id).unwrap().unwrap();
+        assert!(view.valid, "{:?}", view.diagnostics);
+        assert_eq!(
+            view.record.values[&kind.id],
+            FieldValue::Enum(options[2].id)
+        );
+    }
+    // Editing another field keeps the removed option.
+    assert!(
+        app.validate_record_draft(
+            collection,
+            Some(held[0]),
+            BTreeMap::from([(note.id, FieldValue::Text("later".into()))]),
+        )
+        .unwrap()
+        .is_empty()
+    );
+    app.update_record_field(
+        held[0],
+        collection,
+        kind.id,
+        FieldValue::Enum(options[2].id),
+    )
+    .await
+    .unwrap();
+    app.update_record_field(
+        held[0],
+        collection,
+        note.id,
+        FieldValue::Text("later".into()),
+    )
+    .await
+    .unwrap();
+    assert!(app.record(held[0]).unwrap().unwrap().valid);
+
+    // Newly picking it is rejected, in the draft and on create or update.
+    let issues = app
+        .validate_record_draft(
+            collection,
+            Some(other),
+            BTreeMap::from([(kind.id, FieldValue::Enum(options[2].id))]),
+        )
+        .unwrap();
+    assert_eq!(issues.len(), 1);
+    assert_eq!(issues[0].code.as_str(), "inactive_option");
+    assert!(
+        app.update_record_field(other, collection, kind.id, FieldValue::Enum(options[2].id))
+            .await
+            .is_err()
+    );
+    assert!(
+        app.create_record(
+            collection,
+            BTreeMap::from([(kind.id, FieldValue::Enum(options[2].id))]),
+        )
+        .await
+        .is_err()
+    );
     app.shutdown().await.unwrap();
 }
 

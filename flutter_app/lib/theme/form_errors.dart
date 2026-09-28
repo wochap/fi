@@ -1,8 +1,40 @@
+import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/theme/nocturne.dart';
 import 'package:flutter/material.dart';
 
-/// Error lines under an input that has no `InputDecoration` (a switch row, a picker), styled like
-/// Material's `errorText`: one line per issue, in the error color, no bullets.
+/// The color of a field's error message and warning icon; its control gets an accent border.
+const Color fieldErrorColor = Nocturne.accent200;
+
+/// A field's error message under its control: a warning icon, then one line per issue in
+/// [fieldErrorColor]. [text] is the lines joined by newlines, as one `Text`.
+class FieldErrorMessage extends StatelessWidget {
+  const FieldErrorMessage(this.lines, {super.key});
+
+  final List<String> lines;
+
+  String get text => lines.join('\n');
+
+  @override
+  Widget build(BuildContext context) => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      const Padding(
+        padding: EdgeInsets.only(top: 1),
+        child: Icon(FiIcons.error, size: 14, color: fieldErrorColor),
+      ),
+      const SizedBox(width: 6),
+      Flexible(
+        child: Text(
+          text,
+          style: const TextStyle(fontSize: 12, color: fieldErrorColor),
+        ),
+      ),
+    ],
+  );
+}
+
+/// Error lines under a control that has no `InputDecoration` (a switch, a segmented choice),
+/// drawn like an input's: a warning icon and one line per issue.
 class FieldErrorLines extends StatelessWidget {
   const FieldErrorLines(this.lines, {super.key});
 
@@ -12,20 +44,52 @@ class FieldErrorLines extends StatelessWidget {
   Widget build(BuildContext context) {
     if (lines.isEmpty) return const SizedBox.shrink();
     return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 6, 14, 0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        spacing: 2,
-        children: [
-          for (final line in lines)
-            Text(
-              line,
-              style: const TextStyle(fontSize: 12, color: Nocturne.error),
-            ),
-        ],
-      ),
+      padding: const EdgeInsets.fromLTRB(4, 6, 4, 0),
+      child: FieldErrorMessage(lines),
     );
   }
+}
+
+/// The summary pinned above a form's footer after a save left fields with errors: "Couldn't
+/// save. N fields need attention." with [onShow], which jumps to the first of them.
+class FormErrorSummary extends StatelessWidget {
+  const FormErrorSummary({
+    required this.count,
+    required this.onShow,
+    super.key,
+  });
+
+  final int count;
+  final VoidCallback onShow;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    liveRegion: true,
+    child: Container(
+      key: const Key('form-error-summary'),
+      padding: const EdgeInsets.fromLTRB(12, 4, 4, 4),
+      constraints: const BoxConstraints(minHeight: 44),
+      decoration: BoxDecoration(
+        color: Nocturne.bg,
+        borderRadius: BorderRadius.circular(Nocturne.radius),
+        border: Border.all(color: Nocturne.accent700),
+      ),
+      child: Row(
+        children: [
+          const Icon(FiIcons.error, size: 18, color: Nocturne.accent),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              "Couldn't save. $count ${count == 1 ? 'field needs' : 'fields need'} "
+              'attention.',
+              style: const TextStyle(fontSize: 13, color: Nocturne.text),
+            ),
+          ),
+          TextButton(onPressed: onShow, child: const Text('Show')),
+        ],
+      ),
+    ),
+  );
 }
 
 /// The form-level slot's contents: issues that name no field or several, and failures that are
@@ -52,12 +116,16 @@ class FormErrorLines extends StatelessWidget {
   );
 }
 
-/// [errors] as `InputDecoration.errorText`: one line per issue, or null when there are none.
-String? errorTextOf(List<String> errors) =>
-    errors.isEmpty ? null : errors.join('\n');
+/// [errors] as `InputDecoration.error`: a [FieldErrorMessage], or null when there are none.
+Widget? errorOf(List<String> errors) =>
+    errors.isEmpty ? null : FieldErrorMessage(errors);
 
-/// `InputDecoration.errorMaxLines` for [errors]: one line per issue.
-int? errorLinesOf(List<String> errors) => errors.isEmpty ? null : errors.length;
+/// The error lines an input shows, read back from its decoration; null when it shows none.
+String? decorationErrorText(InputDecoration? decoration) =>
+    switch (decoration?.error) {
+      FieldErrorMessage(:final text) => text,
+      _ => decoration?.errorText,
+    };
 
 /// An input label for a required value: the name, then an `*` in `accent300` (not the error
 /// color). Screen readers hear "name, required". Use as `InputDecoration.label`.

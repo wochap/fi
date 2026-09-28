@@ -660,6 +660,9 @@ class FieldDefinitionDto {
   final FieldTypeDto fieldType;
   final bool required_;
   final FieldValueDto? defaultValue;
+
+  /// Date-only default in whole days from the record's creation day.
+  final int? defaultRelativeDays;
   final ValidationMetadataDto validation;
   final DisplayMetadataDto display;
   final int order;
@@ -672,6 +675,7 @@ class FieldDefinitionDto {
     required this.fieldType,
     required this.required_,
     this.defaultValue,
+    this.defaultRelativeDays,
     required this.validation,
     required this.display,
     required this.order,
@@ -686,6 +690,7 @@ class FieldDefinitionDto {
       fieldType.hashCode ^
       required_.hashCode ^
       defaultValue.hashCode ^
+      defaultRelativeDays.hashCode ^
       validation.hashCode ^
       display.hashCode ^
       order.hashCode ^
@@ -702,6 +707,7 @@ class FieldDefinitionDto {
           fieldType == other.fieldType &&
           required_ == other.required_ &&
           defaultValue == other.defaultValue &&
+          defaultRelativeDays == other.defaultRelativeDays &&
           validation == other.validation &&
           display == other.display &&
           order == other.order &&
