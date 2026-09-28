@@ -290,7 +290,7 @@ final class CollectionsController extends ChangeNotifier {
     collectionSort = sort;
     _prefs = _prefs.copyWith(collectionSort: sort);
     notifyListeners();
-    unawaited(uiPrefs?.save(_prefs));
+    unawaited(uiPrefs?.update((prefs) => prefs.copyWith(collectionSort: sort)));
   }
 
   /// [collections] in the chosen order, ties broken by id.

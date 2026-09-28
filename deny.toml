@@ -11,3 +11,9 @@ allow = [
     "Unlicense",
     "Zlib",
 ]
+
+# webpki-roots ships Mozilla's CA bundle under the data license; it is only
+# used for the model download's TLS roots.
+[[licenses.exceptions]]
+crate = "webpki-roots"
+allow = ["CDLA-Permissive-2.0"]

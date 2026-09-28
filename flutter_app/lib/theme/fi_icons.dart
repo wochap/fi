@@ -55,6 +55,25 @@ abstract final class FiIcons {
   static const IconData sparkle = PhosphorIconsRegular.sparkle;
   static const IconData defaultValue = PhosphorIconsRegular.arrowBendDownRight;
 
+  // Voice fill.
+  static const IconData download = PhosphorIconsRegular.downloadSimple;
+  static const IconData pause = PhosphorIconsRegular.pause;
+  static const IconData stop = PhosphorIconsFill.stop;
+  static const IconData wifi = PhosphorIconsRegular.wifiHigh;
+  static const IconData mobileData = PhosphorIconsRegular.wifiSlash;
+  static const IconData storage = PhosphorIconsRegular.hardDrives;
+  static const IconData mute = PhosphorIconsRegular.speakerSimpleSlash;
+  static const IconData settings = PhosphorIconsRegular.gear;
+  static const IconData waveform = PhosphorIconsRegular.waveform;
+  static const IconData noSpeech = PhosphorIconsRegular.microphoneSlash;
+  static const IconData nothingMatched = PhosphorIconsRegular.chatSlash;
+  static const IconData microphoneOff = PhosphorIconsRegular.lockSimple;
+  static const IconData microphoneBusy = PhosphorIconsRegular.handPalm;
+  static const IconData modelBroken = PhosphorIconsRegular.fileX;
+  static const IconData lowMemory = PhosphorIconsRegular.memory;
+  static const IconData backgrounded = PhosphorIconsRegular.appWindow;
+  static const IconData callInterrupted = PhosphorIconsRegular.phoneDisconnect;
+
   // Sync and devices.
   static const IconData offline = PhosphorIconsRegular.cloudSlash;
   static const IconData synced = PhosphorIconsRegular.cloudCheck;

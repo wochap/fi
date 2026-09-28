@@ -38,8 +38,11 @@ tracing-subscriber.workspace = true
 uuid.workspace = true
 zeroize.workspace = true
 x509-parser.workspace = true
+fs4.workspace = true
+ureq.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+tiny_http.workspace = true
 # Paused virtual time for the reconnect scheduler tests.
 tokio = { workspace = true, features = ["test-util"] }

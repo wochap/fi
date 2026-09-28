@@ -13,6 +13,7 @@ pub mod generic;
 pub mod hlc;
 pub mod identity;
 pub mod import_export;
+pub mod models;
 pub mod pairing;
 pub mod pairing_manager;
 pub mod pairing_transport;

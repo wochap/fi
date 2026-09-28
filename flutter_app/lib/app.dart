@@ -12,10 +12,12 @@ import 'package:fi/collections_page.dart';
 import 'package:fi/device_details.dart';
 import 'package:fi/pairing_card.dart';
 import 'package:fi/reset_dialog.dart';
+import 'package:fi/settings_page.dart';
 import 'package:fi/theme/inputs.dart';
 import 'package:fi/theme/nocturne.dart';
 import 'package:fi/theme/nocturne_widgets.dart';
 import 'package:fi/ui_prefs.dart';
+import 'package:fi/voice/services.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -28,11 +30,16 @@ class CollectionApp extends StatefulWidget {
     this.setPlatformForeground,
     this.fileDialogs = const PlatformFileDialogs(),
     this.uiPrefs,
+    this.voiceServices,
     super.key,
   });
 
   final CollectionBridge bridge;
   final Future<void> Function() initializeRust;
+
+  /// Builds the voice services once the data directory is known; none in tests by default.
+  final VoiceServices Function(String dataDir, UiPrefsStore prefs)?
+  voiceServices;
 
   /// Device-local list preferences; by default `ui_prefs.json` in the data directory.
   final UiPrefsStore? uiPrefs;
@@ -54,6 +61,11 @@ class _CollectionAppState extends State<CollectionApp>
   /// confirmation survives the needs-decision → joining → ready transition.
   late final DevicesController devices;
   bool _devicesStarted = false;
+  VoiceServices? _voice;
+
+  /// One store for the list order and voice preferences, so their updates queue.
+  late final UiPrefsStore _uiPrefs =
+      widget.uiPrefs ?? FileUiPrefsStore(widget.dataDirProvider);
   static const _platform = MethodChannel('fi/platform');
 
   @override
@@ -72,6 +84,12 @@ class _CollectionAppState extends State<CollectionApp>
   Future<void> _start() async {
     await _setPlatformForeground(true);
     await controller.start();
+    if (_voice == null && controller.fatalError == null) {
+      if (widget.voiceServices case final build?) {
+        final voice = build(await widget.dataDirProvider(), _uiPrefs);
+        if (mounted) setState(() => _voice = voice);
+      }
+    }
     await _setForeground(true);
     // Only after the core exists (bridge.initialize) and foreground is set, so
     // every call in DevicesController.start() succeeds and the aggregate
@@ -207,8 +225,9 @@ class _CollectionAppState extends State<CollectionApp>
           BootstrapKindDto.ready => CollectionShell(
             bridge: widget.bridge,
             fileDialogs: widget.fileDialogs,
-            uiPrefs: widget.uiPrefs ?? FileUiPrefsStore(widget.dataDirProvider),
+            uiPrefs: _uiPrefs,
             devices: devices,
+            voice: _voice,
             onResetDataset: _resetDataset,
           ),
           BootstrapKindDto.needsDecision => OnboardingPage(
@@ -568,12 +587,16 @@ class CollectionShell extends StatefulWidget {
     this.onResetDataset,
     this.fileDialogs = const PlatformFileDialogs(),
     this.uiPrefs,
+    this.voice,
     super.key,
   });
   final CollectionBridge bridge;
   final FileDialogs fileDialogs;
   final UiPrefsStore? uiPrefs;
   final DevicesController devices;
+
+  /// Voice fill and the Settings tab's voice and microphone sections; absent in most tests.
+  final VoiceServices? voice;
   final ResetDatasetAction? onResetDataset;
 
   @override
@@ -605,29 +628,41 @@ class _CollectionShellState extends State<CollectionShell> {
   void _select(int value) => setState(() => selected = value);
 
   @override
-  Widget build(BuildContext context) => ListenableBuilder(
+  Widget build(BuildContext context) => VoiceScope(
+    services: widget.voice,
+    openSettings: () => _select(2),
+    child: _shell(context),
+  );
+
+  Widget _shell(BuildContext context) => ListenableBuilder(
     listenable: Listenable.merge([controller, devices]),
     builder: (context, _) {
+      final wide = MediaQuery.sizeOf(context).width >= 720;
+      // Settings is a phone tab; a wide window that was on it shows Collections.
+      final index = wide && selected == 2 ? 0 : selected;
       final page = IndexedStack(
-        index: selected,
+        index: index,
         children: [
           CollectionsPage(controller: controller),
           DevicesPage(
             controller: devices,
             onResetDataset: widget.onResetDataset,
           ),
+          if (!wide)
+            SettingsPage(
+              buildLabel: switch (devices.buildInfo) {
+                final build? => BuildLabel(build),
+                null => null,
+              },
+            ),
         ],
       );
-      if (MediaQuery.sizeOf(context).width >= 720) {
+      if (wide) {
         return Scaffold(
           body: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _Sidebar(
-                selected: selected,
-                onSelected: _select,
-                devices: devices,
-              ),
+              _Sidebar(selected: index, onSelected: _select, devices: devices),
               Expanded(child: page),
             ],
           ),
@@ -639,7 +674,7 @@ class _CollectionShellState extends State<CollectionShell> {
         0 when controller.selectedCollectionId == null => _MobileTopRow(
           status: devices.syncStatus,
         ),
-        1 => const _MobileTopRow(),
+        1 || 2 => const _MobileTopRow(),
         _ => null,
       };
       return Scaffold(
@@ -667,6 +702,10 @@ class _CollectionShellState extends State<CollectionShell> {
               NavigationDestination(
                 icon: Icon(FiIcons.devices),
                 label: 'Devices',
+              ),
+              NavigationDestination(
+                icon: Icon(FiIcons.settings),
+                label: 'Settings',
               ),
             ],
           ),
@@ -1114,12 +1153,8 @@ class _DevicesPageState extends State<DevicesPage> {
                       : () => _resetDataset(context),
                   showReset: onResetDataset != null,
                 ),
-                // Wide screens show the build under the sidebar status instead.
-                if (phone)
-                  if (controller.buildInfo case final build?) ...[
-                    const SizedBox(height: 26),
-                    BuildLabel(build),
-                  ],
+                // The build label lives under the sidebar status on wide screens and in
+                // Settings › About on a phone.
               ],
             ),
           ),

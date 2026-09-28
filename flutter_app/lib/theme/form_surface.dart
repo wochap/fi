@@ -135,6 +135,8 @@ class FormSurface extends StatelessWidget {
     this.leadingFooterAction,
     this.footerHint,
     this.fullWidthPrimaryOnPhone = false,
+    this.phoneFooterLeading,
+    this.top,
     this.submitOnCtrlEnter = false,
     this.summary,
     this.showContextInDialog = false,
@@ -192,6 +194,13 @@ class FormSurface extends StatelessWidget {
 
   /// On a phone, the footer holds only the primary action, full width and 52px tall.
   final bool fullWidthPrimaryOnPhone;
+
+  /// With [fullWidthPrimaryOnPhone], a widget at the leading edge of the phone footer (the
+  /// voice mic) with the primary action filling the rest of the row.
+  final Widget? phoneFooterLeading;
+
+  /// On a phone, a slot at the top of the scrolling body, above the fields (the voice panel).
+  final Widget? top;
 
   /// In a dialog, Ctrl+Enter runs [onPrimary].
   final bool submitOnCtrlEnter;
@@ -369,7 +378,13 @@ class FormSurface extends StatelessWidget {
             child: SingleChildScrollView(
               // Room above the first field so its floating label is not clipped.
               padding: const EdgeInsets.fromLTRB(18, 8, 18, 8),
-              child: body,
+              child: top == null
+                  ? body
+                  : Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [top!, const SizedBox(height: 14), body],
+                    ),
             ),
           ),
           if (!keyboardOpen) ?_pinned(const EdgeInsets.fromLTRB(18, 8, 18, 0)),
@@ -377,13 +392,23 @@ class FormSurface extends StatelessWidget {
           if (fullWidthPrimaryOnPhone)
             Padding(
               padding: const EdgeInsets.fromLTRB(18, 14, 18, 16),
-              child: FilledButton(
-                key: primaryKey,
-                style: FilledButton.styleFrom(
-                  minimumSize: const Size.fromHeight(52),
-                ),
-                onPressed: onPrimary,
-                child: Text(primaryLabel),
+              child: Row(
+                children: [
+                  if (phoneFooterLeading case final leading?) ...[
+                    leading,
+                    const SizedBox(width: 12),
+                  ],
+                  Expanded(
+                    child: FilledButton(
+                      key: primaryKey,
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size.fromHeight(52),
+                      ),
+                      onPressed: onPrimary,
+                      child: Text(primaryLabel),
+                    ),
+                  ),
+                ],
               ),
             )
           else

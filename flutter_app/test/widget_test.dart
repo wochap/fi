@@ -3,6 +3,7 @@ import 'package:fi/file_dialogs.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/ui_prefs.dart';
 import 'package:fi/theme/form_errors.dart';
+import 'package:fi/voice/services.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -12,6 +13,7 @@ Widget app(
   FakeCollectionBridge bridge, {
   FileDialogs? fileDialogs,
   UiPrefsStore? uiPrefs,
+  VoiceServices? voice,
 }) => CollectionApp(
   bridge: bridge,
   initializeRust: () async {},
@@ -19,6 +21,7 @@ Widget app(
   setPlatformForeground: (_) async {},
   fileDialogs: fileDialogs ?? FakeFileDialogs(),
   uiPrefs: uiPrefs ?? MemoryUiPrefsStore(),
+  voiceServices: voice == null ? null : (_, _) => voice,
 );
 Future<void> pumpUntilFound(WidgetTester tester, Finder finder) async {
   for (var attempt = 0; attempt < 30; attempt++) {

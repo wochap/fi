@@ -46,4 +46,7 @@ tempfile = "=3.27.0"
 flutter_rust_bridge = "=2.12.0"
 android_log-sys = "=0.3.2"
 zeroize = { version = "=1.9.0", features = ["zeroize_derive"] }
+fs4 = "=1.1.0"
+tiny_http = "=0.12.0"
+ureq = { version = "=3.4.2", default-features = false, features = ["rustls"] }
 x509-parser = { version = "=0.18.0", default-features = false, features = ["verify"] }

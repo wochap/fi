@@ -25,7 +25,9 @@ is the target and this guide should be updated to match.
 | `lib/field_editor.dart` | `FieldEditorBody` (name, 4×2 type grid, option chips with a settings block per chip, Choice options, default checks), hosted as a desktop inline panel or by `FieldEditorScreen` (the pushed phone screen); `fieldSummary()` for schema rows |
 | `lib/theme/action_sheet.dart` | `showActionSheet()` + `ActionSheet`: a phone row menu as a bottom sheet, headed by what it acts on (icon tile, title, subtitle), with 48px action rows in optionally labelled groups (mock 4f) |
 | `lib/device_details.dart` | A trusted device's Details: `DeviceDetails` (state grid, failure, DeviceId with copy, categorized connection log with the All / Pairing / Peer filter, Reconnect and Copy log), `DeviceDetailsScreen` (the pushed phone screen, mock 5f), `DeviceStateTag`, `LogLineRow`, `seenSyncedLine()`, `shortDeviceId()` / `groupedDeviceId()`, `copyWithConfirmation()` |
-| `lib/ui_prefs.dart` | `UiPrefs` and its stores: device-local presentation choices (the collections sort) in `ui_prefs.json` in the app support directory; never sent to Rust or synced |
+| `lib/ui_prefs.dart` | `UiPrefs` and its stores: device-local presentation choices (the collections sort, the voice tip dismissal, hands-free spoken feedback) in `ui_prefs.json` in the app support directory; never sent to Rust or synced. Write with `UiPrefsStore.update` so writers of different fields don't undo each other |
+| `lib/voice/` | Voice fill in the phone New record sheet (mocks 6a–6l, 7j): `engine.dart` (`VoiceEngine` boundary, `FakeVoiceEngine`, `UnavailableVoiceEngine`, `selectVoiceEngine()`), `patch.dart` (`applyPatch` rules, `VoiceDraftState` field origins), `controller.dart` (`VoiceFillController`, the sheet's flow), `panel.dart` (`VoicePanel`, `VoiceEvidencePopover`, `VoiceFieldMark`, `voiceErrorCopy()`), `mic_button.dart` (`VoiceMicButton`, `VoiceProgressRing`), `example.dart` (`exampleUtterance()`), `services.dart` (permission, network, TTS and model services, `VoicePrefs`, `VoiceScope`, `formatBytes()`), `fakes.dart` (test fakes) |
+| `lib/settings_page.dart` | `SettingsPage`, the third phone tab (mock 7i): Voice input (model row, hands-free, re-download, delete), Microphone and About (the build label) |
 | `lib/collections_page.dart` `_RecordTable` | The desktop records table (mock 4c): a `two_dimensional_scrollables` `TableView` with a pinned header row and first column (170px, others 150px), typed headers with the required mark, incomplete-row marks, and the "Scroll for more columns →" hint with a trailing fade |
 | `lib/theme/form_errors.dart` | `FieldErrorMessage` / `FieldErrorLines` (warning icon + message under a control), `FormErrorLines`, `FormErrorSummary` ("Couldn't save. N fields need attention." + Show), `RequiredLegend`, `requiredLabel()`, `errorOf()` / `decorationErrorText()`: how forms show errors and required inputs |
 | `assets/fonts/` | Inter (400, 500) and JetBrains Mono (400), with OFL licences |
@@ -129,7 +131,7 @@ must write one, use these sizes:
 
 | Where | Breakpoint | Behavior |
 | --- | --- | --- |
-| Screen width (`MediaQuery`) | 720 | ≥720: 216px sidebar (`_Sidebar` in `app.dart`). <720: slim logo row plus `NavigationBar`, bottom sheets instead of side sheets, larger touch targets (44–48px), create/edit forms as bottom sheets |
+| Screen width (`MediaQuery`) | 720 | ≥720: 216px sidebar (`_Sidebar` in `app.dart`, Collections and Devices, the build label under the sync status). <720: slim logo row plus `NavigationBar` (Collections · Devices · Settings; the build label in Settings › About), bottom sheets instead of side sheets, larger touch targets (44–48px), create/edit forms as bottom sheets |
 | Screen width, collection screen | 720 | ≥720: records table. <720: record cards (newest first), a phone header with Schema and a ⋮ menu (Queries, Select records, Collection actions…), floating "+ Record" button, row menus as action sheets, device Details as a pushed screen |
 | Collection content width (`LayoutBuilder`) | 760 | Above the phone breakpoint: ≥760 labelled header buttons, <760 the same actions as icon buttons |
 | Form surface screen width | 820 | ≥820: a form with an aside (the widget editor's preview) shows it as a 280px pane beside the form; below, the aside is pinned above the buttons |
@@ -223,6 +225,20 @@ must write one, use these sizes:
 - **States:** hover is a `text@4–7%` or `accent@10–12%` tint, pressed about double that, disabled
   45% opacity. There is no ink ripple (`NoSplash`). The theme already provides all of this, so
   don't restyle per widget.
+
+- **Voice fill** exists only in the phone New record sheet and only when `VoiceScope.of` returns
+  services (an engine is available; the fake one in debug builds or with
+  `--dart-define=FI_VOICE_FAKE=true`). Never in Edit record or a dialog. The sheet is its own route,
+  so `_recordEditor` carries the shell's `VoiceScope` into it. `FormSurface.phoneFooterLeading`
+  holds the 56px `VoiceMicButton` beside a flexible Save; `FormSurface.top` holds the `VoicePanel`.
+  Each mic state has its own icon and label, never color alone. Panels use `bg` cards with 8px
+  radius; the primer and listening panels use the accent900→bg radial glow with an accent700 edge.
+  A voice-filled field shows `VoiceChip` in its label row and `VoiceFieldMark` (accent900 tint,
+  accent700 border) on its control; a field a turn asks for gets the Needed marker and a dashed
+  accent border. The evidence popover is inline under the label row, not an overlay. Save is
+  disabled only while listening or processing, and closing with changes asks "Discard this
+  record?". Transcripts stay in the controller's memory and die with the sheet: never log, persist
+  or send them.
 
 ## Charts
 

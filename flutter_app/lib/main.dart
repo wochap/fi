@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:fi/app.dart';
 import 'package:fi/bridge/collection_bridge.dart';
 import 'package:fi/bridge/rust_bridge_loader.dart';
+import 'package:fi/voice/services.dart';
 import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
@@ -20,6 +21,8 @@ void main() {
       bridge: RustCollectionBridge(),
       initializeRust: initializeRustBridge,
       dataDirProvider: resolveDataDir,
+      voiceServices: (dataDir, prefs) =>
+          VoiceServices.platform(dataDir: dataDir, prefs: prefs),
     ),
   );
 }

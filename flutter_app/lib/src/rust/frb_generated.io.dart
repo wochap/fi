@@ -10,6 +10,7 @@ import 'api/lifecycle.dart';
 import 'api/models.dart';
 import 'api/pairing.dart';
 import 'api/queries.dart';
+import 'api/voice_models.dart';
 import 'api/widgets.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -55,6 +56,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   RustStreamSink<List<TrustedDeviceDto>>
   dco_decode_StreamSink_list_trusted_device_dto_Sse(dynamic raw);
+
+  @protected
+  RustStreamSink<ModelStatusDto> dco_decode_StreamSink_model_status_dto_Sse(
+    dynamic raw,
+  );
 
   @protected
   RustStreamSink<PairingStateDto> dco_decode_StreamSink_pairing_state_dto_Sse(
@@ -150,6 +156,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   LocalDeviceDto dco_decode_box_autoadd_local_device_dto(dynamic raw);
+
+  @protected
+  ModelErrorDto dco_decode_box_autoadd_model_error_dto(dynamic raw);
 
   @protected
   NetworkingDeferredDto dco_decode_box_autoadd_networking_deferred_dto(
@@ -422,6 +431,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   LogEventDto dco_decode_log_event_dto(dynamic raw);
 
   @protected
+  ModelErrorDto dco_decode_model_error_dto(dynamic raw);
+
+  @protected
+  ModelErrorKindDto dco_decode_model_error_kind_dto(dynamic raw);
+
+  @protected
+  ModelStatusDto dco_decode_model_status_dto(dynamic raw);
+
+  @protected
+  ModelStatusKindDto dco_decode_model_status_kind_dto(dynamic raw);
+
+  @protected
   NetworkPortsDto dco_decode_network_ports_dto(dynamic raw);
 
   @protected
@@ -502,6 +523,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   LocalDeviceDto? dco_decode_opt_box_autoadd_local_device_dto(dynamic raw);
+
+  @protected
+  ModelErrorDto? dco_decode_opt_box_autoadd_model_error_dto(dynamic raw);
 
   @protected
   NetworkingDeferredDto? dco_decode_opt_box_autoadd_networking_deferred_dto(
@@ -748,6 +772,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  RustStreamSink<ModelStatusDto> sse_decode_StreamSink_model_status_dto_Sse(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   RustStreamSink<PairingStateDto> sse_decode_StreamSink_pairing_state_dto_Sse(
     SseDeserializer deserializer,
   );
@@ -869,6 +898,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   LocalDeviceDto sse_decode_box_autoadd_local_device_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ModelErrorDto sse_decode_box_autoadd_model_error_dto(
     SseDeserializer deserializer,
   );
 
@@ -1233,6 +1267,22 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   LogEventDto sse_decode_log_event_dto(SseDeserializer deserializer);
 
   @protected
+  ModelErrorDto sse_decode_model_error_dto(SseDeserializer deserializer);
+
+  @protected
+  ModelErrorKindDto sse_decode_model_error_kind_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ModelStatusDto sse_decode_model_status_dto(SseDeserializer deserializer);
+
+  @protected
+  ModelStatusKindDto sse_decode_model_status_kind_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   NetworkPortsDto sse_decode_network_ports_dto(SseDeserializer deserializer);
 
   @protected
@@ -1325,6 +1375,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   LocalDeviceDto? sse_decode_opt_box_autoadd_local_device_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ModelErrorDto? sse_decode_opt_box_autoadd_model_error_dto(
     SseDeserializer deserializer,
   );
 
@@ -1636,6 +1691,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_StreamSink_model_status_dto_Sse(
+    RustStreamSink<ModelStatusDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_StreamSink_pairing_state_dto_Sse(
     RustStreamSink<PairingStateDto> self,
     SseSerializer serializer,
@@ -1785,6 +1846,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_box_autoadd_local_device_dto(
     LocalDeviceDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_model_error_dto(
+    ModelErrorDto self,
     SseSerializer serializer,
   );
 
@@ -2245,6 +2312,27 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_log_event_dto(LogEventDto self, SseSerializer serializer);
 
   @protected
+  void sse_encode_model_error_dto(ModelErrorDto self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_model_error_kind_dto(
+    ModelErrorKindDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_model_status_dto(
+    ModelStatusDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_model_status_kind_dto(
+    ModelStatusKindDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_network_ports_dto(
     NetworkPortsDto self,
     SseSerializer serializer,
@@ -2355,6 +2443,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_opt_box_autoadd_local_device_dto(
     LocalDeviceDto? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_model_error_dto(
+    ModelErrorDto? self,
     SseSerializer serializer,
   );
 

@@ -24,6 +24,12 @@ import 'package:fi/widgets/expression_builder.dart';
 import 'package:fi/widgets/query_builder.dart';
 import 'package:fi/widgets/query_editor_dialog.dart';
 import 'package:fi/widgets/widget_dashboard.dart';
+import 'package:fi/voice/controller.dart';
+import 'package:fi/voice/engine.dart';
+import 'package:fi/voice/mic_button.dart';
+import 'package:fi/voice/panel.dart';
+import 'package:fi/voice/patch.dart';
+import 'package:fi/voice/services.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -2017,21 +2023,29 @@ class CollectionsPage extends StatelessWidget {
     RecordDto? existing,
     String? focusFieldId,
     Map<String, FieldValueDto>? prefill,
-  ]) => showFormSurface<void>(
-    context,
-    builder: (route) => _RecordEditorForm(
-      controller: controller,
-      schema: schema,
-      existing: existing,
-      focusFieldId: focusFieldId,
-      prefill: prefill,
-      onDuplicate: (values) {
-        if (context.mounted) {
-          unawaited(_recordEditor(context, schema, null, null, values));
-        }
-      },
-    ),
-  );
+  ]) {
+    // The sheet is its own route, so the shell's voice scope is carried into it.
+    final voice = VoiceScope.scopeOf(context);
+    return showFormSurface<void>(
+      context,
+      builder: (route) => VoiceScope(
+        services: voice?.services,
+        openSettings: voice?.openSettings,
+        child: _RecordEditorForm(
+          controller: controller,
+          schema: schema,
+          existing: existing,
+          focusFieldId: focusFieldId,
+          prefill: prefill,
+          onDuplicate: (values) {
+            if (context.mounted) {
+              unawaited(_recordEditor(context, schema, null, null, values));
+            }
+          },
+        ),
+      ),
+    );
+  }
 }
 
 /// How long the record editor waits after an edit before asking Rust to re-validate the draft.
@@ -2274,6 +2288,100 @@ class _RecordEditorFormState extends State<_RecordEditorForm> {
   };
   late final _fieldKeys = {for (final field in fields) field.id: GlobalKey()};
 
+  /// Voice fill: only in a phone New record sheet with an engine; null otherwise.
+  VoiceFillController? _voice;
+  var _voiceChecked = false;
+
+  /// Bumped when voice writes a field, so its control rebuilds from the new value.
+  final _revisions = <String, int>{};
+
+  /// The values the sheet opened with, to tell whether closing loses changes.
+  late final _opened = Map<String, FieldValueDto>.of(values);
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_voiceChecked) return;
+    _voiceChecked = true;
+    final services = VoiceScope.of(context);
+    if (services == null ||
+        widget.existing != null ||
+        FormSurfaceScope.modeOf(context) != FormSurfaceMode.sheet) {
+      return;
+    }
+    _voice = VoiceFillController(
+      services: services,
+      fields: [for (final field in fields) VoiceField.fromDefinition(field)],
+      readDraft: () => values,
+      writeDraft: _voiceWrote,
+      origins: {for (final id in _defaulted) id: FieldOrigin.defaulted},
+    );
+  }
+
+  /// A voice turn (or "Clear field") replaced the draft.
+  void _voiceWrote(Map<String, FieldValueDto> next) {
+    setState(() {
+      for (final MapEntry(:key, :value) in next.entries) {
+        if (values[key] == value) continue;
+        values[key] = value;
+        _defaulted.remove(key);
+        _revisions[key] = (_revisions[key] ?? 0) + 1;
+      }
+    });
+    // The patched draft goes through Rust's validation; issues show once Save was tried.
+    _debounce?.cancel();
+    _debounce = Timer(_draftValidationDelay, () async {
+      final found = await _check(++_request);
+      if (found != null && attempted) setState(() => issues = found);
+    });
+  }
+
+  bool get _changedSinceOpen {
+    bool empty(FieldValueDto? value) =>
+        value == null || value.kind == FieldValueKindDto.null_;
+    return {...values.keys, ..._opened.keys}.any((key) {
+      final now = values[key];
+      final before = _opened[key];
+      return !(empty(now) && empty(before)) && now != before;
+    });
+  }
+
+  /// Closing while a turn runs or after changes asks first (voice sheets only).
+  bool get _confirmClose =>
+      _voice != null && (_voice!.busy || _changedSinceOpen);
+
+  Future<void> _close() async {
+    if (!_confirmClose) {
+      Navigator.pop(context);
+      return;
+    }
+    final discard = await showDialog<bool>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        key: const Key('voice-discard-dialog'),
+        title: const Text('Discard this record?'),
+        content: const Text(
+          'Voice processing will stop and the fields you changed will be lost.',
+        ),
+        actions: [
+          OutlinedButton(
+            key: const Key('voice-discard'),
+            onPressed: () => Navigator.pop(dialog, true),
+            child: const Text('Discard'),
+          ),
+          FilledButton(
+            key: const Key('voice-keep-editing'),
+            onPressed: () => Navigator.pop(dialog, false),
+            child: const Text('Keep editing'),
+          ),
+        ],
+      ),
+    );
+    if (discard != true || !mounted) return;
+    await _voice?.discard();
+    if (mounted) Navigator.pop(context);
+  }
+
   bool _stillNeeded(String fieldId) =>
       _needed.contains(fieldId) &&
       (values[fieldId]?.kind ?? FieldValueKindDto.null_) ==
@@ -2314,6 +2422,7 @@ class _RecordEditorFormState extends State<_RecordEditorForm> {
   @override
   void dispose() {
     _debounce?.cancel();
+    _voice?.dispose();
     for (final node in _focusGroups.values) {
       node.dispose();
     }
@@ -2321,6 +2430,7 @@ class _RecordEditorFormState extends State<_RecordEditorForm> {
   }
 
   void _changed(String fieldId, FieldValueDto value) {
+    _voice?.fieldEdited(fieldId);
     final wasNeeded = _stillNeeded(fieldId);
     values[fieldId] = value;
     final wasDefaulted = _defaulted.remove(fieldId);
@@ -2442,6 +2552,49 @@ class _RecordEditorFormState extends State<_RecordEditorForm> {
 
   @override
   Widget build(BuildContext context) {
+    final voice = _voice;
+    if (voice == null) return _form(context);
+    return ListenableBuilder(
+      listenable: Listenable.merge([voice, voice.services.models]),
+      builder: (context, _) => PopScope(
+        canPop: !_confirmClose,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) unawaited(_close());
+        },
+        child: _form(context),
+      ),
+    );
+  }
+
+  Widget _mic(VoiceFillController voice) {
+    final status = voice.services.models.status;
+    return VoiceMicButton(
+      state: voice.micState,
+      percent: status.totalBytes == 0
+          ? 0
+          : status.doneBytes * 100 ~/ status.totalBytes,
+      onTap: () => unawaited(voice.micTapped()),
+      onHoldStart: () => unawaited(voice.holdStarted()),
+      onHoldEnd: () => unawaited(voice.holdEnded()),
+    );
+  }
+
+  Widget? _evidence(VoiceFillController? voice, String fieldId) {
+    if (voice == null || voice.evidenceFieldId != fieldId) return null;
+    final origin = voice.draftState.of(fieldId);
+    final transcript = voice.transcriptOf(fieldId);
+    if (!origin.isVoice || transcript == null) return null;
+    return VoiceEvidencePopover(
+      key: Key('voice-evidence-$fieldId'),
+      transcript: transcript,
+      evidence: origin.evidence ?? '',
+      onClear: () => voice.clearField(fieldId),
+      onDone: voice.closeEvidence,
+    );
+  }
+
+  Widget _form(BuildContext context) {
+    final voice = _voice;
     final dialog = FormSurfaceScope.modeOf(context) != FormSurfaceMode.sheet;
     final needed = fields.where((field) => _stillNeeded(field.id)).length;
     final existing = widget.existing;
@@ -2457,7 +2610,10 @@ class _RecordEditorFormState extends State<_RecordEditorForm> {
       contextLabel: _contextLabel,
       showContextInDialog: true,
       closeInHeader: true,
+      onCancel: voice == null ? null : () => unawaited(_close()),
       fullWidthPrimaryOnPhone: true,
+      phoneFooterLeading: voice == null ? null : _mic(voice),
+      top: voice == null ? null : VoicePanel(controller: voice),
       submitOnCtrlEnter: true,
       footerHint: existing == null ? '* Required · Ctrl+Enter to save' : null,
       leadingFooterAction: existing == null
@@ -2500,17 +2656,26 @@ class _RecordEditorFormState extends State<_RecordEditorForm> {
               required: FieldRendererRegistry.marksRequired(field),
               defaulted: _defaulted.contains(field.id),
               needed: _stillNeeded(field.id),
+              voiceFilled: voice?.draftState.of(field.id).isVoice ?? false,
+              onVoiceChip: voice == null
+                  ? null
+                  : () => voice.openEvidence(field.id),
+              voiceNeeded: voice?.isNeeded(field.id) ?? false,
+              belowLabel: _evidence(voice, field.id),
               control: Focus(
                 focusNode: _focusGroups[field.id],
                 child: KeyedSubtree(
                   key: _fieldKeys[field.id],
-                  child: const FieldRendererRegistry().editor(
-                    field,
-                    values[field.id],
-                    (value) => _changed(field.id, value),
-                    errors: issues.of(field.id),
-                    quickFill: true,
-                    showLabel: false,
+                  child: KeyedSubtree(
+                    key: ValueKey(_revisions[field.id] ?? 0),
+                    child: const FieldRendererRegistry().editor(
+                      field,
+                      values[field.id],
+                      (value) => _changed(field.id, value),
+                      errors: issues.of(field.id),
+                      quickFill: true,
+                      showLabel: false,
+                    ),
                   ),
                 ),
               ),
@@ -2519,7 +2684,8 @@ class _RecordEditorFormState extends State<_RecordEditorForm> {
       ),
       errors: issues.form,
       primaryLabel: existing == null ? 'Save record' : 'Save changes',
-      onPrimary: _save,
+      // Voice fill never saves by itself, and Save waits while a turn listens or processes.
+      onPrimary: voice?.busy ?? false ? null : _save,
     );
   }
 }

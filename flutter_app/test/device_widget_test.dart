@@ -770,24 +770,23 @@ void main() {
       );
     });
 
-    testWidgets('ends the devices screen on a phone', (tester) async {
+    testWidgets('sits in Settings › About on a phone, not on Devices', (
+      tester,
+    ) async {
       final bridge = FakeCollectionBridge()..buildIdentity = clean;
       await openWithBuild(tester, bridge, size: const Size(390, 900));
       final label = find.byKey(const Key('build-version'));
-      await tester.scrollUntilVisible(
-        label,
-        200,
-        scrollable: find
-            .descendant(
-              of: find.byKey(const Key('devices-page')),
-              matching: find.byType(Scrollable),
-            )
-            .first,
-      );
-      expect(find.text('fi 0.1.21 · a1b2c3d'), findsOneWidget);
+      final devicesPage = find.byKey(const Key('devices-page'));
+      expect(find.descendant(of: devicesPage, matching: label), findsNothing);
+      await tester.tap(find.text('Settings'));
+      await tester.pump();
+      await pumpUntilFound(tester, label);
       expect(
-        tester.getTopLeft(label).dy,
-        greaterThan(tester.getTopLeft(find.text('THIS DEVICE')).dy),
+        find.descendant(
+          of: find.byKey(const Key('settings-about')),
+          matching: find.text('fi 0.1.21 · a1b2c3d'),
+        ),
+        findsOneWidget,
       );
     });
 

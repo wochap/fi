@@ -1,6 +1,7 @@
 import 'package:fi/theme/form_errors.dart';
 import 'package:fi/theme/nocturne.dart';
 import 'package:fi/theme/nocturne_widgets.dart';
+import 'package:fi/voice/panel.dart';
 import 'package:flutter/material.dart';
 
 /// Width of the label column beside the controls at 720px and wider.
@@ -15,6 +16,10 @@ final class RecordFormRow {
     this.required = false,
     this.defaulted = false,
     this.needed = false,
+    this.voiceFilled = false,
+    this.onVoiceChip,
+    this.voiceNeeded = false,
+    this.belowLabel,
     this.key,
   });
 
@@ -30,6 +35,18 @@ final class RecordFormRow {
 
   /// Shows the Needed marker and "Needed to complete this record" under the control.
   final bool needed;
+
+  /// Filled by voice: the Voice chip in the label row, an accent tint and border on the control.
+  final bool voiceFilled;
+
+  /// Tapping the Voice chip, which opens the evidence popover.
+  final VoidCallback? onVoiceChip;
+
+  /// A voice turn asked for this required field: the Needed marker and a dashed accent border.
+  final bool voiceNeeded;
+
+  /// Shown between the label row and the control, such as the voice evidence popover.
+  final Widget? belowLabel;
 
   /// Keys the whole row, for scrolling to it.
   final Key? key;
@@ -67,11 +84,25 @@ class RecordFormBody extends StatelessWidget {
       child: row.required ? requiredLabel(row.name) : Text(row.name),
     );
     final markers = [
-      if (row.needed) const NeededMarker(),
-      if (row.defaulted && !row.needed)
+      if (row.voiceFilled)
+        VoiceChip(
+          key: Key('voice-chip-${row.id}'),
+          fieldLabel: row.name,
+          onTap: row.onVoiceChip,
+        ),
+      if (row.needed || (row.voiceNeeded && !row.voiceFilled))
+        NeededMarker(key: Key('needed-marker-${row.id}')),
+      if (row.defaulted && !row.needed && !row.voiceFilled)
         DefaultMarker(key: Key('default-${row.id}')),
     ];
-    Widget control = row.control;
+    Widget control = row.voiceFilled || row.voiceNeeded
+        ? VoiceFieldMark(
+            key: Key('voice-mark-${row.id}'),
+            voice: row.voiceFilled,
+            needed: row.voiceNeeded,
+            child: row.control,
+          )
+        : row.control;
     if (row.needed) {
       control = Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -102,6 +133,7 @@ class RecordFormBody extends StatelessWidget {
               ],
             ],
           ),
+          ?row.belowLabel,
           control,
         ],
       );
@@ -125,7 +157,15 @@ class RecordFormBody extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 18),
-        Expanded(child: control),
+        Expanded(
+          child: row.belowLabel == null
+              ? control
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  spacing: 6,
+                  children: [row.belowLabel!, control],
+                ),
+        ),
       ],
     );
   }
