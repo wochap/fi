@@ -28,11 +28,15 @@ Flutter SHALL present create and edit forms through one shared form surface. Whe
 - **THEN** the editor opens as a form-surface dialog with Cancel and Save right-aligned
 
 ### Requirement: Phone sheet layout
-On a phone, the form surface SHALL show a drag handle, the form title with an optional context line (for example "in Gym") on the same row, a scrollable body, and a footer with Cancel (one part width) beside the primary action (two parts width). Inputs in the body SHALL take their height from the shared input size tokens (normal is 48px on a phone); the surface MUST NOT override input padding. The sheet MUST clear both the on-screen keyboard and the system navigation bar.
+On a phone, the form surface SHALL show a drag handle, the form title with an optional context line (for example "in Gym") on the same row, a scrollable body, and a footer with Cancel (one part width) beside the primary action (two parts width). The record editor is the exception: its header SHALL end with a close ✕ (and a ⋮ when it has header actions), and its footer SHALL hold only the primary action at full width, 52px tall, so that `voice-record-fill` can place the mic beside it. Inputs in the body SHALL take their height from the shared input size tokens (normal is 48px on a phone); the surface MUST NOT override input padding. The sheet MUST clear both the on-screen keyboard and the system navigation bar.
 
 #### Scenario: Footer proportions
 - **WHEN** a form surface is shown as a bottom sheet
 - **THEN** the footer shows an outlined Cancel button and a primary button twice its width, both 48px tall
+
+#### Scenario: Record editor footer
+- **WHEN** the new-record editor opens as a bottom sheet on a 390px-wide screen
+- **THEN** the header shows "New record", "in <collection>" and a close ✕, and the footer holds only a full-width "Save record" button
 
 #### Scenario: Keyboard open
 - **WHEN** the user focuses an input in the sheet and the keyboard opens
@@ -43,7 +47,7 @@ On a phone, the form surface SHALL show a drag handle, the form title with an op
 - **THEN** both input boxes are 48px tall
 
 ### Requirement: Header actions
-The form surface SHALL accept secondary actions for the header. On a phone these SHALL render as icon buttons with tooltips in the title row; on a dialog they SHALL render as text buttons before Cancel in the footer.
+The form surface SHALL accept secondary actions for the header. On a phone these SHALL render as icon buttons with tooltips in the title row, or, for the record editor, as items of one ⋮ menu in the title row; on a dialog they SHALL render as text buttons before Cancel in the footer, except a destructive record action, which SHALL sit at the leading edge of the footer.
 
 #### Scenario: Remove widget on a phone
 - **WHEN** the user edits an existing widget on a phone

@@ -25,6 +25,8 @@ Every field and enum option SHALL have a globally unique stable ID independent o
 ### Requirement: Supported field definitions
 Field definitions SHALL support Text, Integer, FixedDecimal with scale, Boolean, Date, DateTime, Duration, and Enum types plus requiredness, optional default, applicable validation metadata, display metadata, deterministic order, and logical deletion. Multiline text SHALL be represented as Text display metadata. A slider presentation SHALL be represented as Integer display metadata and SHALL be valid only when the field declares both a minimum and a maximum. A slider MAY carry a positive whole-number step as Integer display metadata; a definition without a step SHALL read as step 1. Display metadata SHALL be forward compatible: a definition missing a display flag SHALL read as that flag unset, and a definition missing the step SHALL read as step 1.
 
+A Date field MAY declare a relative default: a signed whole number of days added to the record's creation day. A field SHALL NOT declare both a fixed default and a relative default, and a relative default SHALL be rejected on any type other than Date. The relative default SHALL be stored so that a device that does not know it reads the field as having no default rather than failing to read the schema.
+
 #### Scenario: Add every supported field type
 - **WHEN** a user adds one valid field of every supported type
 - **THEN** the schema round-trips through Automerge and projection without losing type or metadata
@@ -44,6 +46,14 @@ Field definitions SHALL support Text, Integer, FixedDecimal with scale, Boolean,
 #### Scenario: Definition written before the slider flag existed
 - **WHEN** a field definition stored without any slider entry is read
 - **THEN** it parses with the slider flag unset and no malformed diagnostic
+
+#### Scenario: Relative default round-trips
+- **WHEN** a Date field with a relative default of +7 days is created on one device
+- **THEN** another device reads the same field with a relative default of +7 days and no fixed default
+
+#### Scenario: Relative default on the wrong type
+- **WHEN** a Text field carries a relative default
+- **THEN** the command returns a typed validation error naming the default and commits nothing
 
 #### Scenario: Definition written before the step existed
 - **WHEN** a field definition stored with the slider flag but without any step entry is read
@@ -83,6 +93,8 @@ Rust application-core commands SHALL validate names, field types, scale bounds, 
 ### Requirement: Safe schema evolution
 Schema commands SHALL support collection create, rename, logical delete, field add/update/logical removal/reorder, and enum option maintenance. A field base type or FixedDecimal scale MUST NOT change once active records contain a value for that field. A required constraint MAY be introduced or a default removed while active records lack the field; the command SHALL be accepted, and each active record lacking the field SHALL be projected as invalid with a typed missing-required diagnostic until it is repaired or the constraint is relaxed. When the field carries a default, the default SHALL continue to satisfy the constraint for records lacking the field.
 
+Removing an enum option SHALL be accepted whether or not active records hold it. Records that hold a removed option SHALL keep that value, SHALL remain valid, and SHALL read the option's last label; the option SHALL no longer be accepted as a new value.
+
 #### Scenario: Remove field logically
 - **WHEN** a populated field is removed
 - **THEN** the field is hidden from ordinary editing while its definition and existing authoritative record values remain recoverable
@@ -98,6 +110,10 @@ Schema commands SHALL support collection create, rename, logical delete, field a
 #### Scenario: Required introduced with a default
 - **WHEN** a field is added as required with a valid default while active records lack it
 - **THEN** the schema command commits and those records remain valid because the default satisfies the constraint on read
+
+#### Scenario: Remove an option records use
+- **WHEN** the option "option 3" is removed while two active records hold it
+- **THEN** the command commits, both records keep "option 3" and stay valid, and a new record that picks "option 3" is rejected
 
 #### Scenario: Invalid record repaired
 - **WHEN** a record marked invalid for a missing required field receives a value for that field through an ordinary field update
@@ -154,3 +170,26 @@ The clone SHALL be applied as exactly one Automerge change under exactly one HLC
 #### Scenario: Invalid clone writes nothing
 - **WHEN** the clone name is empty or the source collection is deleted
 - **THEN** the command returns a typed validation error and neither Automerge nor the projection changes and no data-changed notification is emitted
+
+### Requirement: Duration text grammar
+The core SHALL define one text grammar for durations and expose parsing and formatting to Flutter. A duration text SHALL be an optional sign (`-`, `−` or `+`) followed by one or more parts, each a whole number and a unit — `h`, `m` or `min`, `s` or `sec`, `ms` — in any order, each unit at most once, with optional spaces between parts. Units SHALL be case-insensitive. The value SHALL be the signed sum in milliseconds and SHALL be rejected when it overflows a signed 64-bit integer, when a unit repeats, when a part has no unit, or when the text is empty. Formatting SHALL produce the canonical short form with units in the order h, m, s, ms, omitting zero parts (for example "1h 30m", "-45s", "0s" for zero), and parsing a formatted value SHALL return the same number.
+
+#### Scenario: Parse hours and minutes
+- **WHEN** the text "1h 30m" is parsed
+- **THEN** the result is 5400000 milliseconds
+
+#### Scenario: Negative seconds
+- **WHEN** the text "−45s" is parsed
+- **THEN** the result is −45000 milliseconds
+
+#### Scenario: Missing unit rejected
+- **WHEN** the text "90" is parsed
+- **THEN** parsing fails with an error naming the missing unit
+
+#### Scenario: Repeated unit rejected
+- **WHEN** the text "1h 2h" is parsed
+- **THEN** parsing fails
+
+#### Scenario: Round trip
+- **WHEN** 5430250 milliseconds is formatted and the result is parsed
+- **THEN** the text is "1h 30m 30s 250ms" and parsing returns 5430250

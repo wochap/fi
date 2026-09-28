@@ -20,11 +20,17 @@ Flutter SHALL define exactly two input sizes. Small SHALL be 32 logical pixels t
 - **THEN** both are 32px tall
 
 ### Requirement: Shared input widgets
-Feature code SHALL build text, integer, decimal, search, select, slider, and Date / DateTime / time picker inputs only through the shared inputs (`FiTextInput`, `FiSelect`, `FiPickerInput`, `FiSlider`). Every shared input of a given size and screen class except `FiSlider` SHALL render an input box of the same height, whatever its kind, label, value, prefix, or suffix. Switches, checkboxes, and buttons are not inputs under this requirement. `FiSlider` is a composite control: it SHALL take the height its track and its label row need, SHALL keep the same label, required-marker, helper, and error handling as the other shared inputs, and is exempt from the equal-height rule only.
+Feature code SHALL build text, integer, decimal, search, select, slider, segmented choice, duration, and Date / DateTime / time picker inputs only through the shared inputs (`FiTextInput`, `FiSelect`, `FiPickerInput`, `FiSlider`, `FiSegmented`, `FiDurationInput`). Every shared input of a given size and screen class except `FiSlider` SHALL render an input box of the same height, whatever its kind, label, value, prefix, or suffix. Switches, checkboxes, and buttons are not inputs under this requirement. `FiSlider` is a composite control: it SHALL take the height its track and its label row need, SHALL keep the same label, required-marker, helper, and error handling as the other shared inputs, and is exempt from the equal-height rule only.
 
 Feature code SHALL build in-place text editing of a displayed title or label only through the shared `FiEditableText`. `FiEditableText` draws no box: it renders the text in the caller's text style with a caret and selection and nothing else, sizes its width to its content within the bounds the caller gives it, and is exempt from the input size tokens and from the fixed-height and equal-height rules that apply to boxed inputs.
 
-A `FiSlider` SHALL take integer minimum and maximum bounds, an optional positive integer step that defaults to 1 and divides the distance between the bounds exactly, and an optional integer value. It SHALL move only between values of the form `minimum + k * step` inside the bounds, SHALL show the current value as text beside the track, and SHALL always show the track. Below the track it SHALL show one label row: one label per step position, from the minimum to the maximum, each centred under its position, when every label fits in the track width without overlapping; otherwise the row SHALL show only the minimum under the leading end and the maximum under the trailing end. The bounds are therefore always readable, and no label is ever shown twice. Error lines and helper text SHALL render below the label row. When the value is absent it SHALL show the track with no thumb and a placeholder in place of the value label, and the first tap or drag on the track SHALL set the value to the nearest step position. When clearing is allowed, a set value SHALL offer a way to return to unset. It SHALL report only integers inside the bounds that lie on a step position and MUST NOT expose a floating-point value to feature code.
+A `FiSlider` SHALL take integer minimum and maximum bounds, an optional positive integer step that defaults to 1 and divides the distance between the bounds exactly, and an optional integer value. It SHALL move only between values of the form `minimum + k * step` inside the bounds, SHALL show the current value as text beside the track, and SHALL always show the track. Below the track it SHALL show one label row: one label per step position, from the minimum to the maximum, each centred under its position, when every label fits in the track width without overlapping; otherwise the row SHALL show only the minimum under the leading end and the maximum under the trailing end. The bounds are therefore always readable, and no label is ever shown twice. Error lines and helper text SHALL render below the label row. When the value is absent it SHALL show a dashed track with no thumb and a "Set" action in place of the value label; the first tap or drag on the track SHALL set the value to the nearest step position, and "Set" SHALL set it to the minimum. When clearing is allowed, a set value SHALL offer a way to return to unset. It SHALL report only integers inside the bounds that lie on a step position and MUST NOT expose a floating-point value to feature code.
+
+A `FiSegmented` SHALL show its options as equal-width segments of one control, at least 44px tall below 720px. When clearing is allowed, activating the selected segment again SHALL clear the value; when it is not allowed, activating the selected segment SHALL do nothing.
+
+A `FiDurationInput` SHALL edit a signed duration held as whole milliseconds. At 720px and wider it SHALL show a +/− segmented sign followed by four small boxes for hours, minutes, seconds and milliseconds, each labelled with its unit. Below 720px it SHALL be one text input with a timer icon that accepts unit text such as "1h 30m", "90m", "−45s" or "1h 5m 30s 250ms", shows the parsed value beside the text as "= 1 h 30 min", and shows "Use units like 1h 30m" as its error when the text does not parse. Parsing and formatting SHALL use the single duration grammar the core defines.
+
+Every shared input that edits an optional value SHALL show the clear mark only while it holds a value, and MUST NOT show it for a required value. A Date or Date & time input that offers "Today" or "Now" SHALL hide that action while it holds a value.
 
 #### Scenario: New field panel aligns
 - **WHEN** the schema sheet's "New field" panel shows the Name text input beside the Type select
@@ -35,8 +41,32 @@ A `FiSlider` SHALL take integer minimum and maximum bounds, an optional positive
 - **THEN** Name has the normal height, and the node's select and Number inputs share the small height
 
 #### Scenario: Picker input with an action
-- **WHEN** a Date input shows a "Today" action and a clear icon in its suffix
+- **WHEN** a Date input shows a "Today" action or a clear icon in its suffix
 - **THEN** its box height equals a plain text input of the same size
+
+#### Scenario: Today hides once set
+- **WHEN** an optional Date input holding no value shows "Today" and the user picks 2026-09-28
+- **THEN** "Today" is hidden and the clear mark is shown; clearing the value shows "Today" again
+
+#### Scenario: Segmented choice clears on second tap
+- **WHEN** an optional `FiSegmented` with options Low, Mid, High holds Mid and the user taps Mid
+- **THEN** no segment is selected and feature code receives no value
+
+#### Scenario: Required segmented choice does not clear
+- **WHEN** a required `FiSegmented` holds Mid and the user taps Mid
+- **THEN** Mid stays selected
+
+#### Scenario: Duration text on a phone
+- **WHEN** the user types "1h 30m" into a `FiDurationInput` on a 390px-wide screen
+- **THEN** the input shows "= 1 h 30 min" beside the text and feature code receives 5400000
+
+#### Scenario: Duration text that does not parse
+- **WHEN** the user types "an hour" into a `FiDurationInput`
+- **THEN** the input shows "Use units like 1h 30m" under the box and feature code receives no new value
+
+#### Scenario: Duration boxes on desktop
+- **WHEN** a `FiDurationInput` holding −45000 is rendered on a 1240px-wide screen
+- **THEN** the sign reads −, the boxes read 0 h, 0 m, 45 s and 0 ms
 
 #### Scenario: Slider aligns with a text input
 - **WHEN** a normal `FiSlider` is rendered beside a normal `FiTextInput` on the same screen
@@ -68,7 +98,11 @@ A `FiSlider` SHALL take integer minimum and maximum bounds, an optional positive
 
 #### Scenario: Slider starts unset
 - **WHEN** a `FiSlider` is rendered with no value
-- **THEN** it shows the track with no thumb and a placeholder instead of a value label, offers no "Set" action, and reports no value until the user touches the track
+- **THEN** it shows a dashed track with no thumb and a "Set" action instead of a value label, and reports no value until the user touches the track or presses "Set"
+
+#### Scenario: Set puts the slider at its minimum
+- **WHEN** the user presses "Set" on an unset `FiSlider` with bounds 5 and 30
+- **THEN** the thumb appears at 5, the value label shows 5, and feature code receives 5
 
 #### Scenario: Touching an unset track sets the value
 - **WHEN** the user taps an unset `FiSlider` with bounds 1 and 5 near the middle of the track

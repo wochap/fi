@@ -85,6 +85,16 @@ When the kind is Choice, the field editor SHALL show an inline options section l
 
 On Save the editor SHALL submit the field definition, then the option changes as individual option commands (create, rename or reorder, remove), then, when the chosen default is an option created by this save, a second field update carrying the option ID returned for it. Options left unchanged SHALL NOT be resubmitted.
 
+At 720px and wider the schema editor SHALL be the side sheet headed by "<collection> · N fields" and "Collection schema". It SHALL list fields as rows with a drag handle, the field-type icon, the name with the required mark, and a short summary (for example "Integer · 5–30", "Text · multiline", "Choice · 3 options"). "New field" and editing an existing field SHALL open as an inline panel in the sheet. The footer SHALL read "Drag to reorder · click a field to edit" with Done. Below 720px the schema editor SHALL be a sheet of rows at least 52px tall ending in a chevron, followed by a dashed "Add field" button and a footer reading "Long-press to reorder" with Done. Tapping a row SHALL push a field screen titled with the field name and "Field in <collection>", with a back action, a ⋮ menu holding Delete field, and a "Save field" footer. "Add field" SHALL push the same screen titled "New field" with an "Add field" footer.
+
+The field editor SHALL present the type as a grid of eight tiles in two rows of four, each with the type icon and human label. The type SHALL be fixed once the field exists, and the other tiles SHALL be shown disabled. Below the type the editor SHALL show option chips for the chosen type: Required for every type; Multiline and Length limits for Text; Range for Integer, Decimal and Duration; Show as slider for Integer; Date range for Date and Date & time; Default value for every type. A chip that is on SHALL show a check and open its settings block under the chips, headed by the chip's name with a ✕ that turns the chip off and clears its settings. Length limits SHALL show Min characters and Max characters side by side. Range and Date range SHALL show their two bounds side by side, labelled Earliest and Latest for dates. A Choice field SHALL always show its options section.
+
+The editor SHALL check the default against the other settings while the user types: a Text default outside the length limits SHALL show a counter such as "2 / 4–8" and the line "Default must be 4–8 characters." under it, a default outside the range SHALL show the range it must fall in, and the save action SHALL be disabled while such a line is shown.
+
+For a Date field the Default value block SHALL offer "Day of creation" or "Fixed date". "Day of creation" SHALL take a +/− sign and a whole number of days and SHALL show the date it resolves to today (for example "→ Oct 5, 2026").
+
+Each option row SHALL have a drag handle, the label as an editable input, and a delete action. Deleting an option that active records use SHALL first ask for confirmation stating how many records use it and that they keep it. Under the options the editor SHALL note that records using a deleted option keep it, shown as "<label> (deleted)", and that it can't be picked for new records.
+
 #### Scenario: Rust rejects schema edit
 - **WHEN** a submitted field definition violates a core validation rule
 - **THEN** the editor remains open and displays the typed field-safe error without local authoritative insertion
@@ -115,14 +125,38 @@ On Save the editor SHALL submit the field definition, then the option changes as
 
 #### Scenario: Kind labels are human
 - **WHEN** the user opens the type selector or reads the field list
-- **THEN** kinds read Text, Integer, Decimal, Boolean, Date, Date & time, Duration, and Choice, and a Choice row lists its option labels in order
+- **THEN** kinds read Text, Integer, Decimal, Boolean, Date, Date & time, Duration, and Choice, and a Choice row summarizes its options
+
+#### Scenario: Type grid and chips for a Date field
+- **WHEN** the user adds a field named "due" and picks the Date tile
+- **THEN** the chips read Required, Default value and Date range, and turning on Default value and Date range opens a block for each with a ✕
+
+#### Scenario: Relative date default preview
+- **WHEN** today is 2026-09-28 and the user sets the Date default to Day of creation + 7 days
+- **THEN** the block shows "→ Oct 5, 2026" and saving submits a relative default of 7 days, not a fixed date
+
+#### Scenario: Default checked against length limits
+- **WHEN** a Text field has length limits 4 and 8 and the user types the default "AB"
+- **THEN** the default shows "2 / 4–8" and "Default must be 4–8 characters.", and the save action is disabled until the default fits
+
+#### Scenario: Type fixed for an existing field
+- **WHEN** the user opens an existing Date field
+- **THEN** the Date tile is selected and the other seven tiles are disabled
+
+#### Scenario: Field screen on a phone
+- **WHEN** the user taps the "due" row in the schema sheet on a 390px-wide screen
+- **THEN** a pushed screen titled "due" and "Field in tst" shows the type grid, chips and blocks, a ⋮ with Delete field, and a "Save field" footer
+
+#### Scenario: Deleting a used option asks first
+- **WHEN** the user deletes the option "option 3" that two active records use
+- **THEN** a confirmation states that 2 records use it and keep it, and confirming removes it from the options list
 
 #### Scenario: Create a Choice field with options and a default in one save
 - **WHEN** the user picks Choice, adds options "Low", "Medium", "High", chooses "Medium" as the default, and taps Save
 - **THEN** the field is created, three option commands follow with orders 0, 1, 2, and a final field update sets the default to the ID returned for "Medium"; the field list then shows "Choice · Low, Medium, High"
 
 #### Scenario: Edit options of an existing Choice field
-- **WHEN** the user renames "Medium" to "Mid", drags "High" above "Low", removes "Low", and taps Save
+- **WHEN** the user renames "Medium" to "Mid", drags "High" above "Low", removes "Low" (confirming if records use it), and taps Save
 - **THEN** exactly three option commands are submitted — a rename for "Mid", a reorder for "High", and a remove for "Low" — and no command is sent for an option that did not change
 
 #### Scenario: Cancel discards option edits
@@ -144,9 +178,27 @@ On Save the editor SHALL submit the field definition, then the option changes as
 ### Requirement: Registry-driven field rendering
 A Flutter field renderer registry SHALL map supported field kinds to editor and display components, and generic forms MUST NOT use domain-specific Headache or Money implementations.
 
+The record editor SHALL lay fields out with labels beside the controls in a 140px column at 720px and wider, and with labels above the controls, one field per row, below 720px. Each kind SHALL use one control:
+- Text, Integer and Decimal use the text input; a Decimal shows its scale ("2 dp") as a suffix.
+- An Integer with the slider flag uses the slider.
+- A required Boolean uses a switch; an optional Boolean uses a Yes / No segmented choice that can be cleared.
+- A Choice with 2–4 active options uses a segmented choice. With 5–10 active options it uses a select that opens a dropdown at 720px and wider and a picker sheet titled with the field name, with a Clear action when optional, below 720px. With more than 10 active options it uses a search input that filters by substring and highlights the match, opening in place at 720px and wider and as a full-height search sheet with a back action, the option count and Clear below 720px.
+- Date and Date & time use the picker input.
+- Duration uses the duration input.
+
+A Choice value that holds a deleted option SHALL read "<label> (deleted)" in the record editor and in record lists, and the deleted option SHALL NOT be offered in any Choice control for picking.
+
 #### Scenario: Render supported controls
 - **WHEN** a schema contains Text, Integer, FixedDecimal, Boolean, Date, DateTime, Duration, and Enum fields
-- **THEN** the generic form renders the registered text, numeric, decimal, switch, picker, duration, and selection controls
+- **THEN** the generic form renders the registered text, numeric, decimal, switch or segmented boolean, picker, duration, and choice controls
+
+#### Scenario: Choice control follows the option count
+- **WHEN** a form has Choice fields with 3, 7 and 48 active options on a 390px-wide screen
+- **THEN** the first is a segmented choice, the second opens a picker sheet, and the third opens a full-height search sheet that returns to the form after a pick
+
+#### Scenario: Deleted option on an old record
+- **WHEN** a record holds the Choice option "option 3", which was later deleted
+- **THEN** the editor and the record list read "option 3 (deleted)", and "option 3" is not offered in the control
 
 #### Scenario: Unsupported future field type
 - **WHEN** a device reads a field type it cannot render
@@ -162,6 +214,10 @@ When a collection has incomplete records, a status line under the records SHALL 
 
 Opening an incomplete record SHALL open the record editor scrolled to the first missing required field in form order, with keyboard focus in that field. The field SHALL show the Needed marker and the line "Needed to complete this record". The editor title SHALL add "· N field needed" at 720px and wider. Saving values for every missing field SHALL remove the record's incomplete marks after the projection refreshes.
 
+The new-record editor SHALL be titled "New record" with "in <collection>". At 720px and wider its footer SHALL show "* Required · Ctrl+Enter to save" at the leading edge and Cancel and "Save record" at the trailing edge, and Ctrl+Enter SHALL save. Below 720px it SHALL be the bottom sheet with a close ✕ in the header and a full-width "Save record" footer.
+
+The edit-record editor SHALL be titled "Edit record" with "in <collection> · created <date>" when the record has a creation time, and its primary action SHALL read "Save changes". At 720px and wider a "Delete…" text button SHALL sit at the leading edge of the footer, apart from Cancel and "Save changes". Below 720px a ⋮ in the header SHALL hold Duplicate and "Delete record…", and the footer SHALL hold only "Save changes". Delete SHALL ask for confirmation before logically deleting the record. Duplicate SHALL close the editor and open the new-record editor prefilled with this record's current values, without saving anything until the user saves.
+
 #### Scenario: Create Headache record
 - **WHEN** the user completes a schema-generated Headache form
 - **THEN** Flutter submits a generic typed record command and reloads the projected record after success
@@ -169,6 +225,14 @@ Opening an incomplete record SHALL open the record editor scrolled to the first 
 #### Scenario: Edit one field
 - **WHEN** the user changes one field in an existing record
 - **THEN** Flutter submits field-specific updates rather than replacing the record
+
+#### Scenario: Delete from the edit dialog
+- **WHEN** the user presses "Delete…" in the edit dialog on a 1240px-wide screen and confirms
+- **THEN** the record is logically deleted and the dialog closes; cancelling the confirmation leaves the dialog open with edits intact
+
+#### Scenario: Duplicate on a phone
+- **WHEN** the user chooses Duplicate from the edit sheet's ⋮ on a 390px-wide screen
+- **THEN** the new-record sheet opens holding the same values, and no record is created until the user presses "Save record"
 
 #### Scenario: Invalid record in list
 - **WHEN** the record list on a 1240px-wide screen contains a record with `valid = false` and a missing-required diagnostic for "text multiline"
@@ -279,7 +343,7 @@ The computed-field section and editor SHALL include an on-demand explainer, open
 - **THEN** a dismissible popup shows the explanation and the numeric rules without leaving the dialog
 
 ### Requirement: Date and DateTime quick fill
-The registered Date editor SHALL offer a "Today" action and the registered DateTime editor SHALL offer a "Now" action wherever a record value is entered: the new-record form, the edit-record form, and the batch field editor. "Today" SHALL fill the device's local calendar day. "Now" SHALL fill the current instant truncated to the minute. Either action SHALL update the input text and emit the typed value exactly as a picker selection would, so validation timing and draft validation behave the same. The actions MUST NOT appear in schema metadata slots (field default, minimum, maximum), where they would freeze the moment the schema was edited.
+The registered Date editor SHALL offer a "Today" action and the registered DateTime editor SHALL offer a "Now" action wherever a record value is entered: the new-record form, the edit-record form, and the batch field editor. "Today" SHALL fill the device's local calendar day. "Now" SHALL fill the current instant truncated to the minute. Either action SHALL update the input text and emit the typed value exactly as a picker selection would, so validation timing and draft validation behave the same. At 720px and wider the action SHALL be a text button beside the input; below 720px it SHALL be an inline link inside the input's trailing edge. The action SHALL be hidden while the input holds a value. The actions MUST NOT appear in schema metadata slots (field default, minimum, maximum), where they would freeze the moment the schema was edited.
 
 #### Scenario: Today on a new record
 - **WHEN** the device's local date is 2026-09-24 at 23:30 in UTC-5 and the user taps "Today" on a Date field in the new-record form
@@ -294,8 +358,12 @@ The registered Date editor SHALL offer a "Today" action and the registered DateT
 - **THEN** no "Today" or "Now" action is shown and the picker remains the only way to choose a value
 
 #### Scenario: Replacing an existing value
-- **WHEN** a record already has a DateTime value and the user taps "Now" while editing it
+- **WHEN** a record already has a DateTime value and the user clears it, taps "Now", and saves
 - **THEN** the input shows the new time and saving submits a field update for that field only
+
+#### Scenario: Action hidden once set
+- **WHEN** a Date field in the new-record form holds 2026-09-22
+- **THEN** no "Today" action is shown
 
 ### Requirement: Local DateTime editor text
 The DateTime editor SHALL show its current value as local time in the sortable form `yyyy-MM-dd HH:mm`, both when opened with an existing value and after a picker or "Now" selection.
@@ -470,7 +538,7 @@ The collections list SHALL offer, per collection, "Export CSV" and "Export JSON"
 - **THEN** two new collections appear in the list and existing collections are unchanged
 
 ### Requirement: New-record editor seeds defaults
-When the record editor opens for a new record, every field that declares a default SHALL open with that default as its current value, shown in the field's input exactly as a stored value would be. Fields without a default SHALL open empty. Editing an existing record SHALL show the stored values only and MUST NOT substitute defaults for absent fields. The stored result of saving an untouched seeded form SHALL equal the result of saving the same form before this requirement, because Rust applies the same defaults on create.
+When the record editor opens for a new record, every field that declares a default SHALL open with that default as its current value, shown in the field's input exactly as a stored value would be. A Date field whose default is relative SHALL open at the device's local date plus the declared number of days. Fields without a default SHALL open empty. Defaulted fields SHALL show the Default marker until the user changes them. Editing an existing record SHALL show the stored values only and MUST NOT substitute defaults for absent fields. The stored result of saving an untouched seeded form SHALL equal the result of saving the same form before this requirement, because Rust applies the same defaults on create.
 
 #### Scenario: Slider opens at its default
 - **WHEN** the user opens the new-record editor for an optional slider field with bounds 1 and 5 and default 3
@@ -487,6 +555,10 @@ When the record editor opens for a new record, every field that declares a defau
 #### Scenario: Cleared default saves null
 - **WHEN** the user opens the new-record editor for an optional slider field with default 3, taps the clear icon, and saves
 - **THEN** the submitted value for that field is an explicit null, exactly as it is today when an optional field is cleared
+
+#### Scenario: Relative date default seeds a date
+- **WHEN** the device's local date is 2026-09-28 and the user opens the new-record editor for a Date field whose default is Day of creation + 7 days
+- **THEN** the input reads 2026-10-05 and shows the Default marker
 
 #### Scenario: Editing an existing record does not seed
 - **WHEN** the user opens an existing record that lacks an optional field which has since gained a default

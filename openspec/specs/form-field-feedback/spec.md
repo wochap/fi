@@ -22,9 +22,15 @@ When a validation issue names exactly one field, Flutter SHALL show its message 
 ### Requirement: Form-level errors above the actions
 An issue that names no field or more than one field SHALL be shown in the form-level slot directly above the Cancel and primary buttons, one line per issue. Failures that are not validation issues (for example persistence failures) SHALL use the same slot.
 
+When a save attempt leaves one or more fields with errors, the slot SHALL also show a summary pinned above the footer that stays visible while the form scrolls, reading "Couldn't save. N field(s) need attention." with a "Show" action that scrolls to the first field with an error, in form order, and focuses it. The summary SHALL disappear once no field has an error. Field errors SHALL be shown with an accent border on the control, a warning icon and the message.
+
 #### Scenario: Cross-field issue
 - **WHEN** Rust returns an issue naming both Start and End
 - **THEN** its message appears once in the form-level slot above the buttons, not under either input
+
+#### Scenario: Summary jumps to the first error
+- **WHEN** the user saves a form in which "text multiline" is missing and "date" is out of range
+- **THEN** the pinned summary reads "Couldn't save. 2 fields need attention.", and pressing Show scrolls to "text multiline" and focuses it
 
 #### Scenario: Persistence failure
 - **WHEN** saving fails because local data could not be saved

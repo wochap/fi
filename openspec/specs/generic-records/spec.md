@@ -12,7 +12,7 @@ Records SHALL use canonical UUIDv7 `RecordId` and `CollectionSchemaId` values, a
 - **THEN** both use the same generic record command, authoritative representation, projection, and query path
 
 ### Requirement: Rust-authoritative record validation
-Before authoritative mutation, Rust SHALL verify that the collection and field are active, value types match definitions, required fields are present, numeric ranges hold, enum options are active members, defaults are valid, and FixedDecimal representations use the field's scale. Validation SHALL report every issue it finds rather than stopping at the first, and each issue SHALL carry the ids of the fields it concerns, a stable code, and a safe message that contains no ids.
+Before authoritative mutation, Rust SHALL verify that the collection and field are active, value types match definitions, required fields are present, numeric ranges hold, enum options are active members (except that an existing record may keep a removed option it already holds, as long as the command does not newly set it), relative Date defaults resolve from the record's creation day, defaults are valid, and FixedDecimal representations use the field's scale. Validation SHALL report every issue it finds rather than stopping at the first, and each issue SHALL carry the ids of the fields it concerns, a stable code, and a safe message that contains no ids.
 
 #### Scenario: Reject wrong value type
 - **WHEN** Flutter supplies Text for an Integer field
@@ -25,6 +25,18 @@ Before authoritative mutation, Rust SHALL verify that the collection and field a
 #### Scenario: Report all issues
 - **WHEN** a create command omits one required field and gives another field a value outside its range
 - **THEN** Rust rejects the creation and reports two issues, each naming its own field id
+
+#### Scenario: Keep a removed option on update
+- **WHEN** a record holds the removed option "option 3" and an update changes only another field
+- **THEN** Rust accepts the update and the record stays valid
+
+#### Scenario: Newly set a removed option
+- **WHEN** a create or update command sets a Choice field to a removed option
+- **THEN** Rust rejects it with the inactive-option issue for that field
+
+#### Scenario: Relative default applied on create
+- **WHEN** a record created on 2026-09-28 (UTC) omits a Date field whose relative default is +7 days
+- **THEN** the stored value is 2026-10-05
 
 #### Scenario: Messages without ids
 - **WHEN** a text value is longer than the field allows
