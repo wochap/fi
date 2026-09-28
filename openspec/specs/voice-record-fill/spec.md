@@ -201,11 +201,17 @@ Desktop navigation SHALL NOT change.
 - **THEN** the models are deleted, the row shows "Not downloaded" with "Download 1.3 GB", and the hands-free switch is hidden
 
 ### Requirement: Voice engine boundary and fake engine
-The app SHALL reach speech-to-text and field filling only through one voice engine boundary. It takes the audio of one turn, the collection's active fields (id, name, type, required, options, bounds) and the current draft values, and returns a transcript and a patch. It SHALL report typed failures (no speech, model not loaded, out of memory, microphone busy, cancelled). It SHALL report input levels while listening, so the level bars reflect the microphone. A scripted fake engine SHALL be available in debug builds, or when the build defines `FI_VOICE_FAKE=true`. It returns scripted transcripts and patches after realistic delays, and can be set to produce each typed failure. Release builds without a real engine SHALL report the engine as unavailable.
+The app SHALL reach speech-to-text and field filling only through one voice engine boundary. It takes the audio of one turn, the collection's active fields (id, name, type, required, options, bounds) and the current draft values, and returns a transcript and a patch. It SHALL report typed failures (no speech, model not loaded, out of memory, microphone busy, cancelled). It SHALL report input levels while listening, so the level bars reflect the microphone. A scripted fake engine SHALL be available in debug builds, or when the build defines `FI_VOICE_FAKE=true`. It returns scripted transcripts and patches after realistic delays, and can be set to produce each typed failure.
+
+The native on-device engine SHALL be the engine of every build that includes it, which is Android arm64 release and debug builds. It is not used when the build defines `FI_VOICE_FAKE=true`, which forces the fake engine. The native engine SHALL report itself available whether or not the models are downloaded, so the first-use download flow can run. Builds without the native engine and without `FI_VOICE_FAKE` SHALL use the fake engine in debug mode and report the engine as unavailable in release mode.
 
 #### Scenario: Release build without an engine
-- **WHEN** a release build has no real engine and no `FI_VOICE_FAKE`
+- **WHEN** a release build has no native engine and no `FI_VOICE_FAKE`
 - **THEN** the engine reports unavailable and voice fill is not offered
+
+#### Scenario: Android release uses the native engine
+- **WHEN** an Android arm64 release build starts
+- **THEN** the selected engine is the native engine, it reports available, and the mic is offered on the New record sheet
 
 #### Scenario: Fake engine drives every state
 - **WHEN** the fake engine is scripted to return “Taxi home yesterday” with description and date entries, and then to fail with no speech
