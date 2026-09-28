@@ -284,7 +284,7 @@ When Rust reports that peer networking is deferred because every port in the fix
 - **THEN** the banner disappears and sync status leaves the deferred state
 
 ### Requirement: Build identity on the devices screen
-The app SHALL show a muted, selectable monospace build label reading `fi <version> · <hash>`, where version and hash come from the bridge build-identity query. When the build was dirty the hash SHALL be followed by `-dirty`. At 720px and wider the label SHALL be shown at the bottom of the navigation sidebar under the sync status; below 720px it SHALL end the devices screen. The label SHALL be shown whether or not a dataset exists or any device is paired, and SHALL read `fi <version> · unknown` when the hash is unavailable. It SHALL never block the rest of the screen: while the query is pending or if it fails, the label is simply absent.
+The app SHALL show a muted, selectable monospace build label reading `fi <version> · <hash>`, where version and hash come from the bridge build-identity query. When the build was dirty the hash SHALL be followed by `-dirty`. At 720px and wider the label SHALL be shown at the bottom of the navigation sidebar under the sync status; below 720px it SHALL be shown in the About section of the Settings tab. The label SHALL be shown whether or not a dataset exists or any device is paired, and SHALL read `fi <version> · unknown` when the hash is unavailable. It SHALL never block the rest of the screen: while the query is pending or if it fails, the label is simply absent.
 
 #### Scenario: Clean release build
 - **WHEN** the bridge reports version `0.1.21`, hash `a1b2c3d`, and dirty false
@@ -296,7 +296,7 @@ The app SHALL show a muted, selectable monospace build label reading `fi <versio
 
 #### Scenario: Placement by screen width
 - **WHEN** the app is shown on a 1240px-wide screen and then on a 390px-wide screen
-- **THEN** the label sits under the sidebar's sync status on the wide screen and at the end of the devices screen on the narrow one
+- **THEN** the label sits under the sidebar's sync status on the wide screen and in Settings › About on the narrow one, and the narrow Devices screen no longer ends with it
 
 #### Scenario: No devices paired
 - **WHEN** the trusted-device list is empty
