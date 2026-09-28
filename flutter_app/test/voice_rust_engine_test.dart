@@ -1,0 +1,330 @@
+import 'dart:async';
+import 'dart:typed_data';
+
+import 'package:fake_async/fake_async.dart';
+import 'package:fi/src/rust/api/voice.dart';
+import 'package:fi/voice/engine.dart';
+import 'package:fi/voice/rust_engine.dart';
+import 'package:flutter/widgets.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+import 'voice_fixtures.dart';
+
+final class FakeCapture implements AudioCapture {
+  FakeCapture({this.failure});
+
+  final VoiceFailureKind? failure;
+  final chunks = StreamController<Uint8List>();
+  final interruptionEvents = StreamController<void>.broadcast();
+  var opened = 0;
+  var closed = 0;
+
+  @override
+  Stream<void> get interruptions => interruptionEvents.stream;
+
+  @override
+  Future<Stream<Uint8List>> open() async {
+    opened++;
+    if (failure case final kind?) throw VoiceFailure(kind);
+    return chunks.stream;
+  }
+
+  @override
+  Future<void> close() async => closed++;
+
+  /// Sends [samples] of one constant amplitude.
+  void speak(int samples, {int amplitude = 8000}) {
+    final pcm = Int16List(samples)..fillRange(0, samples, amplitude);
+    chunks.add(pcm.buffer.asUint8List());
+  }
+}
+
+final class FakeNative implements VoiceNative {
+  FakeNative({this.available = true, List<VoiceTurnEventDto>? events})
+    : events =
+          events ??
+          [
+            const VoiceTurnEventDto(transcript: 'Lunch twelve fifty'),
+            VoiceTurnEventDto(
+              patch: [
+                VoicePatchEntryDto(
+                  fieldId: 'amount',
+                  value: decimal(1250),
+                  evidence: 'twelve fifty',
+                ),
+              ],
+            ),
+          ];
+
+  @override
+  final bool available;
+  final List<VoiceTurnEventDto> events;
+  Int16List? pcm;
+  VoiceFillRequestDto? request;
+  var prepares = 0;
+  var cancels = 0;
+  var releases = 0;
+  StreamController<VoiceTurnEventDto>? running;
+
+  @override
+  void prepare(String modelsDir) => prepares++;
+
+  @override
+  Stream<VoiceTurnEventDto> fillTurn(
+    String modelsDir,
+    Int16List pcm,
+    VoiceFillRequestDto request,
+  ) {
+    this.pcm = pcm;
+    this.request = request;
+    final controller = running = StreamController<VoiceTurnEventDto>();
+    // No events: the turn runs until cancelled.
+    if (events.isEmpty) return controller.stream;
+    scheduleMicrotask(() async {
+      for (final event in events) {
+        await Future<void>.delayed(Duration.zero);
+        if (controller.isClosed) return;
+        controller.add(event);
+      }
+      await controller.close();
+    });
+    return controller.stream;
+  }
+
+  @override
+  void cancel() => cancels++;
+
+  @override
+  void release() => releases++;
+}
+
+const request = VoiceFillRequest(fields: expenseFields, draft: {});
+
+RustVoiceEngine engineWith(FakeCapture capture, FakeNative native) =>
+    RustVoiceEngine(
+      modelsDir: '/models',
+      capture: capture,
+      native: native,
+      clock: () => DateTime(2026, 9, 28, 14, 7),
+    );
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('levels are RMS on a 60 dB scale', () {
+    expect(levelOf(Int16List(100)), 0);
+    expect(levelOf(Int16List(100)..fillRange(0, 100, 32767)), closeTo(1, 0.01));
+    final quiet = levelOf(Int16List(100)..fillRange(0, 100, 33));
+    final loud = levelOf(Int16List(100)..fillRange(0, 100, 8000));
+    expect(quiet, lessThan(0.05));
+    expect(loud, greaterThan(0.6));
+  });
+
+  Future<void> settle() => pumpEventQueue();
+
+  test('a turn captures PCM, reports levels and returns the patch', () async {
+    final capture = FakeCapture();
+    final native = FakeNative();
+    final engine = engineWith(capture, native);
+    final levels = <double>[];
+    engine.start().listen(levels.add);
+    await settle();
+    capture.speak(1600);
+    await Future<void>.delayed(const Duration(seconds: 1));
+    expect(levels.length, greaterThanOrEqualTo(10));
+    expect(levels.last, greaterThan(0.5));
+    String? heard;
+    final result = await engine.stop(
+      request,
+      onTranscript: (text) => heard = text,
+    );
+    expect(heard, 'Lunch twelve fifty');
+    expect(result.transcript, 'Lunch twelve fifty');
+    expect(result.patch.single.fieldId, 'amount');
+    expect(native.pcm!.length, 1600);
+    expect(native.request!.year, 2026);
+    expect(native.request!.minuteOfDay, 14 * 60 + 7);
+    expect(native.request!.fields.map((field) => field.name), [
+      'description',
+      'amount',
+      'category',
+      'date',
+    ]);
+    expect(capture.closed, greaterThan(0));
+  });
+
+  test('capture stops at the time cap and ends the level stream', () async {
+    final capture = FakeCapture();
+    final native = FakeNative();
+    final engine = RustVoiceEngine(
+      modelsDir: '/models',
+      capture: capture,
+      native: native,
+      maxDuration: const Duration(milliseconds: 500),
+    );
+    final done = Completer<void>();
+    engine.start().listen((_) {}, onDone: done.complete);
+    await settle();
+    capture.speak(16000);
+    await done.future;
+    await engine.stop(request);
+    expect(native.pcm!.length, 8000);
+  });
+
+  test('open failures surface through the level stream', () async {
+    for (final kind in [
+      VoiceFailureKind.micBusy,
+      VoiceFailureKind.permissionDenied,
+    ]) {
+      final engine = engineWith(FakeCapture(failure: kind), FakeNative());
+      await expectLater(
+        engine.start(),
+        emitsError(isA<VoiceFailure>().having((f) => f.kind, 'kind', kind)),
+      );
+    }
+  });
+
+  test(
+    'a call while listening is interruptedCall and drops the audio',
+    () async {
+      final capture = FakeCapture();
+      final engine = engineWith(capture, FakeNative());
+      final levels = engine.start();
+      final failed = expectLater(
+        levels,
+        emitsThrough(
+          emitsError(
+            isA<VoiceFailure>().having(
+              (f) => f.kind,
+              'kind',
+              VoiceFailureKind.interruptedCall,
+            ),
+          ),
+        ),
+      );
+      await settle();
+      capture.speak(1600);
+      capture.interruptionEvents.add(null);
+      await failed;
+      expect(capture.closed, greaterThan(0));
+    },
+  );
+
+  test('typed failures from Rust become VoiceFailures', () async {
+    final native = FakeNative(
+      events: [const VoiceTurnEventDto(error: VoiceErrorKindDto.noSpeech)],
+    );
+    final engine = engineWith(FakeCapture(), native);
+    engine.start();
+    await settle();
+    await expectLater(
+      engine.stop(request),
+      throwsA(
+        isA<VoiceFailure>().having(
+          (f) => f.kind,
+          'kind',
+          VoiceFailureKind.noSpeech,
+        ),
+      ),
+    );
+  });
+
+  test(
+    'cancel during processing stops Rust and fails with cancelled',
+    () async {
+      final native = FakeNative(events: []);
+      final engine = engineWith(FakeCapture(), native);
+      engine.start();
+      await settle();
+      final stopped = expectLater(
+        engine.stop(request),
+        throwsA(
+          isA<VoiceFailure>().having(
+            (f) => f.kind,
+            'kind',
+            VoiceFailureKind.cancelled,
+          ),
+        ),
+      );
+      while (native.running == null) {
+        await settle();
+      }
+      await engine.cancel();
+      await stopped;
+      expect(native.cancels, 1);
+    },
+  );
+
+  test('draft values are sent as display text', () {
+    final dto = requestDto(
+      VoiceFillRequest(
+        fields: expenseFields,
+        draft: {
+          'amount': decimal(-305),
+          'category': choice('food'),
+          'date': date(20723),
+          'description': text(''),
+        },
+      ),
+      now: DateTime(2026, 9, 28),
+    );
+    expect(
+      {for (final value in dto.draft) value.fieldId: value.text},
+      {'amount': '-3.05', 'category': 'Food', 'date': '2026-09-27'},
+    );
+  });
+
+  group('selection and lifecycle', () {
+    test('the native engine wins unless FI_VOICE_FAKE is set', () {
+      final native = FakeNative();
+      VoiceEngine build() => engineWith(FakeCapture(), native);
+      expect(
+        selectVoiceEngine(debug: false, nativeAvailable: true, native: build),
+        isA<RustVoiceEngine>(),
+      );
+      expect(
+        selectVoiceEngine(debug: true, nativeAvailable: true, native: build),
+        isA<RustVoiceEngine>(),
+      );
+      expect(
+        selectVoiceEngine(
+          debug: false,
+          fakeDefine: true,
+          nativeAvailable: true,
+          native: build,
+        ),
+        isA<FakeVoiceEngine>(),
+      );
+      expect(
+        selectVoiceEngine(debug: false, nativeAvailable: false, native: build),
+        isA<UnavailableVoiceEngine>(),
+      );
+    });
+
+    test('prepare and release reach Rust', () {
+      final native = FakeNative();
+      final engine = engineWith(FakeCapture(), native);
+      expect(engine.available, isTrue);
+      engine.prepare();
+      engine.release();
+      expect((native.prepares, native.releases), (1, 1));
+    });
+
+    test('the model is released after 5 minutes in the background', () {
+      fakeAsync((async) {
+        final engine = FakeVoiceEngine();
+        final lifecycle = VoiceEngineLifecycle(engine);
+        lifecycle.didChangeAppLifecycleState(AppLifecycleState.paused);
+        async.elapse(const Duration(minutes: 4));
+        lifecycle.didChangeAppLifecycleState(AppLifecycleState.resumed);
+        async.elapse(const Duration(minutes: 5));
+        expect(engine.releases, 0);
+        lifecycle.didChangeAppLifecycleState(AppLifecycleState.paused);
+        async.elapse(const Duration(minutes: 5));
+        expect(engine.releases, 1);
+        lifecycle.didHaveMemoryPressure();
+        expect(engine.releases, 2);
+      });
+    });
+  });
+}

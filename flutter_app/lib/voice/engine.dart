@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:fi/src/rust/api/models.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 
 /// One active field of the collection, as the engine sees it.
 @immutable
@@ -127,6 +128,51 @@ abstract interface class VoiceEngine {
 
   /// Stops the turn and discards its audio and transcript.
   Future<void> cancel();
+
+  /// Starts loading the instruction model in the background; called when a New record sheet
+  /// opens with the models ready.
+  void prepare();
+
+  /// Frees the instruction model (long in the background, or memory pressure).
+  void release();
+}
+
+/// Releases the engine's model after [backgroundDelay] in the background, or at once on memory
+/// pressure.
+final class VoiceEngineLifecycle with WidgetsBindingObserver {
+  VoiceEngineLifecycle(
+    this.engine, {
+    this.backgroundDelay = const Duration(minutes: 5),
+  });
+
+  final VoiceEngine engine;
+  final Duration backgroundDelay;
+  Timer? _timer;
+
+  void attach() => WidgetsBinding.instance.addObserver(this);
+
+  void detach() {
+    WidgetsBinding.instance.removeObserver(this);
+    _timer?.cancel();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.detached) {
+      _timer ??= Timer(backgroundDelay, () {
+        _timer = null;
+        engine.release();
+      });
+    } else if (state == AppLifecycleState.resumed) {
+      _timer?.cancel();
+      _timer = null;
+    }
+  }
+
+  @override
+  void didHaveMemoryPressure() => engine.release();
 }
 
 /// The engine of builds without speech support: voice fill is not offered.
@@ -148,6 +194,12 @@ final class UnavailableVoiceEngine implements VoiceEngine {
 
   @override
   Future<void> cancel() async {}
+
+  @override
+  void prepare() {}
+
+  @override
+  void release() {}
 }
 
 /// One scripted turn of a [FakeVoiceEngine]: a result, or a failure raised at [failAt].
@@ -226,6 +278,16 @@ final class FakeVoiceEngine implements VoiceEngine {
   /// Turns started so far.
   int get turns => _turn;
 
+  /// [prepare] and [release] calls so far.
+  int prepares = 0;
+  int releases = 0;
+
+  @override
+  void prepare() => prepares++;
+
+  @override
+  void release() => releases++;
+
   FakeVoiceTurn get _current => script[math.min(_turn, script.length) - 1];
 
   @override
@@ -297,9 +359,15 @@ final class FakeVoiceEngine implements VoiceEngine {
 /// Whether the build defines `FI_VOICE_FAKE=true`.
 const voiceFakeDefine = bool.fromEnvironment('FI_VOICE_FAKE');
 
-/// The engine for this build: the fake one in debug builds or with `FI_VOICE_FAKE`, otherwise
-/// unavailable until a real engine exists.
+/// The engine for this build: the fake one with `FI_VOICE_FAKE`, else the native engine when the
+/// build has it ([nativeAvailable]), else the fake one in debug builds and none in release.
 VoiceEngine selectVoiceEngine({
   bool debug = kDebugMode,
   bool fakeDefine = voiceFakeDefine,
-}) => debug || fakeDefine ? FakeVoiceEngine() : const UnavailableVoiceEngine();
+  bool nativeAvailable = false,
+  VoiceEngine Function()? native,
+}) {
+  if (fakeDefine) return FakeVoiceEngine();
+  if (nativeAvailable && native != null) return native();
+  return debug ? FakeVoiceEngine() : const UnavailableVoiceEngine();
+}

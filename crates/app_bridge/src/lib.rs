@@ -1,6 +1,7 @@
 pub mod api;
 mod frb_generated;
 mod log_sink;
+mod voice_worker;
 
 #[cfg(test)]
 mod tests {

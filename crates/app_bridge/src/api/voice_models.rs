@@ -131,7 +131,7 @@ impl ModelStatusDto {
 
 static MANAGERS: OnceLock<Mutex<Vec<(PathBuf, ModelManager)>>> = OnceLock::new();
 
-fn manager(models_dir: &str) -> ModelManager {
+pub(crate) fn manager(models_dir: &str) -> ModelManager {
     let path = PathBuf::from(models_dir);
     let mut managers = MANAGERS
         .get_or_init(|| Mutex::new(Vec::new()))

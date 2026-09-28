@@ -38,7 +38,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1165900417;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1936190529;
 
 // Section: executor
 
@@ -4081,6 +4081,176 @@ fn wire__crate__api__models__validation_metadata_dto_default_impl(
         },
     )
 }
+fn wire__crate__api__voice__voice_cancel_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "voice_cancel",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let output_ok = Result::<_, ()>::Ok({
+                    crate::api::voice::voice_cancel();
+                })?;
+                Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__crate__api__voice__voice_fill_turn_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "voice_fill_turn",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_models_dir = <String>::sse_decode(&mut deserializer);
+            let api_pcm = <Vec<i16>>::sse_decode(&mut deserializer);
+            let api_request =
+                <crate::api::voice::VoiceFillRequestDto>::sse_decode(&mut deserializer);
+            let api_sink = <StreamSink<
+                crate::api::voice::VoiceTurnEventDto,
+                flutter_rust_bridge::for_generated::SseCodec,
+            >>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok = Result::<_, ()>::Ok({
+                        crate::api::voice::voice_fill_turn(
+                            api_models_dir,
+                            api_pcm,
+                            api_request,
+                            api_sink,
+                        );
+                    })?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__voice__voice_native_available_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "voice_native_available",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let output_ok = Result::<_, ()>::Ok(crate::api::voice::voice_native_available())?;
+                Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__crate__api__voice__voice_prepare_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "voice_prepare",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_models_dir = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let output_ok = Result::<_, ()>::Ok({
+                    crate::api::voice::voice_prepare(api_models_dir);
+                })?;
+                Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__crate__api__voice__voice_release_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "voice_release",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let output_ok = Result::<_, ()>::Ok({
+                    crate::api::voice::voice_release();
+                })?;
+                Ok(output_ok)
+            })())
+        },
+    )
+}
 fn wire__crate__api__widgets__widget_diagnostics_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -4225,6 +4395,19 @@ impl SseDecode
 
 impl SseDecode
     for StreamSink<crate::api::models::SyncStatusDto, flutter_rust_bridge::for_generated::SseCodec>
+{
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <String>::sse_decode(deserializer);
+        return StreamSink::deserialize(inner);
+    }
+}
+
+impl SseDecode
+    for StreamSink<
+        crate::api::voice::VoiceTurnEventDto,
+        flutter_rust_bridge::for_generated::SseCodec,
+    >
 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -4870,6 +5053,13 @@ impl SseDecode for crate::api::models::GroupingDto {
     }
 }
 
+impl SseDecode for i16 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        deserializer.cursor.read_i16::<NativeEndian>().unwrap()
+    }
+}
+
 impl SseDecode for i32 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -5126,6 +5316,18 @@ impl SseDecode for Vec<crate::api::models::PairingCandidateDto> {
     }
 }
 
+impl SseDecode for Vec<i16> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<i16>::sse_decode(deserializer));
+        }
+        return ans_;
+    }
+}
+
 impl SseDecode for Vec<u8> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -5267,6 +5469,60 @@ impl SseDecode for Vec<crate::api::models::TrustedDeviceDto> {
         let mut ans_ = Vec::with_capacity(len_ as usize);
         for idx_ in 0..len_ {
             ans_.push(<crate::api::models::TrustedDeviceDto>::sse_decode(
+                deserializer,
+            ));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::api::voice::VoiceDraftValueDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::voice::VoiceDraftValueDto>::sse_decode(
+                deserializer,
+            ));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::api::voice::VoiceFieldDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::voice::VoiceFieldDto>::sse_decode(deserializer));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::api::voice::VoiceOptionDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::voice::VoiceOptionDto>::sse_decode(
+                deserializer,
+            ));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::api::voice::VoicePatchEntryDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::voice::VoicePatchEntryDto>::sse_decode(
                 deserializer,
             ));
         }
@@ -5837,6 +6093,19 @@ impl SseDecode for Option<crate::api::models::ValueTypeDto> {
     }
 }
 
+impl SseDecode for Option<crate::api::voice::VoiceErrorKindDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<crate::api::voice::VoiceErrorKindDto>::sse_decode(
+                deserializer,
+            ));
+        } else {
+            return None;
+        }
+    }
+}
+
 impl SseDecode for Option<crate::api::models::WidgetConfigurationDto> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -5894,6 +6163,19 @@ impl SseDecode for Option<Vec<u8>> {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         if (<bool>::sse_decode(deserializer)) {
             return Some(<Vec<u8>>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode for Option<Vec<crate::api::voice::VoicePatchEntryDto>> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<Vec<crate::api::voice::VoicePatchEntryDto>>::sse_decode(
+                deserializer,
+            ));
         } else {
             return None;
         }
@@ -6508,6 +6790,121 @@ impl SseDecode for crate::api::models::ValueTypeKindDto {
     }
 }
 
+impl SseDecode for crate::api::voice::VoiceDraftValueDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_fieldId = <String>::sse_decode(deserializer);
+        let mut var_text = <String>::sse_decode(deserializer);
+        return crate::api::voice::VoiceDraftValueDto {
+            field_id: var_fieldId,
+            text: var_text,
+        };
+    }
+}
+
+impl SseDecode for crate::api::voice::VoiceErrorKindDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::api::voice::VoiceErrorKindDto::NoSpeech,
+            1 => crate::api::voice::VoiceErrorKindDto::NothingMatched,
+            2 => crate::api::voice::VoiceErrorKindDto::ModelLoadFailed,
+            3 => crate::api::voice::VoiceErrorKindDto::LowMemory,
+            4 => crate::api::voice::VoiceErrorKindDto::Cancelled,
+            _ => unreachable!("Invalid variant for VoiceErrorKindDto: {}", inner),
+        };
+    }
+}
+
+impl SseDecode for crate::api::voice::VoiceFieldDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_id = <String>::sse_decode(deserializer);
+        let mut var_name = <String>::sse_decode(deserializer);
+        let mut var_kind = <crate::api::models::FieldTypeKindDto>::sse_decode(deserializer);
+        let mut var_scale = <Option<u8>>::sse_decode(deserializer);
+        let mut var_required_ = <bool>::sse_decode(deserializer);
+        let mut var_options = <Vec<crate::api::voice::VoiceOptionDto>>::sse_decode(deserializer);
+        let mut var_maxLength = <Option<u32>>::sse_decode(deserializer);
+        return crate::api::voice::VoiceFieldDto {
+            id: var_id,
+            name: var_name,
+            kind: var_kind,
+            scale: var_scale,
+            required: var_required_,
+            options: var_options,
+            max_length: var_maxLength,
+        };
+    }
+}
+
+impl SseDecode for crate::api::voice::VoiceFillRequestDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_collectionId = <String>::sse_decode(deserializer);
+        let mut var_fields = <Vec<crate::api::voice::VoiceFieldDto>>::sse_decode(deserializer);
+        let mut var_draft = <Vec<crate::api::voice::VoiceDraftValueDto>>::sse_decode(deserializer);
+        let mut var_year = <i32>::sse_decode(deserializer);
+        let mut var_month = <u32>::sse_decode(deserializer);
+        let mut var_day = <u32>::sse_decode(deserializer);
+        let mut var_minuteOfDay = <u32>::sse_decode(deserializer);
+        let mut var_utcOffsetMinutes = <i32>::sse_decode(deserializer);
+        return crate::api::voice::VoiceFillRequestDto {
+            collection_id: var_collectionId,
+            fields: var_fields,
+            draft: var_draft,
+            year: var_year,
+            month: var_month,
+            day: var_day,
+            minute_of_day: var_minuteOfDay,
+            utc_offset_minutes: var_utcOffsetMinutes,
+        };
+    }
+}
+
+impl SseDecode for crate::api::voice::VoiceOptionDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_id = <String>::sse_decode(deserializer);
+        let mut var_label = <String>::sse_decode(deserializer);
+        return crate::api::voice::VoiceOptionDto {
+            id: var_id,
+            label: var_label,
+        };
+    }
+}
+
+impl SseDecode for crate::api::voice::VoicePatchEntryDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_fieldId = <String>::sse_decode(deserializer);
+        let mut var_value = <crate::api::models::FieldValueDto>::sse_decode(deserializer);
+        let mut var_evidence = <String>::sse_decode(deserializer);
+        return crate::api::voice::VoicePatchEntryDto {
+            field_id: var_fieldId,
+            value: var_value,
+            evidence: var_evidence,
+        };
+    }
+}
+
+impl SseDecode for crate::api::voice::VoiceTurnEventDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_transcript = <Option<String>>::sse_decode(deserializer);
+        let mut var_patch =
+            <Option<Vec<crate::api::voice::VoicePatchEntryDto>>>::sse_decode(deserializer);
+        let mut var_error =
+            <Option<crate::api::voice::VoiceErrorKindDto>>::sse_decode(deserializer);
+        return crate::api::voice::VoiceTurnEventDto {
+            transcript: var_transcript,
+            patch: var_patch,
+            error: var_error,
+        };
+    }
+}
+
 impl SseDecode for crate::api::models::WeekStartDto {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -7010,7 +7407,8 @@ fn pde_ffi_dispatcher_primary_impl(
             rust_vec_len,
             data_len,
         ),
-        109 => {
+        110 => wire__crate__api__voice__voice_fill_turn_impl(port, ptr, rust_vec_len, data_len),
+        114 => {
             wire__crate__api__widgets__widget_diagnostics_impl(port, ptr, rust_vec_len, data_len)
         }
         _ => unreachable!(),
@@ -7037,6 +7435,10 @@ fn pde_ffi_dispatcher_sync_impl(
         92 => {
             wire__crate__api__voice_models__set_voice_turn_active_impl(ptr, rust_vec_len, data_len)
         }
+        109 => wire__crate__api__voice__voice_cancel_impl(ptr, rust_vec_len, data_len),
+        111 => wire__crate__api__voice__voice_native_available_impl(ptr, rust_vec_len, data_len),
+        112 => wire__crate__api__voice__voice_prepare_impl(ptr, rust_vec_len, data_len),
+        113 => wire__crate__api__voice__voice_release_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -9012,6 +9414,169 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::models::ValueTypeKindDto>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::voice::VoiceDraftValueDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.field_id.into_into_dart().into_dart(),
+            self.text.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::voice::VoiceDraftValueDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::voice::VoiceDraftValueDto>
+    for crate::api::voice::VoiceDraftValueDto
+{
+    fn into_into_dart(self) -> crate::api::voice::VoiceDraftValueDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::voice::VoiceErrorKindDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::NoSpeech => 0.into_dart(),
+            Self::NothingMatched => 1.into_dart(),
+            Self::ModelLoadFailed => 2.into_dart(),
+            Self::LowMemory => 3.into_dart(),
+            Self::Cancelled => 4.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::voice::VoiceErrorKindDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::voice::VoiceErrorKindDto>
+    for crate::api::voice::VoiceErrorKindDto
+{
+    fn into_into_dart(self) -> crate::api::voice::VoiceErrorKindDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::voice::VoiceFieldDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.id.into_into_dart().into_dart(),
+            self.name.into_into_dart().into_dart(),
+            self.kind.into_into_dart().into_dart(),
+            self.scale.into_into_dart().into_dart(),
+            self.required.into_into_dart().into_dart(),
+            self.options.into_into_dart().into_dart(),
+            self.max_length.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::voice::VoiceFieldDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::voice::VoiceFieldDto>
+    for crate::api::voice::VoiceFieldDto
+{
+    fn into_into_dart(self) -> crate::api::voice::VoiceFieldDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::voice::VoiceFillRequestDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.collection_id.into_into_dart().into_dart(),
+            self.fields.into_into_dart().into_dart(),
+            self.draft.into_into_dart().into_dart(),
+            self.year.into_into_dart().into_dart(),
+            self.month.into_into_dart().into_dart(),
+            self.day.into_into_dart().into_dart(),
+            self.minute_of_day.into_into_dart().into_dart(),
+            self.utc_offset_minutes.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::voice::VoiceFillRequestDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::voice::VoiceFillRequestDto>
+    for crate::api::voice::VoiceFillRequestDto
+{
+    fn into_into_dart(self) -> crate::api::voice::VoiceFillRequestDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::voice::VoiceOptionDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.id.into_into_dart().into_dart(),
+            self.label.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::voice::VoiceOptionDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::voice::VoiceOptionDto>
+    for crate::api::voice::VoiceOptionDto
+{
+    fn into_into_dart(self) -> crate::api::voice::VoiceOptionDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::voice::VoicePatchEntryDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.field_id.into_into_dart().into_dart(),
+            self.value.into_into_dart().into_dart(),
+            self.evidence.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::voice::VoicePatchEntryDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::voice::VoicePatchEntryDto>
+    for crate::api::voice::VoicePatchEntryDto
+{
+    fn into_into_dart(self) -> crate::api::voice::VoicePatchEntryDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::voice::VoiceTurnEventDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.transcript.into_into_dart().into_dart(),
+            self.patch.into_into_dart().into_dart(),
+            self.error.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::voice::VoiceTurnEventDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::voice::VoiceTurnEventDto>
+    for crate::api::voice::VoiceTurnEventDto
+{
+    fn into_into_dart(self) -> crate::api::voice::VoiceTurnEventDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::models::WeekStartDto {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         match self {
@@ -9331,6 +9896,18 @@ impl SseEncode
 
 impl SseEncode
     for StreamSink<crate::api::models::SyncStatusDto, flutter_rust_bridge::for_generated::SseCodec>
+{
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        unimplemented!("")
+    }
+}
+
+impl SseEncode
+    for StreamSink<
+        crate::api::voice::VoiceTurnEventDto,
+        flutter_rust_bridge::for_generated::SseCodec,
+    >
 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -9871,6 +10448,13 @@ impl SseEncode for crate::api::models::GroupingDto {
     }
 }
 
+impl SseEncode for i16 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        serializer.cursor.write_i16::<NativeEndian>(self).unwrap();
+    }
+}
+
 impl SseEncode for i32 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -10058,6 +10642,16 @@ impl SseEncode for Vec<crate::api::models::PairingCandidateDto> {
     }
 }
 
+impl SseEncode for Vec<i16> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <i16>::sse_encode(item, serializer);
+        }
+    }
+}
+
 impl SseEncode for Vec<u8> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -10164,6 +10758,46 @@ impl SseEncode for Vec<crate::api::models::TrustedDeviceDto> {
         <i32>::sse_encode(self.len() as _, serializer);
         for item in self {
             <crate::api::models::TrustedDeviceDto>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::api::voice::VoiceDraftValueDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::voice::VoiceDraftValueDto>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::api::voice::VoiceFieldDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::voice::VoiceFieldDto>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::api::voice::VoiceOptionDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::voice::VoiceOptionDto>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::api::voice::VoicePatchEntryDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::voice::VoicePatchEntryDto>::sse_encode(item, serializer);
         }
     }
 }
@@ -10629,6 +11263,16 @@ impl SseEncode for Option<crate::api::models::ValueTypeDto> {
     }
 }
 
+impl SseEncode for Option<crate::api::voice::VoiceErrorKindDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::api::voice::VoiceErrorKindDto>::sse_encode(value, serializer);
+        }
+    }
+}
+
 impl SseEncode for Option<crate::api::models::WidgetConfigurationDto> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -10675,6 +11319,16 @@ impl SseEncode for Option<Vec<u8>> {
         <bool>::sse_encode(self.is_some(), serializer);
         if let Some(value) = self {
             <Vec<u8>>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<Vec<crate::api::voice::VoicePatchEntryDto>> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <Vec<crate::api::voice::VoicePatchEntryDto>>::sse_encode(value, serializer);
         }
     }
 }
@@ -11197,6 +11851,86 @@ impl SseEncode for crate::api::models::ValueTypeKindDto {
             },
             serializer,
         );
+    }
+}
+
+impl SseEncode for crate::api::voice::VoiceDraftValueDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.field_id, serializer);
+        <String>::sse_encode(self.text, serializer);
+    }
+}
+
+impl SseEncode for crate::api::voice::VoiceErrorKindDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::api::voice::VoiceErrorKindDto::NoSpeech => 0,
+                crate::api::voice::VoiceErrorKindDto::NothingMatched => 1,
+                crate::api::voice::VoiceErrorKindDto::ModelLoadFailed => 2,
+                crate::api::voice::VoiceErrorKindDto::LowMemory => 3,
+                crate::api::voice::VoiceErrorKindDto::Cancelled => 4,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
+impl SseEncode for crate::api::voice::VoiceFieldDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.id, serializer);
+        <String>::sse_encode(self.name, serializer);
+        <crate::api::models::FieldTypeKindDto>::sse_encode(self.kind, serializer);
+        <Option<u8>>::sse_encode(self.scale, serializer);
+        <bool>::sse_encode(self.required, serializer);
+        <Vec<crate::api::voice::VoiceOptionDto>>::sse_encode(self.options, serializer);
+        <Option<u32>>::sse_encode(self.max_length, serializer);
+    }
+}
+
+impl SseEncode for crate::api::voice::VoiceFillRequestDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.collection_id, serializer);
+        <Vec<crate::api::voice::VoiceFieldDto>>::sse_encode(self.fields, serializer);
+        <Vec<crate::api::voice::VoiceDraftValueDto>>::sse_encode(self.draft, serializer);
+        <i32>::sse_encode(self.year, serializer);
+        <u32>::sse_encode(self.month, serializer);
+        <u32>::sse_encode(self.day, serializer);
+        <u32>::sse_encode(self.minute_of_day, serializer);
+        <i32>::sse_encode(self.utc_offset_minutes, serializer);
+    }
+}
+
+impl SseEncode for crate::api::voice::VoiceOptionDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.id, serializer);
+        <String>::sse_encode(self.label, serializer);
+    }
+}
+
+impl SseEncode for crate::api::voice::VoicePatchEntryDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.field_id, serializer);
+        <crate::api::models::FieldValueDto>::sse_encode(self.value, serializer);
+        <String>::sse_encode(self.evidence, serializer);
+    }
+}
+
+impl SseEncode for crate::api::voice::VoiceTurnEventDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <Option<String>>::sse_encode(self.transcript, serializer);
+        <Option<Vec<crate::api::voice::VoicePatchEntryDto>>>::sse_encode(self.patch, serializer);
+        <Option<crate::api::voice::VoiceErrorKindDto>>::sse_encode(self.error, serializer);
     }
 }
 

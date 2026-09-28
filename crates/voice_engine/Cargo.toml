@@ -1,0 +1,29 @@
+[package]
+name = "voice_engine"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "On-device voice fill: schema grammar, prompt, patch, normalizers, and native Whisper/llama runners"
+
+[features]
+default = []
+# Builds whisper.cpp and llama.cpp. Off in the default workspace build and the gate.
+native = ["dep:whisper-rs", "dep:llama-cpp-2"]
+
+[dependencies]
+app-core = { path = "../app_core" }
+chrono.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+whisper-rs = { version = "=0.16.0", optional = true }
+llama-cpp-2 = { version = "=0.1.157", optional = true, default-features = false }
+
+# The APK bundles no libc++_shared.so.
+[target.'cfg(target_os = "android")'.dependencies]
+llama-cpp-2 = { version = "=0.1.157", optional = true, default-features = false, features = ["android-static-stdcxx"] }
+
+[[example]]
+name = "eval"
+required-features = ["native"]

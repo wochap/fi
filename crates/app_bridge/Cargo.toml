@@ -10,8 +10,14 @@ description = "Narrow flutter_rust_bridge adapter for app-core"
 name = "app_bridge"
 crate-type = ["rlib", "cdylib", "staticlib"]
 
+[features]
+# Builds the on-device voice engine off Android arm64 (for example to run it on Linux).
+voice-native = ["voice_engine/native"]
+
 [dependencies]
 app-core = { path = "../app_core" }
+voice_engine = { path = "../voice_engine" }
+chrono.workspace = true
 flutter_rust_bridge.workspace = true
 serde_json.workspace = true
 tracing.workspace = true
@@ -22,6 +28,11 @@ uuid.workspace = true
 
 [target.'cfg(target_os = "android")'.dependencies]
 android_log-sys.workspace = true
+
+# whisper.cpp and llama.cpp are built for arm64 Android only; other ABIs report voice as
+# unavailable.
+[target.'cfg(all(target_os = "android", target_arch = "aarch64"))'.dependencies]
+voice_engine = { path = "../voice_engine", features = ["native"] }
 
 [dev-dependencies]
 tempfile.workspace = true

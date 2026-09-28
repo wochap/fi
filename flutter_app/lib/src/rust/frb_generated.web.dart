@@ -13,6 +13,7 @@ import 'api/lifecycle.dart';
 import 'api/models.dart';
 import 'api/pairing.dart';
 import 'api/queries.dart';
+import 'api/voice.dart';
 import 'api/voice_models.dart';
 import 'api/widgets.dart';
 import 'dart:async';
@@ -78,6 +79,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   RustStreamSink<SyncStatusDto> dco_decode_StreamSink_sync_status_dto_Sse(
     dynamic raw,
   );
+
+  @protected
+  RustStreamSink<VoiceTurnEventDto>
+  dco_decode_StreamSink_voice_turn_event_dto_Sse(dynamic raw);
 
   @protected
   String dco_decode_String(dynamic raw);
@@ -203,6 +208,14 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   ValueTypeDto dco_decode_box_autoadd_value_type_dto(dynamic raw);
 
   @protected
+  VoiceErrorKindDto dco_decode_box_autoadd_voice_error_kind_dto(dynamic raw);
+
+  @protected
+  VoiceFillRequestDto dco_decode_box_autoadd_voice_fill_request_dto(
+    dynamic raw,
+  );
+
+  @protected
   WidgetConfigurationDto dco_decode_box_autoadd_widget_configuration_dto(
     dynamic raw,
   );
@@ -318,6 +331,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   GroupingDto dco_decode_grouping_dto(dynamic raw);
 
   @protected
+  int dco_decode_i_16(dynamic raw);
+
+  @protected
   int dco_decode_i_32(dynamic raw);
 
   @protected
@@ -380,6 +396,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<PairingCandidateDto> dco_decode_list_pairing_candidate_dto(dynamic raw);
 
   @protected
+  List<int> dco_decode_list_prim_i_16_loose(dynamic raw);
+
+  @protected
+  Int16List dco_decode_list_prim_i_16_strict(dynamic raw);
+
+  @protected
   List<int> dco_decode_list_prim_u_8_loose(dynamic raw);
 
   @protected
@@ -416,6 +438,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<TrustedDeviceDto> dco_decode_list_trusted_device_dto(dynamic raw);
+
+  @protected
+  List<VoiceDraftValueDto> dco_decode_list_voice_draft_value_dto(dynamic raw);
+
+  @protected
+  List<VoiceFieldDto> dco_decode_list_voice_field_dto(dynamic raw);
+
+  @protected
+  List<VoiceOptionDto> dco_decode_list_voice_option_dto(dynamic raw);
+
+  @protected
+  List<VoicePatchEntryDto> dco_decode_list_voice_patch_entry_dto(dynamic raw);
 
   @protected
   List<WidgetDefinitionDto> dco_decode_list_widget_definition_dto(dynamic raw);
@@ -569,6 +603,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   ValueTypeDto? dco_decode_opt_box_autoadd_value_type_dto(dynamic raw);
 
   @protected
+  VoiceErrorKindDto? dco_decode_opt_box_autoadd_voice_error_kind_dto(
+    dynamic raw,
+  );
+
+  @protected
   WidgetConfigurationDto? dco_decode_opt_box_autoadd_widget_configuration_dto(
     dynamic raw,
   );
@@ -588,6 +627,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   Uint8List? dco_decode_opt_list_prim_u_8_strict(dynamic raw);
+
+  @protected
+  List<VoicePatchEntryDto>? dco_decode_opt_list_voice_patch_entry_dto(
+    dynamic raw,
+  );
 
   @protected
   PairingCandidateDto dco_decode_pairing_candidate_dto(dynamic raw);
@@ -710,6 +754,27 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   ValueTypeKindDto dco_decode_value_type_kind_dto(dynamic raw);
 
   @protected
+  VoiceDraftValueDto dco_decode_voice_draft_value_dto(dynamic raw);
+
+  @protected
+  VoiceErrorKindDto dco_decode_voice_error_kind_dto(dynamic raw);
+
+  @protected
+  VoiceFieldDto dco_decode_voice_field_dto(dynamic raw);
+
+  @protected
+  VoiceFillRequestDto dco_decode_voice_fill_request_dto(dynamic raw);
+
+  @protected
+  VoiceOptionDto dco_decode_voice_option_dto(dynamic raw);
+
+  @protected
+  VoicePatchEntryDto dco_decode_voice_patch_entry_dto(dynamic raw);
+
+  @protected
+  VoiceTurnEventDto dco_decode_voice_turn_event_dto(dynamic raw);
+
+  @protected
   WeekStartDto dco_decode_week_start_dto(dynamic raw);
 
   @protected
@@ -792,6 +857,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   RustStreamSink<SyncStatusDto> sse_decode_StreamSink_sync_status_dto_Sse(
     SseDeserializer deserializer,
   );
+
+  @protected
+  RustStreamSink<VoiceTurnEventDto>
+  sse_decode_StreamSink_voice_turn_event_dto_Sse(SseDeserializer deserializer);
 
   @protected
   String sse_decode_String(SseDeserializer deserializer);
@@ -959,6 +1028,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  VoiceErrorKindDto sse_decode_box_autoadd_voice_error_kind_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  VoiceFillRequestDto sse_decode_box_autoadd_voice_fill_request_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   WidgetConfigurationDto sse_decode_box_autoadd_widget_configuration_dto(
     SseDeserializer deserializer,
   );
@@ -1112,6 +1191,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   GroupingDto sse_decode_grouping_dto(SseDeserializer deserializer);
 
   @protected
+  int sse_decode_i_16(SseDeserializer deserializer);
+
+  @protected
   int sse_decode_i_32(SseDeserializer deserializer);
 
   @protected
@@ -1194,6 +1276,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  List<int> sse_decode_list_prim_i_16_loose(SseDeserializer deserializer);
+
+  @protected
+  Int16List sse_decode_list_prim_i_16_strict(SseDeserializer deserializer);
+
+  @protected
   List<int> sse_decode_list_prim_u_8_loose(SseDeserializer deserializer);
 
   @protected
@@ -1244,6 +1332,26 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<TrustedDeviceDto> sse_decode_list_trusted_device_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<VoiceDraftValueDto> sse_decode_list_voice_draft_value_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<VoiceFieldDto> sse_decode_list_voice_field_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<VoiceOptionDto> sse_decode_list_voice_option_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<VoicePatchEntryDto> sse_decode_list_voice_patch_entry_dto(
     SseDeserializer deserializer,
   );
 
@@ -1435,6 +1543,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  VoiceErrorKindDto? sse_decode_opt_box_autoadd_voice_error_kind_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   WidgetConfigurationDto? sse_decode_opt_box_autoadd_widget_configuration_dto(
     SseDeserializer deserializer,
   );
@@ -1456,6 +1569,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   Uint8List? sse_decode_opt_list_prim_u_8_strict(SseDeserializer deserializer);
+
+  @protected
+  List<VoicePatchEntryDto>? sse_decode_opt_list_voice_patch_entry_dto(
+    SseDeserializer deserializer,
+  );
 
   @protected
   PairingCandidateDto sse_decode_pairing_candidate_dto(
@@ -1614,6 +1732,37 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   ValueTypeKindDto sse_decode_value_type_kind_dto(SseDeserializer deserializer);
 
   @protected
+  VoiceDraftValueDto sse_decode_voice_draft_value_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  VoiceErrorKindDto sse_decode_voice_error_kind_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  VoiceFieldDto sse_decode_voice_field_dto(SseDeserializer deserializer);
+
+  @protected
+  VoiceFillRequestDto sse_decode_voice_fill_request_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  VoiceOptionDto sse_decode_voice_option_dto(SseDeserializer deserializer);
+
+  @protected
+  VoicePatchEntryDto sse_decode_voice_patch_entry_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  VoiceTurnEventDto sse_decode_voice_turn_event_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   WeekStartDto sse_decode_week_start_dto(SseDeserializer deserializer);
 
   @protected
@@ -1713,6 +1862,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_StreamSink_sync_status_dto_Sse(
     RustStreamSink<SyncStatusDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_StreamSink_voice_turn_event_dto_Sse(
+    RustStreamSink<VoiceTurnEventDto> self,
     SseSerializer serializer,
   );
 
@@ -1921,6 +2076,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_box_autoadd_voice_error_kind_dto(
+    VoiceErrorKindDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_voice_fill_request_dto(
+    VoiceFillRequestDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_box_autoadd_widget_configuration_dto(
     WidgetConfigurationDto self,
     SseSerializer serializer,
@@ -2113,6 +2280,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_grouping_dto(GroupingDto self, SseSerializer serializer);
 
   @protected
+  void sse_encode_i_16(int self, SseSerializer serializer);
+
+  @protected
   void sse_encode_i_32(int self, SseSerializer serializer);
 
   @protected
@@ -2218,6 +2388,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_list_prim_i_16_loose(
+    List<int> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_prim_i_16_strict(
+    Int16List self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_list_prim_u_8_loose(List<int> self, SseSerializer serializer);
 
   @protected
@@ -2283,6 +2465,30 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_list_trusted_device_dto(
     List<TrustedDeviceDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_voice_draft_value_dto(
+    List<VoiceDraftValueDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_voice_field_dto(
+    List<VoiceFieldDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_voice_option_dto(
+    List<VoiceOptionDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_voice_patch_entry_dto(
+    List<VoicePatchEntryDto> self,
     SseSerializer serializer,
   );
 
@@ -2512,6 +2718,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_opt_box_autoadd_voice_error_kind_dto(
+    VoiceErrorKindDto? self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_opt_box_autoadd_widget_configuration_dto(
     WidgetConfigurationDto? self,
     SseSerializer serializer,
@@ -2538,6 +2750,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_opt_list_prim_u_8_strict(
     Uint8List? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_list_voice_patch_entry_dto(
+    List<VoicePatchEntryDto>? self,
     SseSerializer serializer,
   );
 
@@ -2739,6 +2957,45 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_value_type_kind_dto(
     ValueTypeKindDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_voice_draft_value_dto(
+    VoiceDraftValueDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_voice_error_kind_dto(
+    VoiceErrorKindDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_voice_field_dto(VoiceFieldDto self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_voice_fill_request_dto(
+    VoiceFillRequestDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_voice_option_dto(
+    VoiceOptionDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_voice_patch_entry_dto(
+    VoicePatchEntryDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_voice_turn_event_dto(
+    VoiceTurnEventDto self,
     SseSerializer serializer,
   );
 

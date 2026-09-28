@@ -43,6 +43,7 @@ class VoiceFillController extends ChangeNotifier with WidgetsBindingObserver {
   }) : draftState = VoiceDraftState(origins) {
     WidgetsBinding.instance.addObserver(this);
     services.models.addListener(_modelsChanged);
+    if (services.available && services.models.ready) services.engine.prepare();
   }
 
   final VoiceServices services;
@@ -136,6 +137,7 @@ class VoiceFillController extends ChangeNotifier with WidgetsBindingObserver {
   void _modelsChanged() {
     if (_phase == VoicePhase.downloading && services.models.ready) {
       _phase = VoicePhase.idle;
+      services.engine.prepare();
     }
     if (!_disposed) notifyListeners();
   }
@@ -264,6 +266,10 @@ class VoiceFillController extends ChangeNotifier with WidgetsBindingObserver {
         _fail(
           error is VoiceFailure ? error.kind : VoiceFailureKind.modelLoadFailed,
         );
+      },
+      // The engine ends the level stream itself at the turn's time cap.
+      onDone: () {
+        if (token == _turnToken && listening) unawaited(stopListening());
       },
     );
   }

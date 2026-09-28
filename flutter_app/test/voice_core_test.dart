@@ -238,6 +238,32 @@ void main() {
       await done;
     }
 
+    testWidgets('opening with models ready prepares the engine', (
+      tester,
+    ) async {
+      final engine = FakeVoiceEngine();
+      final ready = VoiceFillController(
+        services: fakeVoiceServices(engine: engine),
+        fields: expenseFields,
+        readDraft: () => {},
+        writeDraft: (_) {},
+      );
+      addTearDown(ready.dispose);
+      expect(engine.prepares, 1);
+      final waiting = FakeVoiceEngine();
+      final models = FakeVoiceModels(
+        modelStatusOf(ModelStatusKindDto.notDownloaded),
+      );
+      final pending = VoiceFillController(
+        services: fakeVoiceServices(engine: waiting, models: models),
+        fields: expenseFields,
+        readDraft: () => {},
+        writeDraft: (_) {},
+      );
+      addTearDown(pending.dispose);
+      expect(waiting.prepares, 0);
+    });
+
     testWidgets('a full turn fills the form', (tester) async {
       final c = make([FakeVoiceTurn.result(lunchResult)]);
       addTearDown(c.dispose);

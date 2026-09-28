@@ -150,7 +150,26 @@ class AndroidEnvironment {
     final toolTempDir =
         Platform.environment['CARGOKIT_TOOL_TEMP_DIR'] ?? targetTempDir;
 
+    // CMake-built C/C++ dependencies (whisper.cpp and llama.cpp in voice_engine) need the NDK's
+    // toolchain file and ABI; harmless for crates without CMake.
+    final androidAbi = switch (target.rust) {
+      'aarch64-linux-android' => 'arm64-v8a',
+      'armv7-linux-androideabi' => 'armeabi-v7a',
+      'x86_64-linux-android' => 'x86_64',
+      _ => 'x86',
+    };
+
     return {
+      'ANDROID_NDK': ndkPath,
+      'ANDROID_ABI': androidAbi,
+      'ANDROID_PLATFORM': 'android-$minSdkVersion',
+      'CMAKE_TOOLCHAIN_FILE':
+          path.join(ndkPath, 'build', 'cmake', 'android.toolchain.cmake'),
+      // ggml: no host-CPU tuning or OpenMP; ARMv8.2 dot product and fp16 on arm64.
+      'GGML_NATIVE': 'OFF',
+      'GGML_OPENMP': 'OFF',
+      if (androidAbi == 'arm64-v8a')
+        'GGML_CPU_ARM_ARCH': 'armv8.2-a+dotprod+fp16',
       arKey: arValue,
       ccKey: ccValue,
       cfFlagsKey: cFlagsValue,

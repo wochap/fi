@@ -6,7 +6,9 @@ import 'package:fi/src/rust/api/voice_models.dart' as rust;
 import 'package:fi/src/rust/api/voice_models.dart'
     show ModelStatusDto, ModelStatusKindDto, ModelErrorDto;
 import 'package:fi/ui_prefs.dart';
+import 'package:fi/src/rust/api/voice.dart' as rust_voice;
 import 'package:fi/voice/engine.dart';
+import 'package:fi/voice/rust_engine.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -252,14 +254,22 @@ final class VoiceServices {
   factory VoiceServices.platform({
     required String dataDir,
     required UiPrefsStore prefs,
-  }) => VoiceServices(
-    engine: selectVoiceEngine(),
-    models: RustVoiceModels('$dataDir${Platform.pathSeparator}models'),
-    permission: const PlatformMicrophonePermission(),
-    network: const PlatformNetworkInfo(),
-    speech: PlatformSpeechOutput(),
-    prefs: VoicePrefs(prefs),
-  );
+  }) {
+    final modelsDir = '$dataDir${Platform.pathSeparator}models';
+    final engine = selectVoiceEngine(
+      nativeAvailable: rust_voice.voiceNativeAvailable(),
+      native: () => RustVoiceEngine(modelsDir: modelsDir),
+    );
+    VoiceEngineLifecycle(engine).attach();
+    return VoiceServices(
+      engine: engine,
+      models: RustVoiceModels(modelsDir),
+      permission: const PlatformMicrophonePermission(),
+      network: const PlatformNetworkInfo(),
+      speech: PlatformSpeechOutput(),
+      prefs: VoicePrefs(prefs),
+    );
+  }
 
   final VoiceEngine engine;
   final VoiceModels models;
