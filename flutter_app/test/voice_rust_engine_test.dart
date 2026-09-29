@@ -98,6 +98,30 @@ final class FakeNative implements VoiceNative {
   void release() => releases++;
 }
 
+/// A capture whose close takes a few event-loop turns, like the platform recorder, and which
+/// fails to open while a close is still running (the recorder it opened would be released).
+final class SlowClosingCapture extends FakeCapture {
+  final log = <String>[];
+  var _closing = false;
+
+  @override
+  Future<Stream<Uint8List>> open() async {
+    log.add('open');
+    if (_closing) throw StateError('recorder released while opening');
+    return super.open();
+  }
+
+  @override
+  Future<void> close() async {
+    log.add('close start');
+    _closing = true;
+    await Future<void>.delayed(const Duration(milliseconds: 5));
+    _closing = false;
+    log.add('close end');
+    await super.close();
+  }
+}
+
 const request = VoiceFillRequest(fields: expenseFields, draft: {});
 
 RustVoiceEngine engineWith(FakeCapture capture, FakeNative native) =>
@@ -110,6 +134,14 @@ RustVoiceEngine engineWith(FakeCapture capture, FakeNative native) =>
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('PCM chunks at an odd byte offset are read, not dropped', () {
+    // Platform-channel buffers can start at any byte; a typed Int16 view cannot.
+    final backing = Uint8List(9);
+    final chunk = Uint8List.sublistView(backing, 1, 9)
+      ..setAll(0, [0x40, 0x1f, 0xc0, 0xe0, 0x00, 0x00, 0x01, 0x00]);
+    expect(pcm16Samples(chunk), [8000, -8000, 0, 1]);
+  });
 
   test('levels are RMS on a 60 dB scale', () {
     expect(levelOf(Int16List(100)), 0);
@@ -170,6 +202,25 @@ void main() {
     await engine.stop(request);
     expect(native.pcm!.length, 8000);
   });
+
+  test(
+    'the previous capture is fully closed before the microphone opens',
+    () async {
+      final capture = SlowClosingCapture();
+      final engine = engineWith(capture, FakeNative());
+      final levels = engine.start();
+      final subscription = levels.listen(
+        (_) {},
+        onError: (Object error) {
+          fail('start failed: $error');
+        },
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(capture.log, ['close start', 'close end', 'open']);
+      await subscription.cancel();
+      await engine.cancel();
+    },
+  );
 
   test('open failures surface through the level stream', () async {
     for (final kind in [

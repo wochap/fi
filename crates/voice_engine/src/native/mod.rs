@@ -38,6 +38,11 @@ impl CancelFlag {
     pub fn is_cancelled(&self) -> bool {
         self.0.load(Ordering::SeqCst)
     }
+
+    /// The flag itself, for C callbacks. Valid while this `CancelFlag` (or a clone) is alive.
+    fn as_ptr(&self) -> *const AtomicBool {
+        Arc::as_ptr(&self.0)
+    }
 }
 
 /// `ModelLoadFailed` when the file is missing, unreadable or lacks `magic`; otherwise the load
@@ -58,10 +63,24 @@ fn check_model_file(path: &Path, magic: &[&[u8]]) -> Result<u64, VoiceError> {
     Ok(size)
 }
 
-/// Maps a load failure of a readable file: `LowMemory` when available memory cannot hold it.
-fn load_failure(model_size: u64) -> VoiceError {
-    match available_memory() {
+/// Maps a load failure of a readable file: `LowMemory` when available memory cannot hold it,
+/// `ModelLoadFailed` otherwise. The native error is logged so the real cause is visible.
+fn load_failure(stage: &'static str, error: impl std::fmt::Display, model_size: u64) -> VoiceError {
+    let available = available_memory();
+    tracing::error!(stage, %error, model_size, ?available, "voice model load failed");
+    match available {
         Some(available) if available < model_size + model_size / 2 => VoiceError::LowMemory,
+        _ => VoiceError::ModelLoadFailed,
+    }
+}
+
+/// Maps a failure while running a loaded model: `LowMemory` only when the device is actually
+/// short of memory (under 512 MiB available), `ModelLoadFailed` otherwise, and logs the cause.
+fn run_failure(stage: &'static str, error: impl std::fmt::Display) -> VoiceError {
+    let available = available_memory();
+    tracing::error!(stage, %error, ?available, "voice engine step failed");
+    match available {
+        Some(available) if available < 512 * 1024 * 1024 => VoiceError::LowMemory,
         _ => VoiceError::ModelLoadFailed,
     }
 }

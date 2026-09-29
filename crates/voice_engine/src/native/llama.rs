@@ -11,7 +11,7 @@ use llama_cpp_2::{
     sampling::LlamaSampler,
 };
 
-use super::{CancelFlag, THREADS, check_model_file, load_failure};
+use super::{CancelFlag, THREADS, check_model_file, load_failure, run_failure};
 use crate::{Grammar, ModelRunner, VoiceError};
 
 const CONTEXT: u32 = 4096;
@@ -43,7 +43,7 @@ impl LlamaRunner {
     pub fn load(path: &Path, cancel: CancelFlag) -> Result<Self, VoiceError> {
         let size = check_model_file(path, &[b"GGUF"])?;
         let model = LlamaModel::load_from_file(backend(), path, &LlamaModelParams::default())
-            .map_err(|_| load_failure(size))?;
+            .map_err(|error| load_failure("llama model", error, size))?;
         Ok(Self { model, cancel })
     }
 }
@@ -66,27 +66,33 @@ impl ModelRunner for LlamaRunner {
         let mut context = self
             .model
             .new_context(backend(), params)
-            .map_err(|_| VoiceError::LowMemory)?;
+            .map_err(|error| run_failure("llama context", error))?;
         let tokens = self
             .model
             .str_to_token(prompt, AddBos::Never)
-            .map_err(|_| VoiceError::ModelLoadFailed)?;
+            .map_err(|error| run_failure("llama tokenize", error))?;
         if tokens.len() + MAX_OUTPUT > CONTEXT as usize {
-            return Err(VoiceError::LowMemory);
+            return Err(run_failure(
+                "llama prompt",
+                format!(
+                    "prompt of {} tokens leaves no room for output",
+                    tokens.len()
+                ),
+            ));
         }
         let mut batch = LlamaBatch::new(CONTEXT as usize, 1);
         let last = tokens.len() - 1;
         for (index, token) in tokens.iter().enumerate() {
             batch
                 .add(*token, index as i32, &[0], index == last)
-                .map_err(|_| VoiceError::LowMemory)?;
+                .map_err(|error| run_failure("llama batch", error))?;
         }
         context
             .decode(&mut batch)
-            .map_err(|_| VoiceError::LowMemory)?;
+            .map_err(|error| run_failure("llama decode", error))?;
         let mut sampler = LlamaSampler::chain_simple([
             LlamaSampler::grammar(&self.model, grammar.gbnf(), "root")
-                .map_err(|_| VoiceError::ModelLoadFailed)?,
+                .map_err(|error| run_failure("llama grammar", error))?,
             LlamaSampler::greedy(),
         ]);
         let mut bytes = Vec::new();
@@ -101,16 +107,16 @@ impl ModelRunner for LlamaRunner {
             bytes.extend(
                 self.model
                     .token_to_piece_bytes(token, 64, false, None)
-                    .map_err(|_| VoiceError::ModelLoadFailed)?,
+                    .map_err(|error| run_failure("llama detokenize", error))?,
             );
             batch.clear();
             batch
                 .add(token, position, &[0], true)
-                .map_err(|_| VoiceError::LowMemory)?;
+                .map_err(|error| run_failure("llama batch", error))?;
             position += 1;
             context
                 .decode(&mut batch)
-                .map_err(|_| VoiceError::LowMemory)?;
+                .map_err(|error| run_failure("llama decode", error))?;
         }
         Ok(String::from_utf8_lossy(&bytes).into_owned())
     }

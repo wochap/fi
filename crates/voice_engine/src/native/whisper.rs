@@ -5,7 +5,7 @@ use std::path::Path;
 
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
-use super::{CancelFlag, THREADS, check_model_file, load_failure};
+use super::{CancelFlag, THREADS, check_model_file, load_failure, run_failure};
 use crate::{
     VoiceError,
     audio::{clean_transcript, pcm16_to_f32, trim_silence},
@@ -24,8 +24,10 @@ pub fn transcribe(model: &Path, pcm: &[i16], cancel: &CancelFlag) -> Result<Stri
     }
     whisper_rs::install_logging_hooks();
     let context = WhisperContext::new_with_params(model, WhisperContextParameters::default())
-        .map_err(|_| load_failure(size))?;
-    let mut state = context.create_state().map_err(|_| VoiceError::LowMemory)?;
+        .map_err(|error| load_failure("whisper context", error, size))?;
+    let mut state = context
+        .create_state()
+        .map_err(|error| run_failure("whisper state", error))?;
     let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
     params.set_language(Some("en"));
     params.set_n_threads(THREADS);
@@ -38,13 +40,19 @@ pub fn transcribe(model: &Path, pcm: &[i16], cancel: &CancelFlag) -> Result<Stri
     params.set_print_progress(false);
     params.set_print_realtime(false);
     params.set_print_timestamps(false);
-    let flag = cancel.clone();
-    params.set_abort_callback_safe(move || flag.is_cancelled());
+    // Not `set_abort_callback_safe`: in whisper-rs 0.16 its trampoline reads the boxed closure
+    // through the wrong pointer type, so whisper aborts on garbage ("failed to encode", -6).
+    // The flag outlives `full` because `cancel` is borrowed for this whole call.
+    // SAFETY: the callback only reads an `AtomicBool` that stays alive until `full` returns.
+    unsafe {
+        params.set_abort_callback(Some(abort_if_cancelled));
+        params.set_abort_callback_user_data(cancel.as_ptr().cast_mut().cast());
+    }
     let result = state.full(params, speech);
     if cancel.is_cancelled() {
         return Err(VoiceError::Cancelled);
     }
-    result.map_err(|_| VoiceError::LowMemory)?;
+    result.map_err(|error| run_failure("whisper transcribe", error))?;
     let text: String = state
         .as_iter()
         .filter_map(|segment| segment.to_str_lossy().ok().map(|text| text.into_owned()))
@@ -55,4 +63,13 @@ pub fn transcribe(model: &Path, pcm: &[i16], cancel: &CancelFlag) -> Result<Stri
         return Err(VoiceError::NoSpeech);
     }
     Ok(cleaned)
+}
+
+/// Whisper's abort callback: true once the turn's cancel flag is set.
+unsafe extern "C" fn abort_if_cancelled(user_data: *mut std::ffi::c_void) -> bool {
+    // SAFETY: `user_data` is the `AtomicBool` of the `CancelFlag` borrowed by `transcribe`.
+    unsafe {
+        (*user_data.cast::<std::sync::atomic::AtomicBool>())
+            .load(std::sync::atomic::Ordering::SeqCst)
+    }
 }

@@ -14,6 +14,7 @@ import 'package:fi/src/rust/api/voice.dart'
         VoiceOptionDto,
         VoiceTurnEventDto;
 import 'package:fi/voice/engine.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/services.dart';
 import 'package:record/record.dart';
 
@@ -22,6 +23,15 @@ const voiceSampleRate = 16000;
 
 /// A turn stops capturing after this long and continues as if the user had stopped.
 const maxTurnDuration = Duration(seconds: 30);
+
+/// Little-endian PCM16 samples of [bytes]. Platform-channel buffers may start at an odd byte
+/// offset, which a typed view cannot, so those are copied first.
+Int16List pcm16Samples(Uint8List bytes) {
+  final aligned = bytes.offsetInBytes.isEven
+      ? bytes
+      : Uint8List.fromList(bytes);
+  return aligned.buffer.asInt16List(aligned.offsetInBytes, aligned.length ~/ 2);
+}
 
 /// The microphone as the engine needs it. Audio stays in memory.
 abstract interface class AudioCapture {
@@ -49,6 +59,7 @@ final class PlatformAudioCapture implements AudioCapture {
 
   @override
   Future<Stream<Uint8List>> open() async {
+    await _release();
     final recorder = _recorder = AudioRecorder();
     if (!await recorder.hasPermission(request: false)) {
       await _release();
@@ -78,7 +89,10 @@ final class PlatformAudioCapture implements AudioCapture {
           audioInterruption: AudioInterruptionMode.none,
         ),
       );
-    } on PlatformException {
+    } on PlatformException catch (error) {
+      debugPrint(
+        'voice: recorder failed to start: ${error.code} ${error.message}',
+      );
       await _release();
       throw const VoiceFailure(VoiceFailureKind.micBusy);
     }
@@ -281,25 +295,31 @@ final class RustVoiceEngine implements VoiceEngine {
 
   @override
   Stream<double> start() {
-    unawaited(_discardCapture());
+    // The previous capture must be fully closed before the next one opens: closing releases
+    // the platform recorder, and an unawaited close would release the new one instead.
+    final discarded = _discardCapture();
     final levels = _levels = StreamController<double>();
     final audio = _audio = BytesBuilder(copy: false);
     _recent = Int16List(0);
-    unawaited(_open(levels, audio));
+    unawaited(_open(levels, audio, after: discarded));
     return levels.stream;
   }
 
   Future<void> _open(
     StreamController<double> levels,
-    BytesBuilder audio,
-  ) async {
+    BytesBuilder audio, {
+    required Future<void> after,
+  }) async {
+    await after;
+    if (!identical(levels, _levels)) return;
     Stream<Uint8List> chunks;
     try {
       chunks = await capture.open();
     } on VoiceFailure catch (failure) {
       _failCapture(levels, failure.kind);
       return;
-    } catch (_) {
+    } catch (error) {
+      debugPrint('voice: microphone failed to open: $error');
       _failCapture(levels, VoiceFailureKind.micBusy);
       return;
     }
@@ -322,9 +342,7 @@ final class RustVoiceEngine implements VoiceEngine {
       if (take > 0) {
         final bytes = Uint8List.sublistView(chunk, 0, take);
         audio.add(bytes);
-        final samples = Int16List.fromList(
-          bytes.buffer.asInt16List(bytes.offsetInBytes, take ~/ 2),
-        );
+        final samples = Int16List.fromList(pcm16Samples(bytes));
         final joined = Int16List.fromList([..._recent, ...samples]);
         final keep = math.min(joined.length, voiceSampleRate ~/ 10);
         _recent = Int16List.sublistView(joined, joined.length - keep);
@@ -379,10 +397,7 @@ final class RustVoiceEngine implements VoiceEngine {
     await _stopCapture();
     if (levels != null && !levels.isClosed) unawaited(levels.close());
     final bytes = audio?.takeBytes() ?? Uint8List(0);
-    final pcm = bytes.buffer.asInt16List(
-      bytes.offsetInBytes,
-      bytes.length ~/ 2,
-    );
+    final pcm = pcm16Samples(bytes);
     final pending = _pending = Completer<VoiceTurnResult>();
     String? transcript;
     _events = native
