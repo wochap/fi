@@ -51,6 +51,7 @@
               ./Cargo.toml
               ./Cargo.lock
               ./crates
+              ./third_party
             ];
           };
 
