@@ -83,3 +83,50 @@ When a lifecycle policy resumes networking on return to the foreground, it SHALL
 #### Scenario: Desktop pause overrides the keep-alive policy
 - **WHEN** the desktop policy is `KeepNetworkingInBackground` and the user turns Sync with paired devices off
 - **THEN** live sessions close and stay closed while the window is focused, unfocused, or hidden
+
+### Requirement: Android key store writes through to the platform store
+Every store or removal of the current discovery-group secret and of the previous-epoch discovery
+secret performed by the Rust core on Android SHALL be persisted to the Keystore-wrapped platform
+store before the operation reports success, whatever triggered it: pairing, an inbound rotation
+received from a peer, a local rotation, revocation, orphan replacement, retention expiry, or dataset
+reset. When the platform store cannot persist the write, the key-store operation SHALL fail with a
+typed secure-store error and the Rust core's view of the secret SHALL remain unchanged. The
+previous-epoch secret SHALL be persisted together with its epoch, and the stored epoch SHALL be bound
+into the authenticated encryption so that altering it fails decryption. Writes SHALL be applied in
+the order the core issued them.
+
+#### Scenario: Secret received from a peer survives restart
+- **WHEN** an Android device accepts an inbound discovery-secret rotation from a trusted peer and the
+  application process is then killed and relaunched
+- **THEN** the relaunched core loads the received secret and epoch, and advertises and browses the
+  same group selector as the peer that sent it
+
+#### Scenario: Previous-epoch secret survives restart
+- **WHEN** an Android device retains a previous-epoch secret during a rotation and is relaunched
+  inside the retention window
+- **THEN** the relaunched core loads that previous secret with its epoch and still recognises peers
+  advertising on the previous selector
+
+#### Scenario: Platform write fails
+- **WHEN** the platform store rejects a discovery-secret write
+- **THEN** the key-store operation returns a secure-store error, the in-memory secret is unchanged,
+  and an inbound rotation that required the write is neither adopted nor acknowledged
+
+#### Scenario: Dataset reset clears the platform copies
+- **WHEN** the user resets the dataset on Android
+- **THEN** both the current and the previous-epoch secret are removed from the platform store, and
+  the next launch starts with no discovery secret
+
+#### Scenario: Stored epoch is altered
+- **WHEN** the persisted previous-epoch value is changed without re-encrypting the secret
+- **THEN** loading the previous-epoch secret fails authentication and no secret is seeded from it
+
+### Requirement: Android startup seeds every persisted discovery secret
+Android networked startup SHALL seed the Rust key store with the persisted current discovery-group
+secret and, when present, the persisted previous-epoch secret with its epoch. Seeding SHALL NOT
+write back to the platform store.
+
+#### Scenario: Launch with current and previous secrets persisted
+- **WHEN** the platform store holds a current secret and a previous-epoch secret for epoch 3
+- **THEN** after startup the core reports the same current secret and a previous secret for epoch 3,
+  and no platform write occurs during startup

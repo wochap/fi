@@ -43,3 +43,21 @@ Automated tests SHALL run representative identity, pairing, discovery, provision
 #### Scenario: Sentinel scan of retained events
 - **WHEN** the same operations run with the retention layer installed and a diagnostic block is produced
 - **THEN** neither the retained events nor the block contain the sentinel material or the SAS
+
+### Requirement: Discovery secret fingerprint is the only logged secret-derived identifier
+The only value derived from a discovery secret that tracing MAY include besides the public service
+selector and routing tokens SHALL be a fingerprint made of the first 4 bytes, hex encoded, of
+HMAC-SHA256 keyed by the secret over the ASCII message `fp`. The fingerprint SHALL NOT reveal any
+byte of the secret, and logging-leakage tests SHALL assert that events carrying the fingerprint
+contain no sentinel secret bytes in any encoding the formatter could produce.
+
+#### Scenario: Fingerprint is logged with a sentinel secret
+- **WHEN** a group advertisement is logged with a sentinel discovery secret and the output is captured
+  at every level, including the retained event buffer and a diagnostic block
+- **THEN** the output contains the 8-hex-digit fingerprint and no hex, base32, decimal, or debug
+  rendering of the sentinel secret bytes
+
+#### Scenario: Secret persistence is logged
+- **WHEN** a discovery secret is written to or removed from a platform secure store
+- **THEN** the event names the slot and operation and outcome only, without secret bytes or
+  ciphertext

@@ -52,3 +52,36 @@ Every build SHALL carry the version, the short hash of the commit it was built f
 #### Scenario: Hash follows the checkout
 - **WHEN** a new commit is checked out and the application is rebuilt without cleaning
 - **THEN** the reported hash is the new commit's hash
+
+### Requirement: Build identity capture does not depend on the build host's tools
+The source commit hash SHALL be determined from the repository metadata of the source tree without
+requiring a `git` executable, including in linked worktrees and when the current branch reference is
+stored only in packed form. When explicit build-identity values are supplied to the build through
+the environment, they SHALL take precedence over the repository metadata. The packaged Nix build
+SHALL supply the flake's source revision this way. A build that falls back to `unknown` SHALL emit a
+build-time warning stating why. A new commit on the current branch SHALL cause the reported hash to
+change on the next build without cleaning.
+
+#### Scenario: Android build from a commit
+- **WHEN** the Android application is built from commit `a1b2c3d` with the normal Flutter build
+- **THEN** the bridge on the device reports hash `a1b2c3d`, and the version label does not read
+  `unknown`
+
+#### Scenario: Build without a git executable
+- **WHEN** the application is built from a git checkout on a host where no `git` executable is on the
+  build's PATH
+- **THEN** the bridge reports the checked-out commit's short hash and dirty false
+
+#### Scenario: Explicit identity from the environment
+- **WHEN** the build receives hash `d4e5f6a` and dirty `1` through the build-identity environment
+  values
+- **THEN** the bridge reports hash `d4e5f6a` and dirty true regardless of the repository metadata
+
+#### Scenario: Commit on the same branch
+- **WHEN** a new commit is made on the checked-out branch and the application is rebuilt without
+  cleaning
+- **THEN** the reported hash is the new commit's hash
+
+#### Scenario: Nix package build
+- **WHEN** the application is built with the flake's package output from a clean committed tree
+- **THEN** the bridge reports the flake revision's short hash and dirty false

@@ -89,3 +89,19 @@ on retry rather than being silently skipped.
 - **WHEN** a previously failed rotation is retried after the underlying keystore failure is resolved
 - **THEN** the epoch advances, the previous secret is retained, and remaining trusted devices receive
   the new secret over authenticated control channels
+
+### Requirement: Received rotations are durable on every shipping key store
+A discovery secret and epoch received through an authenticated rotation update, and the previous
+secret the recipient retains because of it, SHALL be written to durable secure storage on every
+shipping platform key store before the recipient adopts the new epoch or acknowledges the update.
+Durability SHALL NOT depend on a later user action or on which component initiated the rotation.
+
+#### Scenario: Recipient restarts after an inbound rotation
+- **WHEN** a trusted device receives and acknowledges a rotation to epoch N and then restarts
+- **THEN** it resumes with the epoch-N secret and the retained epoch N-1 secret, and derives the same
+  selector as the rotating device
+
+#### Scenario: Durable write fails on the recipient
+- **WHEN** the recipient's secure store cannot persist the received secret
+- **THEN** the recipient keeps its current epoch, does not acknowledge the update, and a later
+  delivery of the same update can still be applied

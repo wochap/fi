@@ -77,3 +77,59 @@ Group-scoped normal discovery advertising and browsing SHALL run only while the 
 #### Scenario: Pairing discovery while off
 - **WHEN** Discoverable is off and the user starts pairing
 - **THEN** the generic pairing service is advertised and browsed for the pairing window exactly as when Discoverable is on
+
+### Requirement: Discovery diagnostics events
+The discovery subsystem SHALL emit info-level structured events that let a user compare two devices'
+discovery state from their logs alone: one when browsing starts for a scope, naming the scope and,
+for a group scope, the epoch and service selector; one for every resolved service, naming the scope,
+the service instance, the resolved addresses, and the port; and one for every group-scoped record
+that is not turned into an endpoint, naming the scope, instance, address, and a `reason` that is
+exactly one of `address` (the address is not admissible for dialing or the record has expired),
+`selector` (the record's selector matches neither the current nor the retained previous secret),
+`token` (the routing token is absent or maps to no device this device knows), or `untrusted` (the
+token maps to a known device that is not currently trusted). A rejection with reason `untrusted`
+SHALL carry that device's public DeviceId. A record carrying this device's own routing token SHALL
+NOT be reported as rejected at info level. None of these events SHALL include a discovery secret.
+
+#### Scenario: Browse starts for the group scope
+- **WHEN** normal discovery starts for epoch 4
+- **THEN** an info event records the group scope, epoch 4, and the service selector being browsed
+
+#### Scenario: Service resolves
+- **WHEN** mDNS resolves a service instance with two addresses
+- **THEN** an info event records the scope, the instance name, both addresses, and the port
+
+#### Scenario: Record from a revoked device
+- **WHEN** a group record's routing token matches a device whose trust state is revoked
+- **THEN** an info event records the record as rejected with reason `untrusted` and that device's
+  DeviceId, and no endpoint is produced
+
+#### Scenario: Record from another group
+- **WHEN** a resolved group record's selector matches neither the current nor the previous secret
+- **THEN** an info event records the record as rejected with reason `selector`
+
+#### Scenario: Unknown routing token
+- **WHEN** a group record's routing token maps to no known device
+- **THEN** an info event records the record as rejected with reason `token`
+
+#### Scenario: Non-routable address
+- **WHEN** a group record resolves to a loopback or container-bridge address
+- **THEN** an info event records that address as rejected with reason `address`
+
+#### Scenario: Own advertisement is observed
+- **WHEN** the device resolves its own group record
+- **THEN** no info-level rejection is emitted for it
+
+### Requirement: Group advertisement names a secret fingerprint
+The event recording a group-scoped advertisement SHALL include the epoch, the service selector, and a
+fingerprint of the current discovery secret so that two devices' logs show whether they hold the same
+secret. The fingerprint SHALL be independent of the epoch and SHALL be identical on every device that
+holds the same secret.
+
+#### Scenario: Same secret on two devices
+- **WHEN** two devices advertise with the same discovery secret
+- **THEN** their advertisement events carry the same fingerprint
+
+#### Scenario: Different secrets
+- **WHEN** two devices advertise with different discovery secrets
+- **THEN** their advertisement events carry different fingerprints
