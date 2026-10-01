@@ -59,3 +59,36 @@ Address selection SHALL be re-evaluated when the host's network topology changes
 #### Scenario: Stale advertisement expires
 - **WHEN** an address ceases to be advertised while a previously published record still exists
 - **THEN** the record stops resolving as an endpoint no later than its published expiry
+
+### Requirement: Tailnet peer addresses are admitted for sync
+A tailnet address SHALL be an IPv4 address in `100.64.0.0/10`. The device SHALL be on a tailnet while at least one of its tunnel interfaces (an interface whose name starts with `tailscale` or `tun`) holds a tailnet address; a `100.64.0.0/10` address on any other interface, such as a carrier-grade NAT address on a mobile data interface, SHALL NOT put the device on a tailnet. This SHALL be evaluated from the current interfaces, so joining or leaving the tailnet takes effect without restarting the application.
+
+For sync, the address policy of an IPv4 unspecified bind SHALL admit a tailnet peer address while the device is on a tailnet, in addition to the addresses it already admits, and SHALL NOT admit it otherwise. Pairing SHALL NOT admit tailnet addresses. Discovery advertisements SHALL NOT carry tailnet addresses.
+
+#### Scenario: Device on a tailnet admits a tailnet peer
+- **WHEN** the device has `100.71.3.9` on `tailscale0`, sync is bound to `0.0.0.0`, and a peer address `100.88.10.4` is checked for sync
+- **THEN** the address is admitted
+
+#### Scenario: Android Tailscale interface
+- **WHEN** the device has `100.71.3.9` on `tun0` and a peer address `100.88.10.4` is checked for sync
+- **THEN** the address is admitted
+
+#### Scenario: Device not on a tailnet
+- **WHEN** the device has no tunnel interface with a tailnet address and a peer address `100.88.10.4` is checked for sync
+- **THEN** the address is not admitted
+
+#### Scenario: Carrier-grade NAT is not a tailnet
+- **WHEN** the device's only `100.64.0.0/10` address is `100.100.5.6` on `rmnet_data0` and a peer address `100.88.10.4` is checked for sync
+- **THEN** the address is not admitted
+
+#### Scenario: Pairing ignores the tailnet
+- **WHEN** the device is on a tailnet and a peer address `100.88.10.4` is checked for pairing
+- **THEN** the address is not admitted
+
+#### Scenario: Tailnet address is not advertised
+- **WHEN** the device is on a tailnet with `100.71.3.9` on `tailscale0` and `192.168.0.165` on Wi-Fi, and registers a discovery advertisement
+- **THEN** the advertisement carries `192.168.0.165` and not `100.71.3.9`
+
+#### Scenario: Leaving the tailnet
+- **WHEN** the tunnel interface holding the device's tailnet address goes away while the application runs
+- **THEN** tailnet peer addresses stop being admitted for sync without a restart

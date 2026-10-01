@@ -210,10 +210,14 @@ The pairing socket SHALL be released when pairing reaches any terminal or idle s
 - **THEN** a pairing socket is bound again inside the range and advertised with its actual port
 
 ### Requirement: Inbound pairing connections from non-LAN addresses are dropped before the handshake
-The pairing endpoint SHALL apply the same source-address admission as the sync endpoint: an inbound connection whose source is not a LAN-routable peer address under the device's address policy SHALL be dropped before the TLS handshake, without any reply and without presenting the certificate, and SHALL NOT affect the pairing state, the window, or the candidate list.
+The pairing endpoint SHALL admit an inbound connection only when its source is a LAN-routable peer address under the device's address policy: a private (RFC 1918) or link-local IPv4 address for an IPv4 unspecified or LAN bind. Tailnet addresses SHALL NOT be admitted for pairing, even while the device is on a tailnet. Any other inbound connection SHALL be dropped before the TLS handshake, without any reply and without presenting the certificate, and SHALL NOT affect the pairing state, the window, or the candidate list.
 
 #### Scenario: Public source during a window
 - **WHEN** a pairing window is open and a connection to the pairing port arrives from a public address
+- **THEN** it is dropped without a reply and the device stays discoverable
+
+#### Scenario: Tailnet source during a window
+- **WHEN** the device is on a tailnet, a pairing window is open, and a connection to the pairing port arrives from `100.88.10.4`
 - **THEN** it is dropped without a reply and the device stays discoverable
 
 ### Requirement: A failed inbound pairing handshake refuses only that connection

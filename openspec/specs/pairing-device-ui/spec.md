@@ -416,7 +416,7 @@ The tag SHALL use the error style with an icon beside its text, never colour alo
 "Connect" SHALL be unavailable while the field is empty and while an attempt runs. While an attempt runs the dialog SHALL show "Connecting…" and the field SHALL not be editable. "Connect" SHALL invoke the connect-by-address command for that device with the field text. The outcome SHALL be shown as follows:
 - Connected: the dialog closes and a brief confirmation reads "Connected to <name>".
 - Invalid address: the field shows "Enter an IPv4 address like 192.168.0.165, optionally followed by :port."
-- Not a local-network address: the field shows "Use an address on your local network, like 192.168.x.x."
+- Not a local-network address: the field shows "Use an address on your local network or tailnet, like 192.168.x.x or 100.x.x.x."
 - No route, route, transport or stream failure: "No answer at <address>. Check the address and that Fi is open on the other device."
 - Trust or TLS failure: "The device at <address> isn't <name>."
 - Paused: "Sync with paired devices is off. Turn it on to connect."
@@ -435,6 +435,10 @@ After a failure the dialog SHALL stay open with the typed text kept, so the user
 #### Scenario: Invalid address
 - **WHEN** the user enters `192.168.0` and presses Connect
 - **THEN** the dialog stays open, the text `192.168.0` is kept, and the field shows the invalid-address line
+
+#### Scenario: Address not admitted
+- **WHEN** the user enters `8.8.8.8` and the command reports not a local-network address
+- **THEN** the dialog stays open and the field shows "Use an address on your local network or tailnet, like 192.168.x.x or 100.x.x.x."
 
 #### Scenario: Wrong device at the address
 - **WHEN** the command reports a trust failure for `192.168.0.20:47380`

@@ -20,18 +20,30 @@ The application SHALL maintain zero or more expiring `NetworkEndpoint` values pe
 - **THEN** the new endpoint is eligible immediately with no backoff, and one connection attempt that fails on the stale endpoint proceeds to the new endpoint within the same attempt rather than waiting for the stale endpoint to expire
 
 ### Requirement: Extensible endpoint sources
-`EndpointSource` SHALL support LAN and reserve a distinct Tailscale variant without introducing either source into the custom Repo API or wire protocol.
+`EndpointSource` SHALL distinguish LAN, Tailscale and remembered endpoints without introducing any source into the custom Repo API or wire protocol. An endpoint whose address is a tailnet address SHALL have the Tailscale source, whether it was learned from a live session, an address hint, memory, or a manual connection.
 
 #### Scenario: Repo receives a routed connection
 - **WHEN** a connection through any endpoint source authenticates successfully
 - **THEN** the Repo receives only the peer's authenticated `PeerId` and complete frames
 
+#### Scenario: Tailnet address is a Tailscale endpoint
+- **WHEN** a session with a peer authenticates from `100.88.10.4:47380`
+- **THEN** the peer's endpoint for that address has the Tailscale source
+
 ### Requirement: Pure endpoint selection policy
-Endpoint ranking SHALL be deterministic and side-effect-free, prefer eligible LAN endpoints over future Tailscale endpoints, and account for expiry, recent success, and bounded failure backoff within a source. Eligibility SHALL additionally require that the endpoint address be one the peer can be reached on; loopback addresses and addresses belonging to host-local container, virtualization, or tunnel bridge interfaces learned from a remote peer's advertisement SHALL NOT be eligible, and ranking SHALL NOT promote an ineligible address above an eligible one.
+Endpoint ranking SHALL be deterministic and side-effect-free, rank eligible LAN endpoints first, then eligible Tailscale endpoints, then other eligible remembered endpoints, and account for expiry, recent success, and bounded failure backoff within a source. Eligibility SHALL additionally require that the address policy admits the endpoint address for sync, so a Tailscale endpoint is eligible only while the device is on a tailnet; loopback addresses and addresses belonging to host-local container, virtualization, or tunnel bridge interfaces learned from a remote peer's advertisement SHALL NOT be eligible, and ranking SHALL NOT promote an ineligible address above an eligible one.
 
 #### Scenario: LAN and Tailscale endpoints exist
 - **WHEN** both sources contain eligible routes for one device
 - **THEN** the current strategy selects LAN first
+
+#### Scenario: Tailscale before remembered LAN
+- **WHEN** a peer has an eligible remembered LAN endpoint `192.168.0.165:47380` and an eligible Tailscale endpoint `100.88.10.4:47380`, and discovery resolves nothing
+- **THEN** selection returns `100.88.10.4:47380` first
+
+#### Scenario: Tailscale endpoint while off the tailnet
+- **WHEN** a peer's only endpoint is `100.88.10.4:47380` and the device is not on a tailnet
+- **THEN** no endpoint is eligible for that peer
 
 #### Scenario: Preferred endpoint fails
 - **WHEN** connection to the selected endpoint fails

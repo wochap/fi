@@ -93,14 +93,14 @@ Sizes SHALL come from the model manifest. Where the Voice input section is not s
 ### Requirement: About section
 The About section SHALL be shown on every platform as one card with these rows in order:
 - "Version" with the build label, shown only once the build identity is known.
-- "This device" with every address at which a paired device on the same local network can reach this one, one per line as `ip:port` using the bound sync port (for example `192.168.0.165:47380`), in a monospace presentation. Each address SHALL have a copy action that places exactly that `ip:port` on the clipboard and confirms the copy with "Address copied". While no address is available (networking not running or no local-network connection) the row SHALL read "Not on a local network" instead. The addresses SHALL be read again when Settings is opened and when the app returns to the foreground, so a device that changed networks shows its new address.
-- "Network" with the low-emphasis line "Local network only · UDP 47380–47389 · mDNS 5353", stating that sync and pairing use only the local network, the UDP port range 47380–47389, and mDNS on port 5353. The line SHALL use the muted text colour and a smaller size than the row label.
+- "This device" with every address at which a paired device on the same local network or tailnet can reach this one, as exposed by the core (LAN addresses first, then tailnet addresses), one per line as `ip:port` using the bound sync port (for example `192.168.0.165:47380`), in a monospace presentation. Each address SHALL have a copy action that places exactly that `ip:port` on the clipboard and confirms the copy with "Address copied". While no address is available (networking not running, or neither a local-network nor a tailnet connection) the row SHALL read "Not on a local network or tailnet" instead. The addresses SHALL be read again when Settings is opened and when the app returns to the foreground, so a device that changed networks shows its new address.
+- "Network" with the low-emphasis line "Local network and tailnet · UDP 47380–47389 · mDNS 5353", stating that sync uses the local network and the tailnet, the UDP port range 47380–47389, and mDNS on port 5353. The line SHALL use the muted text colour and a smaller size than the row label.
 
 The About section SHALL render even while the build identity is pending or after it failed; the Version row is then absent and the This device and Network rows are still shown.
 
 #### Scenario: About on desktop
 - **WHEN** the app runs with desktop capabilities, the build identity is `0.1.21`, `a1b2c3d`, not dirty, the device's LAN address is `192.168.0.165` with sync bound to `47380`, and the user opens Settings
-- **THEN** About shows "Version" with `fi 0.1.21 · a1b2c3d`, then "This device" with `192.168.0.165:47380`, then "Network" with "Local network only · UDP 47380–47389 · mDNS 5353"
+- **THEN** About shows "Version" with `fi 0.1.21 · a1b2c3d`, then "This device" with `192.168.0.165:47380`, then "Network" with "Local network and tailnet · UDP 47380–47389 · mDNS 5353"
 
 #### Scenario: Copy this device's address
 - **WHEN** the user presses the copy action beside `192.168.0.165:47380`
@@ -110,9 +110,13 @@ The About section SHALL render even while the build identity is pending or after
 - **WHEN** the device is connected to Ethernet at `192.168.0.10` and Wi-Fi at `192.168.0.165` with sync on `47380`
 - **THEN** "This device" lists `192.168.0.10:47380` and `192.168.0.165:47380`, each with its own copy action
 
+#### Scenario: LAN and tailnet addresses
+- **WHEN** the device has Wi-Fi at `192.168.0.165` and the tailnet address `100.71.3.9` with sync on `47380`
+- **THEN** "This device" lists `192.168.0.165:47380` then `100.71.3.9:47380`, each with its own copy action
+
 #### Scenario: No local network
-- **WHEN** networking is not running or the device has no local-network address
-- **THEN** "This device" reads "Not on a local network" and offers no copy action
+- **WHEN** networking is not running or the device has neither a local-network nor a tailnet address
+- **THEN** "This device" reads "Not on a local network or tailnet" and offers no copy action
 
 #### Scenario: Address changes after roaming
 - **WHEN** the device moves to another Wi-Fi network while the app is in the background and the user returns to the app and opens Settings

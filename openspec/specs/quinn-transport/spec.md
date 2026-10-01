@@ -93,7 +93,7 @@ The sync transport SHALL expose an accepting flag. While accepting is off, every
 - **THEN** the connection is authenticated and registered as usual on the same bound port
 
 ### Requirement: Inbound sync connections from non-LAN addresses are dropped before the handshake
-The sync endpoint SHALL admit an inbound connection only when its source address is one the device would itself dial as a peer under its address policy: for an IPv4 unspecified or LAN bind, a private (RFC 1918) or link-local IPv4 address; for an IPv6 unspecified bind, additionally a unique-local IPv6 address; for a loopback bind, a loopback address. Any other inbound connection SHALL be dropped before the TLS handshake starts, without sending any reply, without presenting the device certificate, and MUST NOT register a session or emit a peer event. This check SHALL apply before the accepting flag and the connection limit are consulted, and SHALL NOT affect outbound dials.
+The sync endpoint SHALL admit an inbound connection only when its source address is one the device would itself dial as a peer under its sync address policy: for an IPv4 unspecified or LAN bind, a private (RFC 1918) or link-local IPv4 address, or a tailnet address while the device is on a tailnet; for an IPv6 unspecified bind, additionally a unique-local IPv6 address; for a loopback bind, a loopback address. Any other inbound connection SHALL be dropped before the TLS handshake starts, without sending any reply, without presenting the device certificate, and MUST NOT register a session or emit a peer event. This check SHALL apply before the accepting flag and the connection limit are consulted, and SHALL NOT affect outbound dials.
 
 #### Scenario: Public source address
 - **WHEN** a packet opening a connection to the sync port arrives from a public address such as `8.8.8.8`
@@ -106,6 +106,14 @@ The sync endpoint SHALL admit an inbound connection only when its source address
 #### Scenario: LAN peer is unaffected
 - **WHEN** a trusted peer at a private LAN address dials the sync port while sync is accepting
 - **THEN** the connection is authenticated and registered as usual
+
+#### Scenario: Tailnet peer while on a tailnet
+- **WHEN** the device is on a tailnet and a trusted peer dials the sync port from `100.88.10.4` while sync is accepting
+- **THEN** the connection is authenticated and registered as usual
+
+#### Scenario: Tailnet source while not on a tailnet
+- **WHEN** the device is not on a tailnet and a connection to the sync port arrives from `100.88.10.4`
+- **THEN** the connection is dropped without a reply and no certificate is sent
 
 ### Requirement: Inbound sync connections are bounded for a personal mesh
 The sync endpoint SHALL hold at most 8 open connections by default. An inbound connection that arrives while the limit is reached SHALL be refused before the TLS handshake and MUST NOT register a session.
