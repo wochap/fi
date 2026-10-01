@@ -2,6 +2,7 @@ import 'package:fi/controllers.dart';
 import 'package:fi/l10n/l10n.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/theme/form_errors.dart';
+import 'package:fi/theme/nocturne.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -120,7 +121,114 @@ Future<void> _save(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+/// [bridge] with [count] optional text fields appended after Mood, so the form scrolls.
+void _makeTall(FakeCollectionBridge bridge, {int count = 20}) {
+  final schema = bridge.schemas[_collection]!;
+  bridge.schemas[_collection] = CollectionSchemaDto(
+    id: schema.id,
+    name: schema.name,
+    description: schema.description,
+    fields: [
+      ...schema.fields,
+      for (var i = 0; i < count; i++)
+        _field(
+          'field-extra-$i',
+          'Extra $i',
+          FieldTypeKindDto.text,
+          order: 3 + i,
+        ),
+    ],
+  );
+}
+
+/// Whether keyboard focus is inside the record field [fieldId].
+bool _focusedIn(String fieldId) {
+  final focused = FocusManager.instance.primaryFocus?.context;
+  if (focused == null) return false;
+  return find
+      .descendant(
+        of: find.byKey(ValueKey('record-field-$fieldId')),
+        matching: find.byWidget(focused.widget),
+      )
+      .evaluate()
+      .isNotEmpty;
+}
+
+/// Whether the record field [fieldId] lies inside the form's visible scroll viewport.
+bool _visible(WidgetTester tester, String fieldId) {
+  final field = tester.getRect(find.byKey(ValueKey('record-field-$fieldId')));
+  final viewport = tester.getRect(
+    find
+        .ancestor(
+          of: find.byKey(ValueKey('record-field-$fieldId')),
+          matching: find.byType(Scrollable),
+        )
+        .first,
+  );
+  return field.top >= viewport.top && field.bottom <= viewport.bottom;
+}
+
 void main() {
+  testWidgets('field error message and icon are drawn in the error red', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(home: Scaffold(body: FieldErrorMessage(['Required']))),
+    );
+    final text = tester.widget<Text>(find.text('Required'));
+    expect(text.style?.color, Nocturne.error);
+    final icon = tester.widget<Icon>(
+      find.descendant(
+        of: find.byType(FieldErrorMessage),
+        matching: find.byType(Icon),
+      ),
+    );
+    expect(icon.color, Nocturne.error);
+  });
+
+  testWidgets('Save jumps to the first field with an error', (tester) async {
+    final bridge = _seeded()
+      ..draftIssues = (_, _, _) => const [
+        BridgeIssueDto(fields: [_title], code: 'required', message: 'Required'),
+      ];
+    _makeTall(bridge);
+    await _openNewRecord(tester, bridge);
+    final last = find.byKey(const ValueKey('record-field-field-extra-19'));
+    await tester.ensureVisible(last);
+    await tester.pumpAndSettle();
+    expect(_visible(tester, _title), isFalse);
+    await _save(tester);
+    expect(_visible(tester, _title), isTrue);
+    expect(_focusedIn(_title), isTrue);
+  });
+
+  testWidgets('re-validation while editing keeps focus on the edited field', (
+    tester,
+  ) async {
+    final bridge = _seeded()
+      ..draftIssues = (_, _, _) => const [
+        BridgeIssueDto(fields: [_title], code: 'required', message: 'Required'),
+      ];
+    _makeTall(bridge);
+    await _openNewRecord(tester, bridge);
+    await _save(tester);
+    expect(_focusedIn(_title), isTrue);
+    const later = 'field-extra-19';
+    final input = find.descendant(
+      of: find.byKey(const ValueKey('record-field-$later')),
+      matching: find.byType(TextFormField),
+    );
+    await tester.ensureVisible(input);
+    await tester.pumpAndSettle();
+    await tester.tap(input);
+    await tester.enterText(input, 'note');
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.pumpAndSettle();
+    expect(_errorUnder(tester, 'Title'), 'Required');
+    expect(_focusedIn(later), isTrue);
+    expect(_visible(tester, later), isTrue);
+  });
+
   testWidgets('a pristine form shows required markers and one legend, no errors', (
     tester,
   ) async {

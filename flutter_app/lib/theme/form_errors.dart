@@ -3,8 +3,9 @@ import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/theme/nocturne.dart';
 import 'package:flutter/material.dart';
 
-/// The color of a field's error message and warning icon; its control gets an accent border.
-const Color fieldErrorColor = Nocturne.accent200;
+/// The color of a field's error message and warning icon, the same red as the form-level slot;
+/// its control gets an accent border.
+const Color fieldErrorColor = Nocturne.error;
 
 /// A field's error message under its control: a warning icon, then one line per issue in
 /// [fieldErrorColor]. [text] is the lines joined by newlines, as one `Text`.

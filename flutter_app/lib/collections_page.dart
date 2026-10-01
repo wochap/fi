@@ -2532,6 +2532,7 @@ class _RecordEditorFormState extends State<_RecordEditorForm> {
     if (found == null) return;
     if (!found.isEmpty) {
       setState(() => issues = found);
+      _jumpToFirstError();
       return;
     }
     try {
@@ -2546,8 +2547,18 @@ class _RecordEditorFormState extends State<_RecordEditorForm> {
       // Save is authoritative: its issues replace whatever the dry run said.
       if (mounted && request == _request) {
         setState(() => issues = FormIssues.from(failure).restrictTo(_fieldIds));
+        _jumpToFirstError();
       }
     }
+  }
+
+  /// After a failed save, scrolls to and focuses the first field with an error, in form order.
+  void _jumpToFirstError() {
+    final first = fields
+        .where((field) => issues.of(field.id).isNotEmpty)
+        .firstOrNull;
+    if (first == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _focusField(first.id));
   }
 
   /// Asks, then logically deletes the record and closes the editor. Cancelling keeps the editor

@@ -179,13 +179,15 @@ must write one, use these sizes:
 - **Form errors** follow one model, `FormIssues` (`controllers.dart`), built from a `BridgeError`
   with `FormIssues.from(error)` or from a list of issues:
   - An issue that names exactly one field (or form key) shows directly under that input: an
-    accent border on the control, a warning icon and the message in `accent200`. Pass the lines
-    as `errors:` to the shared input, which draws them with `FieldErrorMessage` so each issue is
-    its own line; controls without a decoration (a switch, a segmented choice) use
+    accent border on the control, a warning icon and the message in `Nocturne.error`, the same
+    red as the form-level slot. Pass the lines as `errors:` to the shared input, which draws them
+    with `FieldErrorMessage` so each issue is its own line; controls without a decoration (a switch, a segmented choice) use
     `FieldErrorLines`. Several issues on one field are several lines, in Rust's order, with no
     bullets. Tests read them back with `decorationErrorText()`.
   - After a save leaves fields with errors, the record editor pins a `FormErrorSummary` above the
-    footer; Show scrolls to the first field in error, in form order, and focuses it.
+    footer; Show scrolls to the first field in error, in form order, and focuses it. Pressing
+    Save does the same jump on its own; the debounced re-validation while editing never moves
+    the form.
   - An issue that names no field or several, and any non-validation failure, goes in the
     form-level slot above Cancel / primary (`FormSurface.errors`, or `FormErrorLines` placed just
     before a custom form's actions), one line per issue.
