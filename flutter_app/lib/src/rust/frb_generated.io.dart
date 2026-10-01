@@ -407,6 +407,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<LogEventDto> dco_decode_list_log_event_dto(dynamic raw);
 
   @protected
+  List<ModelFileDto> dco_decode_list_model_file_dto(dynamic raw);
+
+  @protected
   List<PairingCandidateDto> dco_decode_list_pairing_candidate_dto(dynamic raw);
 
   @protected
@@ -485,6 +488,15 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ModelErrorKindDto dco_decode_model_error_kind_dto(dynamic raw);
+
+  @protected
+  ModelFileDto dco_decode_model_file_dto(dynamic raw);
+
+  @protected
+  ModelFileStateDto dco_decode_model_file_state_dto(dynamic raw);
+
+  @protected
+  ModelRoleDto dco_decode_model_role_dto(dynamic raw);
 
   @protected
   ModelStatusDto dco_decode_model_status_dto(dynamic raw);
@@ -1315,6 +1327,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<LogEventDto> sse_decode_list_log_event_dto(SseDeserializer deserializer);
 
   @protected
+  List<ModelFileDto> sse_decode_list_model_file_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   List<PairingCandidateDto> sse_decode_list_pairing_candidate_dto(
     SseDeserializer deserializer,
   );
@@ -1427,6 +1444,17 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   ModelErrorKindDto sse_decode_model_error_kind_dto(
     SseDeserializer deserializer,
   );
+
+  @protected
+  ModelFileDto sse_decode_model_file_dto(SseDeserializer deserializer);
+
+  @protected
+  ModelFileStateDto sse_decode_model_file_state_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ModelRoleDto sse_decode_model_role_dto(SseDeserializer deserializer);
 
   @protected
   ModelStatusDto sse_decode_model_status_dto(SseDeserializer deserializer);
@@ -2469,6 +2497,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_list_model_file_dto(
+    List<ModelFileDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_list_pairing_candidate_dto(
     List<PairingCandidateDto> self,
     SseSerializer serializer,
@@ -2614,6 +2648,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
     ModelErrorKindDto self,
     SseSerializer serializer,
   );
+
+  @protected
+  void sse_encode_model_file_dto(ModelFileDto self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_model_file_state_dto(
+    ModelFileStateDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_model_role_dto(ModelRoleDto self, SseSerializer serializer);
 
   @protected
   void sse_encode_model_status_dto(

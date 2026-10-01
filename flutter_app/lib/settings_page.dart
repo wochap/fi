@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/theme/nocturne.dart';
 import 'package:fi/theme/nocturne_widgets.dart';
+import 'package:fi/voice/model_strings.dart';
+import 'package:fi/voice/models_card.dart';
 import 'package:fi/voice/services.dart';
 import 'package:flutter/material.dart';
 
@@ -164,33 +166,6 @@ class _VoiceInputSection extends StatelessWidget {
 
   VoiceModels get models => services.models;
 
-  Future<bool> _confirm(
-    BuildContext context, {
-    required String title,
-    required String body,
-    required String action,
-    required Key key,
-  }) async =>
-      await showDialog<bool>(
-        context: context,
-        builder: (dialog) => AlertDialog(
-          title: Text(title),
-          content: Text(body),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialog, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              key: key,
-              onPressed: () => Navigator.pop(dialog, true),
-              child: Text(action),
-            ),
-          ],
-        ),
-      ) ??
-      false;
-
   Future<void> _run(
     BuildContext context,
     Future<void> Function() action,
@@ -206,7 +181,7 @@ class _VoiceInputSection extends StatelessWidget {
               'Not enough storage: ${formatBytes(error.neededBytes ?? 0)} needed.',
             ModelErrorKindDto.voiceTurnActive =>
               'Finish the voice fill in progress first.',
-            _ => "Couldn't change the voice model. Try again.",
+            _ => "Couldn't change the voice models. Try again.",
           }),
         ),
       );
@@ -219,7 +194,7 @@ class _VoiceInputSection extends StatelessWidget {
     builder: (context, _) {
       final status = models.status;
       final size = formatBytes(status.totalBytes);
-      final ready = status.kind == ModelStatusKindDto.ready;
+      final ready = models.ready;
       return NocturneCard(
         key: const Key('settings-voice'),
         padding: EdgeInsets.zero,
@@ -228,7 +203,10 @@ class _VoiceInputSection extends StatelessWidget {
           children: [
             Padding(
               padding: const EdgeInsets.all(16),
-              child: _modelRow(context, status, size),
+              child: VoiceModelsCard(
+                models: models,
+                run: (action) => _run(context, action),
+              ),
             ),
             if (ready) ...[
               const FadedRule(indent: 16),
@@ -269,15 +247,12 @@ class _VoiceInputSection extends StatelessWidget {
               _actionRow(
                 key: const Key('settings-redownload'),
                 icon: FiIcons.refresh,
-                label: 'Re-download model',
+                label: ModelStrings.redownload,
                 detail: size,
                 onTap: () async {
-                  if (!await _confirm(
+                  if (!await showRedownloadModelsDialog(
                     context,
-                    title: 'Re-download voice model?',
-                    body: 'The model is deleted and downloaded again ($size).',
-                    action: 'Re-download',
-                    key: const Key('confirm-redownload'),
+                    status.totalBytes,
                   )) {
                     return;
                   }
@@ -288,16 +263,12 @@ class _VoiceInputSection extends StatelessWidget {
               _actionRow(
                 key: const Key('settings-delete-model'),
                 icon: FiIcons.delete,
-                label: 'Delete model',
-                detail: 'frees $size',
+                label: ModelStrings.delete,
+                detail: ModelStrings.frees(size),
                 onTap: () async {
-                  if (!await _confirm(
+                  if (!await showDeleteModelsDialog(
                     context,
-                    title: 'Delete voice model?',
-                    body:
-                        'This frees $size. Voice fill needs it downloaded again.',
-                    action: 'Delete',
-                    key: const Key('confirm-delete-model'),
+                    status.totalBytes,
                   )) {
                     return;
                   }
@@ -348,118 +319,4 @@ class _VoiceInputSection extends StatelessWidget {
       ),
     ),
   );
-
-  Widget _modelRow(BuildContext context, ModelStatusDto status, String size) {
-    final header = Row(
-      children: [
-        const Icon(FiIcons.waveform, size: 20, color: Nocturne.accent),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            spacing: 2,
-            children: [
-              const Text('Voice model'),
-              Text(
-                'English · $size',
-                key: const Key('settings-model-size'),
-                style: TextStyle(fontSize: 12, color: Nocturne.muted(.55)),
-              ),
-            ],
-          ),
-        ),
-        switch (status.kind) {
-          ModelStatusKindDto.ready => Container(
-            key: const Key('settings-model-ready'),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              color: Nocturne.accent900,
-              borderRadius: BorderRadius.circular(Nocturne.radiusLg),
-              border: Border.all(color: Nocturne.accent700),
-            ),
-            child: const Text(
-              'Ready',
-              style: TextStyle(fontSize: 11, color: Nocturne.accent100),
-            ),
-          ),
-          ModelStatusKindDto.downloading ||
-          ModelStatusKindDto.paused => IconButton(
-            key: const Key('settings-model-pause'),
-            tooltip: status.kind == ModelStatusKindDto.paused
-                ? 'Resume download'
-                : 'Pause download',
-            onPressed: () => unawaited(
-              status.kind == ModelStatusKindDto.paused
-                  ? _run(context, models.start)
-                  : models.pause(),
-            ),
-            icon: Icon(
-              status.kind == ModelStatusKindDto.paused
-                  ? FiIcons.download
-                  : FiIcons.pause,
-              size: 18,
-            ),
-          ),
-          _ => Text(
-            'Not downloaded',
-            key: const Key('settings-model-missing'),
-            style: TextStyle(fontSize: 12, color: Nocturne.muted(.6)),
-          ),
-        },
-      ],
-    );
-    final progress = status.totalBytes == 0
-        ? 0.0
-        : status.doneBytes / status.totalBytes;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      spacing: 10,
-      children: [
-        header,
-        if (status.kind == ModelStatusKindDto.downloading ||
-            status.kind == ModelStatusKindDto.paused) ...[
-          ClipRRect(
-            borderRadius: BorderRadius.circular(2),
-            child: LinearProgressIndicator(
-              value: progress,
-              minHeight: 4,
-              color: Nocturne.accent,
-              backgroundColor: Nocturne.neutral700,
-            ),
-          ),
-          Text(
-            '${formatBytes(status.doneBytes)} of $size · ${(progress * 100).floor()}%'
-            '${status.kind == ModelStatusKindDto.paused ? ' · Paused' : ''}',
-            key: const Key('settings-model-progress'),
-            style: TextStyle(
-              fontSize: 12,
-              color: Nocturne.muted(.6),
-              fontFeatures: Nocturne.tabular,
-            ),
-          ),
-        ],
-        if (status.kind == ModelStatusKindDto.notDownloaded ||
-            status.kind == ModelStatusKindDto.failed)
-          Row(
-            children: [
-              FilledButton.icon(
-                key: const Key('settings-model-download'),
-                onPressed: () => unawaited(_run(context, models.start)),
-                icon: const Icon(FiIcons.download, size: 18),
-                label: Text('Download ${formatBytes(status.remainingBytes)}'),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  status.kind == ModelStatusKindDto.failed
-                      ? "The last download didn't finish."
-                      : 'Wi-Fi recommended',
-                  style: TextStyle(fontSize: 12, color: Nocturne.muted(.55)),
-                ),
-              ),
-            ],
-          ),
-      ],
-    );
-  }
 }

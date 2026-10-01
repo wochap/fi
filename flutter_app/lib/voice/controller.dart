@@ -106,9 +106,7 @@ class VoiceFillController extends ChangeNotifier with WidgetsBindingObserver {
   MicState get micState {
     if (listening) return MicState.listening;
     if (processing) return MicState.processing;
-    if (services.models.status.kind == ModelStatusKindDto.downloading) {
-      return MicState.downloading;
-    }
+    if (services.models.status.transferring) return MicState.downloading;
     if (_phase == VoicePhase.need) return MicState.ready;
     return MicState.idle;
   }
@@ -188,7 +186,7 @@ class VoiceFillController extends ChangeNotifier with WidgetsBindingObserver {
     final models = services.models;
     if (models.ready) {
       await startListening();
-    } else if (models.status.kind == ModelStatusKindDto.downloading) {
+    } else if (models.status.transferring) {
       _set(VoicePhase.downloading);
     } else {
       _set(VoicePhase.offer);

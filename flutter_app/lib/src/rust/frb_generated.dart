@@ -5067,6 +5067,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<ModelFileDto> dco_decode_list_model_file_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_model_file_dto).toList();
+  }
+
+  @protected
   List<PairingCandidateDto> dco_decode_list_pairing_candidate_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>)
@@ -5250,13 +5256,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ModelErrorDto dco_decode_model_error_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 4)
-      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
     return ModelErrorDto(
       kind: dco_decode_model_error_kind_dto(arr[0]),
       message: dco_decode_String(arr[1]),
       httpStatus: dco_decode_opt_box_autoadd_u_16(arr[2]),
       neededBytes: dco_decode_opt_CastedPrimitive_u_64(arr[3]),
+      file: dco_decode_opt_String(arr[4]),
     );
   }
 
@@ -5267,11 +5274,40 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  ModelFileDto dco_decode_model_file_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 7)
+      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
+    return ModelFileDto(
+      name: dco_decode_String(arr[0]),
+      label: dco_decode_String(arr[1]),
+      role: dco_decode_model_role_dto(arr[2]),
+      language: dco_decode_opt_String(arr[3]),
+      sizeBytes: dco_decode_CastedPrimitive_u_64(arr[4]),
+      storedBytes: dco_decode_CastedPrimitive_u_64(arr[5]),
+      state: dco_decode_model_file_state_dto(arr[6]),
+    );
+  }
+
+  @protected
+  ModelFileStateDto dco_decode_model_file_state_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return ModelFileStateDto.values[raw as int];
+  }
+
+  @protected
+  ModelRoleDto dco_decode_model_role_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return ModelRoleDto.values[raw as int];
+  }
+
+  @protected
   ModelStatusDto dco_decode_model_status_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 6)
-      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
+    if (arr.length != 9)
+      throw Exception('unexpected arr length: expect 9 but see ${arr.length}');
     return ModelStatusDto(
       kind: dco_decode_model_status_kind_dto(arr[0]),
       doneBytes: dco_decode_CastedPrimitive_u_64(arr[1]),
@@ -5279,6 +5315,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       remainingBytes: dco_decode_CastedPrimitive_u_64(arr[3]),
       secondsLeft: dco_decode_opt_CastedPrimitive_u_64(arr[4]),
       error: dco_decode_opt_box_autoadd_model_error_dto(arr[5]),
+      files: dco_decode_list_model_file_dto(arr[6]),
+      checkedBytes: dco_decode_CastedPrimitive_u_64(arr[7]),
+      checkingBytes: dco_decode_CastedPrimitive_u_64(arr[8]),
     );
   }
 
@@ -7453,6 +7492,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<ModelFileDto> sse_decode_list_model_file_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <ModelFileDto>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_model_file_dto(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
   List<PairingCandidateDto> sse_decode_list_pairing_candidate_dto(
     SseDeserializer deserializer,
   ) {
@@ -7764,11 +7817,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_message = sse_decode_String(deserializer);
     var var_httpStatus = sse_decode_opt_box_autoadd_u_16(deserializer);
     var var_neededBytes = sse_decode_opt_CastedPrimitive_u_64(deserializer);
+    var var_file = sse_decode_opt_String(deserializer);
     return ModelErrorDto(
       kind: var_kind,
       message: var_message,
       httpStatus: var_httpStatus,
       neededBytes: var_neededBytes,
+      file: var_file,
     );
   }
 
@@ -7782,6 +7837,43 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  ModelFileDto sse_decode_model_file_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_name = sse_decode_String(deserializer);
+    var var_label = sse_decode_String(deserializer);
+    var var_role = sse_decode_model_role_dto(deserializer);
+    var var_language = sse_decode_opt_String(deserializer);
+    var var_sizeBytes = sse_decode_CastedPrimitive_u_64(deserializer);
+    var var_storedBytes = sse_decode_CastedPrimitive_u_64(deserializer);
+    var var_state = sse_decode_model_file_state_dto(deserializer);
+    return ModelFileDto(
+      name: var_name,
+      label: var_label,
+      role: var_role,
+      language: var_language,
+      sizeBytes: var_sizeBytes,
+      storedBytes: var_storedBytes,
+      state: var_state,
+    );
+  }
+
+  @protected
+  ModelFileStateDto sse_decode_model_file_state_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return ModelFileStateDto.values[inner];
+  }
+
+  @protected
+  ModelRoleDto sse_decode_model_role_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return ModelRoleDto.values[inner];
+  }
+
+  @protected
   ModelStatusDto sse_decode_model_status_dto(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_kind = sse_decode_model_status_kind_dto(deserializer);
@@ -7790,6 +7882,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_remainingBytes = sse_decode_CastedPrimitive_u_64(deserializer);
     var var_secondsLeft = sse_decode_opt_CastedPrimitive_u_64(deserializer);
     var var_error = sse_decode_opt_box_autoadd_model_error_dto(deserializer);
+    var var_files = sse_decode_list_model_file_dto(deserializer);
+    var var_checkedBytes = sse_decode_CastedPrimitive_u_64(deserializer);
+    var var_checkingBytes = sse_decode_CastedPrimitive_u_64(deserializer);
     return ModelStatusDto(
       kind: var_kind,
       doneBytes: var_doneBytes,
@@ -7797,6 +7892,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       remainingBytes: var_remainingBytes,
       secondsLeft: var_secondsLeft,
       error: var_error,
+      files: var_files,
+      checkedBytes: var_checkedBytes,
+      checkingBytes: var_checkingBytes,
     );
   }
 
@@ -10289,6 +10387,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_list_model_file_dto(
+    List<ModelFileDto> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_model_file_dto(item, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_list_pairing_candidate_dto(
     List<PairingCandidateDto> self,
     SseSerializer serializer,
@@ -10579,6 +10689,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_String(self.message, serializer);
     sse_encode_opt_box_autoadd_u_16(self.httpStatus, serializer);
     sse_encode_opt_CastedPrimitive_u_64(self.neededBytes, serializer);
+    sse_encode_opt_String(self.file, serializer);
   }
 
   @protected
@@ -10586,6 +10697,33 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ModelErrorKindDto self,
     SseSerializer serializer,
   ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_model_file_dto(ModelFileDto self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.name, serializer);
+    sse_encode_String(self.label, serializer);
+    sse_encode_model_role_dto(self.role, serializer);
+    sse_encode_opt_String(self.language, serializer);
+    sse_encode_CastedPrimitive_u_64(self.sizeBytes, serializer);
+    sse_encode_CastedPrimitive_u_64(self.storedBytes, serializer);
+    sse_encode_model_file_state_dto(self.state, serializer);
+  }
+
+  @protected
+  void sse_encode_model_file_state_dto(
+    ModelFileStateDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_model_role_dto(ModelRoleDto self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_i_32(self.index, serializer);
   }
@@ -10602,6 +10740,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_CastedPrimitive_u_64(self.remainingBytes, serializer);
     sse_encode_opt_CastedPrimitive_u_64(self.secondsLeft, serializer);
     sse_encode_opt_box_autoadd_model_error_dto(self.error, serializer);
+    sse_encode_list_model_file_dto(self.files, serializer);
+    sse_encode_CastedPrimitive_u_64(self.checkedBytes, serializer);
+    sse_encode_CastedPrimitive_u_64(self.checkingBytes, serializer);
   }
 
   @protected

@@ -32,47 +32,33 @@ final class FakeVoiceModels extends VoiceModels {
     status = modelStatusOf(
       ModelStatusKindDto.downloading,
       done: _status.doneBytes,
-      total: _status.totalBytes,
     );
   }
 
   @override
   Future<void> pause() async {
     calls.add('pause');
-    status = modelStatusOf(
-      ModelStatusKindDto.paused,
-      done: _status.doneBytes,
-      total: _status.totalBytes,
-    );
+    status = modelStatusOf(ModelStatusKindDto.paused, done: _status.doneBytes);
   }
 
   @override
   Future<void> cancel() async {
     calls.add('cancel');
-    status = modelStatusOf(
-      ModelStatusKindDto.notDownloaded,
-      total: _status.totalBytes,
-    );
+    status = modelStatusOf(ModelStatusKindDto.notDownloaded);
   }
 
   @override
   Future<int> delete() async {
     calls.add('delete');
     final freed = _status.doneBytes;
-    status = modelStatusOf(
-      ModelStatusKindDto.notDownloaded,
-      total: _status.totalBytes,
-    );
+    status = modelStatusOf(ModelStatusKindDto.notDownloaded);
     return freed;
   }
 
   @override
   Future<void> redownload() async {
     calls.add('redownload');
-    status = modelStatusOf(
-      ModelStatusKindDto.downloading,
-      total: _status.totalBytes,
-    );
+    status = modelStatusOf(ModelStatusKindDto.downloading);
   }
 
   @override

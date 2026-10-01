@@ -7,7 +7,7 @@ import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `from_core`, `manager`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`
 
 /// Current status of the model set.
 ModelStatusDto modelStatus({required String modelsDir}) =>
@@ -29,7 +29,7 @@ Future<void> pauseModelDownload({required String modelsDir}) => RustLib
     .api
     .crateApiVoiceModelsPauseModelDownload(modelsDir: modelsDir);
 
-/// Cancels the download, dropping partial bytes.
+/// Stops the download and deletes all downloaded data.
 Future<void> cancelModelDownload({required String modelsDir}) => RustLib
     .instance
     .api
@@ -68,11 +68,15 @@ class ModelErrorDto implements FrbException {
   /// Set for `NotEnoughStorage`: download plus headroom.
   final int? neededBytes;
 
+  /// Set for `Checksum`: the damaged file's name.
+  final String? file;
+
   const ModelErrorDto({
     required this.kind,
     required this.message,
     this.httpStatus,
     this.neededBytes,
+    this.file,
   });
 
   @override
@@ -80,7 +84,8 @@ class ModelErrorDto implements FrbException {
       kind.hashCode ^
       message.hashCode ^
       httpStatus.hashCode ^
-      neededBytes.hashCode;
+      neededBytes.hashCode ^
+      file.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -90,7 +95,8 @@ class ModelErrorDto implements FrbException {
           kind == other.kind &&
           message == other.message &&
           httpStatus == other.httpStatus &&
-          neededBytes == other.neededBytes;
+          neededBytes == other.neededBytes &&
+          file == other.file;
 }
 
 enum ModelErrorKindDto {
@@ -101,6 +107,58 @@ enum ModelErrorKindDto {
   io,
   voiceTurnActive,
 }
+
+/// One manifest file with what is stored of it.
+class ModelFileDto {
+  final String name;
+
+  /// Friendly name, e.g. "Whisper Base (English)".
+  final String label;
+  final ModelRoleDto role;
+
+  /// Language code, or `None` for a model shared by every language.
+  final String? language;
+  final int sizeBytes;
+  final int storedBytes;
+  final ModelFileStateDto state;
+
+  const ModelFileDto({
+    required this.name,
+    required this.label,
+    required this.role,
+    this.language,
+    required this.sizeBytes,
+    required this.storedBytes,
+    required this.state,
+  });
+
+  @override
+  int get hashCode =>
+      name.hashCode ^
+      label.hashCode ^
+      role.hashCode ^
+      language.hashCode ^
+      sizeBytes.hashCode ^
+      storedBytes.hashCode ^
+      state.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ModelFileDto &&
+          runtimeType == other.runtimeType &&
+          name == other.name &&
+          label == other.label &&
+          role == other.role &&
+          language == other.language &&
+          sizeBytes == other.sizeBytes &&
+          storedBytes == other.storedBytes &&
+          state == other.state;
+}
+
+enum ModelFileStateDto { waiting, downloading, checking, ready, damaged }
+
+enum ModelRoleDto { speech, understanding }
 
 /// The model set's state, flattened for Dart.
 class ModelStatusDto {
@@ -119,6 +177,15 @@ class ModelStatusDto {
   /// Set for `Failed`.
   final ModelErrorDto? error;
 
+  /// Every manifest file in manifest order.
+  final List<ModelFileDto> files;
+
+  /// Stored bytes already re-hashed; 0 unless verifying.
+  final int checkedBytes;
+
+  /// Stored bytes being re-hashed; 0 unless verifying.
+  final int checkingBytes;
+
   const ModelStatusDto({
     required this.kind,
     required this.doneBytes,
@@ -126,6 +193,9 @@ class ModelStatusDto {
     required this.remainingBytes,
     this.secondsLeft,
     this.error,
+    required this.files,
+    required this.checkedBytes,
+    required this.checkingBytes,
   });
 
   @override
@@ -135,7 +205,10 @@ class ModelStatusDto {
       totalBytes.hashCode ^
       remainingBytes.hashCode ^
       secondsLeft.hashCode ^
-      error.hashCode;
+      error.hashCode ^
+      files.hashCode ^
+      checkedBytes.hashCode ^
+      checkingBytes.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -147,7 +220,18 @@ class ModelStatusDto {
           totalBytes == other.totalBytes &&
           remainingBytes == other.remainingBytes &&
           secondsLeft == other.secondsLeft &&
-          error == other.error;
+          error == other.error &&
+          files == other.files &&
+          checkedBytes == other.checkedBytes &&
+          checkingBytes == other.checkingBytes;
 }
 
-enum ModelStatusKindDto { notDownloaded, downloading, paused, ready, failed }
+enum ModelStatusKindDto {
+  notDownloaded,
+  downloading,
+  reconnecting,
+  verifying,
+  paused,
+  ready,
+  failed,
+}

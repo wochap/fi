@@ -12,6 +12,95 @@ import 'package:flutter_test/flutter_test.dart';
 import 'voice_fixtures.dart';
 
 void main() {
+  group('model sizes and status', () {
+    test('formatBytes shows GB with up to two decimals and MB rounded', () {
+      expect(formatBytes(1433458515), '1.43 GB');
+      expect(formatBytes(1285494304), '1.29 GB');
+      expect(formatBytes(12400000000), '12.4 GB');
+      expect(formatBytes(2000000000), '2 GB');
+      expect(formatBytes(147964211), '148 MB');
+    });
+
+    test('formatTimeLeft reads "about"', () {
+      expect(formatTimeLeft(180), 'about 3 min left');
+      expect(formatTimeLeft(45), 'about 45 s left');
+    });
+
+    List<(ModelFileStateDto, int)> states(ModelStatusDto status) => [
+      for (final file in status.files) (file.state, file.storedBytes),
+    ];
+
+    test('modelStatusOf spreads done over the files in order', () {
+      final idle = modelStatusOf(ModelStatusKindDto.notDownloaded);
+      expect(idle.totalBytes, 1433458515);
+      expect(idle.remainingBytes, 1433458515);
+      expect(idle.speechLanguage, 'en');
+      expect(states(idle), [
+        (ModelFileStateDto.waiting, 0),
+        (ModelFileStateDto.waiting, 0),
+      ]);
+
+      final downloading = modelStatusOf(
+        ModelStatusKindDto.downloading,
+        done: 612000000,
+      );
+      expect(states(downloading), [
+        (ModelFileStateDto.ready, 147964211),
+        (ModelFileStateDto.downloading, 464035789),
+      ]);
+      expect(downloading.remainingBytes, 1285494304);
+
+      expect(
+        states(modelStatusOf(ModelStatusKindDto.verifying, done: 612000000)),
+        [
+          (ModelFileStateDto.ready, 147964211),
+          (ModelFileStateDto.checking, 464035789),
+        ],
+      );
+      expect(
+        states(
+          modelStatusOf(
+            ModelStatusKindDto.failed,
+            done: 147964211,
+            damagedFile: 'qwen2.5-1.5b-instruct-q5_k_m.gguf',
+          ),
+        ),
+        [(ModelFileStateDto.ready, 147964211), (ModelFileStateDto.damaged, 0)],
+      );
+      expect(states(modelStatusOf(ModelStatusKindDto.ready)), [
+        (ModelFileStateDto.ready, 147964211),
+        (ModelFileStateDto.ready, 1285494304),
+      ]);
+    });
+
+    test('in progress covers reconnecting and verifying', () {
+      for (final kind in [
+        ModelStatusKindDto.downloading,
+        ModelStatusKindDto.reconnecting,
+        ModelStatusKindDto.verifying,
+        ModelStatusKindDto.paused,
+      ]) {
+        expect(FakeVoiceModels(modelStatusOf(kind)).inProgress, isTrue);
+      }
+      expect(
+        FakeVoiceModels(
+          modelStatusOf(ModelStatusKindDto.notDownloaded),
+        ).inProgress,
+        isFalse,
+      );
+    });
+
+    test('fake cancel drops everything', () async {
+      final models = FakeVoiceModels(
+        modelStatusOf(ModelStatusKindDto.downloading, done: 612000000),
+      );
+      await models.cancel();
+      expect(models.calls, ['cancel']);
+      expect(models.status.kind, ModelStatusKindDto.notDownloaded);
+      expect(models.status.doneBytes, 0);
+    });
+  });
+
   group('engine selection', () {
     test('debug builds and FI_VOICE_FAKE get the fake engine', () {
       expect(

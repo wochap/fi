@@ -320,13 +320,34 @@ void main() {
       await _openNewRecord(tester, harness);
       await tester.tap(_mic());
       await tester.pumpAndSettle();
-      expect(find.text('Download voice model'), findsOneWidget);
+      expect(find.text('Download voice models'), findsOneWidget);
       expect(
         find.text(
-          'A one-time 1.3 GB download so speech can be understood on this phone.',
+          'English · 1.43 GB total, one time. Everything runs on this phone.',
         ),
         findsOneWidget,
       );
+      for (final (name, texts) in [
+        (
+          'ggml-base.en.bin',
+          ['Speech recognition', 'Whisper Base (English)', '148 MB'],
+        ),
+        (
+          'qwen2.5-1.5b-instruct-q5_k_m.gguf',
+          ['Understanding', 'Qwen2.5 1.5B Instruct', '1.29 GB'],
+        ),
+      ]) {
+        for (final text in texts) {
+          expect(
+            find.descendant(
+              of: find.byKey(Key('voice-offer-model-$name')),
+              matching: find.text(text),
+            ),
+            findsOneWidget,
+          );
+        }
+      }
+      expect(find.text('Download 1.43 GB'), findsOneWidget);
       expect(find.text("You're on mobile data"), findsOneWidget);
       expect(find.text('Wi-Fi recommended'), findsOneWidget);
       expect(find.text('12.4 GB free'), findsOneWidget);
@@ -350,18 +371,18 @@ void main() {
       expect(harness.models.calls, ['start']);
       harness.models.status = modelStatusOf(
         ModelStatusKindDto.downloading,
-        done: 494000000,
+        done: 612000000,
         secondsLeft: 240,
       );
       await tester.pump();
-      expect(find.text('Downloading voice model'), findsOneWidget);
-      expect(find.text('494 MB of 1.3 GB · 38%'), findsOneWidget);
-      expect(find.text('4 min left'), findsOneWidget);
+      expect(find.text('Downloading voice models'), findsOneWidget);
+      expect(find.text('612 MB of 1.43 GB · 42%'), findsOneWidget);
+      expect(find.text('about 4 min left'), findsOneWidget);
       expect(
         find.text("Keep filling by hand. The mic turns on when it's ready."),
         findsOneWidget,
       );
-      expect(_micLabel(tester), 'Voice model downloading, 38 percent');
+      expect(_micLabel(tester), 'Voice model downloading, 42 percent');
       await tester.enterText(
         _inRow('description', find.byType(TextField)),
         'Lunch',
@@ -379,6 +400,25 @@ void main() {
       harness.models.status = modelStatusOf(ModelStatusKindDto.ready);
       await tester.pump();
       expect(_micLabel(tester), 'Fill by voice');
+    });
+
+    testWidgets('reconnecting keeps the card and the mic ring', (tester) async {
+      final harness = _Harness(
+        status: modelStatusOf(ModelStatusKindDto.notDownloaded),
+      );
+      await _openNewRecord(tester, harness);
+      await tester.tap(_mic());
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('voice-offer-download')));
+      await tester.pump();
+      harness.models.status = modelStatusOf(
+        ModelStatusKindDto.reconnecting,
+        done: 612000000,
+      );
+      await tester.pump();
+      expect(find.text('Reconnecting…'), findsOneWidget);
+      expect(find.byKey(const Key('voice-download-pause')), findsOneWidget);
+      expect(_micLabel(tester), 'Voice model downloading, 42 percent');
     });
   });
 

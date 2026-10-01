@@ -29,10 +29,43 @@ Future<void> _open(
   await pumpUntilFound(tester, find.text('Collections'));
 }
 
-Future<void> _openSettings(WidgetTester tester, {VoiceServices? voice}) async {
+/// [settle] false for states with endless animations (indeterminate bars).
+Future<void> _openSettings(
+  WidgetTester tester, {
+  VoiceServices? voice,
+  bool settle = true,
+}) async {
   await _open(tester, voice: voice);
   await tester.tap(find.text('Settings'));
-  await tester.pumpAndSettle();
+  if (settle) {
+    await tester.pumpAndSettle();
+  } else {
+    await tester.pump(const Duration(seconds: 1));
+  }
+}
+
+ModelStatusDto _downloading() => modelStatusOf(
+  ModelStatusKindDto.downloading,
+  done: 612000000,
+  secondsLeft: 240,
+);
+
+Finder _tag(String text) => find.descendant(
+  of: find.byKey(const Key('settings-model-tag')),
+  matching: find.text(text),
+);
+
+void _expectRow(String name, List<String> texts) {
+  for (final text in texts) {
+    expect(
+      find.descendant(
+        of: find.byKey(Key('settings-model-row-$name')),
+        matching: find.text(text),
+      ),
+      findsOneWidget,
+      reason: '$name row shows "$text"',
+    );
+  }
 }
 
 void main() {
@@ -86,11 +119,25 @@ void main() {
       modelStatusOf(ModelStatusKindDto.notDownloaded),
     );
     await _openSettings(tester, voice: fakeVoiceServices(models: models));
-    expect(find.text('Voice model'), findsOneWidget);
-    expect(find.text('English · 1.3 GB'), findsOneWidget);
+    expect(find.text('Voice models'), findsOneWidget);
+    expect(find.text('English · 1.43 GB total'), findsOneWidget);
     expect(find.text('Not downloaded'), findsOneWidget);
-    expect(find.text('Download 1.3 GB'), findsOneWidget);
+    _expectRow('ggml-base.en.bin', [
+      'Speech recognition',
+      'Whisper Base (English)',
+      '148 MB',
+    ]);
+    _expectRow('qwen2.5-1.5b-instruct-q5_k_m.gguf', [
+      'Understanding',
+      'Qwen2.5 1.5B Instruct',
+      '1.29 GB',
+    ]);
+    expect(find.text('Download 1.43 GB'), findsOneWidget);
     expect(find.text('Wi-Fi recommended'), findsOneWidget);
+    expect(
+      find.text('Needs 1.43 GB · 24 GB free on this phone'),
+      findsOneWidget,
+    );
     expect(find.byKey(const Key('settings-hands-free')), findsNothing);
     expect(
       find.text(
@@ -104,38 +151,182 @@ void main() {
     expect(find.byKey(const Key('settings-model-progress')), findsOneWidget);
   });
 
-  testWidgets('downloading shows progress and pause', (tester) async {
-    final models = FakeVoiceModels(
-      modelStatusOf(ModelStatusKindDto.downloading, done: 494000000),
-    );
+  testWidgets('downloading shows progress, pause and cancel', (tester) async {
+    final models = FakeVoiceModels(_downloading());
     await _openSettings(tester, voice: fakeVoiceServices(models: models));
-    expect(find.text('494 MB of 1.3 GB · 38%'), findsOneWidget);
+    expect(find.text('English · 612 MB of 1.43 GB'), findsOneWidget);
+    expect(_tag('Downloading'), findsOneWidget);
+    expect(find.text('42%'), findsOneWidget);
+    expect(find.text('about 4 min left'), findsOneWidget);
+    _expectRow('qwen2.5-1.5b-instruct-q5_k_m.gguf', ['464 MB of 1.29 GB']);
+    _expectRow('ggml-base.en.bin', ['148 MB']);
+    expect(find.byKey(const Key('settings-model-cancel')), findsOneWidget);
     await tester.tap(find.byKey(const Key('settings-model-pause')));
     await tester.pump();
     expect(models.calls, ['pause']);
-    expect(find.text('494 MB of 1.3 GB · 38% · Paused'), findsOneWidget);
+    expect(_tag('Paused'), findsOneWidget);
+    expect(find.text('English · paused at 612 MB of 1.43 GB'), findsOneWidget);
+    expect(find.text('resumes from here'), findsOneWidget);
+    expect(find.byKey(const Key('settings-model-resume')), findsOneWidget);
+  });
+
+  testWidgets('cancel asks first; Keep downloading changes nothing', (
+    tester,
+  ) async {
+    final models = FakeVoiceModels(_downloading());
+    await _openSettings(tester, voice: fakeVoiceServices(models: models));
+    await tester.tap(find.byKey(const Key('settings-model-cancel')));
+    await tester.pumpAndSettle();
+    expect(find.text('Cancel download?'), findsOneWidget);
+    expect(
+      find.text('Downloaded data (612 MB) will be deleted.'),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Keep downloading'));
+    await tester.pumpAndSettle();
+    expect(models.calls, isEmpty);
+    expect(_tag('Downloading'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('settings-model-cancel')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('confirm-cancel-download')));
+    await tester.pumpAndSettle();
+    expect(models.calls, ['cancel']);
+    expect(find.text('Not downloaded'), findsOneWidget);
+    expect(find.text('Download 1.43 GB'), findsOneWidget);
+  });
+
+  testWidgets('reconnecting explains and keeps pause and cancel', (
+    tester,
+  ) async {
+    final models = FakeVoiceModels(
+      modelStatusOf(ModelStatusKindDto.reconnecting, done: 612000000),
+    );
+    await _openSettings(tester, voice: fakeVoiceServices(models: models));
+    expect(_tag('Reconnecting'), findsOneWidget);
+    expect(find.text('Connection lost — reconnecting…'), findsOneWidget);
+    expect(find.text('The download resumes where it stopped.'), findsOneWidget);
+    expect(find.byKey(const Key('settings-model-pause')), findsOneWidget);
+    expect(find.byKey(const Key('settings-model-cancel')), findsOneWidget);
+  });
+
+  testWidgets('verifying shows the check and the checking row', (tester) async {
+    final models = FakeVoiceModels(
+      modelStatusOf(
+        ModelStatusKindDto.verifying,
+        done: 612000000,
+        checked: 100000000,
+        checking: 464035789,
+      ),
+    );
+    await _openSettings(
+      tester,
+      voice: fakeVoiceServices(models: models),
+      settle: false,
+    );
+    expect(_tag('Verifying'), findsOneWidget);
+    expect(find.text('English · 1.43 GB'), findsOneWidget);
+    expect(find.text('Checking downloaded data…'), findsOneWidget);
+    _expectRow('qwen2.5-1.5b-instruct-q5_k_m.gguf', ['Checking']);
+    expect(find.byKey(const Key('settings-model-pause')), findsNothing);
+    expect(find.byKey(const Key('settings-model-cancel')), findsOneWidget);
+  });
+
+  testWidgets('a network failure offers Retry and Cancel and delete', (
+    tester,
+  ) async {
+    final models = FakeVoiceModels(
+      modelStatusOf(
+        ModelStatusKindDto.failed,
+        done: 612000000,
+        error: const ModelErrorDto(
+          kind: ModelErrorKindDto.network,
+          message: 'network error',
+        ),
+      ),
+    );
+    await _openSettings(tester, voice: fakeVoiceServices(models: models));
+    expect(_tag('Failed'), findsOneWidget);
+    expect(find.text('No connection'), findsOneWidget);
+    expect(find.text('English · stopped at 612 MB'), findsOneWidget);
+    expect(
+      find.byKey(const Key('settings-model-cancel-delete')),
+      findsOneWidget,
+    );
+    await tester.tap(find.byKey(const Key('settings-model-retry')));
+    await tester.pump();
+    expect(models.calls, ['start']);
+  });
+
+  testWidgets('a storage failure names the space needed', (tester) async {
+    final models = FakeVoiceModels(
+      modelStatusOf(
+        ModelStatusKindDto.failed,
+        done: 612000000,
+        error: const ModelErrorDto(
+          kind: ModelErrorKindDto.notEnoughStorage,
+          message: 'not enough storage',
+          neededBytes: 1021000000,
+        ),
+      ),
+    );
+    await _openSettings(tester, voice: fakeVoiceServices(models: models));
+    expect(find.text('Not enough storage'), findsOneWidget);
+    expect(
+      find.text('Free up 1.02 GB on this phone, then retry.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('a damaged file names its model', (tester) async {
+    const qwen = 'qwen2.5-1.5b-instruct-q5_k_m.gguf';
+    final models = FakeVoiceModels(
+      modelStatusOf(
+        ModelStatusKindDto.failed,
+        done: 147964211,
+        damagedFile: qwen,
+        error: const ModelErrorDto(
+          kind: ModelErrorKindDto.checksum,
+          message: 'checksum',
+          file: qwen,
+        ),
+      ),
+    );
+    await _openSettings(tester, voice: fakeVoiceServices(models: models));
+    expect(find.text('Downloaded file is damaged'), findsOneWidget);
+    expect(
+      find.text(
+        'The understanding model failed its check. Retry downloads it again (1.29 GB).',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('English · check failed'), findsOneWidget);
+    _expectRow(qwen, ['1.29 GB · damaged']);
   });
 
   testWidgets('ready shows the tag, hands-free, re-download and delete', (
     tester,
   ) async {
     final prefs = MemoryUiPrefsStore();
-    final models = FakeVoiceModels(
-      modelStatusOf(ModelStatusKindDto.ready, done: 1300000000),
-    );
+    final models = FakeVoiceModels(modelStatusOf(ModelStatusKindDto.ready));
     await _openSettings(
       tester,
       voice: fakeVoiceServices(models: models, prefs: prefs),
     );
-    expect(find.text('Ready'), findsOneWidget);
-    expect(find.text('English · 1.3 GB'), findsOneWidget);
+    expect(_tag('Ready'), findsOneWidget);
+    expect(find.text('English · 1.43 GB used on this phone'), findsOneWidget);
+    _expectRow('ggml-base.en.bin', ['Whisper Base (English)', '148 MB']);
+    _expectRow('qwen2.5-1.5b-instruct-q5_k_m.gguf', [
+      'Qwen2.5 1.5B Instruct',
+      '1.29 GB',
+    ]);
     expect(find.text('Hands-free spoken feedback'), findsOneWidget);
     expect(
       find.text('Speaks the “still need” question and a short confirmation'),
       findsOneWidget,
     );
-    expect(find.text('Re-download model'), findsOneWidget);
-    expect(find.text('frees 1.3 GB'), findsOneWidget);
+    expect(find.text('Re-download models'), findsOneWidget);
+    expect(find.text('frees 1.43 GB'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('settings-hands-free')));
     await tester.pump();
@@ -143,25 +334,29 @@ void main() {
 
     await tester.tap(find.byKey(const Key('settings-redownload')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Cancel'));
+    await tester.tap(find.text('Keep models'));
     await tester.pumpAndSettle();
     expect(models.calls, isEmpty);
 
     await tester.tap(find.byKey(const Key('settings-delete-model')));
     await tester.pumpAndSettle();
-    expect(find.text('Delete voice model?'), findsOneWidget);
+    expect(find.text('Delete voice models?'), findsOneWidget);
+    expect(
+      find.text(
+        'Frees 1.43 GB. Voice fill won’t work until you download them again.',
+      ),
+      findsOneWidget,
+    );
     await tester.tap(find.byKey(const Key('confirm-delete-model')));
     await tester.pumpAndSettle();
     expect(models.calls, ['delete']);
     expect(find.text('Not downloaded'), findsOneWidget);
-    expect(find.text('Download 1.3 GB'), findsOneWidget);
+    expect(find.text('Download 1.43 GB'), findsOneWidget);
     expect(find.byKey(const Key('settings-hands-free')), findsNothing);
   });
 
   testWidgets('re-download asks first, then starts over', (tester) async {
-    final models = FakeVoiceModels(
-      modelStatusOf(ModelStatusKindDto.ready, done: 1300000000),
-    );
+    final models = FakeVoiceModels(modelStatusOf(ModelStatusKindDto.ready));
     await _openSettings(tester, voice: fakeVoiceServices(models: models));
     await tester.tap(find.byKey(const Key('settings-redownload')));
     await tester.pumpAndSettle();
@@ -183,6 +378,12 @@ void main() {
     );
     expect(find.text('Microphone access'), findsOneWidget);
     expect(find.text('Off'), findsOneWidget);
+    await tester.dragUntilVisible(
+      find.byKey(const Key('settings-android-settings')),
+      find.byKey(const Key('settings-page')),
+      const Offset(0, -200),
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('settings-android-settings')));
     await tester.pump();
     expect(permission.settingsOpened, 1);

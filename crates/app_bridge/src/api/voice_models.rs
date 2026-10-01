@@ -10,7 +10,8 @@ use std::{
 };
 
 use app_core::models::{
-    DownloadProgress, ModelError, ModelManager, ModelManagerConfig, ModelStatus,
+    DownloadProgress, ModelError, ModelFileDetail, ModelFileState, ModelManager,
+    ModelManagerConfig, ModelRole, ModelStatus,
 };
 use flutter_rust_bridge::frb;
 
@@ -20,9 +21,63 @@ use crate::frb_generated::StreamSink;
 pub enum ModelStatusKindDto {
     NotDownloaded,
     Downloading,
+    Reconnecting,
+    Verifying,
     Paused,
     Ready,
     Failed,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ModelRoleDto {
+    Speech,
+    Understanding,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ModelFileStateDto {
+    Waiting,
+    Downloading,
+    Checking,
+    Ready,
+    Damaged,
+}
+
+/// One manifest file with what is stored of it.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ModelFileDto {
+    pub name: String,
+    /// Friendly name, e.g. "Whisper Base (English)".
+    pub label: String,
+    pub role: ModelRoleDto,
+    /// Language code, or `None` for a model shared by every language.
+    pub language: Option<String>,
+    pub size_bytes: u64,
+    pub stored_bytes: u64,
+    pub state: ModelFileStateDto,
+}
+
+impl From<ModelFileDetail> for ModelFileDto {
+    fn from(detail: ModelFileDetail) -> Self {
+        Self {
+            name: detail.name,
+            label: detail.label,
+            role: match detail.role {
+                ModelRole::Speech => ModelRoleDto::Speech,
+                ModelRole::Understanding => ModelRoleDto::Understanding,
+            },
+            language: detail.language,
+            size_bytes: detail.size,
+            stored_bytes: detail.stored_bytes,
+            state: match detail.state {
+                ModelFileState::Waiting => ModelFileStateDto::Waiting,
+                ModelFileState::Downloading => ModelFileStateDto::Downloading,
+                ModelFileState::Checking => ModelFileStateDto::Checking,
+                ModelFileState::Ready => ModelFileStateDto::Ready,
+                ModelFileState::Damaged => ModelFileStateDto::Damaged,
+            },
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -44,28 +99,34 @@ pub struct ModelErrorDto {
     pub http_status: Option<u16>,
     /// Set for `NotEnoughStorage`: download plus headroom.
     pub needed_bytes: Option<u64>,
+    /// Set for `Checksum`: the damaged file's name.
+    pub file: Option<String>,
 }
 
 impl From<ModelError> for ModelErrorDto {
     fn from(error: ModelError) -> Self {
         let message = error.to_string();
-        let (kind, http_status, needed_bytes) = match error {
-            ModelError::Network(_) => (ModelErrorKindDto::Network, None, None),
-            ModelError::HttpStatus(status) => (ModelErrorKindDto::HttpStatus, Some(status), None),
-            ModelError::Checksum { .. } => (ModelErrorKindDto::Checksum, None, None),
+        let (kind, http_status, needed_bytes, file) = match error {
+            ModelError::Network(_) => (ModelErrorKindDto::Network, None, None, None),
+            ModelError::HttpStatus(status) => {
+                (ModelErrorKindDto::HttpStatus, Some(status), None, None)
+            }
+            ModelError::Checksum { file } => (ModelErrorKindDto::Checksum, None, None, Some(file)),
             ModelError::NotEnoughStorage { needed_bytes, .. } => (
                 ModelErrorKindDto::NotEnoughStorage,
                 None,
                 Some(needed_bytes),
+                None,
             ),
-            ModelError::Io(_) => (ModelErrorKindDto::Io, None, None),
-            ModelError::VoiceTurnActive => (ModelErrorKindDto::VoiceTurnActive, None, None),
+            ModelError::Io(_) => (ModelErrorKindDto::Io, None, None, None),
+            ModelError::VoiceTurnActive => (ModelErrorKindDto::VoiceTurnActive, None, None, None),
         };
         Self {
             kind,
             message,
             http_status,
             needed_bytes,
+            file,
         }
     }
 }
@@ -83,12 +144,23 @@ pub struct ModelStatusDto {
     pub seconds_left: Option<u64>,
     /// Set for `Failed`.
     pub error: Option<ModelErrorDto>,
+    /// Every manifest file in manifest order.
+    pub files: Vec<ModelFileDto>,
+    /// Stored bytes already re-hashed; 0 unless verifying.
+    pub checked_bytes: u64,
+    /// Stored bytes being re-hashed; 0 unless verifying.
+    pub checking_bytes: u64,
 }
 
 impl ModelStatusDto {
     fn from_core(status: ModelStatus, manager: &ModelManager) -> Self {
         let store = manager.store();
         let total_bytes = store.manifest().total_size();
+        let files: Vec<ModelFileDto> = store
+            .file_details(&status)
+            .into_iter()
+            .map(ModelFileDto::from)
+            .collect();
         let with_progress = |kind, progress: DownloadProgress, error| Self {
             kind,
             done_bytes: progress.done_bytes,
@@ -96,6 +168,9 @@ impl ModelStatusDto {
             remaining_bytes: store.remaining_bytes(),
             seconds_left: progress.seconds_left,
             error,
+            files: files.clone(),
+            checked_bytes: 0,
+            checking_bytes: 0,
         };
         match status {
             ModelStatus::NotDownloaded { download_bytes } => Self {
@@ -105,10 +180,22 @@ impl ModelStatusDto {
                 remaining_bytes: download_bytes,
                 seconds_left: None,
                 error: None,
+                files,
+                checked_bytes: 0,
+                checking_bytes: 0,
             },
             ModelStatus::Downloading(progress) => {
                 with_progress(ModelStatusKindDto::Downloading, progress, None)
             }
+            ModelStatus::Reconnecting(progress) => {
+                with_progress(ModelStatusKindDto::Reconnecting, progress, None)
+            }
+            ModelStatus::Verifying(verify) => Self {
+                seconds_left: verify.seconds_left,
+                checked_bytes: verify.checked_bytes,
+                checking_bytes: verify.total_bytes,
+                ..with_progress(ModelStatusKindDto::Verifying, verify.download, None)
+            },
             ModelStatus::Paused(progress) => {
                 with_progress(ModelStatusKindDto::Paused, progress, None)
             }
@@ -119,6 +206,9 @@ impl ModelStatusDto {
                 remaining_bytes: 0,
                 seconds_left: None,
                 error: None,
+                files,
+                checked_bytes: 0,
+                checking_bytes: 0,
             },
             ModelStatus::Failed { error, progress } => with_progress(
                 ModelStatusKindDto::Failed,
@@ -178,7 +268,7 @@ pub fn pause_model_download(models_dir: String) {
     manager(&models_dir).pause_download();
 }
 
-/// Cancels the download, dropping partial bytes.
+/// Stops the download and deletes all downloaded data.
 pub fn cancel_model_download(models_dir: String) {
     manager(&models_dir).cancel_download();
 }
@@ -238,6 +328,44 @@ mod tests {
         assert_eq!(status.kind, ModelStatusKindDto::NotDownloaded);
         assert_eq!(status.remaining_bytes, status.total_bytes);
         assert!(status.total_bytes > 1_000_000_000);
+        let files: Vec<_> = status
+            .files
+            .iter()
+            .map(|file| {
+                (
+                    file.label.as_str(),
+                    file.role,
+                    file.language.as_deref(),
+                    file.state,
+                )
+            })
+            .collect();
+        assert_eq!(
+            files,
+            [
+                (
+                    "Whisper Base (English)",
+                    ModelRoleDto::Speech,
+                    Some("en"),
+                    ModelFileStateDto::Waiting
+                ),
+                (
+                    "Qwen2.5 1.5B Instruct",
+                    ModelRoleDto::Understanding,
+                    None,
+                    ModelFileStateDto::Waiting
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn checksum_errors_name_the_file() {
+        let dto = ModelErrorDto::from(ModelError::Checksum {
+            file: "qwen.gguf".into(),
+        });
+        assert_eq!(dto.kind, ModelErrorKindDto::Checksum);
+        assert_eq!(dto.file.as_deref(), Some("qwen.gguf"));
     }
 
     #[test]

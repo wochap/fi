@@ -5329,6 +5329,20 @@ impl SseDecode for Vec<crate::api::models::LogEventDto> {
     }
 }
 
+impl SseDecode for Vec<crate::api::voice_models::ModelFileDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::voice_models::ModelFileDto>::sse_decode(
+                deserializer,
+            ));
+        }
+        return ans_;
+    }
+}
+
 impl SseDecode for Vec<crate::api::models::PairingCandidateDto> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -5638,11 +5652,13 @@ impl SseDecode for crate::api::voice_models::ModelErrorDto {
         let mut var_message = <String>::sse_decode(deserializer);
         let mut var_httpStatus = <Option<u16>>::sse_decode(deserializer);
         let mut var_neededBytes = <Option<u64>>::sse_decode(deserializer);
+        let mut var_file = <Option<String>>::sse_decode(deserializer);
         return crate::api::voice_models::ModelErrorDto {
             kind: var_kind,
             message: var_message,
             http_status: var_httpStatus,
             needed_bytes: var_neededBytes,
+            file: var_file,
         };
     }
 }
@@ -5663,6 +5679,55 @@ impl SseDecode for crate::api::voice_models::ModelErrorKindDto {
     }
 }
 
+impl SseDecode for crate::api::voice_models::ModelFileDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_name = <String>::sse_decode(deserializer);
+        let mut var_label = <String>::sse_decode(deserializer);
+        let mut var_role = <crate::api::voice_models::ModelRoleDto>::sse_decode(deserializer);
+        let mut var_language = <Option<String>>::sse_decode(deserializer);
+        let mut var_sizeBytes = <u64>::sse_decode(deserializer);
+        let mut var_storedBytes = <u64>::sse_decode(deserializer);
+        let mut var_state = <crate::api::voice_models::ModelFileStateDto>::sse_decode(deserializer);
+        return crate::api::voice_models::ModelFileDto {
+            name: var_name,
+            label: var_label,
+            role: var_role,
+            language: var_language,
+            size_bytes: var_sizeBytes,
+            stored_bytes: var_storedBytes,
+            state: var_state,
+        };
+    }
+}
+
+impl SseDecode for crate::api::voice_models::ModelFileStateDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::api::voice_models::ModelFileStateDto::Waiting,
+            1 => crate::api::voice_models::ModelFileStateDto::Downloading,
+            2 => crate::api::voice_models::ModelFileStateDto::Checking,
+            3 => crate::api::voice_models::ModelFileStateDto::Ready,
+            4 => crate::api::voice_models::ModelFileStateDto::Damaged,
+            _ => unreachable!("Invalid variant for ModelFileStateDto: {}", inner),
+        };
+    }
+}
+
+impl SseDecode for crate::api::voice_models::ModelRoleDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::api::voice_models::ModelRoleDto::Speech,
+            1 => crate::api::voice_models::ModelRoleDto::Understanding,
+            _ => unreachable!("Invalid variant for ModelRoleDto: {}", inner),
+        };
+    }
+}
+
 impl SseDecode for crate::api::voice_models::ModelStatusDto {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -5673,6 +5738,9 @@ impl SseDecode for crate::api::voice_models::ModelStatusDto {
         let mut var_secondsLeft = <Option<u64>>::sse_decode(deserializer);
         let mut var_error =
             <Option<crate::api::voice_models::ModelErrorDto>>::sse_decode(deserializer);
+        let mut var_files = <Vec<crate::api::voice_models::ModelFileDto>>::sse_decode(deserializer);
+        let mut var_checkedBytes = <u64>::sse_decode(deserializer);
+        let mut var_checkingBytes = <u64>::sse_decode(deserializer);
         return crate::api::voice_models::ModelStatusDto {
             kind: var_kind,
             done_bytes: var_doneBytes,
@@ -5680,6 +5748,9 @@ impl SseDecode for crate::api::voice_models::ModelStatusDto {
             remaining_bytes: var_remainingBytes,
             seconds_left: var_secondsLeft,
             error: var_error,
+            files: var_files,
+            checked_bytes: var_checkedBytes,
+            checking_bytes: var_checkingBytes,
         };
     }
 }
@@ -5691,9 +5762,11 @@ impl SseDecode for crate::api::voice_models::ModelStatusKindDto {
         return match inner {
             0 => crate::api::voice_models::ModelStatusKindDto::NotDownloaded,
             1 => crate::api::voice_models::ModelStatusKindDto::Downloading,
-            2 => crate::api::voice_models::ModelStatusKindDto::Paused,
-            3 => crate::api::voice_models::ModelStatusKindDto::Ready,
-            4 => crate::api::voice_models::ModelStatusKindDto::Failed,
+            2 => crate::api::voice_models::ModelStatusKindDto::Reconnecting,
+            3 => crate::api::voice_models::ModelStatusKindDto::Verifying,
+            4 => crate::api::voice_models::ModelStatusKindDto::Paused,
+            5 => crate::api::voice_models::ModelStatusKindDto::Ready,
+            6 => crate::api::voice_models::ModelStatusKindDto::Failed,
             _ => unreachable!("Invalid variant for ModelStatusKindDto: {}", inner),
         };
     }
@@ -8487,6 +8560,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::voice_models::ModelErrorDto {
             self.message.into_into_dart().into_dart(),
             self.http_status.into_into_dart().into_dart(),
             self.needed_bytes.into_into_dart().into_dart(),
+            self.file.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -8528,6 +8602,77 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::voice_models::ModelErrorKindD
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::voice_models::ModelFileDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.name.into_into_dart().into_dart(),
+            self.label.into_into_dart().into_dart(),
+            self.role.into_into_dart().into_dart(),
+            self.language.into_into_dart().into_dart(),
+            self.size_bytes.into_into_dart().into_dart(),
+            self.stored_bytes.into_into_dart().into_dart(),
+            self.state.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::voice_models::ModelFileDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::voice_models::ModelFileDto>
+    for crate::api::voice_models::ModelFileDto
+{
+    fn into_into_dart(self) -> crate::api::voice_models::ModelFileDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::voice_models::ModelFileStateDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Waiting => 0.into_dart(),
+            Self::Downloading => 1.into_dart(),
+            Self::Checking => 2.into_dart(),
+            Self::Ready => 3.into_dart(),
+            Self::Damaged => 4.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::voice_models::ModelFileStateDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::voice_models::ModelFileStateDto>
+    for crate::api::voice_models::ModelFileStateDto
+{
+    fn into_into_dart(self) -> crate::api::voice_models::ModelFileStateDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::voice_models::ModelRoleDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Speech => 0.into_dart(),
+            Self::Understanding => 1.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::voice_models::ModelRoleDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::voice_models::ModelRoleDto>
+    for crate::api::voice_models::ModelRoleDto
+{
+    fn into_into_dart(self) -> crate::api::voice_models::ModelRoleDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::voice_models::ModelStatusDto {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -8537,6 +8682,9 @@ impl flutter_rust_bridge::IntoDart for crate::api::voice_models::ModelStatusDto 
             self.remaining_bytes.into_into_dart().into_dart(),
             self.seconds_left.into_into_dart().into_dart(),
             self.error.into_into_dart().into_dart(),
+            self.files.into_into_dart().into_dart(),
+            self.checked_bytes.into_into_dart().into_dart(),
+            self.checking_bytes.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -8558,9 +8706,11 @@ impl flutter_rust_bridge::IntoDart for crate::api::voice_models::ModelStatusKind
         match self {
             Self::NotDownloaded => 0.into_dart(),
             Self::Downloading => 1.into_dart(),
-            Self::Paused => 2.into_dart(),
-            Self::Ready => 3.into_dart(),
-            Self::Failed => 4.into_dart(),
+            Self::Reconnecting => 2.into_dart(),
+            Self::Verifying => 3.into_dart(),
+            Self::Paused => 4.into_dart(),
+            Self::Ready => 5.into_dart(),
+            Self::Failed => 6.into_dart(),
             _ => unreachable!(),
         }
     }
@@ -10792,6 +10942,16 @@ impl SseEncode for Vec<crate::api::models::LogEventDto> {
     }
 }
 
+impl SseEncode for Vec<crate::api::voice_models::ModelFileDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::voice_models::ModelFileDto>::sse_encode(item, serializer);
+        }
+    }
+}
+
 impl SseEncode for Vec<crate::api::models::PairingCandidateDto> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -11019,6 +11179,7 @@ impl SseEncode for crate::api::voice_models::ModelErrorDto {
         <String>::sse_encode(self.message, serializer);
         <Option<u16>>::sse_encode(self.http_status, serializer);
         <Option<u64>>::sse_encode(self.needed_bytes, serializer);
+        <Option<String>>::sse_encode(self.file, serializer);
     }
 }
 
@@ -11042,6 +11203,54 @@ impl SseEncode for crate::api::voice_models::ModelErrorKindDto {
     }
 }
 
+impl SseEncode for crate::api::voice_models::ModelFileDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.name, serializer);
+        <String>::sse_encode(self.label, serializer);
+        <crate::api::voice_models::ModelRoleDto>::sse_encode(self.role, serializer);
+        <Option<String>>::sse_encode(self.language, serializer);
+        <u64>::sse_encode(self.size_bytes, serializer);
+        <u64>::sse_encode(self.stored_bytes, serializer);
+        <crate::api::voice_models::ModelFileStateDto>::sse_encode(self.state, serializer);
+    }
+}
+
+impl SseEncode for crate::api::voice_models::ModelFileStateDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::api::voice_models::ModelFileStateDto::Waiting => 0,
+                crate::api::voice_models::ModelFileStateDto::Downloading => 1,
+                crate::api::voice_models::ModelFileStateDto::Checking => 2,
+                crate::api::voice_models::ModelFileStateDto::Ready => 3,
+                crate::api::voice_models::ModelFileStateDto::Damaged => 4,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
+impl SseEncode for crate::api::voice_models::ModelRoleDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::api::voice_models::ModelRoleDto::Speech => 0,
+                crate::api::voice_models::ModelRoleDto::Understanding => 1,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
 impl SseEncode for crate::api::voice_models::ModelStatusDto {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -11051,6 +11260,9 @@ impl SseEncode for crate::api::voice_models::ModelStatusDto {
         <u64>::sse_encode(self.remaining_bytes, serializer);
         <Option<u64>>::sse_encode(self.seconds_left, serializer);
         <Option<crate::api::voice_models::ModelErrorDto>>::sse_encode(self.error, serializer);
+        <Vec<crate::api::voice_models::ModelFileDto>>::sse_encode(self.files, serializer);
+        <u64>::sse_encode(self.checked_bytes, serializer);
+        <u64>::sse_encode(self.checking_bytes, serializer);
     }
 }
 
@@ -11061,9 +11273,11 @@ impl SseEncode for crate::api::voice_models::ModelStatusKindDto {
             match self {
                 crate::api::voice_models::ModelStatusKindDto::NotDownloaded => 0,
                 crate::api::voice_models::ModelStatusKindDto::Downloading => 1,
-                crate::api::voice_models::ModelStatusKindDto::Paused => 2,
-                crate::api::voice_models::ModelStatusKindDto::Ready => 3,
-                crate::api::voice_models::ModelStatusKindDto::Failed => 4,
+                crate::api::voice_models::ModelStatusKindDto::Reconnecting => 2,
+                crate::api::voice_models::ModelStatusKindDto::Verifying => 3,
+                crate::api::voice_models::ModelStatusKindDto::Paused => 4,
+                crate::api::voice_models::ModelStatusKindDto::Ready => 5,
+                crate::api::voice_models::ModelStatusKindDto::Failed => 6,
                 _ => {
                     unimplemented!("");
                 }

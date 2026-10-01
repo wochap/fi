@@ -4,6 +4,8 @@ import 'package:fi/voice/controller.dart';
 import 'package:fi/voice/engine.dart';
 import 'package:fi/voice/example.dart';
 import 'package:fi/voice/mic_button.dart';
+import 'package:fi/voice/model_strings.dart';
+import 'package:fi/voice/models_card.dart';
 import 'package:fi/voice/services.dart';
 import 'package:flutter/material.dart';
 
@@ -223,7 +225,9 @@ class _VoicePanelState extends State<VoicePanel> {
     if (!_offerLoaded) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _loadOffer());
     }
-    final size = formatBytes(c.services.models.status.remainingBytes);
+    final status = c.services.models.status;
+    final size = formatBytes(status.remainingBytes);
+    final language = ModelStrings.languageName(status.speechLanguage);
     final mobile = _network == NetworkKind.mobile;
     final error = c.downloadError;
     return Container(
@@ -240,7 +244,7 @@ class _VoicePanelState extends State<VoicePanel> {
               const SizedBox(width: 10),
               Expanded(
                 child: _announced(
-                  'Download voice model',
+                  ModelStrings.offerTitle,
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w500,
@@ -249,9 +253,38 @@ class _VoicePanelState extends State<VoicePanel> {
               ),
             ],
           ),
-          Text(
-            'A one-time $size download so speech can be understood on this phone.',
-            style: _muted(.7, 13),
+          Text(ModelStrings.offerLine(language, size), style: _muted(.7, 13)),
+          Column(
+            spacing: 6,
+            children: [
+              for (final file in status.files)
+                Row(
+                  key: Key('voice-offer-model-${file.name}'),
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            ModelStrings.roleName(file.role),
+                            style: _muted(.55, 11),
+                          ),
+                          Text(
+                            file.label,
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Text(
+                      formatBytes(file.sizeBytes),
+                      style: _muted(
+                        .6,
+                      ).copyWith(fontFeatures: Nocturne.tabular),
+                    ),
+                  ],
+                ),
+            ],
           ),
           Column(
             spacing: 6,
@@ -261,18 +294,20 @@ class _VoicePanelState extends State<VoicePanel> {
                   key: const Key('voice-offer-network'),
                   icon: mobile ? FiIcons.mobileData : FiIcons.wifi,
                   iconColor: mobile ? Nocturne.accent300 : Nocturne.muted(.7),
-                  text: mobile ? "You're on mobile data" : "You're on Wi-Fi",
-                  trailing: mobile ? 'Wi-Fi recommended' : null,
+                  text: mobile
+                      ? ModelStrings.onMobileData
+                      : ModelStrings.onWifi,
+                  trailing: mobile ? ModelStrings.wifiRecommended : null,
                   trailingColor: Nocturne.accent300,
                 ),
               _infoRow(
                 key: const Key('voice-offer-storage'),
                 icon: FiIcons.storage,
                 iconColor: Nocturne.muted(.7),
-                text: 'Storage',
+                text: ModelStrings.storage,
                 trailing: _freeBytes == null
                     ? null
-                    : '${formatBytes(_freeBytes!)} free',
+                    : ModelStrings.free(formatBytes(_freeBytes!)),
                 trailingColor: Nocturne.muted(.6),
               ),
             ],
@@ -280,10 +315,10 @@ class _VoicePanelState extends State<VoicePanel> {
           if (error != null) _downloadErrorLine(error),
           _twoButtons(
             secondaryKey: const Key('voice-offer-later'),
-            secondary: 'Later',
+            secondary: ModelStrings.later,
             onSecondary: c.offerLater,
             primaryKey: const Key('voice-offer-download'),
-            primary: 'Download',
+            primary: ModelStrings.download(size),
             primaryIcon: FiIcons.download,
             onPrimary: c.offerDownload,
           ),
@@ -292,19 +327,18 @@ class _VoicePanelState extends State<VoicePanel> {
     );
   }
 
-  Widget _downloadErrorLine(ModelErrorDto error) => Text(
-    switch (error.kind) {
-      ModelErrorKindDto.notEnoughStorage =>
-        'Not enough storage: free up ${formatBytes(error.neededBytes ?? 0)} and try again.',
-      ModelErrorKindDto.checksum =>
-        'The download was damaged and was removed. Try again.',
-      ModelErrorKindDto.network ||
-      ModelErrorKindDto.httpStatus => "Couldn't reach the download. Try again.",
-      _ => "Couldn't download the voice model. Try again.",
-    },
-    key: const Key('voice-download-error'),
-    style: const TextStyle(fontSize: 12, color: Nocturne.error),
-  );
+  Widget _downloadErrorLine(ModelErrorDto error) {
+    final (title, line) = modelFailureText(
+      c.services.models.status.error == error
+          ? c.services.models.status
+          : modelStatusOf(ModelStatusKindDto.failed, error: error),
+    );
+    return Text(
+      ModelStrings.errorLine(title, line),
+      key: const Key('voice-download-error'),
+      style: const TextStyle(fontSize: 12, color: Nocturne.error),
+    );
+  }
 
   Widget _infoRow({
     required Key key,
@@ -331,6 +365,14 @@ class _VoicePanelState extends State<VoicePanel> {
         : status.doneBytes / status.totalBytes;
     final percent = (progress * 100).floor();
     final paused = status.kind == ModelStatusKindDto.paused;
+    final stopped = paused || status.kind == ModelStatusKindDto.failed;
+    final verifying = status.kind == ModelStatusKindDto.verifying;
+    final title = switch (status.kind) {
+      ModelStatusKindDto.reconnecting => ModelStrings.reconnectingShort,
+      ModelStatusKindDto.verifying => ModelStrings.verifyingTitle,
+      ModelStatusKindDto.paused => ModelStrings.pausedTitle,
+      _ => ModelStrings.downloadingTitle,
+    };
     final error = c.downloadError;
     return Container(
       key: const Key('voice-downloading'),
@@ -344,20 +386,22 @@ class _VoicePanelState extends State<VoicePanel> {
             children: [
               const Icon(FiIcons.download, size: 18, color: Nocturne.accent),
               const SizedBox(width: 10),
-              Expanded(
-                child: _announced(
-                  paused ? 'Download paused' : 'Downloading voice model',
+              Expanded(child: _announced(title)),
+              if (!verifying)
+                IconButton(
+                  key: const Key('voice-download-pause'),
+                  tooltip: stopped
+                      ? ModelStrings.resumeDownload
+                      : ModelStrings.pauseDownload,
+                  onPressed: stopped ? c.resumeDownload : c.pauseDownload,
+                  icon: Icon(
+                    stopped ? FiIcons.download : FiIcons.pause,
+                    size: 18,
+                  ),
                 ),
-              ),
-              IconButton(
-                key: const Key('voice-download-pause'),
-                tooltip: paused ? 'Resume download' : 'Pause download',
-                onPressed: paused ? c.resumeDownload : c.pauseDownload,
-                icon: Icon(paused ? FiIcons.download : FiIcons.pause, size: 18),
-              ),
               IconButton(
                 key: const Key('voice-download-hide'),
-                tooltip: 'Hide',
+                tooltip: ModelStrings.hide,
                 onPressed: c.hideDownload,
                 icon: Icon(
                   FiIcons.collapse,
@@ -373,9 +417,11 @@ class _VoicePanelState extends State<VoicePanel> {
             child: ClipRRect(
               borderRadius: BorderRadius.circular(2),
               child: LinearProgressIndicator(
-                value: progress,
+                value: verifying ? null : progress,
                 minHeight: 4,
-                color: Nocturne.accent,
+                color: stopped || status.kind == ModelStatusKindDto.reconnecting
+                    ? Nocturne.neutral500
+                    : Nocturne.accent,
                 backgroundColor: Nocturne.neutral700,
               ),
             ),
@@ -384,20 +430,21 @@ class _VoicePanelState extends State<VoicePanel> {
             children: [
               Expanded(
                 child: Text(
-                  '${formatBytes(status.doneBytes)} of ${formatBytes(status.totalBytes)} · $percent%',
+                  ModelStrings.progressLine(
+                    formatBytes(status.doneBytes),
+                    formatBytes(status.totalBytes),
+                    percent,
+                  ),
                   key: const Key('voice-download-progress'),
                   style: _muted(.6).copyWith(fontFeatures: Nocturne.tabular),
                 ),
               ),
-              if (status.secondsLeft case final seconds? when !paused)
+              if (status.secondsLeft case final seconds? when !stopped)
                 Text(formatTimeLeft(seconds), style: _muted(.6)),
             ],
           ),
           if (error != null) _downloadErrorLine(error),
-          Text(
-            "Keep filling by hand. The mic turns on when it's ready.",
-            style: _muted(.55),
-          ),
+          Text(ModelStrings.keepFilling, style: _muted(.55)),
         ],
       ),
     );

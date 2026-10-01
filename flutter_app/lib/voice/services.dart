@@ -4,7 +4,13 @@ import 'dart:io';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:fi/src/rust/api/voice_models.dart' as rust;
 import 'package:fi/src/rust/api/voice_models.dart'
-    show ModelStatusDto, ModelStatusKindDto, ModelErrorDto;
+    show
+        ModelStatusDto,
+        ModelStatusKindDto,
+        ModelErrorDto,
+        ModelFileDto,
+        ModelRoleDto,
+        ModelFileStateDto;
 import 'package:fi/ui_prefs.dart';
 import 'package:fi/src/rust/api/voice.dart' as rust_voice;
 import 'package:fi/voice/engine.dart';
@@ -14,7 +20,14 @@ import 'package:flutter_tts/flutter_tts.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 export 'package:fi/src/rust/api/voice_models.dart'
-    show ModelStatusDto, ModelStatusKindDto, ModelErrorDto, ModelErrorKindDto;
+    show
+        ModelStatusDto,
+        ModelStatusKindDto,
+        ModelErrorDto,
+        ModelErrorKindDto,
+        ModelFileDto,
+        ModelRoleDto,
+        ModelFileStateDto;
 
 /// The microphone permission as voice fill needs to know it.
 enum MicPermission {
@@ -133,10 +146,9 @@ abstract class VoiceModels extends ChangeNotifier {
 
   bool get ready => status.kind == ModelStatusKindDto.ready;
 
-  /// Downloading or paused with bytes stored.
+  /// Downloading, reconnecting, verifying, or paused with bytes stored.
   bool get inProgress =>
-      status.kind == ModelStatusKindDto.downloading ||
-      status.kind == ModelStatusKindDto.paused;
+      status.transferring || status.kind == ModelStatusKindDto.paused;
 
   /// Starts or resumes; throws a [ModelErrorDto] when it can't start.
   Future<void> start();
@@ -315,34 +327,117 @@ class VoiceScope extends InheritedWidget {
       services != oldWidget.services || openSettings != oldWidget.openSettings;
 }
 
-/// Formats a byte count the way the voice UI shows sizes: "494 MB", "1.3 GB".
+extension ModelStatusDetails on ModelStatusDto {
+  /// Downloading, reconnecting or verifying: a worker is running.
+  bool get transferring => switch (kind) {
+    ModelStatusKindDto.downloading ||
+    ModelStatusKindDto.reconnecting ||
+    ModelStatusKindDto.verifying => true,
+    _ => false,
+  };
+
+  /// The language of the speech model.
+  String? get speechLanguage => files
+      .where((file) => file.role == ModelRoleDto.speech)
+      .firstOrNull
+      ?.language;
+}
+
+/// Formats a byte count the way the voice UI shows sizes: "148 MB",
+/// "1.43 GB", "12.4 GB".
 String formatBytes(int bytes) {
   const mb = 1000 * 1000;
   const gb = 1000 * mb;
   if (bytes >= gb) {
-    return '${(bytes / gb).toStringAsFixed(1)} GB';
+    final fixed = (bytes / gb).toStringAsFixed(2);
+    final trimmed = fixed.replaceFirst(RegExp(r'\.?0+$'), '');
+    return '$trimmed GB';
   }
   return '${(bytes / mb).round()} MB';
 }
 
-/// "3 min left", "45 s left".
-String formatTimeLeft(int seconds) =>
-    seconds >= 90 ? '${(seconds / 60).round()} min left' : '$seconds s left';
+/// "about 3 min left", "about 45 s left".
+String formatTimeLeft(int seconds) => seconds >= 90
+    ? 'about ${(seconds / 60).round()} min left'
+    : 'about $seconds s left';
 
-/// A status built from parts, for fakes and tests.
+/// The bundled manifest's files, for fakes and tests.
+const fakeModelFiles = [
+  ModelFileDto(
+    name: 'ggml-base.en.bin',
+    label: 'Whisper Base (English)',
+    role: ModelRoleDto.speech,
+    language: 'en',
+    sizeBytes: 147964211,
+    storedBytes: 0,
+    state: ModelFileStateDto.waiting,
+  ),
+  ModelFileDto(
+    name: 'qwen2.5-1.5b-instruct-q5_k_m.gguf',
+    label: 'Qwen2.5 1.5B Instruct',
+    role: ModelRoleDto.understanding,
+    sizeBytes: 1285494304,
+    storedBytes: 0,
+    state: ModelFileStateDto.waiting,
+  ),
+];
+
+/// A status built from parts, for fakes and tests. [done] is spread over
+/// the files in order; a fully stored file counts as verified.
 ModelStatusDto modelStatusOf(
   ModelStatusKindDto kind, {
   int done = 0,
-  int total = 1300000000,
-  int? remaining,
   int? secondsLeft,
   ModelErrorDto? error,
-}) => ModelStatusDto(
-  kind: kind,
-  doneBytes: done,
-  totalBytes: total,
-  remainingBytes:
-      remaining ?? (kind == ModelStatusKindDto.ready ? 0 : total - done),
-  secondsLeft: secondsLeft,
-  error: error,
-);
+  String? damagedFile,
+  int checked = 0,
+  int checking = 0,
+  List<ModelFileDto> manifest = fakeModelFiles,
+}) {
+  final total = manifest.fold(0, (sum, file) => sum + file.sizeBytes);
+  final ready = kind == ModelStatusKindDto.ready;
+  var left = ready ? total : done;
+  var firstUnverified = true;
+  final files = <ModelFileDto>[];
+  for (final file in manifest) {
+    final stored = left.clamp(0, file.sizeBytes);
+    left -= stored;
+    final verified = stored == file.sizeBytes;
+    final state = verified
+        ? ModelFileStateDto.ready
+        : kind == ModelStatusKindDto.verifying && firstUnverified
+        ? ModelFileStateDto.checking
+        : file.name == damagedFile
+        ? ModelFileStateDto.damaged
+        : (kind == ModelStatusKindDto.downloading ||
+                  kind == ModelStatusKindDto.reconnecting) &&
+              firstUnverified
+        ? ModelFileStateDto.downloading
+        : ModelFileStateDto.waiting;
+    if (!verified) firstUnverified = false;
+    files.add(
+      ModelFileDto(
+        name: file.name,
+        label: file.label,
+        role: file.role,
+        language: file.language,
+        sizeBytes: file.sizeBytes,
+        storedBytes: stored,
+        state: state,
+      ),
+    );
+  }
+  return ModelStatusDto(
+    kind: kind,
+    doneBytes: ready ? total : done,
+    totalBytes: total,
+    remainingBytes: files
+        .where((file) => file.state != ModelFileStateDto.ready)
+        .fold(0, (sum, file) => sum + file.sizeBytes),
+    secondsLeft: secondsLeft,
+    error: error,
+    files: files,
+    checkedBytes: checked,
+    checkingBytes: checking,
+  );
+}
