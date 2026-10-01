@@ -7,6 +7,7 @@ import 'package:fi/l10n/language.dart';
 import 'package:fi/platform_capabilities.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/theme/fi_icons.dart';
+import 'package:fi/theme/inputs.dart';
 import 'package:fi/theme/nocturne.dart';
 import 'package:fi/theme/nocturne_widgets.dart';
 import 'package:fi/ui_prefs.dart';
@@ -280,6 +281,9 @@ class _LanguageSection extends StatefulWidget {
 }
 
 class _LanguageSectionState extends State<_LanguageSection> {
+  /// Card width from which the dropdown sits beside the label instead of below it.
+  static const _wideLanguageWidth = 560.0;
+
   /// The language code whose speech model offer was dismissed.
   String? _offerDismissedFor;
 
@@ -312,33 +316,52 @@ class _LanguageSectionState extends State<_LanguageSection> {
         ? _voice(services)
         : null;
     if (!PlatformScope.of(context).android) {
+      final label = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        spacing: 6,
+        children: [
+          Text(l.langAppLanguage),
+          Text(
+            l.langAppLanguageHint,
+            style: TextStyle(fontSize: 13, color: Nocturne.muted(.6)),
+          ),
+        ],
+      );
+      final dropdown = FiSelect<AppLanguage>(
+        key: const Key('settings-language-dropdown'),
+        value: controller.value,
+        onChanged: choose,
+        items: [
+          for (final language in AppLanguage.values)
+            DropdownMenuItem(
+              key: _optionKey(language),
+              value: language,
+              child: Text(name(language)),
+            ),
+        ],
+      );
       return NocturneCard(
         key: const Key('settings-language'),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          spacing: 6,
-          children: [
-            Text(l.langAppLanguage),
-            Text(
-              l.langAppLanguageHint,
-              style: TextStyle(fontSize: 13, color: Nocturne.muted(.6)),
-            ),
-            DropdownButton<AppLanguage>(
-              isExpanded: true,
-              key: const Key('settings-language-dropdown'),
-              value: controller.value,
-              onChanged: choose,
-              items: [
-                for (final language in AppLanguage.values)
-                  DropdownMenuItem(
-                    key: _optionKey(language),
-                    value: language,
-                    child: Text(name(language)),
-                  ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final wide = constraints.maxWidth >= _wideLanguageWidth;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              spacing: 6,
+              children: [
+                if (wide)
+                  Row(
+                    spacing: 24,
+                    children: [
+                      Expanded(child: label),
+                      SizedBox(width: 280, child: dropdown),
+                    ],
+                  )
+                else ...[label, dropdown],
+                if (voice != null) ...[const FadedRule(), voice],
               ],
-            ),
-            if (voice != null) ...[const FadedRule(), voice],
-          ],
+            );
+          },
         ),
       );
     }
