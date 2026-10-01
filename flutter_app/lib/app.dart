@@ -679,82 +679,94 @@ class _CollectionShellState extends State<CollectionShell> {
 
   Widget _shell(BuildContext context) => ListenableBuilder(
     listenable: Listenable.merge([controller, devices]),
-    builder: (context, _) {
-      final wide = MediaQuery.sizeOf(context).width >= 720;
-      final page = IndexedStack(
-        index: selected,
-        children: [
-          CollectionsPage(controller: controller),
-          DevicesPage(
-            controller: devices,
-            onResetDataset: widget.onResetDataset,
-          ),
-          SettingsPage(
-            buildInfo: devices.buildInfo,
-            localAddresses: devices.localAddresses,
-          ),
-        ],
-      );
-      if (wide) {
-        return Scaffold(
-          body: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _Sidebar(
-                selected: selected,
-                onSelected: _select,
-                devices: devices,
-              ),
-              Expanded(child: page),
-            ],
-          ),
-        );
-      }
-      // The slim brand row belongs to the top-level lists; a collection brings its own header
-      // with a back button, and the devices page states the sync status itself.
-      final topRow = switch (selected) {
-        0 when controller.selectedCollectionId == null => _MobileTopRow(
-          status: devices.syncStatus,
-        ),
-        1 || 2 => const _MobileTopRow(),
-        _ => null,
-      };
-      return Scaffold(
-        body: SafeArea(
-          bottom: false,
-          child: Column(
-            children: [
-              ?topRow,
-              Expanded(child: page),
-            ],
-          ),
-        ),
-        bottomNavigationBar: DecoratedBox(
-          decoration: const BoxDecoration(
-            border: Border(top: BorderSide(color: Nocturne.divider)),
-          ),
-          child: NavigationBar(
-            selectedIndex: selected,
-            onDestinationSelected: _select,
-            destinations: [
-              NavigationDestination(
-                icon: const Icon(FiIcons.collection),
-                label: context.l10n.navCollections,
-              ),
-              NavigationDestination(
-                icon: const Icon(FiIcons.devices),
-                label: context.l10n.navDevices,
-              ),
-              NavigationDestination(
-                icon: const Icon(FiIcons.settings),
-                label: context.l10n.navSettings,
-              ),
-            ],
-          ),
-        ),
-      );
-    },
+    builder: (context, _) => PopScope(
+      canPop:
+          selected == 0 &&
+          controller.selectedCollectionId == null &&
+          !controller.selecting,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        // System back unwinds the shell one step: selection, open collection, then tab.
+        if (controller.selecting) {
+          controller.clearSelection();
+        } else if (controller.selectedCollectionId != null) {
+          unawaited(controller.selectCollection(null));
+        } else {
+          _select(0);
+        }
+      },
+      child: _layout(context),
+    ),
   );
+
+  Widget _layout(BuildContext context) {
+    final wide = MediaQuery.sizeOf(context).width >= 720;
+    final page = IndexedStack(
+      index: selected,
+      children: [
+        CollectionsPage(controller: controller),
+        DevicesPage(controller: devices, onResetDataset: widget.onResetDataset),
+        SettingsPage(
+          buildInfo: devices.buildInfo,
+          localAddresses: devices.localAddresses,
+        ),
+      ],
+    );
+    if (wide) {
+      return Scaffold(
+        body: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _Sidebar(selected: selected, onSelected: _select, devices: devices),
+            Expanded(child: page),
+          ],
+        ),
+      );
+    }
+    // The slim brand row belongs to the top-level lists; a collection brings its own header
+    // with a back button, and the devices page states the sync status itself.
+    final topRow = switch (selected) {
+      0 when controller.selectedCollectionId == null => _MobileTopRow(
+        status: devices.syncStatus,
+      ),
+      1 || 2 => const _MobileTopRow(),
+      _ => null,
+    };
+    return Scaffold(
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            ?topRow,
+            Expanded(child: page),
+          ],
+        ),
+      ),
+      bottomNavigationBar: DecoratedBox(
+        decoration: const BoxDecoration(
+          border: Border(top: BorderSide(color: Nocturne.divider)),
+        ),
+        child: NavigationBar(
+          selectedIndex: selected,
+          onDestinationSelected: _select,
+          destinations: [
+            NavigationDestination(
+              icon: const Icon(FiIcons.collection),
+              label: context.l10n.navCollections,
+            ),
+            NavigationDestination(
+              icon: const Icon(FiIcons.devices),
+              label: context.l10n.navDevices,
+            ),
+            NavigationDestination(
+              icon: const Icon(FiIcons.settings),
+              label: context.l10n.navSettings,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 /// The wide-layout navigation: brand, destinations, and the aggregate sync status at the foot.
