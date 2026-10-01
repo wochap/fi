@@ -29,9 +29,9 @@ Voice fill SHALL be offered only in the New record sheet on screens narrower tha
 The first mic tap SHALL run setup inside the sheet's voice panel slot, in this order, skipping any step already satisfied:
 
 1. A microphone primer. It has a mic icon, "Speak to fill records", "Audio is processed on this device and never saved. English only for now.", "Next, Android will ask for microphone access.", and "Not now" / "Continue". Continue requests the Android microphone permission.
-2. A model download offer. It has "Download voice model", "A one-time <size> download so speech can be understood on this phone.", a line stating whether the phone is on mobile data (with "Wi-Fi recommended") or Wi-Fi, a line with free storage, and "Later" / "Download".
+2. A model download offer (mock 8f). It has "Download voice models", "<language> · <size> total, one time. Everything runs on this phone.", one row per manifest model with its role ("Speech recognition" or "Understanding"), its friendly label and its manifest size, a line stating whether the phone is on mobile data (with "Wi-Fi recommended") or Wi-Fi, a line with free storage, and "Later" / "Download <size>". <size> is the sum of the files not yet verified, and <language> is the language name of the speech model.
 
-While the model downloads, the panel SHALL show a compact card: "Downloading voice model", a pause action, a hide action, a progress bar, "<done> of <total> · <percent>%" with the time left, and "Keep filling by hand. The mic turns on when it's ready." The form SHALL stay fully usable during setup and download. The mic SHALL show a progress ring with the percentage and a download icon while downloading, and SHALL become the idle mic when the model is ready.
+While the model downloads, the panel SHALL show a compact card: a title, a pause action, a hide action, a progress bar, "<done> of <total> · <percent>%" with the time left, and "Keep filling by hand. The mic turns on when it's ready." The title SHALL read "Downloading voice models" while downloading, "Reconnecting…" while reconnecting, "Checking downloaded data…" while verifying, and "Download paused" while paused. A failed download SHALL show its reason line in the card. The form SHALL stay fully usable during setup and download. The mic SHALL show a progress ring with the percentage and a download icon while downloading, reconnecting or verifying, and SHALL become the idle mic when the model is ready.
 
 #### Scenario: Primer then permission
 - **WHEN** the microphone permission was never granted and the user taps the mic
@@ -39,11 +39,15 @@ While the model downloads, the panel SHALL show a compact card: "Downloading voi
 
 #### Scenario: Offer after permission
 - **WHEN** the permission is granted and no model is ready
-- **THEN** the download offer shows the manifest size, the network line and free storage
+- **THEN** the download offer shows "English · 1.43 GB total, one time. Everything runs on this phone.", the rows "Speech recognition · Whisper Base (English) · 148 MB" and "Understanding · Qwen2.5 1.5B Instruct · 1.29 GB", the network line, free storage, and "Download 1.43 GB"
 
 #### Scenario: Keep typing while downloading
-- **WHEN** the download is at 38% and the user types "Lunch" in description
-- **THEN** the field accepts the text, the card shows "494 MB of 1.3 GB · 38%", and the mic shows a 38% ring
+- **WHEN** the download is at 42% and the user types "Lunch" in description
+- **THEN** the field accepts the text, the card shows "612 MB of 1.43 GB · 42%", and the mic shows a 42% ring
+
+#### Scenario: Reconnecting in the sheet
+- **WHEN** the download is reconnecting
+- **THEN** the card title reads "Reconnecting…" and the mic keeps its progress ring
 
 #### Scenario: Not now
 - **WHEN** the user taps "Not now" on the primer
@@ -183,22 +187,50 @@ When the Settings switch "Hands-free spoken feedback" is on, the app SHALL speak
 ### Requirement: Settings tab with voice input
 Below 720px the bottom navigation SHALL show Collections, Devices and Settings. Settings SHALL show three sections:
 - Voice input, shown only when a voice engine is available. It holds:
-  - The voice model row: "Voice model", its language and size, and its state. Not downloaded shows "Download <size>" and "Wi-Fi recommended". Downloading shows progress with pause. Ready shows a "Ready" tag.
-  - The hands-free switch with "Speaks the “still need” question and a short confirmation".
-  - "Re-download model" and "Delete model" with "frees <size>", both confirmed first.
+  - The voice models card (mocks 8b, 8d). Its header reads "Voice models", a state tag with an icon and text, and a summary line starting with the speech model's language name. Below it, one row per manifest model shows its role ("Speech recognition" or "Understanding"), its friendly label, and its size or state: the manifest size when waiting or ready, "<stored> of <size>" while partly stored, "Checking" while verifying, and "<size> · damaged" after a checksum failure. The card shows one of these states:
+    - Not downloaded: tag "Not downloaded", summary "<language> · <total> total", "Wi-Fi recommended", "Needs <remaining> · <free> free on this phone", and "Download <remaining>".
+    - Downloading: tag "Downloading", summary "<language> · <done> of <total>", a progress bar with the percent and "about <time> left", Pause and Cancel.
+    - Reconnecting: tag "Reconnecting", "Connection lost — reconnecting…", the progress bar frozen in a neutral color, "The download resumes where it stopped.", "Leaving Fi can pause the network. Keep it open to finish faster.", Pause and Cancel.
+    - Verifying: tag "Verifying", summary "<language> · <total>", "Checking downloaded data…" with the time left when known, a striped bar without a percent, and Cancel.
+    - Paused: tag "Paused", summary "<language> · paused at <done> of <total>", the frozen progress bar with the percent and "resumes from here", Resume and Cancel.
+    - Failed: tag "Failed", a reason title and line, Retry and "Cancel and delete". A network or HTTP failure reads "No connection" / "Couldn't reach the download server. Check your Wi-Fi, then retry. Downloaded data is kept." with summary "<language> · stopped at <done>". A storage failure reads "Not enough storage" / "Free up <needed> on this phone, then retry." with the same summary. A checksum failure reads "Downloaded file is damaged" / "The <role> model failed its check. Retry downloads it again (<size>)." with summary "<language> · check failed".
+    - Ready: tag "Ready", summary "<language> · <total> used on this phone", Re-download and Delete.
+  - The hands-free switch with "Speaks the “still need” question and a short confirmation", shown only when the models are ready.
   - The privacy line "Audio is processed on this device and never saved. English only for now."
 - Microphone, with the permission state and an "Android settings" link.
 - About, with the build label.
+
+State tags SHALL pair an icon with their text, never color alone. Retry SHALL resume from the stored bytes. Cancel and "Cancel and delete" SHALL ask "Cancel download?" with "Downloaded data (<done>) will be deleted.", "Cancel download" and "Keep downloading", unless nothing is stored. Delete SHALL ask "Delete voice models?" with "Frees <size>. Voice fill won’t work until you download them again.", "Delete" and "Keep models". Re-download SHALL be confirmed first. In each confirm dialog the safe choice SHALL be the primary button on the right and the destructive choice the secondary button on the left. There is no undo.
 
 Desktop navigation SHALL NOT change.
 
 #### Scenario: Ready model in Settings
 - **WHEN** the model set is ready
-- **THEN** Settings › Voice input shows "Voice model", "English · 1.3 GB", a "Ready" tag, the hands-free switch, Re-download and Delete
+- **THEN** Settings › Voice input shows "Voice models", "English · 1.43 GB used on this phone", a "Ready" tag, the rows "Speech recognition · Whisper Base (English) · 148 MB" and "Understanding · Qwen2.5 1.5B Instruct · 1.29 GB", Re-download, Delete and the hands-free switch
+
+#### Scenario: Downloading in Settings
+- **WHEN** the speech model is verified and 464 MB of the understanding model are stored
+- **THEN** the card shows "English · 612 MB of 1.43 GB", a "Downloading" tag, "42%", the understanding row "464 MB of 1.29 GB", Pause and Cancel
+
+#### Scenario: Cancel asks first
+- **WHEN** the user taps Cancel while downloading with 612 MB stored and confirms "Cancel download"
+- **THEN** the download stops, the downloaded data is deleted, and the card shows "Not downloaded" with "Download 1.43 GB"
+
+#### Scenario: Keep downloading
+- **WHEN** the user taps Cancel and then "Keep downloading"
+- **THEN** the dialog closes and the download continues
+
+#### Scenario: Failed with a network reason
+- **WHEN** the download failed with the network reason at 612 MB
+- **THEN** the card shows a "Failed" tag, "No connection", Retry and "Cancel and delete", and Retry resumes from 612 MB
+
+#### Scenario: Damaged file
+- **WHEN** the understanding model failed its checksum
+- **THEN** the card shows "Downloaded file is damaged", "The understanding model failed its check. Retry downloads it again (1.29 GB).", and the understanding row reads "1.29 GB · damaged"
 
 #### Scenario: Delete asks first
-- **WHEN** the user taps Delete model and confirms
-- **THEN** the models are deleted, the row shows "Not downloaded" with "Download 1.3 GB", and the hands-free switch is hidden
+- **WHEN** the user taps Delete and confirms
+- **THEN** the models are deleted, the card shows "Not downloaded" with "Download 1.43 GB", and the hands-free switch is hidden
 
 ### Requirement: Voice engine boundary and fake engine
 The app SHALL reach speech-to-text and field filling only through one voice engine boundary. It takes the audio of one turn, the collection's active fields (id, name, type, required, options, bounds) and the current draft values, and returns a transcript and a patch. It SHALL report typed failures (no speech, model not loaded, out of memory, microphone busy, cancelled). It SHALL report input levels while listening, so the level bars reflect the microphone. A scripted fake engine SHALL be available in debug builds, or when the build defines `FI_VOICE_FAKE=true`. It returns scripted transcripts and patches after realistic delays, and can be set to produce each typed failure.
