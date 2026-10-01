@@ -563,3 +563,40 @@ When the record editor opens for a new record, every field that declares a defau
 #### Scenario: Editing an existing record does not seed
 - **WHEN** the user opens an existing record that lacks an optional field which has since gained a default
 - **THEN** that field opens empty
+
+### Requirement: System back navigation
+The system back action (the Android back button or back gesture) SHALL unwind the main shell one step at a time before leaving the app. When a pushed screen, dialog or sheet is open, system back SHALL close it as it does today, including any close confirmation that screen defines, and SHALL NOT also change the shell. Otherwise system back SHALL apply the first matching step:
+1. When the open collection is in selection mode, it SHALL clear the selection and leave selection mode, staying in the collection.
+2. When a collection is open, it SHALL return to the collections list.
+3. When the Devices or Settings destination is shown, it SHALL show the Collections destination.
+4. Otherwise it SHALL leave the app as the platform does by default.
+
+These rules SHALL apply in both the layout below 720px and the layout at 720px and wider.
+
+#### Scenario: Back clears selection mode
+- **WHEN** a collection is open with two records selected and the user presses system back
+- **THEN** the selection is cleared, selection mode ends, and the collection stays open
+
+#### Scenario: Back leaves an open collection
+- **WHEN** a collection is open outside selection mode and the user presses system back
+- **THEN** the collections list is shown and the app stays in the foreground
+
+#### Scenario: Back from Devices returns to Collections
+- **WHEN** the Devices destination is shown and the user presses system back
+- **THEN** the Collections destination is shown and the app stays in the foreground
+
+#### Scenario: Back from Settings returns to Collections
+- **WHEN** the Settings destination is shown and the user presses system back
+- **THEN** the Collections destination is shown and the app stays in the foreground
+
+#### Scenario: Back from the collections list leaves the app
+- **WHEN** the collections list is shown on the Collections destination and the user presses system back
+- **THEN** the app leaves to the platform as it does by default
+
+#### Scenario: Back unwinds step by step
+- **WHEN** a collection is open in selection mode and the user presses system back three times
+- **THEN** the first press clears the selection, the second shows the collections list, and the third leaves the app
+
+#### Scenario: Pushed screens close first
+- **WHEN** the record editor is open over a collection and the user presses system back
+- **THEN** the record editor closes (after its close confirmation when it shows one) and the collection stays open
