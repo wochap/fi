@@ -4,6 +4,7 @@ import 'package:fi/voice/controller.dart';
 import 'package:fi/voice/engine.dart';
 import 'package:fi/voice/example.dart';
 import 'package:fi/voice/fakes.dart';
+import 'package:fi/voice/models_card.dart';
 import 'package:fi/voice/patch.dart';
 import 'package:fi/voice/services.dart';
 import 'package:flutter/widgets.dart';
@@ -25,6 +26,37 @@ void main() {
       addTearDown(() => Intl.defaultLocale = null);
       expect(formatBytes(1433458515), '1,43 GB');
       expect(formatBytes(12400000000), '12,4 GB');
+    });
+
+    test('the Spanish set swaps in the Spanish speech model', () {
+      final status = modelStatusOf(
+        ModelStatusKindDto.notDownloaded,
+        language: 'es',
+      );
+      expect(status.totalBytes, 1433445769);
+      expect(status.language, 'es');
+      expect(
+        status.files
+            .where((file) => file.role == ModelRoleDto.speech)
+            .single
+            .label,
+        'Whisper Base (Spanish)',
+      );
+    });
+
+    test('modelDisplayLabel names speech models in the UI language', () {
+      final speech = modelStatusOf(
+        ModelStatusKindDto.notDownloaded,
+        language: 'es',
+      ).files.first;
+      expect(
+        modelDisplayLabel(lookupAppLocalizations(const Locale('es')), speech),
+        'Whisper Base (español)',
+      );
+      expect(
+        modelDisplayLabel(lookupAppLocalizations(const Locale('en')), speech),
+        'Whisper Base (Spanish)',
+      );
     });
 
     test('formatTimeLeft reads "about"', () {
@@ -283,6 +315,17 @@ void main() {
     test('an expenses-like schema reads like a spoken record', () {
       expect(
         exampleUtterance(expenseFields),
+        'Lunch, 12.50, category food, yesterday',
+      );
+    });
+
+    test('Spanish fields read like a Spanish record', () {
+      expect(
+        exampleUtterance(spanishExpenseFields, language: 'es'),
+        'Almuerzo, 12,50, categoría comida, ayer',
+      );
+      expect(
+        exampleUtterance(expenseFields, language: 'en'),
         'Lunch, 12.50, category food, yesterday',
       );
     });

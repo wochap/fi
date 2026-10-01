@@ -109,6 +109,9 @@ abstract interface class SpeechOutput {
   /// Speaks [text]; completes when speech ends or is stopped.
   Future<void> speak(String text);
   Future<void> stop();
+
+  /// Speaks in [code]'s language from the next line on: "en" or "es".
+  Future<void> setLanguage(String code);
 }
 
 final class PlatformSpeechOutput implements SpeechOutput {
@@ -116,13 +119,30 @@ final class PlatformSpeechOutput implements SpeechOutput {
 
   final _tts = FlutterTts();
   var _ready = false;
+  var _language = 'en';
+  String? _appliedLanguage;
 
   Future<void> _prepare() async {
-    if (_ready) return;
-    _ready = true;
-    await _tts.setLanguage('en-US');
-    await _tts.awaitSpeakCompletion(true);
+    if (!_ready) {
+      _ready = true;
+      await _tts.awaitSpeakCompletion(true);
+    }
+    if (_appliedLanguage == _language) return;
+    _appliedLanguage = _language;
+    await _tts.setLanguage(await _locale(_language));
   }
+
+  /// The first Spanish voice the phone has, else es-ES; en-US otherwise.
+  Future<String> _locale(String code) async {
+    if (code != 'es') return 'en-US';
+    for (final locale in const ['es-US', 'es-MX', 'es-ES']) {
+      if (await _tts.isLanguageAvailable(locale) == true) return locale;
+    }
+    return 'es-ES';
+  }
+
+  @override
+  Future<void> setLanguage(String code) async => _language = code;
 
   @override
   Future<void> speak(String text) async {
@@ -166,6 +186,12 @@ abstract class VoiceModels extends ChangeNotifier {
 
   /// Set while a turn runs so delete and re-download refuse.
   void setVoiceTurnActive(bool active);
+
+  /// Selects the model set of the voice language [code].
+  Future<void> setLanguage(String code);
+
+  /// Deletes one language's speech model; returns the bytes freed.
+  Future<int> deleteSpeechModel(String language);
 }
 
 /// Models provisioned by Rust under `<data dir>/models`.
@@ -209,6 +235,17 @@ final class RustVoiceModels extends VoiceModels {
   @override
   void setVoiceTurnActive(bool active) =>
       rust.setVoiceTurnActive(modelsDir: modelsDir, active: active);
+
+  @override
+  Future<void> setLanguage(String code) async {
+    rust.setModelLanguage(modelsDir: modelsDir, language: code);
+    _status = rust.modelStatus(modelsDir: modelsDir);
+    notifyListeners();
+  }
+
+  @override
+  Future<int> deleteSpeechModel(String language) =>
+      rust.deleteSpeechModel(modelsDir: modelsDir, language: language);
 
   @override
   void dispose() {
@@ -292,7 +329,47 @@ final class VoiceServices {
   final SpeechOutput speech;
   final VoicePrefs prefs;
 
+  /// The voice language: "en" or "es", following the app language.
+  final ValueNotifier<String> languageListenable = ValueNotifier('en');
+
+  String get language => languageListenable.value;
+
+  /// Switches voice fill to [code]'s language; anything but "es" is English.
+  void setLanguage(String code) {
+    final c = code == 'es' ? 'es' : 'en';
+    if (c == language) return;
+    languageListenable.value = c;
+    unawaited(models.setLanguage(c));
+    unawaited(speech.setLanguage(c));
+  }
+
   bool get available => engine.available;
+}
+
+/// Keeps the voice language equal to the app's resolved language.
+class VoiceLanguageSync extends StatefulWidget {
+  const VoiceLanguageSync({
+    required this.services,
+    required this.child,
+    super.key,
+  });
+
+  final VoiceServices services;
+  final Widget child;
+
+  @override
+  State<VoiceLanguageSync> createState() => _VoiceLanguageSyncState();
+}
+
+class _VoiceLanguageSyncState extends State<VoiceLanguageSync> {
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    widget.services.setLanguage(Localizations.localeOf(context).languageCode);
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 /// Publishes [VoiceServices] and how to reach the Settings tab.
@@ -360,7 +437,18 @@ String formatTimeLeft(AppLocalizations l, int seconds) => seconds >= 90
     ? l.timeLeftMinutes((seconds / 60).round())
     : l.timeLeftSeconds(seconds);
 
-/// The bundled manifest's files, for fakes and tests.
+/// The bundled manifest's Spanish speech file, for fakes and tests.
+const fakeSpanishSpeechFile = ModelFileDto(
+  name: 'ggml-base.bin',
+  label: 'Whisper Base (Spanish)',
+  role: ModelRoleDto.speech,
+  language: 'es',
+  sizeBytes: 147951465,
+  storedBytes: 0,
+  state: ModelFileStateDto.waiting,
+);
+
+/// The bundled manifest's English set, for fakes and tests.
 const fakeModelFiles = [
   ModelFileDto(
     name: 'ggml-base.en.bin',
@@ -382,7 +470,9 @@ const fakeModelFiles = [
 ];
 
 /// A status built from parts, for fakes and tests. [done] is spread over
-/// the files in order; a fully stored file counts as verified.
+/// the files in order; a fully stored file counts as verified, and so does
+/// every file named in [readyFiles]. [language] "es" swaps in the Spanish
+/// speech file.
 ModelStatusDto modelStatusOf(
   ModelStatusKindDto kind, {
   int done = 0,
@@ -391,16 +481,28 @@ ModelStatusDto modelStatusOf(
   String? damagedFile,
   int checked = 0,
   int checking = 0,
-  List<ModelFileDto> manifest = fakeModelFiles,
+  List<ModelFileDto>? manifest,
+  String language = 'en',
+  List<ModelFileDto> otherSpeech = const [],
+  int? cancelBytes,
+  Set<String> readyFiles = const {},
 }) {
+  manifest ??= [
+    for (final file in fakeModelFiles)
+      if (language == 'es' && file.role == ModelRoleDto.speech)
+        fakeSpanishSpeechFile
+      else
+        file,
+  ];
   final total = manifest.fold(0, (sum, file) => sum + file.sizeBytes);
   final ready = kind == ModelStatusKindDto.ready;
   var left = ready ? total : done;
   var firstUnverified = true;
   final files = <ModelFileDto>[];
   for (final file in manifest) {
-    final stored = left.clamp(0, file.sizeBytes);
-    left -= stored;
+    final forced = readyFiles.contains(file.name);
+    final stored = forced ? file.sizeBytes : left.clamp(0, file.sizeBytes);
+    if (!forced) left -= stored;
     final verified = stored == file.sizeBytes;
     final state = verified
         ? ModelFileStateDto.ready
@@ -428,7 +530,9 @@ ModelStatusDto modelStatusOf(
   }
   return ModelStatusDto(
     kind: kind,
-    doneBytes: ready ? total : done,
+    doneBytes: ready
+        ? total
+        : files.fold(0, (sum, file) => sum + file.storedBytes),
     totalBytes: total,
     remainingBytes: files
         .where((file) => file.state != ModelFileStateDto.ready)
@@ -438,5 +542,9 @@ ModelStatusDto modelStatusOf(
     files: files,
     checkedBytes: checked,
     checkingBytes: checking,
+    language: language,
+    otherSpeechModels: otherSpeech,
+    cancelBytes:
+        cancelBytes ?? files.fold(0, (sum, file) => sum + file.storedBytes),
   );
 }

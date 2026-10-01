@@ -57,10 +57,17 @@ final class VoiceField {
 /// What one turn is filling: the active fields in form order and the draft's current values.
 @immutable
 final class VoiceFillRequest {
-  const VoiceFillRequest({required this.fields, required this.draft});
+  const VoiceFillRequest({
+    required this.fields,
+    required this.draft,
+    required this.language,
+  });
 
   final List<VoiceField> fields;
   final Map<String, FieldValueDto> draft;
+
+  /// The voice language code: "en" or "es".
+  final String language;
 }
 
 /// One patch entry: a field, its typed value, and the transcript words it came from.
@@ -278,6 +285,9 @@ final class FakeVoiceEngine implements VoiceEngine {
   /// Turns started so far.
   int get turns => _turn;
 
+  /// The language of each request passed to [stop].
+  final languages = <String>[];
+
   /// [prepare] and [release] calls so far.
   int prepares = 0;
   int releases = 0;
@@ -338,6 +348,7 @@ final class FakeVoiceEngine implements VoiceEngine {
     VoiceFillRequest request, {
     ValueChanged<String>? onTranscript,
   }) async {
+    languages.add(request.language);
     _stopLevels();
     final turn = _current;
     await _wait(transcribeDelay);

@@ -246,6 +246,7 @@ VoiceFillRequestDto requestDto(
   day: now.day,
   minuteOfDay: now.hour * 60 + now.minute,
   utcOffsetMinutes: now.timeZoneOffset.inMinutes,
+  language: request.language,
 );
 
 /// The on-device engine: captures PCM in Dart, transcribes and fills in Rust.

@@ -42,7 +42,7 @@ pub fn normalize_text(text: &str) -> String {
             continue;
         }
         if c.is_alphanumeric() {
-            out.extend(c.to_lowercase());
+            out.extend(c.to_lowercase().map(crate::normalize::es::fold_char));
             space = false;
         } else if !space {
             out.push(' ');
@@ -179,6 +179,16 @@ mod tests {
         ));
         assert!(!evidence_holds("home", "", None));
         assert!(!evidence_holds("the cathedral", "cat", None));
+    }
+
+    #[test]
+    fn evidence_ignores_accents() {
+        assert!(evidence_holds(
+            "Café con Ana, ¿cuánto? doce euros",
+            "cafe con ana",
+            Some("Café")
+        ));
+        assert_eq!(normalize_text("¿Cuánto? ¡Sí! Año"), "cuanto si año");
     }
 
     #[test]

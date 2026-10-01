@@ -12,8 +12,8 @@ use std::{
 };
 
 use app_core::models::{
-    DownloadProgress, ModelError, ModelFile, ModelManager, ModelManagerConfig, ModelManifest,
-    ModelRole, ModelStatus, STORAGE_HEADROOM_BYTES,
+    DownloadProgress, ModelError, ModelFile, ModelFileState, ModelManager, ModelManagerConfig,
+    ModelManifest, ModelRole, ModelStatus, STORAGE_HEADROOM_BYTES,
 };
 use sha2::{Digest, Sha256};
 
@@ -26,6 +26,13 @@ fn fixture() -> Vec<u8> {
 #[derive(Default)]
 struct ServerLog {
     ranges: Vec<Option<String>>,
+    paths: Vec<String>,
+}
+
+impl ServerLog {
+    fn count(&self, path: &str) -> usize {
+        self.paths.iter().filter(|seen| *seen == path).count()
+    }
 }
 
 /// Sends the first `stall_after` bytes, then waits for the gate before the rest.
@@ -96,7 +103,11 @@ fn serve_plan(
                 .iter()
                 .find(|header| header.field.equiv("Range"))
                 .map(|header| header.value.to_string());
-            server_log.lock().unwrap().ranges.push(range.clone());
+            {
+                let mut log = server_log.lock().unwrap();
+                log.ranges.push(range.clone());
+                log.paths.push(request.url().to_string());
+            }
             let start = range
                 .filter(|_| ranges)
                 .and_then(|value| {
@@ -153,6 +164,22 @@ fn manifest_for(url: &str, data: &[u8]) -> ModelManifest {
     ModelManifest {
         version: "test-1".into(),
         files: vec![model_file("model.bin", url, data)],
+    }
+}
+
+/// English speech, Spanish speech and a shared file, each served at its own path.
+fn language_manifest(server: &Server, data: &[u8]) -> ModelManifest {
+    let base = server.url.trim_end_matches("/model.bin");
+    let mut en = model_file("en-speech.bin", &format!("{base}/en-speech"), data);
+    en.language = Some("en".into());
+    let mut es = model_file("es-speech.bin", &format!("{base}/es-speech"), data);
+    es.language = Some("es".into());
+    let mut shared = model_file("shared.bin", &format!("{base}/shared"), data);
+    shared.role = ModelRole::Understanding;
+    shared.language = None;
+    ModelManifest {
+        version: "test-1".into(),
+        files: vec![en, es, shared],
     }
 }
 
@@ -586,4 +613,130 @@ fn resume_reports_verifying_first() {
     assert_eq!(verify.total_bytes, data.len() as u64 / 2);
     models.wait();
     assert!(matches!(models.status(), ModelStatus::Ready { .. }));
+}
+
+fn ready_english(dir: &Path, server: &Server, data: &[u8]) -> ModelManager {
+    let models = manager(dir, language_manifest(server, data), PLENTY);
+    models.start_download().unwrap();
+    models.wait();
+    assert!(matches!(models.status(), ModelStatus::Ready { .. }));
+    models
+}
+
+#[test]
+fn spanish_set_downloads_only_its_speech_model() {
+    let data = fixture();
+    let server = serve(data.clone(), true, None);
+    let dir = tempfile::tempdir().unwrap();
+    let models = ready_english(dir.path(), &server, &data);
+    let before = server.log.lock().unwrap().paths.len();
+
+    models.set_language("es");
+    assert_eq!(
+        models.status(),
+        ModelStatus::NotDownloaded {
+            download_bytes: FIXTURE_LEN as u64
+        }
+    );
+    models.start_download().unwrap();
+    models.wait();
+    assert!(matches!(models.status(), ModelStatus::Ready { .. }));
+    let log = server.log.lock().unwrap();
+    assert_eq!(log.paths[before..], ["/es-speech".to_string()]);
+    assert_eq!(log.count("/shared"), 1);
+}
+
+#[test]
+fn switching_language_pauses_a_running_download() {
+    let data = fixture();
+    let (_keep_closed, gate) = never();
+    let server = serve(data.clone(), true, Some((FIXTURE_LEN / 2, gate)));
+    let dir = tempfile::tempdir().unwrap();
+    let models = manager(dir.path(), language_manifest(&server, &data), PLENTY);
+    models.set_language("es");
+    models.start_download().unwrap();
+    wait_for(
+        &models,
+        |status| matches!(status, ModelStatus::Downloading(p) if p.done_bytes > 0),
+    );
+    let part = dir.path().join("test-1/es-speech.bin.part");
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while std::fs::metadata(&part).map_or(0, |meta| meta.len()) == 0 {
+        assert!(Instant::now() < deadline, "no partial bytes");
+        thread::sleep(Duration::from_millis(5));
+    }
+
+    let switched_at = Instant::now();
+    models.set_language("en");
+    assert!(switched_at.elapsed() < Duration::from_secs(1));
+    assert!(!models.running());
+    let stored = std::fs::metadata(&part).unwrap().len();
+    assert!(stored > 0);
+    let others = models.store().other_speech_files();
+    assert_eq!(others.len(), 1);
+    assert_eq!(others[0].language.as_deref(), Some("es"));
+    assert_eq!(others[0].state, ModelFileState::Waiting);
+    assert_eq!(others[0].stored_bytes, stored);
+}
+
+#[test]
+fn cancel_keeps_the_shared_model_when_another_speech_model_is_verified() {
+    let data = fixture();
+    let server = serve(data.clone(), true, None);
+    let dir = tempfile::tempdir().unwrap();
+    let models = ready_english(dir.path(), &server, &data);
+    models.set_language("es");
+    let part = dir.path().join("test-1/es-speech.bin.part");
+    std::fs::write(&part, &data[..1000]).unwrap();
+    assert_eq!(models.store().language_set_deletable_bytes(), 1000);
+
+    models.cancel_download();
+    assert!(!part.exists());
+    assert!(dir.path().join("test-1/shared.bin").exists());
+    assert!(dir.path().join("test-1/en-speech.bin").exists());
+    assert_eq!(
+        models.status(),
+        ModelStatus::NotDownloaded {
+            download_bytes: FIXTURE_LEN as u64
+        }
+    );
+    models.set_language("en");
+    assert!(matches!(models.status(), ModelStatus::Ready { .. }));
+}
+
+#[test]
+fn delete_speech_model_removes_only_that_file() {
+    let data = fixture();
+    let server = serve(data.clone(), true, None);
+    let dir = tempfile::tempdir().unwrap();
+    let models = ready_english(dir.path(), &server, &data);
+
+    models.set_voice_turn_active(true);
+    assert_eq!(
+        models.delete_speech_model("en"),
+        Err(ModelError::VoiceTurnActive)
+    );
+    models.set_voice_turn_active(false);
+
+    assert_eq!(models.delete_speech_model("en"), Ok(FIXTURE_LEN as u64));
+    assert!(!dir.path().join("test-1/en-speech.bin").exists());
+    assert!(dir.path().join("test-1/shared.bin").exists());
+    assert_eq!(
+        models.status(),
+        ModelStatus::NotDownloaded {
+            download_bytes: FIXTURE_LEN as u64
+        }
+    );
+    assert_eq!(models.delete_speech_model("es"), Ok(0));
+}
+
+#[test]
+fn unknown_language_selects_english() {
+    let data = fixture();
+    let server = serve(data.clone(), true, None);
+    let dir = tempfile::tempdir().unwrap();
+    let models = manager(dir.path(), language_manifest(&server, &data), PLENTY);
+    models.set_language("es");
+    models.set_language("fr");
+    assert_eq!(models.store().language(), "en");
 }

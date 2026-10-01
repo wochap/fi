@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:fi/l10n/app_localizations.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/voice/engine.dart';
 import 'package:fi/voice/patch.dart';
@@ -285,8 +286,14 @@ class VoiceFillController extends ChangeNotifier with WidgetsBindingObserver {
     if (!_disposed) services.models.setVoiceTurnActive(false);
   }
 
-  VoiceFillRequest _request() =>
-      VoiceFillRequest(fields: fields, draft: Map.unmodifiable(readDraft()));
+  VoiceFillRequest _request() => VoiceFillRequest(
+    fields: fields,
+    draft: Map.unmodifiable(readDraft()),
+    language: services.language,
+  );
+
+  /// Copy for spoken and status lines, in the voice language.
+  AppLocalizations get _l => lookupAppLocalizations(Locale(services.language));
 
   Future<void> stopListening() async {
     if (!listening) return;
@@ -375,14 +382,13 @@ class VoiceFillController extends ChangeNotifier with WidgetsBindingObserver {
   String namesOf(Iterable<String> ids) => ids.map(nameOf).join(', ');
 
   String get stillNeedLine =>
-      'Still need: ${missingRequired.map((field) => field.name).join(', ')}';
+      _l.voiceStillNeed(missingRequired.map((field) => field.name).join(', '));
 
   Future<void> _speakOutcome(VoicePhase outcome) async {
     final line = switch (outcome) {
       VoicePhase.need => '$stillNeedLine.',
-      VoicePhase.filled || VoicePhase.followup =>
-        '${lastApplied.length} ${lastApplied.length == 1 ? 'field' : 'fields'} filled. '
-            'Tap Save record when ready.',
+      VoicePhase.filled ||
+      VoicePhase.followup => _l.voiceSpokenFilled(lastApplied.length),
       _ => null,
     };
     if (line == null) return;

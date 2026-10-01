@@ -40,6 +40,35 @@ const expenseFields = [
   VoiceField(id: 'date', name: 'date', kind: FieldTypeKindDto.date),
 ];
 
+/// The expenses collection with Spanish names and labels.
+const spanishExpenseFields = [
+  VoiceField(
+    id: 'description',
+    name: 'descripción',
+    kind: FieldTypeKindDto.text,
+  ),
+  VoiceField(
+    id: 'amount',
+    name: 'importe',
+    kind: FieldTypeKindDto.fixedDecimal,
+    required: true,
+    scale: 2,
+  ),
+  VoiceField(
+    id: 'category',
+    name: 'categoría',
+    kind: FieldTypeKindDto.enum_,
+    required: true,
+    options: [
+      (id: 'comida', label: 'comida'),
+      (id: 'transporte', label: 'transporte'),
+      (id: 'hogar', label: 'hogar'),
+      (id: 'otro', label: 'otro'),
+    ],
+  ),
+  VoiceField(id: 'date', name: 'fecha', kind: FieldTypeKindDto.date),
+];
+
 const lunchTranscript = "Lunch at Nando's, twelve fifty, food, yesterday";
 
 final lunchResult = VoiceTurnResult(
@@ -74,7 +103,7 @@ final categoryOnlyResult = VoiceTurnResult(
 );
 
 VoiceFillRequest request() =>
-    const VoiceFillRequest(fields: expenseFields, draft: {});
+    const VoiceFillRequest(fields: expenseFields, draft: {}, language: 'en');
 
 /// A fake engine with near-instant delays for tests.
 FakeVoiceEngine quickEngine(List<FakeVoiceTurn> script) => FakeVoiceEngine(

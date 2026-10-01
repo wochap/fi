@@ -3,7 +3,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-final _placeholder = RegExp(r'\{(\w+)[,}]');
+/// A placeholder; select and plural branch bodies (`es{…}`) are not.
+final _placeholder = RegExp(r'(?<!\w)\{(\w+)[,}]');
 
 Set<String> _placeholders(Object? message) =>
     _placeholder.allMatches('$message').map((m) => m.group(1)!).toSet();

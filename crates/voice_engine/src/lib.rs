@@ -50,6 +50,32 @@ pub struct VoiceField {
     pub max_length: Option<u32>,
 }
 
+/// The language a turn is spoken in.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub enum VoiceLanguage {
+    #[default]
+    En,
+    Es,
+}
+
+impl VoiceLanguage {
+    /// The language code: "en" or "es".
+    pub fn code(self) -> &'static str {
+        match self {
+            Self::En => "en",
+            Self::Es => "es",
+        }
+    }
+
+    /// "es" gives Spanish; anything else gives English.
+    pub fn from_code(code: &str) -> Self {
+        match code {
+            "es" => Self::Es,
+            _ => Self::En,
+        }
+    }
+}
+
 /// What one turn fills: the collection, its active fields, the draft and the device clock.
 #[derive(Clone, Debug)]
 pub struct FillRequest {
@@ -62,6 +88,8 @@ pub struct FillRequest {
     pub now: NaiveTime,
     /// The device's UTC offset in minutes, used to store date-times as UTC.
     pub utc_offset_minutes: i32,
+    /// The language the turn is spoken in; selects the normalizers.
+    pub language: VoiceLanguage,
 }
 
 /// A typed value, in the core's representations.
@@ -200,6 +228,17 @@ pub(crate) mod test_support {
         ]
     }
 
+    /// `expense_fields` with Spanish choice labels.
+    pub fn spanish_expense_fields() -> Vec<VoiceField> {
+        let mut fields = expense_fields();
+        fields[2] = choice(
+            "f-cat",
+            "category",
+            &["comida", "transporte", "hogar", "otro"],
+        );
+        fields
+    }
+
     pub fn request(fields: Vec<VoiceField>) -> FillRequest {
         FillRequest {
             collection_id: "c-expenses".into(),
@@ -209,6 +248,7 @@ pub(crate) mod test_support {
             today: NaiveDate::from_ymd_opt(2026, 9, 28).unwrap(),
             now: NaiveTime::from_hms_opt(14, 7, 0).unwrap(),
             utc_offset_minutes: 0,
+            language: VoiceLanguage::En,
         }
     }
 }
@@ -268,6 +308,47 @@ mod tests {
             ]
         );
         assert!(runner.prompts[0].contains("Monday 2026-09-28"));
+    }
+
+    #[test]
+    fn a_spanish_turn_becomes_a_typed_patch() {
+        let mut engine = VoiceEngine::new();
+        let mut runner = scripted(
+            r#"[{"field":"description","value":"Almuerzo en Nando's","evidence":"Almuerzo en Nando's"},
+                {"field":"amount","value":"doce con cincuenta","evidence":"doce con cincuenta"},
+                {"field":"category","value":"comida","evidence":"comida"},
+                {"field":"date","value":"ayer","evidence":"ayer"}]"#,
+        );
+        let mut request = request(spanish_expense_fields());
+        request.language = VoiceLanguage::Es;
+        let outcome = engine
+            .fill(
+                &mut runner,
+                "Almuerzo en Nando's, doce con cincuenta, comida, ayer.",
+                &request,
+            )
+            .unwrap();
+        assert_eq!(
+            outcome
+                .patch
+                .iter()
+                .map(|entry| (entry.field_id.as_str(), entry.value.clone()))
+                .collect::<Vec<_>>(),
+            vec![
+                ("f-desc", TypedValue::Text("Almuerzo en Nando's".into())),
+                ("f-amount", TypedValue::Decimal(1250)),
+                ("f-cat", TypedValue::Choice("f-cat-comida".into())),
+                ("f-date", TypedValue::Date(20_723)),
+            ]
+        );
+    }
+
+    #[test]
+    fn language_codes() {
+        assert_eq!(VoiceLanguage::from_code("es"), VoiceLanguage::Es);
+        assert_eq!(VoiceLanguage::from_code("fr"), VoiceLanguage::En);
+        assert_eq!(VoiceLanguage::from_code(""), VoiceLanguage::En);
+        assert_eq!(VoiceLanguage::Es.code(), "es");
     }
 
     #[test]

@@ -6,7 +6,9 @@
 //! [`voice_release`]; Whisper is loaded for each turn. Audio and transcripts are never logged.
 
 use flutter_rust_bridge::frb;
-use voice_engine::{ChoiceOption, FieldKind, PatchEntry, TypedValue, VoiceError, VoiceField};
+use voice_engine::{
+    ChoiceOption, FieldKind, PatchEntry, TypedValue, VoiceError, VoiceField, VoiceLanguage,
+};
 
 use crate::{
     api::models::{FieldTypeKindDto, FieldValueDto, FieldValueKindDto},
@@ -50,6 +52,8 @@ pub struct VoiceFillRequestDto {
     pub day: u32,
     pub minute_of_day: u32,
     pub utc_offset_minutes: i32,
+    /// The voice language code: "en" or "es". Anything else reads as English.
+    pub language: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -162,6 +166,7 @@ fn request(dto: VoiceFillRequestDto) -> Option<voice_engine::FillRequest> {
         today: chrono::NaiveDate::from_ymd_opt(dto.year, dto.month, dto.day)?,
         now: chrono::NaiveTime::from_num_seconds_from_midnight_opt(dto.minute_of_day * 60, 0)?,
         utc_offset_minutes: dto.utc_offset_minutes,
+        language: VoiceLanguage::from_code(&dto.language),
     })
 }
 
@@ -263,6 +268,7 @@ mod tests {
             day: 28,
             minute_of_day: 14 * 60 + 7,
             utc_offset_minutes: 120,
+            language: "es".into(),
         }
     }
 
@@ -273,6 +279,7 @@ mod tests {
         assert_eq!(request.today.to_string(), "2026-09-28");
         assert_eq!(request.now.to_string(), "14:07:00");
         assert_eq!(request.draft, vec![("f".to_owned(), "3.00".to_owned())]);
+        assert_eq!(request.language, VoiceLanguage::Es);
         let mut bad = request_dto();
         bad.month = 13;
         assert!(self::request(bad).is_none());

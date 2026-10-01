@@ -7,15 +7,18 @@ use std::path::PathBuf;
 use chrono::{NaiveDate, NaiveTime};
 use voice_engine::{
     ChoiceOption, FieldKind, FillRequest, ModelRunner, VoiceEngine, VoiceError, VoiceField,
+    VoiceLanguage,
     audio::wav_pcm16,
-    native::{CancelFlag, LLM_MODEL, LlamaRunner, WHISPER_MODEL, transcribe},
+    native::{CancelFlag, LlamaRunner, speech_model_file, transcribe, understanding_model_file},
     patch::normalize_text,
     schema::build_grammar,
 };
 
 fn models_dir() -> Option<PathBuf> {
     let dir = PathBuf::from(std::env::var_os("FI_MODELS_DIR")?);
-    if !dir.join(WHISPER_MODEL).exists() || !dir.join(LLM_MODEL).exists() {
+    if !dir.join(speech_model_file(VoiceLanguage::En)).exists()
+        || !dir.join(understanding_model_file()).exists()
+    {
         eprintln!("FI_MODELS_DIR lacks the models; skipping");
         return None;
     }
@@ -58,6 +61,7 @@ fn expense_request() -> FillRequest {
         today: NaiveDate::from_ymd_opt(2026, 9, 28).unwrap(),
         now: NaiveTime::from_hms_opt(12, 0, 0).unwrap(),
         utc_offset_minutes: 0,
+        language: VoiceLanguage::En,
     }
 }
 
@@ -65,8 +69,9 @@ fn expense_request() -> FillRequest {
 fn whisper_transcribes_the_fixture() {
     let Some(dir) = models_dir() else { return };
     let text = transcribe(
-        &dir.join(WHISPER_MODEL),
+        &dir.join(speech_model_file(VoiceLanguage::En)),
         &fixture("lunch.wav"),
+        VoiceLanguage::En,
         &CancelFlag::default(),
     )
     .unwrap();
@@ -84,7 +89,12 @@ fn silence_is_no_speech_without_a_model() {
     // The energy gate rejects silence before any model is touched.
     let missing = PathBuf::from("/nonexistent/model.bin");
     assert_eq!(
-        transcribe(&missing, &fixture("silence.wav"), &CancelFlag::default()),
+        transcribe(
+            &missing,
+            &fixture("silence.wav"),
+            VoiceLanguage::En,
+            &CancelFlag::default()
+        ),
         Err(VoiceError::NoSpeech)
     );
 }
@@ -94,11 +104,27 @@ fn whisper_silence_is_no_speech() {
     let Some(dir) = models_dir() else { return };
     assert_eq!(
         transcribe(
-            &dir.join(WHISPER_MODEL),
+            &dir.join(speech_model_file(VoiceLanguage::En)),
             &fixture("silence.wav"),
+            VoiceLanguage::En,
             &CancelFlag::default()
         ),
         Err(VoiceError::NoSpeech)
+    );
+}
+
+#[test]
+fn spanish_speech_model_missing_fails_to_load() {
+    let dir = tempdir().join("no-spanish");
+    std::fs::create_dir_all(&dir).unwrap();
+    assert_eq!(
+        transcribe(
+            &dir.join(speech_model_file(VoiceLanguage::Es)),
+            &fixture("lunch.wav"),
+            VoiceLanguage::Es,
+            &CancelFlag::default()
+        ),
+        Err(VoiceError::ModelLoadFailed)
     );
 }
 
@@ -132,7 +158,8 @@ fn tempdir() -> PathBuf {
 #[test]
 fn llama_output_follows_the_grammar() {
     let Some(dir) = models_dir() else { return };
-    let mut runner = LlamaRunner::load(&dir.join(LLM_MODEL), CancelFlag::default()).unwrap();
+    let mut runner =
+        LlamaRunner::load(&dir.join(understanding_model_file()), CancelFlag::default()).unwrap();
     let request = expense_request();
     let mut engine = VoiceEngine::new();
     let transcript = "Lunch at Nando's, twelve fifty, food, yesterday.";
@@ -153,7 +180,8 @@ fn llama_output_follows_the_grammar() {
 fn cancel_stops_generation() {
     let Some(dir) = models_dir() else { return };
     let cancel = CancelFlag::default();
-    let mut runner = LlamaRunner::load(&dir.join(LLM_MODEL), cancel.clone()).unwrap();
+    let mut runner =
+        LlamaRunner::load(&dir.join(understanding_model_file()), cancel.clone()).unwrap();
     cancel.cancel();
     let request = expense_request();
     assert_eq!(

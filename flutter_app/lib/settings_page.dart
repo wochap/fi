@@ -201,9 +201,18 @@ class _SettingsPageState extends State<SettingsPage>
 }
 
 /// The interface language (mocks 8a, 8b): a dropdown on desktop, a radio list
-/// on Android.
-class _LanguageSection extends StatelessWidget {
+/// on Android. With on-device voice, a line or offer about voice input
+/// follows the choices (mocks 8b, 8c).
+class _LanguageSection extends StatefulWidget {
   const _LanguageSection();
+
+  @override
+  State<_LanguageSection> createState() => _LanguageSectionState();
+}
+
+class _LanguageSectionState extends State<_LanguageSection> {
+  /// The language code whose speech model offer was dismissed.
+  String? _offerDismissedFor;
 
   static Key _optionKey(AppLanguage language) => Key(
     'language-option-${language == AppLanguage.system ? 'system' : language.code}',
@@ -229,6 +238,10 @@ class _LanguageSection extends StatelessWidget {
       AppLanguage.spanish => languageEndonym('es'),
     };
 
+    final services = VoiceScope.of(context);
+    final voice = PlatformScope.of(context).onDeviceVoice && services != null
+        ? _voice(services)
+        : null;
     if (!PlatformScope.of(context).android) {
       return NocturneCard(
         key: const Key('settings-language'),
@@ -255,6 +268,7 @@ class _LanguageSection extends StatelessWidget {
                   ),
               ],
             ),
+            if (voice != null) ...[const FadedRule(), voice],
           ],
         ),
       );
@@ -280,8 +294,116 @@ class _LanguageSection extends StatelessWidget {
                     ? Text(l.langSameAsPhone(systemName))
                     : null,
               ),
+            if (voice != null) ...[
+              const FadedRule(indent: 16),
+              Padding(padding: const EdgeInsets.all(16), child: voice),
+            ],
           ],
         ),
+      ),
+    );
+  }
+
+  /// The voice input line, or the offer to download the speech model the
+  /// app language needs.
+  Widget _voice(VoiceServices services) => ListenableBuilder(
+    listenable: Listenable.merge([
+      services.models,
+      services.languageListenable,
+    ]),
+    builder: (context, _) {
+      final l = context.l10n;
+      final lang = services.language;
+      final status = services.models.status;
+      final muted = TextStyle(fontSize: 13, color: Nocturne.muted(.6));
+      if (status.kind == ModelStatusKindDto.ready) {
+        return Text(
+          l.langVoiceReady(lang),
+          key: const Key('language-voice-line'),
+          style: muted,
+        );
+      }
+      if (!speechModelMissing(status) || _offerDismissedFor == lang) {
+        return Text(
+          l.langVoiceFollows,
+          key: const Key('language-voice-line'),
+          style: muted,
+        );
+      }
+      int sizeOf(ModelRoleDto role) =>
+          status.files
+              .where((file) => file.role == role)
+              .firstOrNull
+              ?.sizeBytes ??
+          0;
+      return Container(
+        key: const Key('language-voice-offer'),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Nocturne.bg,
+          borderRadius: BorderRadius.circular(Nocturne.radius),
+          border: Border.all(color: Nocturne.accent700),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: 6,
+          children: [
+            Text(
+              l.langVoiceOfferTitle(
+                lang,
+                formatBytes(sizeOf(ModelRoleDto.speech)),
+              ),
+            ),
+            Text(
+              l.langVoiceOfferBody(
+                formatBytes(sizeOf(ModelRoleDto.understanding)),
+              ),
+              style: muted,
+            ),
+            OverflowBar(
+              alignment: MainAxisAlignment.end,
+              spacing: 8,
+              children: [
+                TextButton(
+                  key: const Key('language-voice-offer-later'),
+                  onPressed: () => setState(() => _offerDismissedFor = lang),
+                  child: Text(l.voiceNotNow),
+                ),
+                FilledButton(
+                  key: const Key('language-voice-offer-download'),
+                  onPressed: () => unawaited(
+                    _runModelAction(context, services.models.start),
+                  ),
+                  child: Text(l.langVoiceDownload),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    },
+  );
+}
+
+/// Runs a model action, reporting a [ModelErrorDto] in a snackbar.
+Future<void> _runModelAction(
+  BuildContext context,
+  Future<void> Function() action,
+) async {
+  final messenger = ScaffoldMessenger.maybeOf(context);
+  final l = context.l10n;
+  try {
+    await action();
+  } on ModelErrorDto catch (error) {
+    messenger?.showSnackBar(
+      SnackBar(
+        content: Text(switch (error.kind) {
+          ModelErrorKindDto.notEnoughStorage => l.settingsNotEnoughStorage(
+            formatBytes(error.neededBytes ?? 0),
+          ),
+          ModelErrorKindDto.voiceTurnActive => l.settingsFinishVoiceFirst,
+          _ => l.settingsCouldntChangeModels,
+        }),
       ),
     );
   }
@@ -337,28 +459,8 @@ class _VoiceInputSection extends StatelessWidget {
 
   VoiceModels get models => services.models;
 
-  Future<void> _run(
-    BuildContext context,
-    Future<void> Function() action,
-  ) async {
-    final messenger = ScaffoldMessenger.maybeOf(context);
-    final l = context.l10n;
-    try {
-      await action();
-    } on ModelErrorDto catch (error) {
-      messenger?.showSnackBar(
-        SnackBar(
-          content: Text(switch (error.kind) {
-            ModelErrorKindDto.notEnoughStorage => l.settingsNotEnoughStorage(
-              formatBytes(error.neededBytes ?? 0),
-            ),
-            ModelErrorKindDto.voiceTurnActive => l.settingsFinishVoiceFirst,
-            _ => l.settingsCouldntChangeModels,
-          }),
-        ),
-      );
-    }
-  }
+  Future<void> _run(BuildContext context, Future<void> Function() action) =>
+      _runModelAction(context, action);
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
@@ -373,6 +475,23 @@ class _VoiceInputSection extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            if (speechModelMissing(status))
+              if (status.files
+                      .where((file) => file.role == ModelRoleDto.speech)
+                      .firstOrNull
+                  case final speech?)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                  child: Text(
+                    context.l10n.voiceNeedsSpeechModel(
+                      languageEndonym(status.language),
+                      status.language,
+                      formatBytes(speech.sizeBytes),
+                    ),
+                    key: const Key('settings-voice-needs-model'),
+                    style: TextStyle(fontSize: 13, color: Nocturne.muted(.7)),
+                  ),
+                ),
             Padding(
               padding: const EdgeInsets.all(16),
               child: VoiceModelsCard(
@@ -440,7 +559,7 @@ class _VoiceInputSection extends StatelessWidget {
                 onTap: () async {
                   if (!await showDeleteModelsDialog(
                     context,
-                    status.totalBytes,
+                    modelDeleteBytes(status),
                   )) {
                     return;
                   }

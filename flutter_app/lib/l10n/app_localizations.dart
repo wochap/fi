@@ -3539,7 +3539,7 @@ abstract class AppLocalizations {
   /// Voice privacy line
   ///
   /// In en, this message translates to:
-  /// **'Audio is processed on this device and never saved. English only for now.'**
+  /// **'Audio is processed on this device and never saved.'**
   String get voicePrivacyLine;
 
   /// Primer line
@@ -3572,11 +3572,11 @@ abstract class AppLocalizations {
   /// **'Listening'**
   String get voiceListening;
 
-  /// Prefix before an example utterance
+  /// Listening hint with an example utterance.
   ///
   /// In en, this message translates to:
-  /// **'Try: '**
-  String get voiceTry;
+  /// **'Try: “{example}”'**
+  String voiceTry(String example);
 
   /// Listening hint
   ///
@@ -4681,6 +4681,108 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Use units like {example}'**
   String inputDurationUnparsed(String example);
+
+  /// Spoken and shown line listing required fields still empty.
+  ///
+  /// In en, this message translates to:
+  /// **'Still need: {names}'**
+  String voiceStillNeed(String names);
+
+  /// Spoken line after a voice turn fills fields.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 field filled.} other{{count} fields filled.}} Tap Save record when ready.'**
+  String voiceSpokenFilled(int count);
+
+  /// Name of a speech model; language is a language code.
+  ///
+  /// In en, this message translates to:
+  /// **'{language, select, es{Whisper Base (Spanish)} other{Whisper Base (English)}}'**
+  String modelSpeechLabel(String language);
+
+  /// Shown instead of a size for a model already stored.
+  ///
+  /// In en, this message translates to:
+  /// **'On this phone'**
+  String get modelOnThisPhone;
+
+  /// Download offer when part of the set is stored; language is the language name.
+  ///
+  /// In en, this message translates to:
+  /// **'{language} · {size} to download, one time. Everything runs on this phone.'**
+  String modelOfferToDownload(String language, String size);
+
+  /// Status tag when some models of the set are stored.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 model missing} other{{count} models missing}}'**
+  String modelMissingTag(int count);
+
+  /// Model card summary when some models are stored.
+  ///
+  /// In en, this message translates to:
+  /// **'{language} · {size} to download'**
+  String modelSummaryToDownload(String language, String size);
+
+  /// Label above speech models of other languages.
+  ///
+  /// In en, this message translates to:
+  /// **'Other languages'**
+  String get modelOtherLanguages;
+
+  /// Delete speech model dialog title.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete this speech model?'**
+  String get modelDeleteSpeechTitle;
+
+  /// Delete speech model dialog body.
+  ///
+  /// In en, this message translates to:
+  /// **'Frees {size}. Voice fill in {language} needs it again.'**
+  String modelDeleteSpeechBody(String size, String language);
+
+  /// Button that keeps the speech model.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep model'**
+  String get modelKeepModel;
+
+  /// Settings line when the speech model of the voice language is missing; language is the language name, lang its code.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice input: {language} — needs {lang, select, es{Spanish} other{English}} speech model ({size})'**
+  String voiceNeedsSpeechModel(String language, String lang, String size);
+
+  /// Language section line about voice input.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice input follows the app language'**
+  String get langVoiceFollows;
+
+  /// Language section line when the voice models are ready.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice input follows the app language · {lang, select, es{Spanish} other{English}} models ready'**
+  String langVoiceReady(String lang);
+
+  /// Language section offer title.
+  ///
+  /// In en, this message translates to:
+  /// **'Download {lang, select, es{Spanish} other{English}} speech model · {size}'**
+  String langVoiceOfferTitle(String lang, String size);
+
+  /// Language section offer body.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice input follows the app language. Understanding ({size}) is already on this phone.'**
+  String langVoiceOfferBody(String size);
+
+  /// Button that downloads the speech model the app language needs.
+  ///
+  /// In en, this message translates to:
+  /// **'Download'**
+  String get langVoiceDownload;
 }
 
 class _AppLocalizationsDelegate

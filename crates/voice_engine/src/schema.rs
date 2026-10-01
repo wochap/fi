@@ -14,7 +14,7 @@ use std::{
 use app_core::schema::{FieldDefinition, FieldType};
 use chrono::Datelike;
 
-use crate::{ChoiceOption, FieldKind, FillRequest, VoiceField};
+use crate::{ChoiceOption, FieldKind, FillRequest, VoiceField, VoiceLanguage};
 
 const CACHE_SIZE: usize = 8;
 
@@ -224,6 +224,11 @@ pub fn build_prompt(fields: &[VoiceField], request: &FillRequest, transcript: &s
         }
         user.push('\n');
     }
+    if request.language == VoiceLanguage::Es {
+        user.push_str(
+            "Transcript language: Spanish. Copy value and evidence words exactly as spoken in Spanish; do not translate.\n",
+        );
+    }
     user.push_str(&format!("Transcript: {}", transcript.trim()));
     format!(
         "<|im_start|>system\n{SYSTEM}<|im_end|>\n<|im_start|>user\n{user}<|im_end|>\n<|im_start|>assistant\n"
@@ -344,5 +349,16 @@ mod tests {
         assert!(prompt.contains("Transcript: Taxi home<|im_end|>"));
         assert!(prompt.contains("null"));
         assert!(prompt.ends_with("<|im_start|>assistant\n"));
+        assert!(!prompt.contains("Transcript language"));
+    }
+
+    #[test]
+    fn spanish_prompt_says_not_to_translate() {
+        let mut request = request(expense_fields());
+        request.language = VoiceLanguage::Es;
+        let prompt = build_prompt(&request.fields, &request, "Taxi a casa");
+        assert!(prompt.contains(
+            "Transcript language: Spanish. Copy value and evidence words exactly as spoken in Spanish; do not translate.\nTranscript: Taxi a casa"
+        ));
     }
 }

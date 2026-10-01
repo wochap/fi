@@ -13,7 +13,7 @@ use std::{
     io::{self, Read, Write},
     path::{Path, PathBuf},
     sync::{
-        Arc, Mutex,
+        Arc, Mutex, RwLock,
         atomic::{AtomicBool, AtomicU8, Ordering},
     },
     thread::JoinHandle,
@@ -85,6 +85,39 @@ impl ModelManifest {
     #[must_use]
     pub fn total_size(&self) -> u64 {
         self.files.iter().map(|file| file.size).sum()
+    }
+
+    /// The speech file for a language.
+    #[must_use]
+    pub fn speech_file(&self, language: &str) -> Option<&ModelFile> {
+        self.files.iter().find(|file| {
+            file.role == ModelRole::Speech && file.language.as_deref() == Some(language)
+        })
+    }
+
+    /// Whether the manifest has a speech file for a language.
+    #[must_use]
+    pub fn has_language(&self, language: &str) -> bool {
+        self.speech_file(language).is_some()
+    }
+
+    /// Files a language needs: shared files and that language's files, in
+    /// manifest order.
+    #[must_use]
+    pub fn language_set(&self, language: &str) -> Vec<&ModelFile> {
+        self.files
+            .iter()
+            .filter(|file| file.language.as_deref().is_none_or(|code| code == language))
+            .collect()
+    }
+
+    /// Sum of the sizes of a language's set.
+    #[must_use]
+    pub fn set_size(&self, language: &str) -> u64 {
+        self.language_set(language)
+            .iter()
+            .map(|file| file.size)
+            .sum()
     }
 }
 
@@ -196,12 +229,44 @@ pub struct ModelFileDetail {
 pub struct ModelStore {
     root: PathBuf,
     manifest: ModelManifest,
+    /// Active voice language code; selects the speech file of the set.
+    language: Arc<RwLock<String>>,
 }
 
 impl ModelStore {
     #[must_use]
     pub fn new(root: PathBuf, manifest: ModelManifest) -> Self {
-        Self { root, manifest }
+        Self {
+            root,
+            manifest,
+            language: Arc::new(RwLock::new("en".into())),
+        }
+    }
+
+    /// The active language code.
+    #[must_use]
+    pub fn language(&self) -> String {
+        self.language.read().expect("language lock").clone()
+    }
+
+    fn set_language_code(&self, code: &str) {
+        *self.language.write().expect("language lock") = code.into();
+    }
+
+    /// Files of the active language's set, in manifest order.
+    #[must_use]
+    pub fn active_files(&self) -> Vec<ModelFile> {
+        self.manifest
+            .language_set(&self.language())
+            .into_iter()
+            .cloned()
+            .collect()
+    }
+
+    /// Total size of the active language's set.
+    #[must_use]
+    pub fn set_size(&self) -> u64 {
+        self.manifest.set_size(&self.language())
     }
 
     #[must_use]
@@ -247,13 +312,25 @@ impl ModelStore {
         fs::rename(temp, path)
     }
 
+    fn unmark_verified(&self, name: &str) -> io::Result<()> {
+        let mut verified = self.verified_map();
+        if verified.remove(name).is_none() {
+            return Ok(());
+        }
+        let path = self.version_dir().join(VERIFIED_FILE);
+        let temp = self.version_dir().join(format!("{VERIFIED_FILE}.tmp"));
+        fs::write(
+            &temp,
+            serde_json::to_vec(&verified).map_err(io::Error::other)?,
+        )?;
+        fs::rename(temp, path)
+    }
+
     fn unverified_files(&self) -> Vec<ModelFile> {
         let verified = self.verified_map();
-        self.manifest
-            .files
-            .iter()
+        self.active_files()
+            .into_iter()
             .filter(|file| !self.is_verified(&verified, file))
-            .cloned()
             .collect()
     }
 
@@ -269,12 +346,11 @@ impl ModelStore {
             .unwrap_or(0)
     }
 
-    /// Verified bytes plus partial bytes, over the whole set.
+    /// Verified bytes plus partial bytes, over the active set.
     #[must_use]
     pub fn done_bytes(&self) -> u64 {
         let verified = self.verified_map();
-        self.manifest
-            .files
+        self.active_files()
             .iter()
             .map(|file| {
                 if self.is_verified(&verified, file) {
@@ -289,23 +365,24 @@ impl ModelStore {
     fn progress(&self, seconds_left: Option<u64>) -> DownloadProgress {
         DownloadProgress {
             done_bytes: self.done_bytes(),
-            total_bytes: self.manifest.total_size(),
+            total_bytes: self.set_size(),
             seconds_left,
         }
     }
 
-    /// Status as the filesystem shows it: ready, paused (bytes on disk) or not downloaded.
+    /// Status as the filesystem shows it: ready, paused (partial bytes of
+    /// an unverified file) or not downloaded.
     #[must_use]
     pub fn derive_status(&self) -> ModelStatus {
-        let remaining = self.remaining_bytes();
+        let unverified = self.unverified_files();
+        let remaining: u64 = unverified.iter().map(|file| file.size).sum();
         if remaining == 0 {
             return ModelStatus::Ready {
-                size_on_disk: self.manifest.total_size(),
+                size_on_disk: self.set_size(),
             };
         }
-        let progress = self.progress(None);
-        if progress.done_bytes > 0 {
-            ModelStatus::Paused(progress)
+        if unverified.iter().any(|file| self.part_bytes(file) > 0) {
+            ModelStatus::Paused(self.progress(None))
         } else {
             ModelStatus::NotDownloaded {
                 download_bytes: remaining,
@@ -331,8 +408,7 @@ impl ModelStore {
             ModelStatus::Downloading(_) | ModelStatus::Reconnecting(_)
         );
         let mut first_unverified = true;
-        self.manifest
-            .files
+        self.active_files()
             .iter()
             .map(|file| {
                 let ready = self.is_verified(&verified, file);
@@ -372,6 +448,118 @@ impl ModelStore {
             .collect()
     }
 
+    /// Speech files of other languages that are verified (`Ready`) or have
+    /// partial bytes (`Waiting`).
+    #[must_use]
+    pub fn other_speech_files(&self) -> Vec<ModelFileDetail> {
+        let verified = self.verified_map();
+        let language = self.language();
+        self.manifest
+            .files
+            .iter()
+            .filter(|file| {
+                file.role == ModelRole::Speech
+                    && file
+                        .language
+                        .as_deref()
+                        .is_some_and(|code| code != language)
+            })
+            .filter_map(|file| {
+                let (state, stored_bytes) = if self.is_verified(&verified, file) {
+                    (ModelFileState::Ready, file.size)
+                } else {
+                    let part = self.part_bytes(file);
+                    if part == 0 {
+                        return None;
+                    }
+                    (ModelFileState::Waiting, part)
+                };
+                Some(ModelFileDetail {
+                    name: file.name.clone(),
+                    label: file.label.clone(),
+                    role: file.role,
+                    language: file.language.clone(),
+                    size: file.size,
+                    stored_bytes,
+                    state,
+                })
+            })
+            .collect()
+    }
+
+    /// Whether shared files must stay because another language's speech
+    /// file is verified.
+    fn shared_files_in_use(&self) -> bool {
+        self.other_speech_files()
+            .iter()
+            .any(|file| file.state == ModelFileState::Ready)
+    }
+
+    /// Removes the active set's partial bytes, its speech file, and its
+    /// shared files unless another language's speech file is verified.
+    pub fn delete_language_set(&self) -> io::Result<()> {
+        let keep_shared = self.shared_files_in_use();
+        for file in self.active_files() {
+            remove_if_present(&self.part_path(&file))?;
+            if file.language.is_some() || !keep_shared {
+                remove_if_present(&self.file_path(&file))?;
+                self.unmark_verified(&file.name)?;
+            }
+        }
+        self.remove_version_dir_if_empty()
+    }
+
+    /// Removes the version directory once it holds no model data.
+    fn remove_version_dir_if_empty(&self) -> io::Result<()> {
+        let Ok(entries) = fs::read_dir(self.version_dir()) else {
+            return Ok(());
+        };
+        let holds_data = entries.flatten().any(|entry| {
+            let name = entry.file_name();
+            name != VERIFIED_FILE && name != format!("{VERIFIED_FILE}.tmp").as_str()
+        });
+        if holds_data {
+            return Ok(());
+        }
+        match fs::remove_dir_all(self.version_dir()) {
+            Err(error) if error.kind() != io::ErrorKind::NotFound => Err(error),
+            _ => Ok(()),
+        }
+    }
+
+    /// Bytes `delete_language_set` would remove.
+    #[must_use]
+    pub fn language_set_deletable_bytes(&self) -> u64 {
+        let keep_shared = self.shared_files_in_use();
+        self.active_files()
+            .iter()
+            .map(|file| {
+                let mut bytes = self.part_bytes(file);
+                if file.language.is_some() || !keep_shared {
+                    bytes += file_len(&self.file_path(file));
+                }
+                bytes
+            })
+            .sum()
+    }
+
+    /// Removes one language's speech file and its partial bytes, returning
+    /// the bytes removed.
+    pub fn delete_speech_file(&self, language: &str) -> io::Result<u64> {
+        let Some(file) = self.manifest.speech_file(language).cloned() else {
+            return Ok(0);
+        };
+        let file_path = self.file_path(&file);
+        let part_path = self.part_path(&file);
+        let freed = file_len(&file_path) + file_len(&part_path);
+        remove_if_present(&file_path)?;
+        remove_if_present(&part_path)?;
+        if self.version_dir().exists() {
+            self.unmark_verified(&file.name)?;
+        }
+        Ok(freed)
+    }
+
     /// Removes every model file and partial download of every manifest
     /// version, returning the bytes freed.
     pub fn delete_all(&self) -> io::Result<u64> {
@@ -381,6 +569,17 @@ impl ModelStore {
             Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(0),
             Err(error) => Err(error),
         }
+    }
+}
+
+fn file_len(path: &Path) -> u64 {
+    fs::metadata(path).map(|meta| meta.len()).unwrap_or(0)
+}
+
+fn remove_if_present(path: &Path) -> io::Result<()> {
+    match fs::remove_file(path) {
+        Err(error) if error.kind() != io::ErrorKind::NotFound => Err(error),
+        _ => Ok(()),
     }
 }
 
@@ -613,11 +812,39 @@ impl ModelManager {
         self.signal(PAUSE);
     }
 
-    /// Stops and deletes all downloaded data: verified files and partial bytes.
+    /// Selects the voice language's model set. An unknown code selects
+    /// English. A running download stops first, keeping its stored bytes.
+    pub fn set_language(&self, code: &str) {
+        let store = &self.inner.store;
+        let code = if store.manifest().has_language(code) {
+            code
+        } else {
+            "en"
+        };
+        if store.language() == code {
+            return;
+        }
+        self.stop_worker();
+        store.set_language_code(code);
+        self.inner.status.send_replace(store.derive_status());
+    }
+
+    /// Takes a live worker out of the slot, pauses it and joins it outside
+    /// the lock.
+    fn stop_worker(&self) {
+        let old = self.inner.worker.lock().expect("worker lock").take();
+        if let Some(worker) = old {
+            worker.control.store(PAUSE, Ordering::SeqCst);
+            let _ = worker.handle.join();
+        }
+    }
+
+    /// Stops and deletes the active set's data: its partial bytes, its
+    /// speech file, and shared files no other language still uses.
     pub fn cancel_download(&self) {
         self.signal(CANCEL);
         self.join_worker();
-        let _ = self.inner.store.delete_all();
+        let _ = self.inner.store.delete_language_set();
         self.inner
             .status
             .send_replace(self.inner.store.derive_status());
@@ -656,10 +883,32 @@ impl ModelManager {
         Ok(freed)
     }
 
-    /// Deletes the models and starts a fresh download.
+    /// Deletes the active set and starts a fresh download.
     pub fn redownload_models(&self) -> Result<(), ModelError> {
-        self.delete_models()?;
+        if self.inner.voice_turn_active.load(Ordering::SeqCst) {
+            return Err(ModelError::VoiceTurnActive);
+        }
+        self.signal(CANCEL);
+        self.join_worker();
+        self.inner.store.delete_language_set()?;
+        self.inner
+            .status
+            .send_replace(self.inner.store.derive_status());
         self.start_download()
+    }
+
+    /// Removes one language's speech model, returning the bytes freed.
+    pub fn delete_speech_model(&self, language: &str) -> Result<u64, ModelError> {
+        if self.inner.voice_turn_active.load(Ordering::SeqCst) {
+            return Err(ModelError::VoiceTurnActive);
+        }
+        let store = &self.inner.store;
+        if language == store.language() {
+            self.stop_worker();
+        }
+        let freed = store.delete_speech_file(language)?;
+        self.inner.status.send_replace(store.derive_status());
+        Ok(freed)
     }
 
     /// Blocks until the running download, if any, stops. For tests and shutdown.
@@ -802,7 +1051,7 @@ impl Reporter<'_> {
 
     fn progress(&self, file_done: u64) -> DownloadProgress {
         let done_bytes = self.base + file_done;
-        let total_bytes = self.inner.store.manifest().total_size();
+        let total_bytes = self.inner.store.set_size();
         let window = done_bytes.saturating_sub(self.window_start_bytes);
         let elapsed = self.started.elapsed().as_secs_f64();
         let seconds_left = (window > 0 && elapsed > 0.0).then(|| {
@@ -1183,7 +1432,7 @@ mod tests {
     #[test]
     fn bundled_manifest_parses_with_pinned_files() {
         let manifest = ModelManifest::bundled();
-        assert_eq!(manifest.files.len(), 2);
+        assert_eq!(manifest.files.len(), 3);
         for file in &manifest.files {
             assert!(file.url.starts_with("https://huggingface.co/"));
             assert!(!file.url.contains("/main/"), "{} is not pinned", file.url);
@@ -1191,14 +1440,20 @@ mod tests {
             assert!(file.size > 0);
         }
         assert_eq!(manifest.files[0].name, "ggml-base.en.bin");
-        assert_eq!(manifest.files[1].name, "qwen2.5-1.5b-instruct-q5_k_m.gguf");
+        assert_eq!(manifest.files[1].name, "ggml-base.bin");
+        assert_eq!(manifest.files[2].name, "qwen2.5-1.5b-instruct-q5_k_m.gguf");
         assert_eq!(manifest.files[0].label, "Whisper Base (English)");
         assert_eq!(manifest.files[0].role, ModelRole::Speech);
         assert_eq!(manifest.files[0].language.as_deref(), Some("en"));
-        assert_eq!(manifest.files[1].label, "Qwen2.5 1.5B Instruct");
-        assert_eq!(manifest.files[1].role, ModelRole::Understanding);
-        assert_eq!(manifest.files[1].language, None);
-        assert_eq!(manifest.total_size(), 1_433_458_515);
+        assert_eq!(manifest.files[1].label, "Whisper Base (Spanish)");
+        assert_eq!(manifest.files[1].role, ModelRole::Speech);
+        assert_eq!(manifest.files[1].language.as_deref(), Some("es"));
+        assert_eq!(manifest.files[1].size, 147_951_465);
+        assert_eq!(manifest.files[2].label, "Qwen2.5 1.5B Instruct");
+        assert_eq!(manifest.files[2].role, ModelRole::Understanding);
+        assert_eq!(manifest.files[2].language, None);
+        assert_eq!(manifest.set_size("en"), 1_433_458_515);
+        assert_eq!(manifest.set_size("es"), 1_433_445_769);
     }
 
     #[test]
@@ -1317,6 +1572,22 @@ mod tests {
         assert_eq!(
             store.derive_status(),
             ModelStatus::Ready { size_on_disk: 40 }
+        );
+    }
+
+    #[test]
+    fn verified_shared_file_alone_is_not_downloaded() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut manifest = manifest("v1", &[10, 20, 30]);
+        manifest.files[1].role = ModelRole::Speech;
+        manifest.files[1].language = Some("es".into());
+        manifest.files[2].language = None;
+        let store = ModelStore::new(dir.path().to_path_buf(), manifest);
+        place_verified(&store, 2);
+        store.set_language_code("es");
+        assert_eq!(
+            store.derive_status(),
+            ModelStatus::NotDownloaded { download_bytes: 20 }
         );
     }
 

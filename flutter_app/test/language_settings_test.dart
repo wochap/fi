@@ -131,4 +131,94 @@ void main() {
       findsOneWidget,
     );
   });
+
+  group('voice input line', () {
+    FakeVoiceModels spanishMissing(FakeVoiceModels models) =>
+        models
+          ..statusByLanguage['es'] = modelStatusOf(
+            ModelStatusKindDto.notDownloaded,
+            language: 'es',
+            readyFiles: {'qwen2.5-1.5b-instruct-q5_k_m.gguf'},
+          );
+
+    Future<void> chooseSpanish(WidgetTester tester) async {
+      await tester.tap(find.byKey(const Key('language-option-es')));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('says the English models are ready', (tester) async {
+      await _openSettings(
+        tester,
+        capabilities: PlatformCapabilities.androidPhone,
+        size: const Size(390, 2400),
+        voice: fakeVoiceServices(),
+      );
+      expect(
+        find.text(
+          'Voice input follows the app language · English models ready',
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('choosing Español offers the Spanish speech model', (
+      tester,
+    ) async {
+      final models = spanishMissing(FakeVoiceModels());
+      await _openSettings(
+        tester,
+        capabilities: PlatformCapabilities.androidPhone,
+        size: const Size(390, 2400),
+        voice: fakeVoiceServices(models: models),
+      );
+      await chooseSpanish(tester);
+      expect(find.byKey(const Key('language-voice-offer')), findsOneWidget);
+      expect(
+        find.text('Descargar modelo de voz en español · 148 MB'),
+        findsOneWidget,
+      );
+      expect(
+        find.text(
+          'La entrada de voz sigue el idioma de la app. '
+          'El modelo de comprensión (1,29 GB) ya está en este teléfono.',
+        ),
+        findsOneWidget,
+      );
+      expect(models.calls, contains('language:es'));
+
+      await tester.tap(find.byKey(const Key('language-voice-offer-download')));
+      await tester.pumpAndSettle();
+      expect(models.calls, contains('start'));
+    });
+
+    testWidgets('Ahora no hides the offer', (tester) async {
+      final models = spanishMissing(FakeVoiceModels());
+      await _openSettings(
+        tester,
+        capabilities: PlatformCapabilities.androidPhone,
+        size: const Size(390, 2400),
+        voice: fakeVoiceServices(models: models),
+      );
+      await chooseSpanish(tester);
+      await tester.tap(find.byKey(const Key('language-voice-offer-later')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('language-voice-offer')), findsNothing);
+      expect(
+        find.text('La entrada de voz sigue el idioma de la app'),
+        findsOneWidget,
+      );
+      expect(find.text('Ajustes'), findsWidgets);
+      expect(models.calls, isNot(contains('start')));
+    });
+
+    testWidgets('desktop shows no voice line', (tester) async {
+      await _openSettings(
+        tester,
+        capabilities: PlatformCapabilities.desktop,
+        size: const Size(1240, 900),
+        voice: fakeVoiceServices(),
+      );
+      expect(find.byKey(const Key('language-voice-line')), findsNothing);
+    });
+  });
 }

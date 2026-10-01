@@ -122,7 +122,11 @@ final class SlowClosingCapture extends FakeCapture {
   }
 }
 
-const request = VoiceFillRequest(fields: expenseFields, draft: {});
+const request = VoiceFillRequest(
+  fields: expenseFields,
+  draft: {},
+  language: 'en',
+);
 
 RustVoiceEngine engineWith(FakeCapture capture, FakeNative native) =>
     RustVoiceEngine(
@@ -316,6 +320,7 @@ void main() {
           'date': date(20723),
           'description': text(''),
         },
+        language: 'en',
       ),
       now: DateTime(2026, 9, 28),
     );
@@ -323,6 +328,16 @@ void main() {
       {for (final value in dto.draft) value.fieldId: value.text},
       {'amount': '-3.05', 'category': 'Food', 'date': '2026-09-27'},
     );
+  });
+
+  test('the voice language is sent', () {
+    const spanish = VoiceFillRequest(
+      fields: expenseFields,
+      draft: {},
+      language: 'es',
+    );
+    expect(requestDto(spanish, now: DateTime(2026, 9, 28)).language, 'es');
+    expect(requestDto(request, now: DateTime(2026, 9, 28)).language, 'en');
   });
 
   group('selection and lifecycle', () {

@@ -7,15 +7,20 @@ use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextPar
 
 use super::{CancelFlag, THREADS, check_model_file, load_failure, run_failure};
 use crate::{
-    VoiceError,
+    VoiceError, VoiceLanguage,
     audio::{clean_transcript, pcm16_to_f32, trim_silence},
 };
 
 /// ggml model files start with "lmgg" (little-endian `ggml`).
 const MAGIC: &[&[u8]] = &[b"lmgg", b"ggml"];
 
-/// Transcribes 16 kHz mono PCM16. `NoSpeech` for silence or an empty transcript.
-pub fn transcribe(model: &Path, pcm: &[i16], cancel: &CancelFlag) -> Result<String, VoiceError> {
+/// Transcribes 16 kHz mono PCM16 in a language. `NoSpeech` for silence or an empty transcript.
+pub fn transcribe(
+    model: &Path,
+    pcm: &[i16],
+    language: VoiceLanguage,
+    cancel: &CancelFlag,
+) -> Result<String, VoiceError> {
     let samples = pcm16_to_f32(pcm);
     let speech = trim_silence(&samples).ok_or(VoiceError::NoSpeech)?;
     let size = check_model_file(model, MAGIC)?;
@@ -29,7 +34,7 @@ pub fn transcribe(model: &Path, pcm: &[i16], cancel: &CancelFlag) -> Result<Stri
         .create_state()
         .map_err(|error| run_failure("whisper state", error))?;
     let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
-    params.set_language(Some("en"));
+    params.set_language(Some(language.code()));
     params.set_n_threads(THREADS);
     params.set_no_context(true);
     params.set_single_segment(true);

@@ -119,6 +119,9 @@ class VoiceFillRequestDto {
   final int minuteOfDay;
   final int utcOffsetMinutes;
 
+  /// The voice language code: "en" or "es". Anything else reads as English.
+  final String language;
+
   const VoiceFillRequestDto({
     required this.collectionId,
     required this.fields,
@@ -128,6 +131,7 @@ class VoiceFillRequestDto {
     required this.day,
     required this.minuteOfDay,
     required this.utcOffsetMinutes,
+    required this.language,
   });
 
   @override
@@ -139,7 +143,8 @@ class VoiceFillRequestDto {
       month.hashCode ^
       day.hashCode ^
       minuteOfDay.hashCode ^
-      utcOffsetMinutes.hashCode;
+      utcOffsetMinutes.hashCode ^
+      language.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -153,7 +158,8 @@ class VoiceFillRequestDto {
           month == other.month &&
           day == other.day &&
           minuteOfDay == other.minuteOfDay &&
-          utcOffsetMinutes == other.utcOffsetMinutes;
+          utcOffsetMinutes == other.utcOffsetMinutes &&
+          language == other.language;
 }
 
 /// One live option of a Choice field.

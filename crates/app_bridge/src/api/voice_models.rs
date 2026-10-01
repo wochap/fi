@@ -137,30 +137,43 @@ pub struct ModelStatusDto {
     pub kind: ModelStatusKindDto,
     /// Bytes on disk over the whole set (verified plus partial).
     pub done_bytes: u64,
-    /// Sum of every manifest file.
+    /// Sum of the active language's set.
     pub total_bytes: u64,
     /// Sum of files not yet verified: the size a download offer shows.
     pub remaining_bytes: u64,
     pub seconds_left: Option<u64>,
     /// Set for `Failed`.
     pub error: Option<ModelErrorDto>,
-    /// Every manifest file in manifest order.
+    /// Every file of the active language's set, in manifest order.
     pub files: Vec<ModelFileDto>,
     /// Stored bytes already re-hashed; 0 unless verifying.
     pub checked_bytes: u64,
     /// Stored bytes being re-hashed; 0 unless verifying.
     pub checking_bytes: u64,
+    /// The active voice language code.
+    pub language: String,
+    /// Speech models of other languages that are stored or partly stored.
+    pub other_speech_models: Vec<ModelFileDto>,
+    /// Bytes a cancel would delete.
+    pub cancel_bytes: u64,
 }
 
 impl ModelStatusDto {
     fn from_core(status: ModelStatus, manager: &ModelManager) -> Self {
         let store = manager.store();
-        let total_bytes = store.manifest().total_size();
+        let total_bytes = store.set_size();
         let files: Vec<ModelFileDto> = store
             .file_details(&status)
             .into_iter()
             .map(ModelFileDto::from)
             .collect();
+        let language = store.language();
+        let other_speech_models: Vec<ModelFileDto> = store
+            .other_speech_files()
+            .into_iter()
+            .map(ModelFileDto::from)
+            .collect();
+        let cancel_bytes = store.language_set_deletable_bytes();
         let with_progress = |kind, progress: DownloadProgress, error| Self {
             kind,
             done_bytes: progress.done_bytes,
@@ -171,6 +184,9 @@ impl ModelStatusDto {
             files: files.clone(),
             checked_bytes: 0,
             checking_bytes: 0,
+            language: language.clone(),
+            other_speech_models: other_speech_models.clone(),
+            cancel_bytes,
         };
         match status {
             ModelStatus::NotDownloaded { download_bytes } => Self {
@@ -183,6 +199,9 @@ impl ModelStatusDto {
                 files,
                 checked_bytes: 0,
                 checking_bytes: 0,
+                language,
+                other_speech_models,
+                cancel_bytes,
             },
             ModelStatus::Downloading(progress) => {
                 with_progress(ModelStatusKindDto::Downloading, progress, None)
@@ -209,6 +228,9 @@ impl ModelStatusDto {
                 files,
                 checked_bytes: 0,
                 checking_bytes: 0,
+                language,
+                other_speech_models,
+                cancel_bytes,
             },
             ModelStatus::Failed { error, progress } => with_progress(
                 ModelStatusKindDto::Failed,
@@ -268,12 +290,26 @@ pub fn pause_model_download(models_dir: String) {
     manager(&models_dir).pause_download();
 }
 
-/// Stops the download and deletes all downloaded data.
+/// Selects the voice language's model set. An unknown code selects English.
+#[frb(sync)]
+pub fn set_model_language(models_dir: String, language: String) {
+    manager(&models_dir).set_language(&language);
+}
+
+/// Deletes one language's speech model, returning the bytes freed.
+pub fn delete_speech_model(models_dir: String, language: String) -> Result<u64, ModelErrorDto> {
+    manager(&models_dir)
+        .delete_speech_model(&language)
+        .map_err(ModelErrorDto::from)
+}
+
+/// Stops the download and deletes the active set's data, keeping shared
+/// models another language still uses.
 pub fn cancel_model_download(models_dir: String) {
     manager(&models_dir).cancel_download();
 }
 
-/// Deletes every model file, returning the bytes freed.
+/// Deletes every model file of every language, returning the bytes freed.
 pub fn delete_models(models_dir: String) -> Result<u64, ModelErrorDto> {
     manager(&models_dir)
         .delete_models()
@@ -357,6 +393,44 @@ mod tests {
                 ),
             ]
         );
+    }
+
+    #[test]
+    fn spanish_selects_its_speech_model() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().to_string_lossy().into_owned();
+        set_model_language(path.clone(), "es".into());
+        let status = model_status(path);
+        let files: Vec<_> = status
+            .files
+            .iter()
+            .map(|file| (file.label.as_str(), file.language.as_deref()))
+            .collect();
+        assert_eq!(
+            files,
+            [
+                ("Whisper Base (Spanish)", Some("es")),
+                ("Qwen2.5 1.5B Instruct", None),
+            ]
+        );
+        assert_eq!(status.total_bytes, 1_433_445_769);
+        assert_eq!(status.language, "es");
+        assert!(status.other_speech_models.is_empty());
+    }
+
+    #[test]
+    fn an_unknown_language_selects_english() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().to_string_lossy().into_owned();
+        set_model_language(path.clone(), "fr".into());
+        assert_eq!(model_status(path).language, "en");
+    }
+
+    #[test]
+    fn deleting_a_missing_speech_model_frees_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().to_string_lossy().into_owned();
+        assert_eq!(delete_speech_model(path, "es".into()), Ok(0));
     }
 
     #[test]

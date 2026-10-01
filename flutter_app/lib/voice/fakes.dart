@@ -17,6 +17,9 @@ final class FakeVoiceModels extends VoiceModels {
   var turnActive = false;
   final calls = <String>[];
 
+  /// The status [setLanguage] swaps in for a language code, when set.
+  final statusByLanguage = <String, ModelStatusDto>{};
+
   @override
   ModelStatusDto get status => _status;
 
@@ -66,6 +69,18 @@ final class FakeVoiceModels extends VoiceModels {
 
   @override
   void setVoiceTurnActive(bool active) => turnActive = active;
+
+  @override
+  Future<void> setLanguage(String code) async {
+    calls.add('language:$code');
+    status = statusByLanguage[code] ?? status;
+  }
+
+  @override
+  Future<int> deleteSpeechModel(String language) async {
+    calls.add('deleteSpeech:$language');
+    return 0;
+  }
 }
 
 final class FakeMicrophonePermission implements MicrophonePermission {
@@ -106,6 +121,7 @@ final class FakeSpeechOutput implements SpeechOutput {
 
   final bool instant;
   final spoken = <String>[];
+  final languages = <String>[];
   var stops = 0;
   Completer<void>? _speaking;
 
@@ -126,6 +142,9 @@ final class FakeSpeechOutput implements SpeechOutput {
     stops++;
     finish();
   }
+
+  @override
+  Future<void> setLanguage(String code) async => languages.add(code);
 }
 
 /// Services built from fakes, for tests and previews.

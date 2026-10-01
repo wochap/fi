@@ -13,7 +13,9 @@ mod imp {
 
     use voice_engine::{
         FillRequest, VoiceEngine, VoiceError,
-        native::{CancelFlag, LLM_MODEL, LlamaRunner, WHISPER_MODEL, transcribe},
+        native::{
+            CancelFlag, LlamaRunner, speech_model_file, transcribe, understanding_model_file,
+        },
     };
 
     use crate::api::voice::VoiceTurnEventDto;
@@ -59,7 +61,7 @@ mod imp {
     }
 
     pub fn prepare(models_dir: &str) {
-        let path = version_dir(models_dir).join(LLM_MODEL);
+        let path = version_dir(models_dir).join(understanding_model_file());
         if !path.exists() {
             return;
         }
@@ -80,25 +82,30 @@ mod imp {
         let dir = version_dir(models_dir);
         cancel_flag().reset();
         std::thread::spawn(move || {
-            let result =
-                transcribe(&dir.join(WHISPER_MODEL), &pcm, cancel_flag()).and_then(|transcript| {
-                    drop(pcm);
-                    emit(VoiceTurnEventDto::transcript(transcript.clone()));
-                    let mut slot = slot()
-                        .lock()
-                        .unwrap_or_else(|poisoned| poisoned.into_inner());
-                    if cancel_flag().is_cancelled() {
-                        return Err(VoiceError::Cancelled);
-                    }
-                    ensure_loaded(&mut slot, &dir.join(LLM_MODEL))?;
-                    let Slot { model, engine } = &mut *slot;
-                    let (_, runner) = model.as_mut().expect("loaded above");
-                    let outcome = engine.fill(runner, &transcript, &request);
-                    if outcome == Err(VoiceError::LowMemory) {
-                        *model = None;
-                    }
-                    outcome
-                });
+            let result = transcribe(
+                &dir.join(speech_model_file(request.language)),
+                &pcm,
+                request.language,
+                cancel_flag(),
+            )
+            .and_then(|transcript| {
+                drop(pcm);
+                emit(VoiceTurnEventDto::transcript(transcript.clone()));
+                let mut slot = slot()
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                if cancel_flag().is_cancelled() {
+                    return Err(VoiceError::Cancelled);
+                }
+                ensure_loaded(&mut slot, &dir.join(understanding_model_file()))?;
+                let Slot { model, engine } = &mut *slot;
+                let (_, runner) = model.as_mut().expect("loaded above");
+                let outcome = engine.fill(runner, &transcript, &request);
+                if outcome == Err(VoiceError::LowMemory) {
+                    *model = None;
+                }
+                outcome
+            });
             emit(match result {
                 Ok(outcome) => VoiceTurnEventDto::patch(outcome.patch),
                 Err(error) => VoiceTurnEventDto::failed(error),

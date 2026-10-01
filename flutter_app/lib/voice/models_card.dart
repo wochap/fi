@@ -16,6 +16,40 @@ String modelRoleName(AppLocalizations l, ModelRoleDto role) => switch (role) {
   ModelRoleDto.understanding => l.modelRoleUnderstanding,
 };
 
+/// A model's shown name: speech models are named by language in the UI
+/// language, other models by their manifest label.
+String modelDisplayLabel(AppLocalizations l, ModelFileDto f) =>
+    f.role == ModelRoleDto.speech
+    ? l.modelSpeechLabel(f.language ?? 'en')
+    : f.label;
+
+/// Bytes a full delete frees: the active set and other languages' speech
+/// models.
+int modelDeleteBytes(ModelStatusDto status) => [
+  ...status.files,
+  ...status.otherSpeechModels,
+].fold(0, (sum, file) => sum + file.storedBytes);
+
+/// Not downloaded while some models of the set are already stored.
+bool modelSetPartlyStored(ModelStatusDto status) =>
+    status.kind == ModelStatusKindDto.notDownloaded &&
+    status.files.any((file) => file.state == ModelFileStateDto.ready);
+
+/// The understanding model is stored but the voice language's speech model
+/// is not started, and no download runs: only the speech model is missing.
+bool speechModelMissing(ModelStatusDto status) {
+  final understanding = status.files
+      .where((file) => file.role == ModelRoleDto.understanding)
+      .firstOrNull;
+  final speech = status.files
+      .where((file) => file.role == ModelRoleDto.speech)
+      .firstOrNull;
+  return understanding?.state == ModelFileStateDto.ready &&
+      speech?.state == ModelFileStateDto.waiting &&
+      speech?.storedBytes == 0 &&
+      !status.transferring;
+}
+
 /// The models' language as shown in the UI; null covers all languages.
 String modelLanguageName(AppLocalizations l, String? code) =>
     code == null ? l.modelAllLanguages : languageEndonym(code);
@@ -69,6 +103,23 @@ Future<bool> showDeleteModelsDialog(BuildContext context, int sizeBytes) =>
       destructiveKey: const Key('confirm-delete-model'),
       safe: context.l10n.modelKeepModels,
     );
+
+/// Asks before deleting one language's speech model.
+Future<bool> showDeleteSpeechModelDialog(
+  BuildContext context,
+  int sizeBytes,
+  String languageName,
+) => _confirm(
+  context,
+  title: context.l10n.modelDeleteSpeechTitle,
+  body: context.l10n.modelDeleteSpeechBody(
+    formatBytes(sizeBytes),
+    languageName,
+  ),
+  destructive: context.l10n.commonDelete,
+  destructiveKey: const Key('confirm-delete-speech'),
+  safe: context.l10n.modelKeepModel,
+);
 
 /// Asks before re-downloading the models.
 Future<bool> showRedownloadModelsDialog(BuildContext context, int sizeBytes) =>
@@ -145,11 +196,23 @@ class _VoiceModelsCardState extends State<VoiceModelsCard> {
   }
 
   Future<void> _cancel(ModelStatusDto status) async {
-    if (status.doneBytes > 0 &&
-        !await showCancelDownloadDialog(context, status.doneBytes)) {
+    if (status.cancelBytes > 0 &&
+        !await showCancelDownloadDialog(context, status.cancelBytes)) {
       return;
     }
     await widget.run(models.cancel);
+  }
+
+  Future<void> _deleteSpeech(ModelFileDto file) async {
+    final language = file.language ?? 'en';
+    if (!await showDeleteSpeechModelDialog(
+      context,
+      file.storedBytes,
+      languageEndonym(language),
+    )) {
+      return;
+    }
+    await widget.run(() async => models.deleteSpeechModel(language));
   }
 
   @override
@@ -166,6 +229,18 @@ class _VoiceModelsCardState extends State<VoiceModelsCard> {
             spacing: 8,
             children: [for (final file in status.files) _row(file)],
           ),
+          if (status.otherSpeechModels.isNotEmpty)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              spacing: 8,
+              children: [
+                Text(
+                  context.l10n.modelOtherLanguages,
+                  style: SectionLabel.style,
+                ),
+                for (final file in status.otherSpeechModels) _otherRow(file),
+              ],
+            ),
           ..._body(status),
         ],
       );
@@ -177,6 +252,11 @@ class _VoiceModelsCardState extends State<VoiceModelsCard> {
     final total = formatBytes(status.totalBytes);
     final done = formatBytes(status.doneBytes);
     final summary = switch (status.kind) {
+      ModelStatusKindDto.notDownloaded when modelSetPartlyStored(status) =>
+        context.l10n.modelSummaryToDownload(
+          languageEndonym(status.language),
+          formatBytes(status.remainingBytes),
+        ),
       ModelStatusKindDto.notDownloaded => context.l10n.modelSummaryTotal(
         language,
         total,
@@ -226,6 +306,15 @@ class _VoiceModelsCardState extends State<VoiceModelsCard> {
   }
 
   Widget _tag(ModelStatusDto status) => switch (status.kind) {
+    ModelStatusKindDto.notDownloaded when modelSetPartlyStored(status) =>
+      Tag.neutral(
+        context.l10n.modelMissingTag(
+          status.files
+              .where((file) => file.state != ModelFileStateDto.ready)
+              .length,
+        ),
+        leading: FiIcons.download,
+      ),
     ModelStatusKindDto.notDownloaded => Tag.neutral(
       context.l10n.modelTagNotDownloaded,
       leading: FiIcons.download,
@@ -280,7 +369,10 @@ class _VoiceModelsCardState extends State<VoiceModelsCard> {
                 modelRoleName(context.l10n, file.role),
                 style: _muted(.55, 11),
               ),
-              Text(file.label, style: const TextStyle(fontSize: 13)),
+              Text(
+                modelDisplayLabel(context.l10n, file),
+                style: const TextStyle(fontSize: 13),
+              ),
             ],
           ),
         ),
@@ -293,6 +385,46 @@ class _VoiceModelsCardState extends State<VoiceModelsCard> {
                 : Nocturne.muted(.6),
             fontFeatures: Nocturne.tabular,
           ),
+        ),
+      ],
+    );
+  }
+
+  /// A speech model of another language, with its delete button.
+  Widget _otherRow(ModelFileDto file) {
+    final size = formatBytes(file.sizeBytes);
+    final language = file.language ?? 'en';
+    return Row(
+      key: Key('settings-model-other-$language'),
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                modelRoleName(context.l10n, file.role),
+                style: _muted(.55, 11),
+              ),
+              Text(
+                modelDisplayLabel(context.l10n, file),
+                style: const TextStyle(fontSize: 13),
+              ),
+            ],
+          ),
+        ),
+        Text(
+          file.state == ModelFileStateDto.ready
+              ? size
+              : context.l10n.modelRowProgress(
+                  formatBytes(file.storedBytes),
+                  size,
+                ),
+          style: _muted(.6).copyWith(fontFeatures: Nocturne.tabular),
+        ),
+        TextButton(
+          key: Key('settings-model-delete-speech-$language'),
+          onPressed: () => unawaited(_deleteSpeech(file)),
+          child: Text(context.l10n.commonDelete),
         ),
       ],
     );

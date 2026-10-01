@@ -6,7 +6,7 @@ mod whisper;
 use std::{
     path::Path,
     sync::{
-        Arc,
+        Arc, OnceLock,
         atomic::{AtomicBool, Ordering},
     },
 };
@@ -14,11 +14,34 @@ use std::{
 pub use llama::LlamaRunner;
 pub use whisper::transcribe;
 
-use crate::VoiceError;
+use app_core::models::{ModelManifest, ModelRole};
 
-/// File names inside the provisioned models directory.
-pub const WHISPER_MODEL: &str = "ggml-base.en.bin";
-pub const LLM_MODEL: &str = "qwen2.5-1.5b-instruct-q5_k_m.gguf";
+use crate::{VoiceError, VoiceLanguage};
+
+fn manifest() -> &'static ModelManifest {
+    static MANIFEST: OnceLock<ModelManifest> = OnceLock::new();
+    MANIFEST.get_or_init(ModelManifest::bundled)
+}
+
+/// The speech model's file name for a language, inside the provisioned models directory.
+pub fn speech_model_file(language: VoiceLanguage) -> &'static str {
+    manifest()
+        .speech_file(language.code())
+        .expect("the manifest has a speech model for every voice language")
+        .name
+        .as_str()
+}
+
+/// The instruction model's file name inside the provisioned models directory.
+pub fn understanding_model_file() -> &'static str {
+    manifest()
+        .files
+        .iter()
+        .find(|file| file.role == ModelRole::Understanding)
+        .expect("the manifest has an understanding model")
+        .name
+        .as_str()
+}
 /// Big cores on the target device.
 pub const THREADS: i32 = 4;
 

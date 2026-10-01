@@ -12,14 +12,14 @@ pub struct Exact {
 }
 
 impl Exact {
-    fn whole(value: i128) -> Self {
+    pub(crate) fn whole(value: i128) -> Self {
         Self {
             mantissa: value,
             exponent: 0,
         }
     }
 
-    fn is_whole(self) -> bool {
+    pub(crate) fn is_whole(self) -> bool {
         self.mantissa % 10i128.pow(self.exponent) == 0
     }
 
@@ -40,7 +40,7 @@ impl Exact {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum Last {
+pub(crate) enum Last {
     Unit,
     Teen,
     Tens,
@@ -49,10 +49,10 @@ enum Last {
 }
 
 #[derive(Clone, Copy, Debug)]
-struct Group {
-    total: i128,
-    small: i128,
-    last: Last,
+pub(crate) struct Group {
+    pub(crate) total: i128,
+    pub(crate) small: i128,
+    pub(crate) last: Last,
 }
 
 fn unit(word: &str) -> Option<i128> {
@@ -137,7 +137,7 @@ pub(crate) fn tokens(span: &str) -> Vec<String> {
     cleaned.split_whitespace().map(str::to_owned).collect()
 }
 
-fn digits(token: &str) -> Option<Exact> {
+pub(crate) fn digits(token: &str) -> Option<Exact> {
     let (negative, body) = match token.strip_prefix('-') {
         Some(body) => (true, body),
         None => (false, token),
@@ -322,9 +322,13 @@ pub fn parse_number(span: &str) -> Option<Vec<Exact>> {
 /// A decimal scaled by `10^scale`, rounded half-even. Two whole groups read as a money pair
 /// when the scale is 2 ("twelve fifty" → 12.50).
 pub fn normalize_decimal(span: &str, scale: u8) -> Option<i64> {
+    decimal_from_groups(&parse_number(span)?, scale)
+}
+
+/// The decimal rule over parsed groups: one group, or a money pair at scale 2.
+pub(crate) fn decimal_from_groups(groups: &[Exact], scale: u8) -> Option<i64> {
     let scale = u32::from(scale);
-    let groups = parse_number(span)?;
-    let value = match groups.as_slice() {
+    let value = match groups {
         [single] => single.scaled(scale)?,
         [whole, cents]
             if scale == 2
@@ -342,7 +346,12 @@ pub fn normalize_decimal(span: &str, scale: u8) -> Option<i64> {
 
 /// A whole number; fractions are not rounded.
 pub fn normalize_integer(span: &str) -> Option<i64> {
-    match parse_number(span)?.as_slice() {
+    integer_from_groups(&parse_number(span)?)
+}
+
+/// The integer rule over parsed groups: exactly one whole group.
+pub(crate) fn integer_from_groups(groups: &[Exact]) -> Option<i64> {
+    match groups {
         [single] if single.is_whole() => {
             i64::try_from(single.mantissa / 10i128.pow(single.exponent)).ok()
         }

@@ -219,6 +219,9 @@ class _VoicePanelState extends State<VoicePanel> {
     final status = c.services.models.status;
     final size = formatBytes(status.remainingBytes);
     final language = modelLanguageName(context.l10n, status.speechLanguage);
+    final partlyStored = status.files.any(
+      (file) => file.state == ModelFileStateDto.ready,
+    );
     final mobile = _network == NetworkKind.mobile;
     final error = c.downloadError;
     return Container(
@@ -245,7 +248,12 @@ class _VoicePanelState extends State<VoicePanel> {
             ],
           ),
           Text(
-            context.l10n.modelOfferLine(language, size),
+            partlyStored
+                ? context.l10n.modelOfferToDownload(
+                    languageEndonym(status.language),
+                    size,
+                  )
+                : context.l10n.modelOfferLine(language, size),
             style: _muted(.7, 13),
           ),
           Column(
@@ -264,14 +272,16 @@ class _VoicePanelState extends State<VoicePanel> {
                             style: _muted(.55, 11),
                           ),
                           Text(
-                            file.label,
+                            modelDisplayLabel(context.l10n, file),
                             style: const TextStyle(fontSize: 13),
                           ),
                         ],
                       ),
                     ),
                     Text(
-                      formatBytes(file.sizeBytes),
+                      file.state == ModelFileStateDto.ready
+                          ? context.l10n.modelOnThisPhone
+                          : formatBytes(file.sizeBytes),
                       style: _muted(
                         .6,
                       ).copyWith(fontFeatures: Nocturne.tabular),
@@ -449,7 +459,7 @@ class _VoicePanelState extends State<VoicePanel> {
     final seconds = c.elapsed.inSeconds;
     final timer =
         '${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')}';
-    final example = exampleUtterance(c.fields);
+    final example = exampleUtterance(c.fields, language: c.services.language);
     return Container(
       key: const Key('voice-listening'),
       padding: const EdgeInsets.all(14),
@@ -491,11 +501,20 @@ class _VoicePanelState extends State<VoicePanel> {
               key: const Key('voice-example'),
               TextSpan(
                 children: [
-                  TextSpan(text: context.l10n.voiceTry),
-                  TextSpan(
-                    text: '“$example”',
-                    style: const TextStyle(color: Nocturne.accent100),
-                  ),
+                  for (final (index, part)
+                      in context.l10n
+                          .voiceTry('\u0000')
+                          .split('\u0000')
+                          .indexed)
+                    if (index == 0)
+                      TextSpan(text: part)
+                    else ...[
+                      TextSpan(
+                        text: example,
+                        style: const TextStyle(color: Nocturne.accent100),
+                      ),
+                      TextSpan(text: part),
+                    ],
                 ],
               ),
               style: _muted(.7, 13),

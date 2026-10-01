@@ -2175,7 +2175,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get voicePrivacyLine =>
-      'Audio is processed on this device and never saved. English only for now.';
+      'Audio is processed on this device and never saved.';
 
   @override
   String get voicePrimerNext => 'Next, Android will ask for microphone access.';
@@ -2193,7 +2193,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get voiceListening => 'Listening';
 
   @override
-  String get voiceTry => 'Try: ';
+  String voiceTry(String example) {
+    return 'Try: “$example”';
+  }
 
   @override
   String get voiceListeningHint =>
@@ -2890,4 +2892,105 @@ class AppLocalizationsEn extends AppLocalizations {
   String inputDurationUnparsed(String example) {
     return 'Use units like $example';
   }
+
+  @override
+  String voiceStillNeed(String names) {
+    return 'Still need: $names';
+  }
+
+  @override
+  String voiceSpokenFilled(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count fields filled.',
+      one: '1 field filled.',
+    );
+    return '$_temp0 Tap Save record when ready.';
+  }
+
+  @override
+  String modelSpeechLabel(String language) {
+    String _temp0 = intl.Intl.selectLogic(language, {
+      'es': 'Whisper Base (Spanish)',
+      'other': 'Whisper Base (English)',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String get modelOnThisPhone => 'On this phone';
+
+  @override
+  String modelOfferToDownload(String language, String size) {
+    return '$language · $size to download, one time. Everything runs on this phone.';
+  }
+
+  @override
+  String modelMissingTag(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count models missing',
+      one: '1 model missing',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String modelSummaryToDownload(String language, String size) {
+    return '$language · $size to download';
+  }
+
+  @override
+  String get modelOtherLanguages => 'Other languages';
+
+  @override
+  String get modelDeleteSpeechTitle => 'Delete this speech model?';
+
+  @override
+  String modelDeleteSpeechBody(String size, String language) {
+    return 'Frees $size. Voice fill in $language needs it again.';
+  }
+
+  @override
+  String get modelKeepModel => 'Keep model';
+
+  @override
+  String voiceNeedsSpeechModel(String language, String lang, String size) {
+    String _temp0 = intl.Intl.selectLogic(lang, {
+      'es': 'Spanish',
+      'other': 'English',
+    });
+    return 'Voice input: $language — needs $_temp0 speech model ($size)';
+  }
+
+  @override
+  String get langVoiceFollows => 'Voice input follows the app language';
+
+  @override
+  String langVoiceReady(String lang) {
+    String _temp0 = intl.Intl.selectLogic(lang, {
+      'es': 'Spanish',
+      'other': 'English',
+    });
+    return 'Voice input follows the app language · $_temp0 models ready';
+  }
+
+  @override
+  String langVoiceOfferTitle(String lang, String size) {
+    String _temp0 = intl.Intl.selectLogic(lang, {
+      'es': 'Spanish',
+      'other': 'English',
+    });
+    return 'Download $_temp0 speech model · $size';
+  }
+
+  @override
+  String langVoiceOfferBody(String size) {
+    return 'Voice input follows the app language. Understanding ($size) is already on this phone.';
+  }
+
+  @override
+  String get langVoiceDownload => 'Download';
 }

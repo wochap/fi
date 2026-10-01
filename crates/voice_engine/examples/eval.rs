@@ -1,9 +1,11 @@
-//! Evaluation harness: fills a fixed set of English utterances against sample schemas with the
+//! Evaluation harness: fills a fixed set of utterances against sample schemas with the
 //! provisioned instruction model and reports field accuracy, invented-field rate, evidence
 //! rejection rate and median fill latency. Exits non-zero below the acceptance bar.
+//! `FI_EVAL_LANGUAGE` picks the utterance set: `en` (default) or `es`.
 //!
 //! ```sh
 //! FI_MODELS_DIR=~/.cache/fi-models cargo run --release -p voice_engine --features native --example eval
+//! FI_EVAL_LANGUAGE=es FI_MODELS_DIR=~/.cache/fi-models cargo run --release -p voice_engine --features native --example eval
 //! ```
 
 use std::{collections::BTreeMap, path::PathBuf, process::ExitCode, time::Instant};
@@ -12,8 +14,8 @@ use chrono::{DateTime, NaiveDate, NaiveTime};
 use serde::Deserialize;
 use voice_engine::{
     ChoiceOption, FieldKind, FillRequest, Grammar, ModelRunner, TypedValue, VoiceEngine,
-    VoiceError, VoiceField,
-    native::{CancelFlag, LLM_MODEL, LlamaRunner},
+    VoiceError, VoiceField, VoiceLanguage,
+    native::{CancelFlag, LlamaRunner, understanding_model_file},
     patch::normalize_text,
 };
 
@@ -127,20 +129,31 @@ fn render(value: &TypedValue, kind: &FieldKind) -> String {
 
 fn main() -> ExitCode {
     let Some(dir) = std::env::var_os("FI_MODELS_DIR").map(PathBuf::from) else {
-        eprintln!("set FI_MODELS_DIR to the directory holding {LLM_MODEL}");
+        eprintln!(
+            "set FI_MODELS_DIR to the directory holding {}",
+            understanding_model_file()
+        );
         return ExitCode::from(2);
     };
-    let fixture: Fixture = serde_json::from_str(include_str!("../tests/fixtures/eval.json"))
-        .expect("eval.json parses");
+    let language = VoiceLanguage::from_code(
+        &std::env::var("FI_EVAL_LANGUAGE").unwrap_or_else(|_| "en".into()),
+    );
+    let fixture: Fixture = serde_json::from_str(match language {
+        VoiceLanguage::En => include_str!("../tests/fixtures/eval.json"),
+        VoiceLanguage::Es => include_str!("../tests/fixtures/eval_es.json"),
+    })
+    .expect("the eval fixture parses");
+    println!("language: {}", language.code());
     let now = NaiveTime::parse_from_str(&fixture.now, "%H:%M").unwrap();
     let load = Instant::now();
-    let mut runner = match LlamaRunner::load(&dir.join(LLM_MODEL), CancelFlag::default()) {
-        Ok(runner) => runner,
-        Err(error) => {
-            eprintln!("model load failed: {error}");
-            return ExitCode::from(2);
-        }
-    };
+    let mut runner =
+        match LlamaRunner::load(&dir.join(understanding_model_file()), CancelFlag::default()) {
+            Ok(runner) => runner,
+            Err(error) => {
+                eprintln!("model load failed: {error}");
+                return ExitCode::from(2);
+            }
+        };
     println!("model loaded in {:.1}s", load.elapsed().as_secs_f64());
     let mut engine = VoiceEngine::new();
     let (mut expected, mut correct, mut returned, mut invented) = (0usize, 0, 0, 0);
@@ -155,6 +168,7 @@ fn main() -> ExitCode {
             today: fixture.today,
             now,
             utc_offset_minutes: 0,
+            language,
         };
         let started = Instant::now();
         let mut recording = Recording {

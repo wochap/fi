@@ -660,7 +660,13 @@ class _CollectionShellState extends State<CollectionShell> {
   Widget build(BuildContext context) => VoiceScope(
     services: widget.voice,
     openSettings: () => _select(2),
-    child: _shell(context),
+    child: switch (widget.voice) {
+      final voice? => VoiceLanguageSync(
+        services: voice,
+        child: _shell(context),
+      ),
+      null => _shell(context),
+    },
   );
 
   Widget _shell(BuildContext context) => ListenableBuilder(

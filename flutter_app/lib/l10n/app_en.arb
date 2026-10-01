@@ -2904,7 +2904,7 @@
   "@voicePrimerTitle": {
     "description": "Primer title"
   },
-  "voicePrivacyLine": "Audio is processed on this device and never saved. English only for now.",
+  "voicePrivacyLine": "Audio is processed on this device and never saved.",
   "@voicePrivacyLine": {
     "description": "Voice privacy line"
   },
@@ -2928,9 +2928,14 @@
   "@voiceListening": {
     "description": "Listening panel title"
   },
-  "voiceTry": "Try: ",
+  "voiceTry": "Try: “{example}”",
   "@voiceTry": {
-    "description": "Prefix before an example utterance"
+    "description": "Listening hint with an example utterance.",
+    "placeholders": {
+      "example": {
+        "type": "String"
+      }
+    }
   },
   "voiceListeningHint": "Tap stop when done, or hold the mic to talk",
   "@voiceListeningHint": {
@@ -3889,5 +3894,146 @@
         "type": "String"
       }
     }
+  },
+  "voiceStillNeed": "Still need: {names}",
+  "@voiceStillNeed": {
+    "description": "Spoken and shown line listing required fields still empty.",
+    "placeholders": {
+      "names": {
+        "type": "String"
+      }
+    }
+  },
+  "voiceSpokenFilled": "{count, plural, =1{1 field filled.} other{{count} fields filled.}} Tap Save record when ready.",
+  "@voiceSpokenFilled": {
+    "description": "Spoken line after a voice turn fills fields.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "modelSpeechLabel": "{language, select, es{Whisper Base (Spanish)} other{Whisper Base (English)}}",
+  "@modelSpeechLabel": {
+    "description": "Name of a speech model; language is a language code.",
+    "placeholders": {
+      "language": {
+        "type": "String"
+      }
+    }
+  },
+  "modelOnThisPhone": "On this phone",
+  "@modelOnThisPhone": {
+    "description": "Shown instead of a size for a model already stored."
+  },
+  "modelOfferToDownload": "{language} · {size} to download, one time. Everything runs on this phone.",
+  "@modelOfferToDownload": {
+    "description": "Download offer when part of the set is stored; language is the language name.",
+    "placeholders": {
+      "language": {
+        "type": "String"
+      },
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "modelMissingTag": "{count, plural, =1{1 model missing} other{{count} models missing}}",
+  "@modelMissingTag": {
+    "description": "Status tag when some models of the set are stored.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "modelSummaryToDownload": "{language} · {size} to download",
+  "@modelSummaryToDownload": {
+    "description": "Model card summary when some models are stored.",
+    "placeholders": {
+      "language": {
+        "type": "String"
+      },
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "modelOtherLanguages": "Other languages",
+  "@modelOtherLanguages": {
+    "description": "Label above speech models of other languages."
+  },
+  "modelDeleteSpeechTitle": "Delete this speech model?",
+  "@modelDeleteSpeechTitle": {
+    "description": "Delete speech model dialog title."
+  },
+  "modelDeleteSpeechBody": "Frees {size}. Voice fill in {language} needs it again.",
+  "@modelDeleteSpeechBody": {
+    "description": "Delete speech model dialog body.",
+    "placeholders": {
+      "size": {
+        "type": "String"
+      },
+      "language": {
+        "type": "String"
+      }
+    }
+  },
+  "modelKeepModel": "Keep model",
+  "@modelKeepModel": {
+    "description": "Button that keeps the speech model."
+  },
+  "voiceNeedsSpeechModel": "Voice input: {language} — needs {lang, select, es{Spanish} other{English}} speech model ({size})",
+  "@voiceNeedsSpeechModel": {
+    "description": "Settings line when the speech model of the voice language is missing; language is the language name, lang its code.",
+    "placeholders": {
+      "language": {
+        "type": "String"
+      },
+      "lang": {
+        "type": "String"
+      },
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "langVoiceFollows": "Voice input follows the app language",
+  "@langVoiceFollows": {
+    "description": "Language section line about voice input."
+  },
+  "langVoiceReady": "Voice input follows the app language · {lang, select, es{Spanish} other{English}} models ready",
+  "@langVoiceReady": {
+    "description": "Language section line when the voice models are ready.",
+    "placeholders": {
+      "lang": {
+        "type": "String"
+      }
+    }
+  },
+  "langVoiceOfferTitle": "Download {lang, select, es{Spanish} other{English}} speech model · {size}",
+  "@langVoiceOfferTitle": {
+    "description": "Language section offer title.",
+    "placeholders": {
+      "lang": {
+        "type": "String"
+      },
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "langVoiceOfferBody": "Voice input follows the app language. Understanding ({size}) is already on this phone.",
+  "@langVoiceOfferBody": {
+    "description": "Language section offer body.",
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "langVoiceDownload": "Download",
+  "@langVoiceDownload": {
+    "description": "Button that downloads the speech model the app language needs."
   }
 }

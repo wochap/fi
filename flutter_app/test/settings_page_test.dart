@@ -6,6 +6,7 @@ import 'package:fi/voice/fakes.dart';
 import 'package:fi/voice/services.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/intl.dart';
 
 import 'fake_bridge.dart';
 import 'widget_test.dart';
@@ -61,6 +62,30 @@ Future<void> _openSettings(
   } else {
     await tester.pump(const Duration(seconds: 1));
   }
+}
+
+/// Opens Ajustes on an Android phone with the app in Spanish.
+Future<void> _openSpanishSettings(
+  WidgetTester tester,
+  VoiceServices voice,
+) async {
+  tester.view.devicePixelRatio = 1;
+  tester.view.physicalSize = const Size(390, 1600);
+  addTearDown(tester.view.reset);
+  await tester.pumpWidget(
+    app(
+      _ready(),
+      voice: voice,
+      capabilities: PlatformCapabilities.androidPhone,
+      uiPrefs: MemoryUiPrefsStore(
+        const UiPrefs(appLanguage: AppLanguage.spanish),
+      ),
+    ),
+  );
+  await pumpUntilFound(tester, find.text('Ajustes'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Ajustes'));
+  await tester.pumpAndSettle();
 }
 
 ModelStatusDto _downloading() => modelStatusOf(
@@ -293,9 +318,7 @@ void main() {
     );
     expect(find.byKey(const Key('settings-hands-free')), findsNothing);
     expect(
-      find.text(
-        'Audio is processed on this device and never saved. English only for now.',
-      ),
+      find.text('Audio is processed on this device and never saved.'),
       findsOneWidget,
     );
     await tester.tap(find.byKey(const Key('settings-model-download')));
@@ -540,5 +563,98 @@ void main() {
     await tester.tap(find.byKey(const Key('settings-android-settings')));
     await tester.pump();
     expect(permission.settingsOpened, 1);
+  });
+
+  group('Spanish voice language', () {
+    tearDown(() => Intl.defaultLocale = null);
+
+    testWidgets('only the Spanish speech model is missing', (tester) async {
+      final models = FakeVoiceModels(
+        modelStatusOf(
+          ModelStatusKindDto.notDownloaded,
+          language: 'es',
+          readyFiles: {'qwen2.5-1.5b-instruct-q5_k_m.gguf'},
+        ),
+      );
+      await _openSpanishSettings(tester, fakeVoiceServices(models: models));
+      expect(
+        find.text(
+          'Entrada de voz: Español — necesita el modelo de voz en español (148 MB)',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('settings-voice-needs-model')),
+        findsOneWidget,
+      );
+      expect(_tag('Falta 1 modelo'), findsOneWidget);
+      expect(find.text('Descargar 148 MB'), findsOneWidget);
+      expect(models.calls, contains('language:es'));
+    });
+
+    testWidgets('other languages list their speech models to delete', (
+      tester,
+    ) async {
+      const english = ModelFileDto(
+        name: 'ggml-base.en.bin',
+        label: 'Whisper Base (English)',
+        role: ModelRoleDto.speech,
+        language: 'en',
+        sizeBytes: 147964211,
+        storedBytes: 147964211,
+        state: ModelFileStateDto.ready,
+      );
+      final models = FakeVoiceModels(
+        modelStatusOf(
+          ModelStatusKindDto.ready,
+          language: 'es',
+          otherSpeech: const [english],
+        ),
+      );
+      await _openSpanishSettings(tester, fakeVoiceServices(models: models));
+      expect(find.text('Otros idiomas'), findsOneWidget);
+      expect(find.text('Whisper Base (inglés)'), findsOneWidget);
+      models.calls.clear();
+      final delete = find.byKey(const Key('settings-model-delete-speech-en'));
+      await tester.ensureVisible(delete);
+      await tester.tap(delete);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Conservar modelo'));
+      await tester.pumpAndSettle();
+      expect(models.calls, isEmpty);
+      await tester.tap(delete);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('confirm-delete-speech')));
+      await tester.pumpAndSettle();
+      expect(models.calls, ['deleteSpeech:en']);
+    });
+  });
+
+  testWidgets('cancel names the bytes a cancel deletes', (tester) async {
+    final models = FakeVoiceModels(
+      modelStatusOf(
+        ModelStatusKindDto.downloading,
+        done: 612000000,
+        cancelBytes: 300000000,
+      ),
+    );
+    await _openSettings(tester, voice: fakeVoiceServices(models: models));
+    await tester.tap(find.byKey(const Key('settings-model-cancel')));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Downloaded data (300 MB) will be deleted.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('the privacy line no longer limits voice to English', (
+    tester,
+  ) async {
+    await _openSettings(tester, voice: fakeVoiceServices());
+    expect(
+      find.text('Audio is processed on this device and never saved.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('English only'), findsNothing);
   });
 }

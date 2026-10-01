@@ -29,13 +29,30 @@ Future<void> pauseModelDownload({required String modelsDir}) => RustLib
     .api
     .crateApiVoiceModelsPauseModelDownload(modelsDir: modelsDir);
 
-/// Stops the download and deletes all downloaded data.
+/// Selects the voice language's model set. An unknown code selects English.
+void setModelLanguage({required String modelsDir, required String language}) =>
+    RustLib.instance.api.crateApiVoiceModelsSetModelLanguage(
+      modelsDir: modelsDir,
+      language: language,
+    );
+
+/// Deletes one language's speech model, returning the bytes freed.
+Future<int> deleteSpeechModel({
+  required String modelsDir,
+  required String language,
+}) => RustLib.instance.api.crateApiVoiceModelsDeleteSpeechModel(
+  modelsDir: modelsDir,
+  language: language,
+);
+
+/// Stops the download and deletes the active set's data, keeping shared
+/// models another language still uses.
 Future<void> cancelModelDownload({required String modelsDir}) => RustLib
     .instance
     .api
     .crateApiVoiceModelsCancelModelDownload(modelsDir: modelsDir);
 
-/// Deletes every model file, returning the bytes freed.
+/// Deletes every model file of every language, returning the bytes freed.
 Future<int> deleteModels({required String modelsDir}) =>
     RustLib.instance.api.crateApiVoiceModelsDeleteModels(modelsDir: modelsDir);
 
@@ -167,7 +184,7 @@ class ModelStatusDto {
   /// Bytes on disk over the whole set (verified plus partial).
   final int doneBytes;
 
-  /// Sum of every manifest file.
+  /// Sum of the active language's set.
   final int totalBytes;
 
   /// Sum of files not yet verified: the size a download offer shows.
@@ -177,7 +194,7 @@ class ModelStatusDto {
   /// Set for `Failed`.
   final ModelErrorDto? error;
 
-  /// Every manifest file in manifest order.
+  /// Every file of the active language's set, in manifest order.
   final List<ModelFileDto> files;
 
   /// Stored bytes already re-hashed; 0 unless verifying.
@@ -185,6 +202,15 @@ class ModelStatusDto {
 
   /// Stored bytes being re-hashed; 0 unless verifying.
   final int checkingBytes;
+
+  /// The active voice language code.
+  final String language;
+
+  /// Speech models of other languages that are stored or partly stored.
+  final List<ModelFileDto> otherSpeechModels;
+
+  /// Bytes a cancel would delete.
+  final int cancelBytes;
 
   const ModelStatusDto({
     required this.kind,
@@ -196,6 +222,9 @@ class ModelStatusDto {
     required this.files,
     required this.checkedBytes,
     required this.checkingBytes,
+    required this.language,
+    required this.otherSpeechModels,
+    required this.cancelBytes,
   });
 
   @override
@@ -208,7 +237,10 @@ class ModelStatusDto {
       error.hashCode ^
       files.hashCode ^
       checkedBytes.hashCode ^
-      checkingBytes.hashCode;
+      checkingBytes.hashCode ^
+      language.hashCode ^
+      otherSpeechModels.hashCode ^
+      cancelBytes.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -223,7 +255,10 @@ class ModelStatusDto {
           error == other.error &&
           files == other.files &&
           checkedBytes == other.checkedBytes &&
-          checkingBytes == other.checkingBytes;
+          checkingBytes == other.checkingBytes &&
+          language == other.language &&
+          otherSpeechModels == other.otherSpeechModels &&
+          cancelBytes == other.cancelBytes;
 }
 
 enum ModelStatusKindDto {

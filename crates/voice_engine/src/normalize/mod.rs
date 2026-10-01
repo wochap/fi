@@ -3,6 +3,7 @@
 mod choice;
 mod dates;
 mod duration;
+pub mod es;
 mod numbers;
 
 pub use choice::{levenshtein, normalize_choice};
@@ -10,22 +11,46 @@ pub use dates::{normalize_date, normalize_date_time};
 pub use duration::normalize_duration;
 pub use numbers::{normalize_decimal, normalize_integer, parse_number};
 
-use crate::{FieldKind, FillRequest, TypedValue, VoiceField};
+use crate::{FieldKind, FillRequest, TypedValue, VoiceField, VoiceLanguage};
 
+/// Converts a span with the turn's language rules. Text and Choice are shared.
 pub fn normalize(field: &VoiceField, span: &str, request: &FillRequest) -> Option<TypedValue> {
-    match field.kind {
-        FieldKind::Text => normalize_text(span, field.max_length).map(TypedValue::Text),
-        FieldKind::Integer => normalize_integer(span).map(TypedValue::Integer),
-        FieldKind::Decimal { scale } => normalize_decimal(span, scale).map(TypedValue::Decimal),
-        FieldKind::Boolean => normalize_boolean(span).map(TypedValue::Boolean),
-        FieldKind::Date => normalize_date(span, request.today)
-            .map(|date| TypedValue::Date(dates::epoch_days(date))),
-        FieldKind::DateTime => {
-            normalize_date_time(span, request.today, request.now, request.utc_offset_minutes)
-                .map(TypedValue::DateTime)
+    let (today, now, offset) = (request.today, request.now, request.utc_offset_minutes);
+    match (field.kind.clone(), request.language) {
+        (FieldKind::Text, _) => normalize_text(span, field.max_length).map(TypedValue::Text),
+        (FieldKind::Choice, _) => normalize_choice(span, &field.options).map(TypedValue::Choice),
+        (FieldKind::Integer, VoiceLanguage::En) => normalize_integer(span).map(TypedValue::Integer),
+        (FieldKind::Integer, VoiceLanguage::Es) => {
+            es::normalize_integer(span).map(TypedValue::Integer)
         }
-        FieldKind::Duration => normalize_duration(span).map(TypedValue::Duration),
-        FieldKind::Choice => normalize_choice(span, &field.options).map(TypedValue::Choice),
+        (FieldKind::Decimal { scale }, VoiceLanguage::En) => {
+            normalize_decimal(span, scale).map(TypedValue::Decimal)
+        }
+        (FieldKind::Decimal { scale }, VoiceLanguage::Es) => {
+            es::normalize_decimal(span, scale).map(TypedValue::Decimal)
+        }
+        (FieldKind::Boolean, VoiceLanguage::En) => normalize_boolean(span).map(TypedValue::Boolean),
+        (FieldKind::Boolean, VoiceLanguage::Es) => {
+            es::normalize_boolean(span).map(TypedValue::Boolean)
+        }
+        (FieldKind::Date, VoiceLanguage::En) => {
+            normalize_date(span, today).map(|date| TypedValue::Date(dates::epoch_days(date)))
+        }
+        (FieldKind::Date, VoiceLanguage::Es) => {
+            es::normalize_date(span, today).map(|date| TypedValue::Date(dates::epoch_days(date)))
+        }
+        (FieldKind::DateTime, VoiceLanguage::En) => {
+            normalize_date_time(span, today, now, offset).map(TypedValue::DateTime)
+        }
+        (FieldKind::DateTime, VoiceLanguage::Es) => {
+            es::normalize_date_time(span, today, now, offset).map(TypedValue::DateTime)
+        }
+        (FieldKind::Duration, VoiceLanguage::En) => {
+            normalize_duration(span).map(TypedValue::Duration)
+        }
+        (FieldKind::Duration, VoiceLanguage::Es) => {
+            es::normalize_duration(span).map(TypedValue::Duration)
+        }
     }
 }
 
@@ -62,6 +87,40 @@ mod tests {
             ("", None),
         ] {
             assert_eq!(normalize_boolean(span), value, "{span}");
+        }
+    }
+
+    #[test]
+    fn normalize_dispatches_on_the_language() {
+        use crate::test_support::{field, request};
+        let amount = field("f-amount", "amount", FieldKind::Decimal { scale: 2 });
+        let mut spanish = request(vec![amount.clone()]);
+        spanish.language = VoiceLanguage::Es;
+        assert_eq!(
+            normalize(&amount, "doce con cincuenta", &spanish),
+            Some(TypedValue::Decimal(1250))
+        );
+        assert_eq!(
+            normalize(
+                &amount,
+                "doce con cincuenta",
+                &request(vec![amount.clone()])
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn booleans_es() {
+        for (span, value) in [
+            ("sí", Some(true)),
+            ("Si.", Some(true)),
+            ("no", Some(false)),
+            ("falso", Some(false)),
+            ("yes", None),
+            ("quizá", None),
+        ] {
+            assert_eq!(es::normalize_boolean(span), value, "{span}");
         }
     }
 

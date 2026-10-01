@@ -10,6 +10,7 @@ import 'package:fi/voice/mic_button.dart';
 import 'package:fi/voice/services.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/intl.dart';
 
 import 'fake_bridge.dart';
 import 'voice_fixtures.dart';
@@ -21,13 +22,14 @@ const _desktop = Size(1240, 900);
 FieldDefinitionDto _field(
   String id,
   FieldTypeKindDto kind, {
+  String? name,
   bool required = false,
   int order = 0,
   int? scale,
   List<EnumOptionDto> options = const [],
 }) => FieldDefinitionDto(
   id: id,
-  name: id,
+  name: name ?? id,
   fieldType: FieldTypeDto(kind: kind, scale: scale),
   required_: required,
   validation: const ValidationMetadataDto(),
@@ -86,6 +88,84 @@ FakeCollectionBridge _expenses({List<RecordDto> records = const []}) {
   );
   bridge.records['expenses'] = [...records];
   return bridge;
+}
+
+/// The expenses collection named in Spanish ("gastos").
+FakeCollectionBridge _gastos() {
+  final bridge = FakeCollectionBridge()
+    ..bootstrap = const BootstrapDto(
+      kind: BootstrapKindDto.ready,
+      rootId: 'root',
+    );
+  bridge.collections.add(
+    const CollectionDto(
+      id: 'gastos',
+      name: 'gastos',
+      description: '',
+      recordCount: 0,
+      fieldCount: 4,
+      incompleteCount: 0,
+    ),
+  );
+  EnumOptionDto option(String label, int order) =>
+      EnumOptionDto(id: label, label: label, order: order, deleted: false);
+  bridge.schemas['gastos'] = CollectionSchemaDto(
+    id: 'gastos',
+    name: 'gastos',
+    description: '',
+    fields: [
+      _field('description', FieldTypeKindDto.text, name: 'descripción'),
+      _field(
+        'amount',
+        FieldTypeKindDto.fixedDecimal,
+        name: 'importe',
+        required: true,
+        order: 1,
+        scale: 2,
+      ),
+      _field(
+        'category',
+        FieldTypeKindDto.enum_,
+        name: 'categoría',
+        required: true,
+        order: 2,
+        options: [
+          option('comida', 0),
+          option('transporte', 1),
+          option('hogar', 2),
+          option('otro', 3),
+        ],
+      ),
+      _field('date', FieldTypeKindDto.date, name: 'fecha', order: 3),
+    ],
+  );
+  bridge.records['gastos'] = [];
+  return bridge;
+}
+
+/// Opens Nuevo registro in "gastos" with the app in Spanish.
+Future<void> _openSpanishNewRecord(
+  WidgetTester tester,
+  _Harness harness,
+) async {
+  tester.view.devicePixelRatio = 1;
+  tester.view.physicalSize = _phone;
+  addTearDown(tester.view.reset);
+  await harness.prefs.update(
+    (prefs) => prefs.copyWith(appLanguage: AppLanguage.spanish),
+  );
+  await tester.pumpWidget(
+    app(_gastos(), voice: harness.services, uiPrefs: harness.prefs),
+  );
+  await pumpUntilFound(tester, find.text('gastos'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('gastos').first);
+  await tester.pumpAndSettle();
+  final tip = find.byTooltip('Nuevo registro');
+  await tester.tap(
+    tip.evaluate().isNotEmpty ? tip.first : find.text('Nuevo registro').first,
+  );
+  await tester.pumpAndSettle();
 }
 
 final class _Harness {
@@ -287,9 +367,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Speak to fill records'), findsOneWidget);
       expect(
-        find.text(
-          'Audio is processed on this device and never saved. English only for now.',
-        ),
+        find.text('Audio is processed on this device and never saved.'),
         findsOneWidget,
       );
       expect(
@@ -840,6 +918,74 @@ void main() {
       await _speak(tester);
       expect(speech.spoken, ['Still need: amount, category.']);
       expect(find.text('Still need: amount, category'), findsOneWidget);
+    });
+  });
+
+  group('Spanish', () {
+    tearDown(() => Intl.defaultLocale = null);
+
+    testWidgets('the offer downloads only the Spanish speech model', (
+      tester,
+    ) async {
+      final harness = _Harness(
+        status: modelStatusOf(
+          ModelStatusKindDto.notDownloaded,
+          language: 'es',
+          readyFiles: {'qwen2.5-1.5b-instruct-q5_k_m.gguf'},
+        ),
+      );
+      await _openSpanishNewRecord(tester, harness);
+      await tester.tap(_mic());
+      await tester.pumpAndSettle();
+      expect(
+        find.text(
+          'Español · 148 MB por descargar, una sola vez. '
+          'Todo se procesa en este teléfono.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Whisper Base (español)'), findsOneWidget);
+      expect(find.text('En este teléfono'), findsOneWidget);
+      expect(find.text('Descargar 148 MB'), findsOneWidget);
+      expect(harness.models.calls, contains('language:es'));
+    });
+
+    testWidgets('listening shows a Spanish example', (tester) async {
+      final harness = _Harness();
+      await _openSpanishNewRecord(tester, harness);
+      await tester.tap(_mic());
+      await tester.pump();
+      expect(
+        find.text(
+          'Prueba: «Almuerzo, 12,50, categoría comida, ayer»',
+          findRichText: true,
+        ),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const Key('voice-cancel')));
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a Spanish turn asks for the rest in Spanish', (tester) async {
+      final speech = FakeSpeechOutput(instant: true);
+      final engine = quickEngine([
+        FakeVoiceTurn.result(
+          VoiceTurnResult(
+            transcript: 'Taxi a casa ayer',
+            patch: [
+              entry('description', text('Taxi a casa'), 'Taxi a casa'),
+              entry('date', date(20000), 'ayer'),
+            ],
+          ),
+        ),
+      ]);
+      final harness = _Harness(engine: engine, handsFree: true, speech: speech);
+      await _openSpanishNewRecord(tester, harness);
+      await _speak(tester);
+      expect(find.text('Todavía falta: importe, categoría'), findsOneWidget);
+      expect(speech.spoken, ['Todavía falta: importe, categoría.']);
+      expect(speech.languages, contains('es'));
+      expect(engine.languages, ['es']);
     });
   });
 

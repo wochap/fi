@@ -1,0 +1,62 @@
+{
+  "today": "2026-09-28",
+  "now": "14:00",
+  "schemas": {
+    "gastos": [
+      { "name": "descripción", "kind": "text", "required": true },
+      { "name": "importe", "kind": "decimal", "scale": 2, "required": true },
+      { "name": "categoría", "kind": "choice", "options": ["comida", "transporte", "hogar", "otro"] },
+      { "name": "fecha", "kind": "date" },
+      { "name": "pagado", "kind": "boolean" }
+    ],
+    "entrenamientos": [
+      { "name": "actividad", "kind": "choice", "options": ["correr", "nadar", "bici", "gimnasio"], "required": true },
+      { "name": "duración", "kind": "duration" },
+      { "name": "distancia km", "kind": "decimal", "scale": 1 },
+      { "name": "inicio", "kind": "datetime" },
+      { "name": "notas", "kind": "text" }
+    ],
+    "libros": [
+      { "name": "título", "kind": "text", "required": true },
+      { "name": "páginas", "kind": "integer" },
+      { "name": "valoración", "kind": "choice", "options": ["encantó", "gustó", "regular", "no gustó"] },
+      { "name": "terminado", "kind": "boolean" },
+      { "name": "terminado el", "kind": "date" }
+    ]
+  },
+  "cases": [
+    { "schema": "gastos", "text": "Almuerzo en Nando's, doce con cincuenta, comida, ayer.", "expect": { "descripción": "Almuerzo en Nando's", "importe": "12.50", "categoría": "comida", "fecha": "2026-09-27" } },
+    { "schema": "gastos", "text": "Taxi a casa, veintidós cuarenta, transporte.", "expect": { "descripción": "Taxi a casa", "importe": "22.40", "categoría": "transporte" } },
+    { "schema": "gastos", "text": "Compra en el Mercadona, cuarenta y cinco euros, comida, hoy.", "expect": { "descripción": "Compra en el Mercadona", "importe": "45.00", "categoría": "comida", "fecha": "2026-09-28" } },
+    { "schema": "gastos", "text": "Factura de la luz, ochenta euros, hogar, ya pagada, sí.", "expect": { "descripción": "Factura de la luz", "importe": "80.00", "categoría": "hogar", "pagado": "true" } },
+    { "schema": "gastos", "text": "Billete de autobús, dos coma cincuenta, el martes pasado.", "expect": { "descripción": "Billete de autobús", "importe": "2.50", "fecha": "2026-09-22" } },
+    { "schema": "gastos", "text": "Café, tres euros.", "expect": { "descripción": "Café", "importe": "3.00" } },
+    { "schema": "gastos", "text": "Alquiler, mil doscientos euros, hogar, pagado sí.", "expect": { "descripción": "Alquiler", "importe": "1200.00", "categoría": "hogar", "pagado": "true" } },
+    { "schema": "gastos", "text": "Regalo de cumpleaños, veinticinco euros, otro, pagado no.", "expect": { "descripción": "Regalo de cumpleaños", "importe": "25.00", "categoría": "otro", "pagado": "false" } },
+    { "schema": "gastos", "text": "Gasolina, cincuenta y dos con diez, transporte, ayer.", "expect": { "descripción": "Gasolina", "importe": "52.10", "categoría": "transporte", "fecha": "2026-09-27" } },
+    { "schema": "gastos", "text": "Fontanero, ciento cincuenta euros, hogar, el 12 de marzo.", "expect": { "descripción": "Fontanero", "importe": "150.00", "categoría": "hogar", "fecha": "2026-03-12" } },
+    { "schema": "gastos", "text": "Desayuno, 9,50, comida.", "expect": { "descripción": "Desayuno", "importe": "9.50", "categoría": "comida" } },
+    { "schema": "gastos", "text": "Entradas de cine, veinticuatro euros, el sábado.", "expect": { "descripción": "Entradas de cine", "importe": "24.00", "fecha": "2026-09-26" } },
+    { "schema": "entrenamientos", "text": "Correr, cinco kilómetros, veintiocho minutos.", "expect": { "actividad": "correr", "distancia km": "5.0", "duración": "1680000" } },
+    { "schema": "entrenamientos", "text": "Nadar cuarenta y cinco minutos, uno coma cinco kilómetros.", "expect": { "actividad": "nadar", "duración": "2700000", "distancia km": "1.5" } },
+    { "schema": "entrenamientos", "text": "Gimnasio una hora, día de piernas.", "expect": { "actividad": "gimnasio", "duración": "3600000", "notas": "día de piernas" } },
+    { "schema": "entrenamientos", "text": "Bici una hora y media, veinte kilómetros.", "expect": { "actividad": "bici", "duración": "5400000", "distancia km": "20.0" } },
+    { "schema": "entrenamientos", "text": "Correr ayer a las siete de la tarde, diez kilómetros.", "expect": { "actividad": "correr", "inicio": "2026-09-27T19:00", "distancia km": "10.0" } },
+    { "schema": "entrenamientos", "text": "Nadar hoy a las seis de la tarde, media hora.", "expect": { "actividad": "nadar", "inicio": "2026-09-28T18:00", "duración": "1800000" } },
+    { "schema": "entrenamientos", "text": "Gimnasio cincuenta minutos, me sentí cansado.", "expect": { "actividad": "gimnasio", "duración": "3000000", "notas": "me sentí cansado" } },
+    { "schema": "entrenamientos", "text": "Correr tres coma dos kilómetros.", "expect": { "actividad": "correr", "distancia km": "3.2" } },
+    { "schema": "entrenamientos", "text": "Bici dos horas y quince minutos, cuarenta kilómetros.", "expect": { "actividad": "bici", "duración": "8100000", "distancia km": "40.0" } },
+    { "schema": "entrenamientos", "text": "Gimnasio a las ocho de la mañana, una hora.", "expect": { "actividad": "gimnasio", "inicio": "2026-09-28T08:00", "duración": "3600000" } },
+    { "schema": "entrenamientos", "text": "Correr el martes pasado a las siete y media de la mañana, seis kilómetros.", "expect": { "actividad": "correr", "inicio": "2026-09-22T07:30", "distancia km": "6.0" } },
+    { "schema": "libros", "text": "Terminé Cien años de soledad, cuatrocientas doce páginas, me encantó.", "expect": { "título": "Cien años de soledad", "páginas": "412", "valoración": "encantó", "terminado": "true" } },
+    { "schema": "libros", "text": "La sombra del viento, quinientas páginas, me gustó.", "expect": { "título": "La sombra del viento", "páginas": "500", "valoración": "gustó" } },
+    { "schema": "libros", "text": "Rayuela, regular, no lo terminé.", "expect": { "título": "Rayuela", "valoración": "regular", "terminado": "false" } },
+    { "schema": "libros", "text": "Pedro Páramo, ciento veinte páginas, terminado ayer.", "expect": { "título": "Pedro Páramo", "páginas": "120", "terminado": "true", "terminado el": "2026-09-27" } },
+    { "schema": "libros", "text": "Don Quijote, mil doscientas páginas.", "expect": { "título": "Don Quijote", "páginas": "1200" } },
+    { "schema": "libros", "text": "Ficciones, valoración encanto, terminado el 12 de marzo.", "expect": { "título": "Ficciones", "valoración": "encantó", "terminado el": "2026-03-12" } },
+    { "schema": "libros", "text": "El túnel, no gustó, terminado sí.", "expect": { "título": "El túnel", "valoración": "no gustó", "terminado": "true" } },
+    { "schema": "libros", "text": "Como agua para chocolate, doscientas cincuenta páginas, gusto.", "expect": { "título": "Como agua para chocolate", "páginas": "250", "valoración": "gustó" } },
+    { "schema": "libros", "text": "Nada, de Carmen Laforet, terminado el martes pasado.", "expect": { "título": "Nada", "terminado el": "2026-09-22" } },
+    { "schema": "libros", "text": "Aura, sesenta páginas, regular, terminado hoy.", "expect": { "título": "Aura", "páginas": "60", "valoración": "regular", "terminado el": "2026-09-28" } }
+  ]
+}

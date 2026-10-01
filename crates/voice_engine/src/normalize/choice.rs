@@ -1,6 +1,7 @@
 //! Choice labels: case-insensitive exact match, then the single closest label within an edit
 //! distance of 2 and 30% of the label length. A tie is ambiguous and dropped.
 
+use super::es::fold;
 use crate::{ChoiceOption, patch::normalize_text};
 
 pub fn levenshtein(a: &str, b: &str) -> usize {
@@ -22,11 +23,14 @@ pub fn levenshtein(a: &str, b: &str) -> usize {
 
 /// The matching option id.
 pub fn normalize_choice(span: &str, options: &[ChoiceOption]) -> Option<String> {
-    let span = normalize_text(span);
+    let span = fold(&normalize_text(span));
     if span.is_empty() {
         return None;
     }
-    let labels: Vec<String> = options.iter().map(|o| normalize_text(&o.label)).collect();
+    let labels: Vec<String> = options
+        .iter()
+        .map(|o| fold(&normalize_text(&o.label)))
+        .collect();
     let exact: Vec<usize> = (0..options.len()).filter(|&i| labels[i] == span).collect();
     if let [index] = exact.as_slice() {
         return Some(options[*index].id.clone());
@@ -68,6 +72,16 @@ mod tests {
                 label: (*label).into(),
             })
             .collect()
+    }
+
+    #[test]
+    fn choices_ignore_accents() {
+        let drinks = options(&["Café", "Té"]);
+        assert_eq!(
+            normalize_choice("cafe", &drinks).as_deref(),
+            Some("id-Café")
+        );
+        assert_eq!(normalize_choice("te", &drinks).as_deref(), Some("id-Té"));
     }
 
     #[test]
