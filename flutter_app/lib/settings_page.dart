@@ -96,6 +96,7 @@ class _SettingsPageState extends State<SettingsPage>
   @override
   Widget build(BuildContext context) {
     final caps = PlatformScope.of(context);
+    final phone = MediaQuery.sizeOf(context).width < 720;
     final services = VoiceScope.scopeOf(context)?.services;
     final voice = VoiceScope.of(context);
     final voiceShown = caps.onDeviceVoice && voice != null;
@@ -114,24 +115,40 @@ class _SettingsPageState extends State<SettingsPage>
     ];
     return ListView(
       key: const Key('settings-page'),
-      padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
+      padding: phone
+          ? const EdgeInsets.fromLTRB(16, 12, 16, 24)
+          : const EdgeInsets.fromLTRB(32, 22, 32, 32),
       children: [
-        Text(
-          context.l10n.settingsTitle,
-          style: Theme.of(context).textTheme.headlineSmall,
-        ),
-        if (!caps.android)
-          Text(
-            context.l10n.settingsSubtitle,
-            key: const Key('settings-subtitle'),
-            style: TextStyle(fontSize: 13, color: Nocturne.muted(.6)),
+        Align(
+          alignment: Alignment.topLeft,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 816),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  context.l10n.settingsTitle,
+                  style: phone
+                      ? Theme.of(context).textTheme.headlineSmall
+                      : Theme.of(context).textTheme.headlineMedium,
+                ),
+                const SizedBox(height: 6),
+                if (!caps.android)
+                  Text(
+                    context.l10n.settingsSubtitle,
+                    key: const Key('settings-subtitle'),
+                    style: TextStyle(fontSize: 13, color: Nocturne.muted(.6)),
+                  ),
+                for (final (index, section) in sections.indexed) ...[
+                  SizedBox(height: index == 0 ? 22 : 26),
+                  SectionLabel(section.label),
+                  const SizedBox(height: 10),
+                  section.child,
+                ],
+              ],
+            ),
           ),
-        for (final (index, section) in sections.indexed) ...[
-          SizedBox(height: index == 0 ? 22 : 26),
-          SectionLabel(section.label),
-          const SizedBox(height: 10),
-          section.child,
-        ],
+        ),
       ],
     );
   }
