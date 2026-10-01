@@ -1147,13 +1147,16 @@ class _DevicesPageState extends State<DevicesPage> {
                         ),
                       const SizedBox(width: 8),
                       Flexible(
-                        child: TextButton.icon(
-                          key: const Key('start-pairing'),
-                          onPressed: controller.busy
-                              ? null
-                              : controller.beginPairing,
-                          icon: const Icon(FiIcons.link, size: 16),
-                          label: Text(l.devicesPairDevice),
+                        child: Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton.icon(
+                            key: const Key('start-pairing'),
+                            onPressed: controller.busy
+                                ? null
+                                : controller.beginPairing,
+                            icon: const Icon(FiIcons.link, size: 16),
+                            label: Text(l.devicesPairDevice),
+                          ),
                         ),
                       ),
                     ],
