@@ -5,7 +5,7 @@ TBD: Define the keyed contextual help-copy registry and the help affordances pla
 ## Requirements
 
 ### Requirement: Keyed help-copy registry
-The Flutter application SHALL hold all contextual help copy in one registry keyed by a stable help id, and every help affordance SHALL resolve its text through that registry rather than embedding copy at the call site. A help id that is referenced but not present in the registry SHALL fail a test rather than render an empty popup.
+The Flutter application SHALL hold all contextual help copy in one registry keyed by a stable help id, and every help affordance SHALL resolve its text through that registry rather than embedding copy at the call site. The registry SHALL hold a title and body for every help id in each supported interface language, and an affordance SHALL show the copy of the active language. A help id that is referenced but not present in the registry, or whose copy is missing or empty in any supported language, SHALL fail a test rather than render an empty popup.
 
 #### Scenario: Copy is reviewable in one place
 - **WHEN** a reviewer opens the help-copy registry
@@ -14,6 +14,14 @@ The Flutter application SHALL hold all contextual help copy in one registry keye
 #### Scenario: Missing help id
 - **WHEN** a surface references a help id absent from the registry
 - **THEN** the registry test fails naming the id, and at runtime the affordance is not rendered rather than rendering an empty popup
+
+#### Scenario: Help in Spanish
+- **WHEN** the interface is in Spanish and the user taps the `?` beside the Required switch in the field editor
+- **THEN** the popup shows the Spanish title and body for Required
+
+#### Scenario: Spanish help copy missing
+- **WHEN** a help id has English copy but no Spanish copy
+- **THEN** the registry test fails naming the id and the language
 
 ### Requirement: Help affordance beside non-obvious controls
 Surfaces SHALL place a `?` help button beside each control whose meaning is not self-evident, and tapping it SHALL open a dismissible popup showing the registry copy for that control without changing any form state. At minimum the following controls SHALL carry a help affordance: in the field editor, Required, Default, Decimal scale, Minimum/Maximum, Minimum/Maximum length, and Multiline; in the widget form, Widget type, Use a saved query, Aggregation, Field to aggregate, Output scale and Rounding policy, Group by, Date field, Category field, X axis and Y axis, Filter, and each presentation option; in the computed-fields-and-queries dialog, the Computed fields section, the Source field, and the Saved queries section; on the pairing card, Start pairing and the single-initiator hint.

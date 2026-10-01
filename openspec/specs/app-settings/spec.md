@@ -27,15 +27,16 @@ Settings SHALL be a top-level destination on every platform and at every width. 
 
 ### Requirement: Settings sections follow platform capabilities
 The app SHALL decide which Settings sections appear from the running platform's capabilities, never from the window width. The capabilities SHALL be replaceable as a whole so tests can present the app as Android or as desktop. Sections SHALL appear in this order, each with its section label:
+- Language: shown on every platform. Its content is defined by the Language section requirement.
 - Voice input: shown only when the platform supports on-device voice (Android) and a voice engine is available to the build. Its content is defined by the voice-record-fill capability.
 - Microphone: shown only on Android and only when Voice input is shown. It holds "Microphone access" with the permission state ("Allowed", "Not allowed yet" with "Fi asks the first time you use voice.", "Off" with "Turn it on in Android settings to fill by voice."), and an "Android settings" button that opens this app's Android settings page. The permission state SHALL be read again when the app returns to the foreground.
 - About: shown on every platform.
 
 No text mentioning Android, and no control that opens Android settings, SHALL appear on a platform other than Android. On a platform other than Android the page header SHALL read "Settings" with the line "Preferences for this computer." under it; on Android the header SHALL read "Settings" alone.
 
-#### Scenario: Desktop shows only About
+#### Scenario: Desktop shows Language and About
 - **WHEN** the app runs with desktop capabilities, even with a voice engine available, and the user opens Settings on a 1240px-wide screen
-- **THEN** Settings shows "Preferences for this computer." and the About section, and shows no Voice input section, no Microphone section and no "Android settings" button
+- **THEN** Settings shows "Preferences for this computer.", the Language section and then the About section, and shows no Voice input section, no Microphone section and no "Android settings" button
 
 #### Scenario: Desktop capabilities at phone width
 - **WHEN** the app runs with desktop capabilities and a voice engine available, and the window is 390px wide
@@ -43,15 +44,32 @@ No text mentioning Android, and no control that opens Android settings, SHALL ap
 
 #### Scenario: Android with voice available
 - **WHEN** the app runs with Android capabilities and a voice engine is available
-- **THEN** Settings shows Voice input, Microphone and About in that order
+- **THEN** Settings shows Language, Voice input, Microphone and About in that order
 
 #### Scenario: Android without a voice engine
 - **WHEN** the app runs with Android capabilities and no voice engine is available to the build
-- **THEN** Settings shows only About
+- **THEN** Settings shows only Language and About
 
 #### Scenario: Permission changed in Android settings
 - **WHEN** the Microphone section shows "Off", the user taps "Android settings", allows the microphone there and returns to the app
 - **THEN** the Microphone section shows "Allowed"
+
+### Requirement: Language section
+The Language section SHALL offer three choices: System default, English and Español. "English" and "Español" SHALL always be written in their own language. The System default choice SHALL name the language the system currently resolves to, in that language's own name. The current preference SHALL be marked. Picking a choice SHALL apply it at once and store it on the device.
+- On a platform other than Android (mock 8a), the section SHALL be one card with the row "App language", the line "Menus, labels and dates. Changes apply right away." under it, and a dropdown showing the current choice. The System default entry SHALL read "System default (<language>)", for example "System default (English)".
+- On Android (mocks 8b, 8i), the section SHALL be one card holding a radio list with the rows "System default" (with the line "<language> — same as your phone", for example "English — same as your phone"), "English" and "Español".
+
+#### Scenario: Desktop dropdown
+- **WHEN** the app runs with desktop capabilities on an English system and the user opens Settings
+- **THEN** the Language section shows "App language", "Menus, labels and dates. Changes apply right away." and a dropdown reading "System default (English)", whose entries are "System default (English)", "English" and "Español"
+
+#### Scenario: Android radio list
+- **WHEN** the app runs with Android capabilities on an English system and the user opens Settings
+- **THEN** the Language section shows the rows "System default" with "English — same as your phone", "English" and "Español", and System default is selected
+
+#### Scenario: Picking Español on Android
+- **WHEN** the user taps "Español" in the Android Language section
+- **THEN** the row "Español" is selected, the page title reads "Ajustes", and the System default row reads "Predeterminado del sistema" with "English — igual que tu teléfono"
 
 ### Requirement: About section
 The About section SHALL be shown on every platform as one card with these rows in order:
