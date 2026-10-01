@@ -97,7 +97,7 @@ void main() {
       final controller = DevicesController(bridge);
       await controller.start();
       expect(bridge.rejected, isEmpty);
-      expect(controller.errorMessage, isNull);
+      expect(controller.failure, isNull);
       expect(controller.syncStatus, SyncStatusDto.searching);
       controller.dispose();
     },

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:fi/l10n/app_localizations.dart';
 import 'package:fi/src/rust/api/voice_models.dart' as rust;
 import 'package:fi/src/rust/api/voice_models.dart'
     show
@@ -15,6 +16,7 @@ import 'package:fi/ui_prefs.dart';
 import 'package:fi/src/rust/api/voice.dart' as rust_voice;
 import 'package:fi/voice/engine.dart';
 import 'package:fi/voice/rust_engine.dart';
+import 'package:intl/intl.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -348,18 +350,15 @@ extension ModelStatusDetails on ModelStatusDto {
 String formatBytes(int bytes) {
   const mb = 1000 * 1000;
   const gb = 1000 * mb;
-  if (bytes >= gb) {
-    final fixed = (bytes / gb).toStringAsFixed(2);
-    final trimmed = fixed.replaceFirst(RegExp(r'\.?0+$'), '');
-    return '$trimmed GB';
-  }
-  return '${(bytes / mb).round()} MB';
+  // Numbers follow Intl.defaultLocale: "1.43 GB" in English, "1,43 GB" in Spanish.
+  if (bytes >= gb) return '${NumberFormat('0.##').format(bytes / gb)} GB';
+  return '${NumberFormat('0').format(bytes / mb)} MB';
 }
 
 /// "about 3 min left", "about 45 s left".
-String formatTimeLeft(int seconds) => seconds >= 90
-    ? 'about ${(seconds / 60).round()} min left'
-    : 'about $seconds s left';
+String formatTimeLeft(AppLocalizations l, int seconds) => seconds >= 90
+    ? l.timeLeftMinutes((seconds / 60).round())
+    : l.timeLeftSeconds(seconds);
 
 /// The bundled manifest's files, for fakes and tests.
 const fakeModelFiles = [

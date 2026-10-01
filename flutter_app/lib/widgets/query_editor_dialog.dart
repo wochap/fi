@@ -1,3 +1,4 @@
+import 'package:fi/l10n/l10n.dart';
 import 'package:fi/controllers.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/theme/form_errors.dart';
@@ -68,20 +69,15 @@ class _QueryEditorDialogState extends State<QueryEditorDialog> {
     super.dispose();
   }
 
-  String get _usage => switch (widget.referencingWidgets) {
-    0 => 'Used by no widgets',
-    1 => 'Used by 1 widget',
-    final count => 'Used by $count widgets',
-  };
-
-  String? get _blocker {
-    if (name.text.trim().isEmpty) return 'Give the query a name.';
-    return query?.blocker;
+  String? _blocker(AppLocalizations l) {
+    if (name.text.trim().isEmpty) return l.queryNameRequired;
+    return query?.blocker(l);
   }
 
   @override
   Widget build(BuildContext context) {
     final state = query;
+    final l = context.l10n;
     return AlertDialog(
       key: const Key('query-editor'),
       title: Column(
@@ -91,7 +87,7 @@ class _QueryEditorDialogState extends State<QueryEditorDialog> {
           Text(widget.heading),
           const SizedBox(height: 2),
           Text(
-            _usage,
+            l.queryUsedBy(widget.referencingWidgets),
             key: const Key('query-editor-usage'),
             style: TextStyle(fontSize: 12, color: Nocturne.muted(.55)),
           ),
@@ -107,17 +103,17 @@ class _QueryEditorDialogState extends State<QueryEditorDialog> {
               FiTextInput(
                 key: const Key('query-name'),
                 controller: name,
-                label: 'Query name',
+                label: l.queryName,
                 required: true,
-                errors: issues.of('name'),
+                errors: issues.fieldLines(context.l10n, 'name'),
                 onChanged: (_) =>
                     setState(() => issues = issues.without('name')),
               ),
               const SizedBox(height: 12),
               if (state == null)
                 Text(
-                  'This query was made elsewhere and cannot be edited here.\n\n'
-                  '${widget.existing == null ? '' : describeQuery(widget.existing!, widget.schema)}',
+                  '${l.queryNotEditable}\n\n'
+                  '${widget.existing == null ? '' : describeQuery(l, widget.existing!, widget.schema)}',
                   key: const Key('query-editor-readonly'),
                 )
               else
@@ -130,7 +126,7 @@ class _QueryEditorDialogState extends State<QueryEditorDialog> {
                 Padding(
                   padding: const EdgeInsets.only(top: 12),
                   child: FormErrorLines(
-                    issues.form,
+                    issues.formLines(context.l10n),
                     key: const Key('query-editor-error'),
                   ),
                 ),
@@ -141,13 +137,13 @@ class _QueryEditorDialogState extends State<QueryEditorDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: Text(state == null ? 'Close' : 'Cancel'),
+          child: Text(state == null ? l.commonClose : l.commonCancel),
         ),
         if (state != null)
           FilledButton(
             key: const Key('save-query'),
-            onPressed: _blocker != null || saving ? null : _save,
-            child: const Text('Save'),
+            onPressed: _blocker(l) != null || saving ? null : _save,
+            child: Text(l.commonSave),
           ),
       ],
     );
@@ -167,6 +163,7 @@ class _QueryEditorDialogState extends State<QueryEditorDialog> {
       existing?.order ?? widget.order,
       id: existing?.id ?? '',
       queryVersion: existing?.queryVersion ?? 1,
+      decimalSeparator: decimalSeparatorOf(context),
     );
     try {
       await widget.onSave(definition);
@@ -189,14 +186,18 @@ Future<bool?> showSavedQueryEditor(
   required CollectionSchemaDto schema,
   required QueryDefinitionDto definition,
   required Future<void> Function(QueryDefinitionDto) onSave,
-  String heading = 'Edit query',
+  String? heading,
 }) => showDialog<bool>(
   context: context,
   builder: (dialog) => QueryEditorDialog(
     schema: schema,
-    heading: heading,
+    heading: heading ?? context.l10n.queryEditTitle,
     initialName: definition.name,
-    initialState: QueryBuilderState.fromDefinition(definition, schema),
+    initialState: QueryBuilderState.fromDefinition(
+      definition,
+      schema,
+      decimalSeparator: decimalSeparatorOf(context),
+    ),
     existing: definition,
     referencingWidgets: widgetsUsingQuery(controller, definition.id),
     onSave: onSave,

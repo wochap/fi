@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:fi/l10n/l10n.dart';
 import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/theme/form_errors.dart';
 import 'package:fi/theme/nocturne.dart';
@@ -127,7 +128,7 @@ class FormSurface extends StatelessWidget {
     this.aside,
     this.pinnedAside,
     this.primaryKey,
-    this.cancelLabel = 'Cancel',
+    this.cancelLabel,
     this.onCancel,
     this.width = 480,
     this.closeInHeader = false,
@@ -169,7 +170,7 @@ class FormSurface extends StatelessWidget {
   final String primaryLabel;
   final VoidCallback? onPrimary;
   final Key? primaryKey;
-  final String cancelLabel;
+  final String? cancelLabel;
 
   /// Defaults to closing the route.
   final VoidCallback? onCancel;
@@ -243,11 +244,11 @@ class FormSurface extends StatelessWidget {
     );
   }
 
-  Widget? _menu() => menuActions.isEmpty
+  Widget? _menu(BuildContext context) => menuActions.isEmpty
       ? null
       : PopupMenuButton<int>(
           key: const Key('form-menu'),
-          tooltip: 'More',
+          tooltip: context.l10n.themeMore,
           icon: const Icon(FiIcons.more, size: 20),
           onSelected: (index) => menuActions[index].onPressed(),
           itemBuilder: (_) => [
@@ -362,12 +363,12 @@ class FormSurface extends StatelessWidget {
                     onPressed: action.onPressed,
                     icon: Icon(action.icon),
                   ),
-                ?_menu(),
+                ?_menu(context),
                 if (closeInHeader)
                   FiIconButton(
                     key: const Key('form-close'),
                     icon: FiIcons.close,
-                    tooltip: 'Close',
+                    tooltip: context.l10n.commonClose,
                     onPressed: () => _cancel(context),
                   ),
               ],
@@ -422,7 +423,7 @@ class FormSurface extends StatelessWidget {
                         minimumSize: const Size(0, 48),
                       ),
                       onPressed: () => _cancel(context),
-                      child: Text(cancelLabel),
+                      child: Text(cancelLabel ?? context.l10n.commonCancel),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -490,7 +491,7 @@ class FormSurface extends StatelessWidget {
           const SizedBox(width: 8),
           TextButton(
             onPressed: () => _cancel(context),
-            child: Text(cancelLabel),
+            child: Text(cancelLabel ?? context.l10n.commonCancel),
           ),
           const SizedBox(width: 8),
           FilledButton(
@@ -516,7 +517,10 @@ class FormSurface extends StatelessWidget {
             onPressed: action.onPressed,
             child: Text(action.label),
           ),
-        TextButton(onPressed: () => _cancel(context), child: Text(cancelLabel)),
+        TextButton(
+          onPressed: () => _cancel(context),
+          child: Text(cancelLabel ?? context.l10n.commonCancel),
+        ),
         FilledButton(
           key: primaryKey,
           onPressed: onPrimary,

@@ -1,8 +1,9 @@
+import 'package:fi/l10n/l10n.dart';
+
 /// Stable identifiers for every contextual help affordance in the application.
 ///
 /// The id names a concept, never the label text, so renaming a control on screen never orphans
-/// its copy. Every value must have an entry in [helpCopy]; a registry test enumerates the enum so
-/// a missing entry fails a test rather than rendering an empty popup.
+/// its copy. [helpEntry] switches over every value, so a missing entry fails to compile.
 enum HelpId {
   // Field editor.
   fieldRequired,
@@ -56,244 +57,130 @@ final class HelpEntry {
   final String body;
 }
 
-/// Every piece of contextual help copy, in one reviewable place.
-const Map<HelpId, HelpEntry> helpCopy = {
-  HelpId.fieldRequired: HelpEntry(
-    title: 'Required',
-    body:
-        'A required field must hold a value. New records cannot be saved without it.\n\n'
-        'Turning this on for a field that existing records do not have marks those records '
-        'invalid until you fill the field in. They are never deleted, and you can still open '
-        'and repair them from the record list.\n\n'
-        'Setting a default avoids that: the default counts as the value for every record that '
-        'does not have one.',
+/// The localized help copy for [id]; titles and bodies live in the ARB files.
+HelpEntry helpEntry(AppLocalizations l, HelpId id) => switch (id) {
+  HelpId.fieldRequired => HelpEntry(
+    title: l.helpFieldRequiredTitle,
+    body: l.helpFieldRequiredBody,
   ),
-  HelpId.fieldDefault: HelpEntry(
-    title: 'Default',
-    body:
-        'The value used when a record does not supply one. It fills new records as you create '
-        'them, and it satisfies the Required rule for existing records that lack the field.\n\n'
-        'Leave it empty if every record should state its own value.',
+  HelpId.fieldDefault => HelpEntry(
+    title: l.helpFieldDefaultTitle,
+    body: l.helpFieldDefaultBody,
   ),
-  HelpId.fieldDecimalScale: HelpEntry(
-    title: 'Decimal scale',
-    body:
-        'How many digits are kept after the decimal point. Scale 2 stores 10.25 exactly; scale 0 '
-        'stores whole numbers only.\n\n'
-        'Values are stored as exact numbers, never as floating point, so sums and averages do not '
-        'drift. The scale cannot be changed once records hold a value for this field.',
+  HelpId.fieldDecimalScale => HelpEntry(
+    title: l.helpFieldDecimalScaleTitle,
+    body: l.helpFieldDecimalScaleBody,
   ),
-  HelpId.fieldMinMax: HelpEntry(
-    title: 'Minimum and Maximum',
-    body:
-        'The range a value is allowed to fall in, inclusive on both ends. A record outside the '
-        'range is rejected when you save it.\n\n'
-        'Leave either box empty for no limit on that side.',
+  HelpId.fieldMinMax => HelpEntry(
+    title: l.helpFieldMinMaxTitle,
+    body: l.helpFieldMinMaxBody,
   ),
-  HelpId.fieldMinMaxLength: HelpEntry(
-    title: 'Minimum and Maximum length',
-    body:
-        'How short and how long the text may be, counted in characters.\n\n'
-        'Leave either box empty for no limit on that side.',
+  HelpId.fieldMinMaxLength => HelpEntry(
+    title: l.helpFieldMinMaxLengthTitle,
+    body: l.helpFieldMinMaxLengthBody,
   ),
-  HelpId.fieldMultiline: HelpEntry(
-    title: 'Multiline',
-    body:
-        'Shows this text field as a box that accepts line breaks instead of a single line. It '
-        'changes how the field is edited, not what may be stored in it.',
+  HelpId.fieldMultiline => HelpEntry(
+    title: l.helpFieldMultilineTitle,
+    body: l.helpFieldMultilineBody,
   ),
-  HelpId.fieldSlider: HelpEntry(
-    title: 'Show as slider',
-    body:
-        'Shows this number field as a slider that moves from the minimum to the maximum, with the '
-        'picked value beside it. Until a value is picked the track shows no thumb; tap or drag '
-        'it to pick one, and the number appears beside it.\n\n'
-        'A row of numbers under the track shows the scale: every step when they all fit, '
-        'otherwise only the minimum and the maximum at the two ends.\n\n'
-        'Step sets how far each move goes, for example 10 on a 0 to 100 range. Leave it empty '
-        'for whole steps of 1. The step must divide the distance from the minimum to the maximum '
-        'exactly, so the last position lands on the maximum.\n\n'
-        'Available only once both a minimum and a maximum are set. It changes how the field is '
-        'edited, not what is stored: queries, charts, and the record list still see a number.',
+  HelpId.fieldSlider => HelpEntry(
+    title: l.helpFieldSliderTitle,
+    body: l.helpFieldSliderBody,
   ),
-  HelpId.widgetType: HelpEntry(
-    title: 'Widget type',
-    body:
-        'What the widget draws.\n\n'
-        'Number shows one aggregated value, such as a total or a count. Line chart draws a value '
-        'over time. Bar chart compares one value across categories. Scatter plot places one point '
-        'per record using two fields as the axes.',
+  HelpId.widgetType => HelpEntry(
+    title: l.helpWidgetTypeTitle,
+    body: l.helpWidgetTypeBody,
   ),
-  HelpId.widgetUseSavedQuery: HelpEntry(
-    title: 'Use a saved query',
-    body:
-        'On, the widget reuses a query you already saved, and editing that query updates every '
-        'widget that uses it.\n\n'
-        'Off, you build the query here and it is saved under the widget title.',
+  HelpId.widgetUseSavedQuery => HelpEntry(
+    title: l.helpWidgetUseSavedQueryTitle,
+    body: l.helpWidgetUseSavedQueryBody,
   ),
-  HelpId.widgetAggregation: HelpEntry(
-    title: 'Aggregation',
-    body:
-        'How many records are reduced to one number.\n\n'
-        'Count counts records and needs no field. Sum, Average, Min, and Max each read one '
-        'numeric field, chosen below.\n\n'
-        'With a Group by period the aggregation is computed once per period rather than once over '
-        'everything.',
+  HelpId.widgetAggregation => HelpEntry(
+    title: l.helpWidgetAggregationTitle,
+    body: l.helpWidgetAggregationBody,
   ),
-  HelpId.widgetOperandField: HelpEntry(
-    title: 'Field to aggregate',
-    body:
-        'The numeric field the aggregation reads. Only number, decimal, and duration fields can '
-        'be summed or averaged.\n\n'
-        'Count ignores this because it counts records rather than values.',
+  HelpId.widgetOperandField => HelpEntry(
+    title: l.helpWidgetOperandFieldTitle,
+    body: l.helpWidgetOperandFieldBody,
   ),
-  HelpId.widgetOutputScale: HelpEntry(
-    title: 'Output scale',
-    body:
-        'How many decimal places the average keeps. An average rarely divides evenly, so the '
-        'result must state its own precision instead of inheriting one.',
+  HelpId.widgetOutputScale => HelpEntry(
+    title: l.helpWidgetOutputScaleTitle,
+    body: l.helpWidgetOutputScaleBody,
   ),
-  HelpId.widgetRounding: HelpEntry(
-    title: 'Rounding policy',
-    body:
-        'What happens when the average does not fit the output scale exactly.\n\n'
-        'Half to even rounds to the nearest value and breaks ties toward the even digit, which '
-        'keeps long runs of numbers unbiased. Reject inexact refuses to show a result rather than '
-        'round, so you never read a rounded number as an exact one.',
+  HelpId.widgetRounding => HelpEntry(
+    title: l.helpWidgetRoundingTitle,
+    body: l.helpWidgetRoundingBody,
   ),
-  HelpId.widgetGroupBy: HelpEntry(
-    title: 'Group by',
-    body:
-        'Buckets records by calendar period — day, week, month, or year — using the date field '
-        'you choose, and computes the aggregation once per bucket. Each bucket becomes one point '
-        'or one bar.\n\n'
-        'Choose None to aggregate over everything at once, or to group by a category instead of a '
-        'period.',
+  HelpId.widgetGroupBy => HelpEntry(
+    title: l.helpWidgetGroupByTitle,
+    body: l.helpWidgetGroupByBody,
   ),
-  HelpId.widgetDateField: HelpEntry(
-    title: 'Date field',
-    body:
-        'The date or timestamp used to decide which period a record falls into. Weeks start on '
-        'Monday and periods are computed in UTC.',
+  HelpId.widgetDateField => HelpEntry(
+    title: l.helpWidgetDateFieldTitle,
+    body: l.helpWidgetDateFieldBody,
   ),
-  HelpId.widgetCategoryField: HelpEntry(
-    title: 'Category field',
-    body:
-        'The field whose values become the categories along the axis: one bar or one point per '
-        'distinct value. Records sharing a value are aggregated together.',
+  HelpId.widgetCategoryField => HelpEntry(
+    title: l.helpWidgetCategoryFieldTitle,
+    body: l.helpWidgetCategoryFieldBody,
   ),
-  HelpId.widgetXAxis: HelpEntry(
-    title: 'X axis',
-    body:
-        'The field plotted horizontally, one point per record. No aggregation happens: each '
-        'record keeps its own point.',
+  HelpId.widgetXAxis => HelpEntry(
+    title: l.helpWidgetXAxisTitle,
+    body: l.helpWidgetXAxisBody,
   ),
-  HelpId.widgetYAxis: HelpEntry(
-    title: 'Y axis',
-    body: 'The numeric field plotted vertically, one point per record.',
+  HelpId.widgetYAxis => HelpEntry(
+    title: l.helpWidgetYAxisTitle,
+    body: l.helpWidgetYAxisBody,
   ),
-  HelpId.widgetFilter: HelpEntry(
-    title: 'Filter',
-    body:
-        'Restricts the widget to records matching one condition, such as amount greater than 10 '
-        'or category equals Migraine.\n\n'
-        'Leave the field set to None to include every record. The filter changes what the widget '
-        'shows; it never hides or deletes records anywhere else.',
+  HelpId.widgetFilter => HelpEntry(
+    title: l.helpWidgetFilterTitle,
+    body: l.helpWidgetFilterBody,
   ),
-  HelpId.widgetUnitSuffix: HelpEntry(
-    title: 'Unit suffix',
-    body:
-        'Text shown after the value, such as EUR or mg. It is display only: the exact number is '
-        'unchanged and the suffix is never stored with the data.',
+  HelpId.widgetUnitSuffix => HelpEntry(
+    title: l.helpWidgetUnitSuffixTitle,
+    body: l.helpWidgetUnitSuffixBody,
   ),
-  HelpId.widgetShowPoints: HelpEntry(
-    title: 'Show points',
-    body:
-        'Draws a marker at every data point on the line, which helps when there are only a few '
-        'points or when gaps matter.',
+  HelpId.widgetShowPoints => HelpEntry(
+    title: l.helpWidgetShowPointsTitle,
+    body: l.helpWidgetShowPointsBody,
   ),
-  HelpId.widgetAxisLabel: HelpEntry(
-    title: 'Y axis label',
-    body:
-        'Text shown beside the vertical axis to name what is being measured, such as "Hours" or '
-        '"EUR". Leave it empty for no label.',
+  HelpId.widgetAxisLabel => HelpEntry(
+    title: l.helpWidgetAxisLabelTitle,
+    body: l.helpWidgetAxisLabelBody,
   ),
-  HelpId.widgetBarWidth: HelpEntry(
-    title: 'Bar width',
-    body:
-        'How wide each bar is drawn, in logical pixels. Leave it empty to let the chart size the '
-        'bars to fit.',
+  HelpId.widgetBarWidth => HelpEntry(
+    title: l.helpWidgetBarWidthTitle,
+    body: l.helpWidgetBarWidthBody,
   ),
-  HelpId.widgetPointRadius: HelpEntry(
-    title: 'Point radius',
-    body:
-        'How large each plotted point is drawn, in logical pixels. Leave it empty for the default '
-        'size.',
+  HelpId.widgetPointRadius => HelpEntry(
+    title: l.helpWidgetPointRadiusTitle,
+    body: l.helpWidgetPointRadiusBody,
   ),
-  HelpId.computedFields: HelpEntry(
-    title: 'Computed fields',
-    body:
-        'A computed field derives its value from other fields of the same record, such as '
-        'amount × rate or ended − started. It is recalculated on this device whenever it is read, '
-        'so it is never out of date, and only its definition is synchronised, never its values.\n\n'
-        'Use one for totals with the sign removed, products like price × quantity, or the time '
-        'between two dates. Queries and widgets can use it like any other field, and editing it '
-        'changes every query and widget that uses it.',
+  HelpId.computedFields => HelpEntry(
+    title: l.helpComputedFieldsTitle,
+    body: l.helpComputedFieldsBody,
   ),
-  HelpId.computedFieldResult: HelpEntry(
-    title: 'Result type',
-    body:
-        'The result type is worked out from the expression; you never pick it.\n\n'
-        '+ and − need both sides to have the same number of decimals. × adds the decimals of '
-        'both sides (scale 2 × scale 3 gives scale 5). Whole numbers and decimals cannot be mixed '
-        'in +, − or ×; turn the number into a decimal instead. Subtracting two dates gives a '
-        'duration.\n\n'
-        '÷ always gives a decimal at the scale you choose. "Round half to even" rounds the last '
-        'digit; "Reject inexact" leaves the value empty when the answer does not fit exactly.\n\n'
-        'If any field used is empty for a record, the result is empty for that record ("may be '
-        'empty").',
+  HelpId.computedFieldResult => HelpEntry(
+    title: l.helpComputedFieldResultTitle,
+    body: l.helpComputedFieldResultBody,
   ),
-  HelpId.querySavedQueries: HelpEntry(
-    title: 'Saved queries',
-    body:
-        'A named query that widgets can reference. Editing one here updates every widget that '
-        'uses it; the editor states how many widgets that is before you save.\n\n'
-        'Deleting a query does not delete any record.',
+  HelpId.querySavedQueries => HelpEntry(
+    title: l.helpQuerySavedQueriesTitle,
+    body: l.helpQuerySavedQueriesBody,
   ),
-  HelpId.pairingStartPairing: HelpEntry(
-    title: 'Start pairing',
-    body:
-        'Makes this device discoverable to nearby devices for a short window so the two can '
-        'exchange trust.\n\n'
-        'Both devices must be nearby and on the same network, and both must have pairing on. '
-        'Nothing is shared until you confirm the same six-digit code on both screens.',
+  HelpId.pairingStartPairing => HelpEntry(
+    title: l.helpPairingStartPairingTitle,
+    body: l.helpPairingStartPairingBody,
   ),
-  HelpId.pairingSingleInitiator: HelpEntry(
-    title: 'Only one device connects',
-    body:
-        'Both devices see each other, but only one may tap Connect. If both tap, the two '
-        'attempts collide and the pairing fails.\n\n'
-        'Pick either device, tap Connect there, and let the other one wait.',
+  HelpId.pairingSingleInitiator => HelpEntry(
+    title: l.helpPairingSingleInitiatorTitle,
+    body: l.helpPairingSingleInitiatorBody,
   ),
-  HelpId.discoverable: HelpEntry(
-    title: 'Discoverable',
-    body:
-        'When on, this device announces itself to your paired devices on the local network '
-        'and looks for their announcements, so they find each other automatically.\n\n'
-        'When off, it neither announces nor looks. Paired devices can still connect while '
-        'their address is known, for example a session that is already open or one that '
-        'dials this device, but a device whose address changed will not be found again '
-        'until you turn this back on.\n\n'
-        'Pairing a new device is not affected: it uses its own short announcement.',
+  HelpId.discoverable => HelpEntry(
+    title: l.helpDiscoverableTitle,
+    body: l.helpDiscoverableBody,
   ),
-  HelpId.syncEnabled: HelpEntry(
-    title: 'Sync with paired devices',
-    body:
-        'When on, this device connects to your paired devices and keeps the dataset in sync '
-        'with them.\n\n'
-        'When off, sync is paused: open sessions close, this device stops connecting, and '
-        'connections from paired devices are refused. Your pairings and data are kept, and '
-        'changes sync again once you turn this back on.\n\n'
-        'Pairing a new device still works while sync is paused.',
+  HelpId.syncEnabled => HelpEntry(
+    title: l.helpSyncEnabledTitle,
+    body: l.helpSyncEnabledBody,
   ),
 };

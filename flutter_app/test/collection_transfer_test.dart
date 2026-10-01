@@ -1,3 +1,4 @@
+import 'package:fi/l10n/l10n.dart';
 import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/controllers.dart';
 import 'package:fi/file_dialogs.dart';
@@ -78,6 +79,8 @@ Future<void> _listAction(WidgetTester tester, String label) async {
   await tester.pumpAndSettle();
 }
 
+final _en = lookupAppLocalizations(const Locale('en'));
+
 void main() {
   group('controller', () {
     test('exports pass Rust text to the save dialog', () async {
@@ -155,7 +158,7 @@ void main() {
         expect(outcome, _csvAbort);
         expect(bridge.records[_collection], hasLength(2));
         expect(
-          importOutcomeMessage(outcome!, csv: true),
+          importOutcomeMessage(_en, outcome!, csv: true),
           'Import stopped. Row 12, column Onset: '
           '"yesterday" is not a date (YYYY-MM-DD)',
         );
@@ -166,6 +169,7 @@ void main() {
     test('outcome messages name counts and JSON abort locations', () {
       expect(
         importOutcomeMessage(
+          _en,
           const ImportOutcomeDto(
             imported: true,
             recordCount: 120,
@@ -178,6 +182,7 @@ void main() {
       );
       expect(
         importOutcomeMessage(
+          _en,
           const ImportOutcomeDto(
             imported: true,
             recordCount: 9,
@@ -190,6 +195,7 @@ void main() {
       );
       expect(
         importOutcomeMessage(
+          _en,
           const ImportOutcomeDto(
             imported: false,
             recordCount: 0,
@@ -205,6 +211,7 @@ void main() {
       );
       expect(
         importOutcomeMessage(
+          _en,
           const ImportOutcomeDto(
             imported: false,
             recordCount: 0,

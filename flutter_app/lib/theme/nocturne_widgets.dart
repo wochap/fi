@@ -1,3 +1,4 @@
+import 'package:fi/l10n/l10n.dart';
 import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/theme/nocturne.dart';
 import 'package:flutter/material.dart';
@@ -164,10 +165,9 @@ class Tag extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Never cut short: a long (translated) tag wraps instead.
     final label = Text(
       text,
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
       style: TextStyle(
         fontSize: fontSize,
         letterSpacing: fontSize * .02,
@@ -214,7 +214,7 @@ class ClearMark extends StatelessWidget {
         : Nocturne.clearMarkSize;
     return Semantics(
       button: true,
-      label: 'Clear',
+      label: context.l10n.commonClear,
       excludeSemantics: true,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
@@ -251,7 +251,7 @@ class VoiceChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Semantics(
     button: true,
-    label: '$fieldLabel, filled by voice',
+    label: context.l10n.themeFilledByVoice(fieldLabel),
     excludeSemantics: true,
     child: Material(
       color: Nocturne.accent900,
@@ -264,16 +264,19 @@ class VoiceChip extends StatelessWidget {
         onTap: onTap,
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: 28),
-          child: const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 8),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(FiIcons.voice, size: 12, color: Nocturne.accent100),
-                SizedBox(width: 4),
+                const Icon(FiIcons.voice, size: 12, color: Nocturne.accent100),
+                const SizedBox(width: 4),
                 Text(
-                  'Voice',
-                  style: TextStyle(fontSize: 11, color: Nocturne.accent100),
+                  context.l10n.themeVoice,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Nocturne.accent100,
+                  ),
                 ),
               ],
             ),
@@ -289,8 +292,11 @@ class DefaultMarker extends StatelessWidget {
   const DefaultMarker({super.key});
 
   @override
-  Widget build(BuildContext context) =>
-      _Marker(FiIcons.defaultValue, 'Default', Nocturne.muted(.55));
+  Widget build(BuildContext context) => _Marker(
+    FiIcons.defaultValue,
+    context.l10n.themeDefault,
+    Nocturne.muted(.55),
+  );
 }
 
 /// The trailing label-row marker for a required field that still needs a value.
@@ -299,7 +305,7 @@ class NeededMarker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) =>
-      const _Marker(FiIcons.needed, 'Needed', Nocturne.accent200);
+      _Marker(FiIcons.needed, context.l10n.themeNeeded, Nocturne.accent200);
 }
 
 class _Marker extends StatelessWidget {

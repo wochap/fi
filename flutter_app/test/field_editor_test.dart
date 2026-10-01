@@ -7,6 +7,7 @@ import 'package:fi/collections_page.dart';
 import 'package:fi/controllers.dart';
 import 'package:fi/field_editor.dart';
 import 'package:fi/field_registry.dart';
+import 'package:fi/l10n/l10n.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/theme/nocturne.dart';
 import 'package:fi/theme/form_errors.dart';
@@ -221,6 +222,7 @@ Future<void> pickType(WidgetTester tester, FieldTypeKindDto kind) async {
 }
 
 void main() {
+  _spanishHelpTest();
   testWidgets('the warning tracks Required, the default, and the record set', (
     tester,
   ) async {
@@ -427,7 +429,7 @@ void main() {
 
   for (final kind in [FieldTypeKindDto.date, FieldTypeKindDto.dateTime]) {
     testWidgets(
-      '${fieldKindLabel(kind)} default and range slots offer no Today or Now',
+      '${fieldKindLabel(lookupAppLocalizations(const Locale('en')), kind)} default and range slots offer no Today or Now',
       (tester) async {
         final seeded = await seed(tester);
         await pumpPage(tester, seeded.controller);
@@ -571,7 +573,11 @@ void main() {
       expect(find.text(label), findsWidgets);
     }
     for (final kind in FieldTypeKindDto.values) {
-      if (kind.name != fieldKindLabel(kind).toLowerCase()) {
+      if (kind.name !=
+          fieldKindLabel(
+            lookupAppLocalizations(const Locale('en')),
+            kind,
+          ).toLowerCase()) {
         expect(find.text(kind.name), findsNothing);
       }
     }
@@ -1200,6 +1206,40 @@ void main() {
     expect(
       seeded.controller.schema!.fields.any((field) => field.name == 'Mood'),
       isTrue,
+    );
+  });
+}
+
+void _spanishHelpTest() {
+  testWidgets('field editor help opens in Spanish', (tester) async {
+    final seeded = await seed(tester);
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('es'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: FieldEditorBody(
+              controller: seeded.controller,
+              onClosed: () {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tapChip(tester, 'default');
+    final help = find.byKey(const Key('help-fieldDefault'));
+    await tester.ensureVisible(help);
+    await tester.tap(help);
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('help-dialog')),
+        matching: find.text('Predeterminado'),
+      ),
+      findsOneWidget,
     );
   });
 }

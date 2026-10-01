@@ -1,12 +1,16 @@
 import 'dart:async';
 
 import 'package:clock/clock.dart';
+import 'package:fi/l10n/error_text.dart';
 import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/bridge/collection_bridge.dart';
 import 'package:fi/controllers.dart';
 import 'package:fi/file_dialogs.dart';
 import 'package:fi/help_button.dart';
 import 'package:fi/help_copy.dart';
+import 'package:fi/l10n/l10n.dart';
+import 'package:fi/l10n/language.dart';
+import 'package:intl/intl.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/collections_page.dart';
 import 'package:fi/device_details.dart';
@@ -72,10 +76,12 @@ class _CollectionAppState extends State<CollectionApp>
   late final UiPrefsStore _uiPrefs =
       widget.uiPrefs ?? FileUiPrefsStore(widget.dataDirProvider);
   static const _platform = MethodChannel('fi/platform');
+  final LanguageController _language = LanguageController();
 
   @override
   void initState() {
     super.initState();
+    unawaited(_language.load(_uiPrefs));
     WidgetsBinding.instance.addObserver(this);
     controller = BootstrapController(
       bridge: widget.bridge,
@@ -89,7 +95,7 @@ class _CollectionAppState extends State<CollectionApp>
   Future<void> _start() async {
     await _setPlatformForeground(true);
     await controller.start();
-    if (_voice == null && controller.fatalError == null) {
+    if (_voice == null && controller.fatalFailure == null) {
       if (widget.voiceServices case final build?) {
         final voice = build(await widget.dataDirProvider(), _uiPrefs);
         if (mounted) setState(() => _voice = voice);
@@ -99,7 +105,7 @@ class _CollectionAppState extends State<CollectionApp>
     // Only after the core exists (bridge.initialize) and foreground is set, so
     // every call in DevicesController.start() succeeds and the aggregate
     // status reads Searching rather than Offline on a rootless device.
-    if (controller.fatalError == null && !_devicesStarted) {
+    if (controller.fatalFailure == null && !_devicesStarted) {
       _devicesStarted = true;
       await devices.start();
     }
@@ -110,7 +116,7 @@ class _CollectionAppState extends State<CollectionApp>
   /// the bridge shut down.
   Future<void> _resetDataset() async {
     await controller.resetDataset();
-    if (controller.fatalError != null) return;
+    if (controller.fatalFailure != null) return;
     await _setForeground(true);
     _devicesStarted = true;
     await devices.restart();
@@ -119,10 +125,7 @@ class _CollectionAppState extends State<CollectionApp>
   Future<void> _confirmResetFromError(BuildContext context) async {
     final confirmed = await ResetDatasetDialog.show(
       context,
-      lead:
-          "This device's local data cannot be opened by this version of the "
-          'app. Resetting it lets you create a new dataset or join one from '
-          'another device.',
+      lead: context.l10n.bootResetLeadError,
     );
     if (confirmed) await _resetDataset();
   }
@@ -132,11 +135,7 @@ class _CollectionAppState extends State<CollectionApp>
   Future<void> _confirmResetFromRecovery(BuildContext context) async {
     final confirmed = await ResetDatasetDialog.show(
       context,
-      lead:
-          'Recovery needs one of your other devices. Resetting instead '
-          'abandons the dataset recorded on this device; if you own no other '
-          'device holding it, the set-aside copy is kept on disk but this app '
-          'cannot read it.',
+      lead: context.l10n.recoveryResetLead,
     );
     if (confirmed) await _resetDataset();
   }
@@ -169,6 +168,7 @@ class _CollectionAppState extends State<CollectionApp>
 
   @override
   void dispose() {
+    _language.dispose();
     devices.dispose();
     controller.dispose();
     WidgetsBinding.instance.removeObserver(this);
@@ -180,103 +180,136 @@ class _CollectionAppState extends State<CollectionApp>
   @override
   Widget build(BuildContext context) => PlatformScope(
     capabilities: widget.capabilities ?? PlatformCapabilities.current(),
-    child: MaterialApp(
-      title: 'Fi',
-      debugShowCheckedModeBanner: false,
-      theme: nocturneTheme(),
-      home: ListenableBuilder(
-        listenable: controller,
-        builder: (context, _) {
-          if (controller.loading) {
-            return const _CenteredSurface(
-              key: Key('bootstrap-loading'),
-              child: CircularProgressIndicator(),
-            );
-          }
-          if (controller.fatalError case final message?) {
-            return _CenteredSurface(
-              key: const Key('bootstrap-error'),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(FiIcons.error, size: 48),
-                  const SizedBox(height: 12),
-                  Text(message, textAlign: TextAlign.center),
-                  const SizedBox(height: 12),
-                  if (controller.fatalSecureStoreLocked)
-                    FilledButton.icon(
-                      key: const Key('retry-after-unlock'),
-                      onPressed: controller.retryingNetworking
-                          ? null
-                          : () => unawaited(controller.retryNetworking()),
-                      icon: const Icon(FiIcons.refresh),
-                      label: const Text('Retry after unlocking'),
-                    )
-                  else if (controller.fatalResetResolvable)
-                    FilledButton(
-                      key: const Key('reset-dataset'),
-                      onPressed: () =>
-                          unawaited(_confirmResetFromError(context)),
-                      child: const Text("Reset this device's data"),
-                    )
-                  else
-                    FilledButton(
-                      key: const Key('retry-bootstrap'),
-                      onPressed: () => unawaited(_start()),
-                      child: const Text('Retry'),
-                    ),
-                ],
-              ),
-            );
-          }
-          final surface = switch (controller.state?.kind) {
-            BootstrapKindDto.ready => CollectionShell(
-              bridge: widget.bridge,
-              fileDialogs: widget.fileDialogs,
-              uiPrefs: _uiPrefs,
-              devices: devices,
-              voice: _voice,
-              onResetDataset: _resetDataset,
-            ),
-            BootstrapKindDto.needsDecision => OnboardingPage(
-              controller: controller,
-              devices: devices,
-              onResetDataset: _resetDataset,
-            ),
-            BootstrapKindDto.joining => switch (controller.state?.recovery) {
-              final recovery? when recovery.isActive => RecoverySurface(
-                recovery: recovery,
-                onResetDataset: () => _confirmResetFromRecovery(context),
-              ),
-              _ => JoiningSurface(devices: devices),
-            },
-            BootstrapKindDto.creating => const _CenteredSurface(
-              child: CircularProgressIndicator(),
-            ),
-            _ => const _CenteredSurface(
-              child: Text('The local collection service is unavailable.'),
-            ),
-          };
-          final deferred = controller.networkingDeferred;
-          if (deferred == null) return surface;
-          // Local data is usable; only peer networking is waiting, so the
-          // explanation sits above the app rather than replacing it.
-          return Column(
-            children: [
-              SafeArea(
-                bottom: false,
-                child: _NetworkingDeferredBanner(
-                  deferred: deferred,
-                  retryError: controller.networkingRetryError,
-                  busy: controller.retryingNetworking,
-                  onRetry: () => unawaited(controller.retryNetworking()),
-                ),
-              ),
-              Expanded(child: surface),
-            ],
-          );
-        },
+    child: LanguageScope(
+      notifier: _language,
+      child: ListenableBuilder(
+        listenable: _language,
+        builder: (context, _) => _app(),
       ),
+    ),
+  );
+
+  Widget _app() => MaterialApp(
+    title: 'Fi',
+    debugShowCheckedModeBanner: false,
+    theme: nocturneTheme(),
+    locale: _language.locale,
+    supportedLocales: AppLocalizations.supportedLocales,
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    localeListResolutionCallback: (locales, supported) =>
+        resolveAppLocale(locales, supported),
+    builder: (context, child) {
+      Intl.defaultLocale = Localizations.localeOf(context).languageCode;
+      return child!;
+    },
+    home: ListenableBuilder(
+      listenable: controller,
+      builder: (context, _) {
+        if (controller.loading) {
+          return const _CenteredSurface(
+            key: Key('bootstrap-loading'),
+            child: CircularProgressIndicator(),
+          );
+        }
+        if (controller.fatalFailure case final failure?) {
+          return _CenteredSurface(
+            key: const Key('bootstrap-error'),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(FiIcons.error, size: 48),
+                const SizedBox(height: 12),
+                Text(
+                  bridgeMessage(context.l10n, failure),
+                  textAlign: TextAlign.center,
+                ),
+                // Rust's own wording, as technical detail under the localized line.
+                if (failure case BridgeError(
+                  kind: != BridgeErrorKind.validation,
+                  :final message,
+                ) when message != bridgeMessage(context.l10n, failure)) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    message,
+                    key: const Key('bootstrap-error-detail'),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 12, color: Nocturne.muted(.55)),
+                  ),
+                ],
+                const SizedBox(height: 12),
+                if (controller.fatalSecureStoreLocked)
+                  FilledButton.icon(
+                    key: const Key('retry-after-unlock'),
+                    onPressed: controller.retryingNetworking
+                        ? null
+                        : () => unawaited(controller.retryNetworking()),
+                    icon: const Icon(FiIcons.refresh),
+                    label: Text(context.l10n.bootRetryAfterUnlock),
+                  )
+                else if (controller.fatalResetResolvable)
+                  FilledButton(
+                    key: const Key('reset-dataset'),
+                    onPressed: () => unawaited(_confirmResetFromError(context)),
+                    child: Text(context.l10n.shellResetData),
+                  )
+                else
+                  FilledButton(
+                    key: const Key('retry-bootstrap'),
+                    onPressed: () => unawaited(_start()),
+                    child: Text(context.l10n.commonRetry),
+                  ),
+              ],
+            ),
+          );
+        }
+        final surface = switch (controller.state?.kind) {
+          BootstrapKindDto.ready => CollectionShell(
+            bridge: widget.bridge,
+            fileDialogs: widget.fileDialogs,
+            uiPrefs: _uiPrefs,
+            devices: devices,
+            voice: _voice,
+            onResetDataset: _resetDataset,
+          ),
+          BootstrapKindDto.needsDecision => OnboardingPage(
+            controller: controller,
+            devices: devices,
+            onResetDataset: _resetDataset,
+          ),
+          BootstrapKindDto.joining => switch (controller.state?.recovery) {
+            final recovery? when recovery.isActive => RecoverySurface(
+              recovery: recovery,
+              onResetDataset: () => _confirmResetFromRecovery(context),
+            ),
+            _ => JoiningSurface(devices: devices),
+          },
+          BootstrapKindDto.creating => const _CenteredSurface(
+            child: CircularProgressIndicator(),
+          ),
+          _ => _CenteredSurface(
+            child: Text(context.l10n.bootServiceUnavailable),
+          ),
+        };
+        final deferred = controller.networkingDeferred;
+        if (deferred == null) return surface;
+        // Local data is usable; only peer networking is waiting, so the
+        // explanation sits above the app rather than replacing it.
+        return Column(
+          children: [
+            SafeArea(
+              bottom: false,
+              child: _NetworkingDeferredBanner(
+                deferred: deferred,
+                ports: controller.deferredPorts,
+                retryFailure: controller.networkingRetryFailure,
+                busy: controller.retryingNetworking,
+                onRetry: () => unawaited(controller.retryNetworking()),
+              ),
+            ),
+            Expanded(child: surface),
+          ],
+        );
+      },
     ),
   );
 }
@@ -284,23 +317,24 @@ class _CollectionAppState extends State<CollectionApp>
 /// Explains why peer networking is off and offers the retry that resumes it.
 /// A locked keyring names the keyring and the unlock, because that is the
 /// action that fixes it; an unavailable store has no such action. Exhausted
-/// ports carry the UDP range in Rust's message, so it is shown as given.
+/// ports name the UDP range from [ports].
 class _NetworkingDeferredBanner extends StatelessWidget {
   const _NetworkingDeferredBanner({
     required this.deferred,
-    required this.retryError,
+    required this.ports,
+    required this.retryFailure,
     required this.busy,
     required this.onRetry,
   });
 
   final NetworkingDeferredDto deferred;
-  final String? retryError;
+  final NetworkPortsDto? ports;
+  final Object? retryFailure;
   final bool busy;
   final VoidCallback onRetry;
 
   @override
   Widget build(BuildContext context) {
-    final locked = deferred.kind == NetworkingDeferredKindDto.secureStoreLocked;
     return MaterialBanner(
       key: const Key('networking-deferred-banner'),
       leading: Icon(switch (deferred.kind) {
@@ -313,16 +347,15 @@ class _NetworkingDeferredBanner extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            locked
-                ? 'Your login keyring is locked, so this device cannot reach '
-                      'your other devices. Unlock the keyring, then retry. '
-                      'Everything stored here still works.'
-                : deferred.message,
+            networkingDeferredText(context.l10n, deferred, ports),
             key: const Key('networking-deferred-message'),
           ),
-          if (retryError case final message?) ...[
+          if (retryFailure case final failure?) ...[
             const SizedBox(height: 8),
-            Text(message, key: const Key('networking-retry-error')),
+            Text(
+              bridgeMessage(context.l10n, failure),
+              key: const Key('networking-retry-error'),
+            ),
           ],
         ],
       ),
@@ -330,7 +363,7 @@ class _NetworkingDeferredBanner extends StatelessWidget {
         TextButton(
           key: const Key('retry-networking'),
           onPressed: busy ? null : onRetry,
-          child: const Text('Retry'),
+          child: Text(context.l10n.commonRetry),
         ),
       ],
     );
@@ -386,23 +419,20 @@ class RecoverySurface extends StatelessWidget {
               const Icon(FiIcons.devices, size: 48),
               const SizedBox(height: 12),
               Text(
-                'Recovery needs another device',
+                context.l10n.recoveryNeedsDevice,
                 style: Theme.of(context).textTheme.titleLarge,
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 12),
               Text(
-                'This device lost its local copy of your dataset$rootLabel. '
-                'None of your other devices is reachable right now. Bring '
-                'one of them online and recovery continues automatically; '
-                'no pairing is needed.',
+                context.l10n.recoveryNoPeerBody(rootLabel),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 16),
               OutlinedButton(
                 key: const Key('recovery-reset-dataset'),
                 onPressed: () => unawaited(onResetDataset()),
-                child: const Text("Reset this device's data instead"),
+                child: Text(context.l10n.recoveryResetInstead),
               ),
             ],
           ),
@@ -416,16 +446,15 @@ class RecoverySurface extends StatelessWidget {
             const CircularProgressIndicator(),
             const SizedBox(height: 16),
             Text(
-              'Recovering your dataset from your other devices$rootLabel…',
+              context.l10n.recoveryRecovering(rootLabel),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
               switch (recovery.reason) {
                 RecoveryReasonDto.rootSnapshotCorrupt =>
-                  'The local copy could not be read and was set aside. '
-                      'Nothing was deleted.',
-                _ => 'The local copy was missing. Nothing was deleted.',
+                  context.l10n.recoveryCorrupt,
+                _ => context.l10n.recoveryMissing,
               },
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodySmall,
@@ -457,8 +486,8 @@ class JoiningSurface extends StatelessWidget {
           const CircularProgressIndicator(),
           const SizedBox(height: 16),
           Text(switch (devices.peerName) {
-            final name? => 'Joining dataset from $name…',
-            null => 'Waiting for this local dataset to become available.',
+            final name? => context.l10n.bootJoiningFrom(name),
+            null => context.l10n.bootWaitingDataset,
           }, textAlign: TextAlign.center),
         ],
       ),
@@ -513,27 +542,19 @@ class _OnboardingPageState extends State<OnboardingPage> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
-                    'Your private collection space',
+                    context.l10n.onboardTitle,
                     style: Theme.of(context).textTheme.headlineMedium,
                   ),
                   const SizedBox(height: 12),
-                  const Text(
-                    'Create a new local dataset, or join the dataset on one of '
-                    'your other devices. Nothing is sent to a server.',
-                  ),
+                  Text(context.l10n.onboardIntro),
                   if (controller.state?.recovery case final recovery?
                       when recovery.outcome ==
                           RecoveryOutcomeDto.quarantined) ...[
                     const SizedBox(height: 16),
-                    const MaterialBanner(
-                      key: Key('recovery-quarantined'),
-                      content: Text(
-                        'Data found on this device was set aside because its '
-                        'dataset record was missing. Nothing was deleted: '
-                        'joining the same dataset from another device '
-                        'restores it.',
-                      ),
-                      actions: [SizedBox.shrink()],
+                    MaterialBanner(
+                      key: const Key('recovery-quarantined'),
+                      content: Text(context.l10n.onboardQuarantined),
+                      actions: const [SizedBox.shrink()],
                     ),
                   ],
                   const SizedBox(height: 24),
@@ -542,15 +563,16 @@ class _OnboardingPageState extends State<OnboardingPage> {
                     onPressed: createBlocked ? null : _create,
                     icon: const Icon(FiIcons.addCircle),
                     label: Text(
-                      controller.creating ? 'Creating…' : 'Create new dataset',
+                      controller.creating
+                          ? context.l10n.onboardCreating
+                          : context.l10n.onboardCreate,
                     ),
                   ),
                   if (_pairingActive) ...[
                     const SizedBox(height: 8),
-                    const Text(
-                      'Creating is unavailable while pairing is active. '
-                      'Stop pairing to create a new dataset here.',
-                      key: Key('create-blocked-reason'),
+                    Text(
+                      context.l10n.onboardCreateBlocked,
+                      key: const Key('create-blocked-reason'),
                       textAlign: TextAlign.center,
                     ),
                   ],
@@ -561,19 +583,17 @@ class _OnboardingPageState extends State<OnboardingPage> {
                         ? null
                         : () => setState(() => showPairing = !showPairing),
                     icon: Icon(showPairing ? FiIcons.collapse : FiIcons.link),
-                    label: const Text('Join an existing dataset'),
+                    label: Text(context.l10n.onboardJoin),
                   ),
                   if (showPairing) ...[
                     const SizedBox(height: 16),
-                    const Text(
-                      'The other device must already have a dataset. Start '
-                      'pairing on both devices, then tap Connect on one device '
-                      'only.',
-                      key: Key('pairing-preconditions'),
+                    Text(
+                      context.l10n.onboardPairingPreconditions,
+                      key: const Key('pairing-preconditions'),
                     ),
                     const SizedBox(height: 12),
-                    if (widget.devices.errorMessage case final error?)
-                      _ErrorBanner(error),
+                    if (widget.devices.failure case final failure?)
+                      _ErrorBanner(bridgeMessage(context.l10n, failure)),
                     PairingCard(
                       controller: widget.devices,
                       onResetDataset: widget.onResetDataset,
@@ -699,18 +719,18 @@ class _CollectionShellState extends State<CollectionShell> {
           child: NavigationBar(
             selectedIndex: selected,
             onDestinationSelected: _select,
-            destinations: const [
+            destinations: [
               NavigationDestination(
-                icon: Icon(FiIcons.collection),
-                label: 'Collections',
+                icon: const Icon(FiIcons.collection),
+                label: context.l10n.navCollections,
               ),
               NavigationDestination(
-                icon: Icon(FiIcons.devices),
-                label: 'Devices',
+                icon: const Icon(FiIcons.devices),
+                label: context.l10n.navDevices,
               ),
               NavigationDestination(
-                icon: Icon(FiIcons.settings),
-                label: 'Settings',
+                icon: const Icon(FiIcons.settings),
+                label: context.l10n.navSettings,
               ),
             ],
           ),
@@ -763,14 +783,14 @@ class _Sidebar extends StatelessWidget {
         ),
         _NavRow(
           icon: FiIcons.collection,
-          label: 'Collections',
+          label: context.l10n.navCollections,
           selected: selected == 0,
           onTap: () => onSelected(0),
         ),
         const SizedBox(height: 4),
         _NavRow(
           icon: FiIcons.devices,
-          label: 'Devices',
+          label: context.l10n.navDevices,
           selected: selected == 1,
           onTap: () => onSelected(1),
         ),
@@ -778,7 +798,7 @@ class _Sidebar extends StatelessWidget {
         _NavRow(
           key: const Key('nav-settings'),
           icon: FiIcons.settings,
-          label: 'Settings',
+          label: context.l10n.navSettings,
           selected: selected == 2,
           onTap: () => onSelected(2),
         ),
@@ -821,8 +841,6 @@ class _NavRow extends StatelessWidget {
               Flexible(
                 child: Text(
                   label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(fontSize: 14, color: color),
                 ),
               ),
@@ -865,12 +883,16 @@ class _SidebarStatus extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _statusText(devices.syncStatus),
+                  _statusText(context.l10n, devices.syncStatus),
                   style: const TextStyle(fontSize: 12, height: 1.35),
                 ),
                 Text(
-                  '${trusted.length} paired · '
-                  '${reachable == 0 ? 'none nearby' : '$reachable connected'}',
+                  context.l10n.sidebarPairedSummary(
+                    trusted.length,
+                    reachable == 0
+                        ? context.l10n.sidebarNoneNearby
+                        : context.l10n.sidebarConnectedCount(reachable),
+                  ),
                   style: TextStyle(
                     fontSize: 12,
                     height: 1.35,
@@ -929,7 +951,7 @@ class _MobileTopRow extends StatelessWidget {
               _StatusDot(status: status, size: 7, ring: false),
               const SizedBox(width: 6),
               Text(
-                _statusText(status),
+                _statusText(context.l10n, status),
                 style: TextStyle(fontSize: 12, color: Nocturne.muted(.6)),
               ),
             ],
@@ -939,16 +961,19 @@ class _MobileTopRow extends StatelessWidget {
   );
 }
 
-String _statusText(SyncStatusDto status) => switch (status) {
-  SyncStatusDto.offline => 'Offline',
+String _statusText(
+  AppLocalizations l,
+  SyncStatusDto status,
+) => switch (status) {
+  SyncStatusDto.offline => l.devicesStatusOffline,
   // Not "Searching": that word belongs to pairing discovery on the pairing card, and the
   // aggregate status is already `Searching` at boot before the user has touched pairing.
-  SyncStatusDto.searching => 'Looking for paired devices',
-  SyncStatusDto.connected => 'Connected',
-  SyncStatusDto.syncing => 'Syncing',
-  SyncStatusDto.synced => 'Synced',
-  SyncStatusDto.error => 'Error',
-  SyncStatusDto.paused => 'Paused',
+  SyncStatusDto.searching => l.devicesStatusLooking,
+  SyncStatusDto.connected => l.devicesStatusConnected,
+  SyncStatusDto.syncing => l.devicesStatusSyncing,
+  SyncStatusDto.synced => l.devicesStatusSynced,
+  SyncStatusDto.error => l.devicesStatusError,
+  SyncStatusDto.paused => l.devicesStatusPaused,
 };
 
 /// One distinct icon per aggregate status, so the state is readable without the label.
@@ -1017,6 +1042,7 @@ class _DevicesPageState extends State<DevicesPage> {
         pairingKind != PairingKindDto.idle &&
         pairingKind != PairingKindDto.trusted;
     final discoveryOff = !controller.preferences.discoverable;
+    final l = context.l10n;
     return ListView(
       key: const Key('devices-page'),
       padding: phone
@@ -1031,7 +1057,7 @@ class _DevicesPageState extends State<DevicesPage> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  'Devices',
+                  l.navDevices,
                   style: phone
                       ? theme.textTheme.headlineSmall
                       : theme.textTheme.headlineMedium,
@@ -1041,28 +1067,25 @@ class _DevicesPageState extends State<DevicesPage> {
                   Padding(
                     padding: const EdgeInsets.only(bottom: 4),
                     child: Text(
-                      'Devices you trust sync this dataset directly with each other.',
+                      l.devicesIntro,
                       style: TextStyle(fontSize: 13, color: Nocturne.muted(.6)),
                     ),
                   ),
                 _SyncChip(status: controller.syncStatus),
                 const SizedBox(height: 22),
-                if (controller.errorMessage case final error?)
-                  _ErrorBanner(error),
+                if (controller.failure case final failure?)
+                  _ErrorBanner(bridgeMessage(context.l10n, failure)),
                 if (controller.rotationError case final error?)
                   MaterialBanner(
                     key: const Key('rotation-error'),
-                    content: Text(
-                      'The device was revoked, but the discovery secret could not be '
-                      'rotated: $error',
-                    ),
+                    content: Text(l.devicesRotationError(error)),
                     actions: [
                       TextButton(
                         key: const Key('retry-rotation'),
                         onPressed: controller.busy
                             ? null
                             : controller.retryRotation,
-                        child: const Text('Retry rotation'),
+                        child: Text(l.devicesRetryRotation),
                       ),
                     ],
                   ),
@@ -1070,7 +1093,7 @@ class _DevicesPageState extends State<DevicesPage> {
                 const SizedBox(height: 26),
                 if (_pairedBanner) ...[
                   _PairedBanner(
-                    name: controller.peerName ?? 'the other device',
+                    name: controller.peerName ?? l.devicesOtherDevice,
                     onDismiss: () => setState(
                       () =>
                           _dismissedBanner = controller.pairing.sessionId ?? '',
@@ -1085,7 +1108,7 @@ class _DevicesPageState extends State<DevicesPage> {
                   children: [
                     Expanded(
                       child: SectionLabel(
-                        'Trusted devices · ${trusted.length}',
+                        l.devicesTrustedHeading(trusted.length),
                         key: const Key('trusted-heading'),
                       ),
                     ),
@@ -1094,7 +1117,7 @@ class _DevicesPageState extends State<DevicesPage> {
                         Flexible(
                           flex: 2,
                           child: Text(
-                            PairingCard.discoveryOffNote,
+                            PairingCard.discoveryOffNote(context.l10n),
                             key: const Key('discovery-off-note'),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
@@ -1106,13 +1129,15 @@ class _DevicesPageState extends State<DevicesPage> {
                           ),
                         ),
                       const SizedBox(width: 8),
-                      TextButton.icon(
-                        key: const Key('start-pairing'),
-                        onPressed: controller.busy
-                            ? null
-                            : controller.beginPairing,
-                        icon: const Icon(FiIcons.link, size: 16),
-                        label: const Text('Pair device'),
+                      Flexible(
+                        child: TextButton.icon(
+                          key: const Key('start-pairing'),
+                          onPressed: controller.busy
+                              ? null
+                              : controller.beginPairing,
+                          icon: const Icon(FiIcons.link, size: 16),
+                          label: Text(l.devicesPairDevice),
+                        ),
                       ),
                     ],
                   ],
@@ -1121,7 +1146,7 @@ class _DevicesPageState extends State<DevicesPage> {
                   Padding(
                     padding: const EdgeInsets.only(top: 4),
                     child: Text(
-                      PairingCard.discoveryOffNote,
+                      PairingCard.discoveryOffNote(context.l10n),
                       key: const Key('discovery-off-note'),
                       style: TextStyle(fontSize: 12, color: Nocturne.muted(.5)),
                     ),
@@ -1152,7 +1177,7 @@ class _DevicesPageState extends State<DevicesPage> {
                     ),
                   ),
                 const SizedBox(height: 26),
-                const SectionLabel('This device'),
+                SectionLabel(l.devicesThisDevice),
                 const SizedBox(height: 10),
                 _LocalIdentity(
                   device: controller.localDevice,
@@ -1200,26 +1225,27 @@ class _DevicesPageState extends State<DevicesPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
+                      // The state tag wraps under the name rather than being cut short.
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
-                          Flexible(
-                            child: Text(
-                              device.friendlyName,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                              ),
+                          Text(
+                            device.friendlyName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
-                          const SizedBox(width: 8),
-                          Flexible(child: DeviceStateTag(device: device)),
+                          DeviceStateTag(device: device),
                         ],
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        seenSyncedLine(device, now),
+                        seenSyncedLine(context.l10n, device, now),
                         key: Key('device-times-${device.deviceId}'),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
@@ -1245,7 +1271,7 @@ class _DevicesPageState extends State<DevicesPage> {
                         : FiIcons.expand,
                     size: 16,
                   ),
-                  label: const Text('Details'),
+                  label: Text(context.l10n.commonDetails),
                 ),
                 _deviceMenu(context, device),
               ],
@@ -1267,26 +1293,28 @@ class _DevicesPageState extends State<DevicesPage> {
   }
 
   /// The row's rename, revoke and delete actions.
-  Widget _deviceMenu(BuildContext context, TrustedDeviceDto device) =>
-      PopupMenuButton<String>(
-        tooltip: 'Device actions',
-        icon: const Icon(FiIcons.more),
-        onSelected: (action) {
-          if (action == 'rename') _renameDevice(context, device);
-          if (action == 'revoke') _revokeDevice(context, device);
-          if (action == 'delete') _deleteDevice(context, device);
-        },
-        itemBuilder: (_) => [
-          const PopupMenuItem(value: 'rename', child: Text('Rename')),
-          if (!device.revoked)
-            const PopupMenuItem(
-              value: 'revoke',
-              child: Text('Revoke / unpair'),
-            ),
-          if (device.revoked)
-            const PopupMenuItem(value: 'delete', child: Text('Delete')),
-        ],
-      );
+  Widget _deviceMenu(
+    BuildContext context,
+    TrustedDeviceDto device,
+  ) => PopupMenuButton<String>(
+    tooltip: context.l10n.devicesActions,
+    icon: const Icon(FiIcons.more),
+    onSelected: (action) {
+      if (action == 'rename') _renameDevice(context, device);
+      if (action == 'revoke') _revokeDevice(context, device);
+      if (action == 'delete') _deleteDevice(context, device);
+    },
+    itemBuilder: (_) => [
+      PopupMenuItem(value: 'rename', child: Text(context.l10n.commonRename)),
+      if (!device.revoked)
+        PopupMenuItem(
+          value: 'revoke',
+          child: Text(context.l10n.devicesRevokeUnpair),
+        ),
+      if (device.revoked)
+        PopupMenuItem(value: 'delete', child: Text(context.l10n.commonDelete)),
+    ],
+  );
 
   void _toggleDetails(TrustedDeviceDto device) {
     setState(() {
@@ -1325,8 +1353,9 @@ class _DevicesPageState extends State<DevicesPage> {
     TrustedDeviceDto device,
   ) async {
     final messenger = ScaffoldMessenger.maybeOf(context);
+    final l = context.l10n;
     if (await controller.copyDiagnostics(device)) {
-      messenger?.showSnackBar(const SnackBar(content: Text('Log copied')));
+      messenger?.showSnackBar(SnackBar(content: Text(l.devicesLogCopied)));
     }
   }
 
@@ -1338,9 +1367,7 @@ class _DevicesPageState extends State<DevicesPage> {
         .length;
     final confirmed = await ResetDatasetDialog.show(
       context,
-      lead:
-          'You are about to abandon the dataset on this device and return to '
-          'onboarding.',
+      lead: context.l10n.devicesResetLead,
       trustedDeviceCount: trusted,
     );
     if (confirmed) await action();
@@ -1351,28 +1378,29 @@ class _DevicesPageState extends State<DevicesPage> {
     TrustedDeviceDto device,
   ) async {
     var name = device.friendlyName;
+    final l = context.l10n;
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Rename device'),
+        title: Text(l.devicesRenameTitle),
         content: FiTextInput(
           key: const Key('device-name'),
           initialValue: name,
           onChanged: (value) => name = value,
           autofocus: true,
-          label: 'Friendly name',
+          label: l.devicesFriendlyName,
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
+            child: Text(l.commonCancel),
           ),
           FilledButton(
             onPressed: () async {
               await controller.rename(device, name);
               if (dialogContext.mounted) Navigator.pop(dialogContext);
             },
-            child: const Text('Save'),
+            child: Text(l.commonSave),
           ),
         ],
       ),
@@ -1383,22 +1411,20 @@ class _DevicesPageState extends State<DevicesPage> {
     BuildContext context,
     TrustedDeviceDto device,
   ) async {
+    final l = context.l10n;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text('Revoke ${device.friendlyName}?'),
-        content: const Text(
-          'This device will be disconnected and will no longer be trusted. '
-          'Its record is retained as revoked.',
-        ),
+        title: Text(l.devicesRevokeTitle(device.friendlyName)),
+        content: Text(l.devicesRevokeBody),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
+            child: Text(l.commonCancel),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Revoke'),
+            child: Text(l.devicesRevoke),
           ),
         ],
       ),
@@ -1410,22 +1436,20 @@ class _DevicesPageState extends State<DevicesPage> {
     BuildContext context,
     TrustedDeviceDto device,
   ) async {
+    final l = context.l10n;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text('Delete ${device.friendlyName}?'),
-        content: const Text(
-          'The revoked record will be removed from this device. '
-          'The device can be paired again later.',
-        ),
+        title: Text(l.devicesDeleteTitle(device.friendlyName)),
+        content: Text(l.devicesDeleteBody),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
+            child: Text(l.commonCancel),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Delete'),
+            child: Text(l.commonDelete),
           ),
         ],
       ),
@@ -1444,11 +1468,12 @@ class _ConnectionSwitches extends StatelessWidget {
   Widget build(BuildContext context) {
     final preferences = controller.preferences;
     final enabled = !controller.busy;
+    final l = context.l10n;
     return Column(
       key: const Key('connection-switches'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const SectionLabel('Connections'),
+        SectionLabel(l.devicesConnections),
         const SizedBox(height: 10),
         NocturneCard(
           padding: EdgeInsets.zero,
@@ -1459,10 +1484,8 @@ class _ConnectionSwitches extends StatelessWidget {
                 value: preferences.discoverable,
                 onChanged: enabled ? controller.setDiscoverable : null,
                 leading: const IconTile(FiIcons.network, size: 32),
-                title: const _SwitchTitle('Discoverable', HelpId.discoverable),
-                subtitle: const Text(
-                  'Announce this device to paired devices on the local network.',
-                ),
+                title: _SwitchTitle(l.devicesDiscoverable, HelpId.discoverable),
+                subtitle: Text(l.devicesDiscoverableSubtitle),
               ),
               const FadedRule(indent: 16),
               FiSwitchTile(
@@ -1470,13 +1493,8 @@ class _ConnectionSwitches extends StatelessWidget {
                 value: preferences.syncEnabled,
                 onChanged: enabled ? controller.setSyncEnabled : null,
                 leading: const IconTile(FiIcons.syncing, size: 32),
-                title: const _SwitchTitle(
-                  'Sync with paired devices',
-                  HelpId.syncEnabled,
-                ),
-                subtitle: const Text(
-                  'Connect to and accept connections from paired devices.',
-                ),
+                title: _SwitchTitle(l.devicesSyncEnabled, HelpId.syncEnabled),
+                subtitle: Text(l.devicesSyncEnabledSubtitle),
               ),
             ],
           ),
@@ -1512,7 +1530,7 @@ class _SyncChip extends StatelessWidget {
       const SizedBox(width: 6),
       Flexible(
         child: Text(
-          _statusText(status),
+          _statusText(context.l10n, status),
           style: TextStyle(fontSize: 12, color: Nocturne.muted(.6)),
         ),
       ),
@@ -1552,16 +1570,15 @@ class _NoDevices extends StatelessWidget {
         children: [
           const IconTile(FiIcons.devices),
           const SizedBox(height: 12),
-          const Text(
-            'No devices paired yet',
+          Text(
+            context.l10n.devicesNoneYet,
             style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
           ),
           const SizedBox(height: 4),
           Text(
             phone
-                ? "Start pairing on both devices while they're nearby."
-                : "Start pairing on both devices while they're nearby. "
-                      'Pairing turns itself off after 2 minutes.',
+                ? context.l10n.devicesNoneBodyPhone
+                : context.l10n.devicesNoneBody,
             key: const Key('no-devices-body'),
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 13, color: Nocturne.muted(.6)),
@@ -1569,7 +1586,7 @@ class _NoDevices extends StatelessWidget {
           if (discoveryOff) ...[
             const SizedBox(height: 6),
             Text(
-              PairingCard.discoveryOffNote,
+              PairingCard.discoveryOffNote(context.l10n),
               key: const Key('discovery-off-note'),
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 12, color: Nocturne.muted(.5)),
@@ -1583,7 +1600,7 @@ class _NoDevices extends StatelessWidget {
                 : null,
             onPressed: onStart,
             icon: const Icon(FiIcons.link),
-            label: const Text('Start pairing'),
+            label: Text(context.l10n.pairingStart),
           ),
         ],
       ),
@@ -1618,19 +1635,19 @@ class _PairedBanner extends StatelessWidget {
         const SizedBox(width: 10),
         Expanded(
           child: Text(
-            'Paired with $name. The first sync starts automatically.',
+            context.l10n.devicesPairedBanner(name),
             style: const TextStyle(fontSize: 13, color: Nocturne.accent100),
           ),
         ),
         TextButton(
           key: const Key('pair-another'),
           onPressed: onPairAnother,
-          child: const Text('Pair another'),
+          child: Text(context.l10n.devicesPairAnother),
         ),
         FiIconButton(
           key: const Key('dismiss-paired-banner'),
           icon: FiIcons.close,
-          tooltip: 'Dismiss',
+          tooltip: context.l10n.devicesDismiss,
           color: Nocturne.accent100,
           onPressed: onDismiss,
         ),
@@ -1666,7 +1683,7 @@ class _LocalIdentity extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
             child: device == null
                 ? Text(
-                    'Networking is not set up on this device.',
+                    context.l10n.devicesNetworkingMissing,
                     key: const Key('local-device-missing'),
                     style: TextStyle(fontSize: 13, color: Nocturne.muted(.6)),
                   )
@@ -1709,11 +1726,11 @@ class _LocalIdentity extends StatelessWidget {
                           copyWithConfirmation(
                             context,
                             device.deviceId,
-                            'ID copied',
+                            context.l10n.devicesIdCopied,
                           ),
                         ),
                         icon: const Icon(FiIcons.copy, size: 16),
-                        label: const Text('Copy ID'),
+                        label: Text(context.l10n.devicesCopyId),
                       ),
                     ],
                   ),
@@ -1741,8 +1758,8 @@ class _LocalIdentity extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            "Reset this device's data",
+                          Text(
+                            context.l10n.shellResetData,
                             style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w500,
@@ -1750,8 +1767,7 @@ class _LocalIdentity extends StatelessWidget {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            'Abandon the dataset here to create a new one or join '
-                            "another device's. Your device identity is kept.",
+                            context.l10n.devicesResetBody,
                             style: TextStyle(
                               fontSize: 12,
                               color: Nocturne.muted(.6),

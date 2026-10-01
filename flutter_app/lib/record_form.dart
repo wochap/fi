@@ -1,3 +1,4 @@
+import 'package:fi/l10n/l10n.dart';
 import 'package:fi/theme/form_errors.dart';
 import 'package:fi/theme/nocturne.dart';
 import 'package:fi/theme/nocturne_widgets.dart';
@@ -110,8 +111,8 @@ class RecordFormBody extends StatelessWidget {
         spacing: 4,
         children: [
           control,
-          const Text(
-            'Needed to complete this record',
+          Text(
+            context.l10n.formNeeded,
             style: TextStyle(fontSize: 12, color: fieldErrorColor),
           ),
         ],

@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:fi/l10n/l10n.dart';
 import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/theme/nocturne.dart';
 import 'package:fi/voice/controller.dart';
@@ -35,12 +36,12 @@ class VoiceMicButton extends StatelessWidget {
   /// The processing ring's filled fraction.
   final double progress;
 
-  String get label => switch (state) {
-    MicState.idle => 'Fill by voice',
-    MicState.ready => 'Answer by voice',
-    MicState.listening => 'Stop listening',
-    MicState.processing => 'Processing speech',
-    MicState.downloading => 'Voice model downloading, $percent percent',
+  String labelOf(AppLocalizations l) => switch (state) {
+    MicState.idle => l.voiceFillByVoice,
+    MicState.ready => l.voiceAnswerByVoice,
+    MicState.listening => l.voiceMicStopListening,
+    MicState.processing => l.voiceMicProcessing,
+    MicState.downloading => l.voiceMicDownloading(percent),
   };
 
   @override
@@ -90,7 +91,7 @@ class VoiceMicButton extends StatelessWidget {
     final busy = state == MicState.processing;
     return Semantics(
       button: true,
-      label: label,
+      label: labelOf(context.l10n),
       enabled: !busy,
       excludeSemantics: true,
       // Flutter has no aria-busy; the label says it and the button is disabled meanwhile.

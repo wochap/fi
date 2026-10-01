@@ -1,5 +1,6 @@
 import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/collections_page.dart';
+import 'package:fi/l10n/l10n.dart';
 import 'package:fi/controllers.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:flutter/material.dart';
@@ -146,6 +147,7 @@ void main() {
   test('sentence pluralizes and joins its parts', () {
     String sentence(int records, int widgets, int savedQueries) =>
         collectionContentsSentence(
+          lookupAppLocalizations(const Locale('en')),
           CollectionContents(
             records: records,
             widgets: widgets,

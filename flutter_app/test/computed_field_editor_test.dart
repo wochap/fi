@@ -1,6 +1,7 @@
 import 'package:fi/collections_page.dart';
 import 'package:fi/controllers.dart';
 import 'package:fi/help_copy.dart';
+import 'package:fi/l10n/l10n.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/theme/nocturne.dart';
 import 'package:flutter/material.dart';
@@ -295,7 +296,15 @@ void main() {
     await tester.tap(find.byKey(Key('help-${HelpId.computedFields.name}')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('help-dialog')), findsOneWidget);
-    expect(find.text(helpCopy[HelpId.computedFields]!.body), findsOneWidget);
+    expect(
+      find.text(
+        helpEntry(
+          lookupAppLocalizations(const Locale('en')),
+          HelpId.computedFields,
+        ).body,
+      ),
+      findsOneWidget,
+    );
     await tester.tap(find.byKey(const Key('help-close')));
     await tester.pumpAndSettle();
     expect(find.text('Computed fields & queries'), findsOneWidget);

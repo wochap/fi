@@ -1,3 +1,4 @@
+import 'package:fi/l10n/l10n.dart';
 import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/theme/inputs.dart';
 import 'package:fi/theme/nocturne.dart';
@@ -117,7 +118,7 @@ class FiChoiceInput extends StatelessWidget {
       return FiSelect<String>(
         value: value,
         label: label,
-        hint: 'Choose…',
+        hint: context.l10n.themeChoose,
         required: required,
         errors: errors,
         onClear: allowClear ? () => onChanged(null) : null,
@@ -153,8 +154,8 @@ class FiChoiceInput extends StatelessWidget {
       required: required,
       errors: errors,
       hint: options.length <= choiceSelectMax
-          ? 'Choose…'
-          : 'Search ${options.length} options',
+          ? context.l10n.themeChoose
+          : context.l10n.themeSearchOptions(options.length),
       search: options.length > choiceSelectMax,
       onClear: allowClear && value != null ? () => onChanged(null) : null,
       onOpen: () async {
@@ -340,7 +341,7 @@ class _ChoiceSearchFieldState extends State<_ChoiceSearchField> {
             controller: controller,
             focusNode: focusNode,
             label: widget.label,
-            hint: 'Type to search ${widget.options.length} options',
+            hint: context.l10n.themeTypeToSearchOptions(widget.options.length),
             required: widget.required,
             errors: widget.errors,
             onClear: widget.allowClear ? () => widget.onChanged(null) : null,
@@ -387,8 +388,10 @@ class _ChoiceSearchFieldState extends State<_ChoiceSearchField> {
                 Padding(
                   padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
                   child: Text(
-                    '${matches.length} of ${widget.options.length} · ↑↓ to move, '
-                    'Enter to pick',
+                    context.l10n.themeMatchesFooter(
+                      matches.length,
+                      widget.options.length,
+                    ),
                     style: TextStyle(fontSize: 11, color: Nocturne.muted(.5)),
                   ),
                 ),
@@ -471,7 +474,7 @@ Future<ChoicePick?> showChoicePickerSheet(
                   key: const Key('choice-sheet-clear'),
                   onPressed: () =>
                       Navigator.pop(context, const ChoicePick(null)),
-                  child: const Text('Clear'),
+                  child: Text(context.l10n.commonClear),
                 ),
             ],
           ),
@@ -610,7 +613,7 @@ class _ChoiceSearchSheetState extends State<_ChoiceSearchSheet> {
                 children: [
                   FiIconButton(
                     icon: FiIcons.back,
-                    tooltip: 'Back',
+                    tooltip: context.l10n.commonBack,
                     onPressed: () => Navigator.pop(context),
                   ),
                   const SizedBox(width: 4),
@@ -639,7 +642,7 @@ class _ChoiceSearchSheetState extends State<_ChoiceSearchSheet> {
                       key: const Key('choice-sheet-clear'),
                       onPressed: () =>
                           Navigator.pop(context, const ChoicePick(null)),
-                      child: const Text('Clear'),
+                      child: Text(context.l10n.commonClear),
                     ),
                 ],
               ),
@@ -650,7 +653,7 @@ class _ChoiceSearchSheetState extends State<_ChoiceSearchSheet> {
                 key: const Key('choice-search'),
                 controller: _query,
                 autofocus: true,
-                hint: 'Search',
+                hint: context.l10n.themeSearch,
                 prefixIcon: const Icon(FiIcons.search, size: 18),
                 onChanged: (_) => setState(() {}),
               ),

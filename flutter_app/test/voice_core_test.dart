@@ -7,7 +7,9 @@ import 'package:fi/voice/fakes.dart';
 import 'package:fi/voice/patch.dart';
 import 'package:fi/voice/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:fi/l10n/l10n.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/intl.dart';
 
 import 'voice_fixtures.dart';
 
@@ -19,11 +21,18 @@ void main() {
       expect(formatBytes(12400000000), '12.4 GB');
       expect(formatBytes(2000000000), '2 GB');
       expect(formatBytes(147964211), '148 MB');
+      Intl.defaultLocale = 'es';
+      addTearDown(() => Intl.defaultLocale = null);
+      expect(formatBytes(1433458515), '1,43 GB');
+      expect(formatBytes(12400000000), '12,4 GB');
     });
 
     test('formatTimeLeft reads "about"', () {
-      expect(formatTimeLeft(180), 'about 3 min left');
-      expect(formatTimeLeft(45), 'about 45 s left');
+      final en = lookupAppLocalizations(const Locale('en'));
+      expect(formatTimeLeft(en, 180), 'about 3 min left');
+      expect(formatTimeLeft(en, 45), 'about 45 s left');
+      final es = lookupAppLocalizations(const Locale('es'));
+      expect(formatTimeLeft(es, 180), 'faltan unos 3 min');
     });
 
     List<(ModelFileStateDto, int)> states(ModelStatusDto status) => [

@@ -10,12 +10,29 @@ enum CollectionSort {
   name,
 }
 
+/// The interface language: the system's, or a fixed one.
+enum AppLanguage {
+  system('system'),
+  english('en'),
+  spanish('es');
+
+  const AppLanguage(this.code);
+
+  /// Stored form: `system`, `en` or `es`.
+  final String code;
+
+  /// Reads [code]; anything unknown is [system].
+  static AppLanguage fromCode(Object? code) =>
+      values.where((value) => value.code == code).firstOrNull ?? system;
+}
+
 /// Device-local presentation choices. They never enter Rust or sync.
 final class UiPrefs {
   const UiPrefs({
     this.collectionSort = CollectionSort.lastEdited,
     this.voiceTipDismissed = false,
     this.handsFree = false,
+    this.appLanguage = AppLanguage.system,
   });
 
   final CollectionSort collectionSort;
@@ -26,20 +43,26 @@ final class UiPrefs {
   /// Hands-free spoken feedback after voice turns; off by default.
   final bool handsFree;
 
+  /// The interface language; follows the system by default.
+  final AppLanguage appLanguage;
+
   UiPrefs copyWith({
     CollectionSort? collectionSort,
     bool? voiceTipDismissed,
     bool? handsFree,
+    AppLanguage? appLanguage,
   }) => UiPrefs(
     collectionSort: collectionSort ?? this.collectionSort,
     voiceTipDismissed: voiceTipDismissed ?? this.voiceTipDismissed,
     handsFree: handsFree ?? this.handsFree,
+    appLanguage: appLanguage ?? this.appLanguage,
   );
 
   Map<String, Object?> toJson() => {
     'collection_sort': collectionSort.name,
     'voice_tip_dismissed': voiceTipDismissed,
     'hands_free': handsFree,
+    'app_language': appLanguage.code,
   };
 
   /// Reads what [toJson] wrote; anything unreadable falls back to the defaults.
@@ -52,6 +75,7 @@ final class UiPrefs {
       collectionSort: sort ?? CollectionSort.lastEdited,
       voiceTipDismissed: json['voice_tip_dismissed'] == true,
       handsFree: json['hands_free'] == true,
+      appLanguage: AppLanguage.fromCode(json['app_language']),
     );
   }
 }

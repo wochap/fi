@@ -1,4 +1,5 @@
 import 'package:clock/clock.dart';
+import 'package:fi/l10n/l10n.dart';
 import 'package:fi/theme/nocturne_widgets.dart';
 import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/exact_format.dart';
@@ -14,16 +15,17 @@ export 'package:fi/exact_format.dart' show formatScaled, parseScaled;
 /// The word a person reads for a field kind, wherever a kind is shown or chosen.
 ///
 /// The generated identifiers (`enum_`, `fixedDecimal`, `dateTime`) are Dart spellings, not labels.
-String fieldKindLabel(FieldTypeKindDto kind) => switch (kind) {
-  FieldTypeKindDto.text => 'Text',
-  FieldTypeKindDto.integer => 'Integer',
-  FieldTypeKindDto.fixedDecimal => 'Decimal',
-  FieldTypeKindDto.boolean => 'Boolean',
-  FieldTypeKindDto.date => 'Date',
-  FieldTypeKindDto.dateTime => 'Date & time',
-  FieldTypeKindDto.duration => 'Duration',
-  FieldTypeKindDto.enum_ => 'Choice',
-};
+String fieldKindLabel(AppLocalizations l, FieldTypeKindDto kind) =>
+    switch (kind) {
+      FieldTypeKindDto.text => l.fieldTypeText,
+      FieldTypeKindDto.integer => l.fieldTypeInteger,
+      FieldTypeKindDto.fixedDecimal => l.fieldTypeDecimal,
+      FieldTypeKindDto.boolean => l.fieldTypeBoolean,
+      FieldTypeKindDto.date => l.fieldTypeDate,
+      FieldTypeKindDto.dateTime => l.fieldTypeDateTime,
+      FieldTypeKindDto.duration => l.fieldTypeDuration,
+      FieldTypeKindDto.enum_ => l.fieldTypeChoice,
+    };
 
 typedef FieldValueChanged = void Function(FieldValueDto value);
 
@@ -102,6 +104,8 @@ final class FieldRendererRegistry {
     FieldValueDto? value, {
     bool human = false,
     bool short = false,
+    AppLocalizations? l,
+    String decimalSeparator = '.',
   }) {
     if (value == null || value.kind == FieldValueKindDto.null_) return null;
     if (human) {
@@ -115,21 +119,32 @@ final class FieldRendererRegistry {
         default:
       }
     }
-    final text = _text(field, value);
+    final text = _text(
+      field,
+      value,
+      l ?? lookupAppLocalizations(const Locale('en')),
+      decimalSeparator,
+    );
     return text == '—' ? null : text;
   }
 
   Widget display(FieldDefinitionDto field, FieldValueDto? value) {
     if (value == null) return const Text('—');
-    final text = _text(field, value);
-    return Text(
-      text,
-      maxLines: field.display.multiline ? null : 1,
-      overflow: field.display.multiline ? null : TextOverflow.ellipsis,
+    return Builder(
+      builder: (context) => Text(
+        _text(field, value, context.l10n, decimalSeparatorOf(context)),
+        maxLines: field.display.multiline ? null : 1,
+        overflow: field.display.multiline ? null : TextOverflow.ellipsis,
+      ),
     );
   }
 
-  String _text(FieldDefinitionDto field, FieldValueDto value) {
+  String _text(
+    FieldDefinitionDto field,
+    FieldValueDto value,
+    AppLocalizations l,
+    String decimalSeparator,
+  ) {
     return switch (value.kind) {
       FieldValueKindDto.null_ => '—',
       FieldValueKindDto.text => value.textValue ?? '—',
@@ -138,8 +153,10 @@ final class FieldRendererRegistry {
       FieldValueKindDto.fixedDecimal => formatScaled(
         value.integerValue ?? 0,
         field.fieldType.scale ?? 0,
+        decimalSeparator: decimalSeparator,
       ),
-      FieldValueKindDto.boolean => value.booleanValue == true ? 'Yes' : 'No',
+      FieldValueKindDto.boolean =>
+        value.booleanValue == true ? l.commonYes : l.commonNo,
       FieldValueKindDto.date => _dateFromDays(
         value.integerValue ?? 0,
       ).toIso8601String().split('T').first,
@@ -180,7 +197,8 @@ final class _FieldEditor extends StatefulWidget {
 const _null = FieldValueDto(kind: FieldValueKindDto.null_);
 
 final class _FieldEditorState extends State<_FieldEditor> {
-  late final TextEditingController text;
+  final TextEditingController text = TextEditingController();
+  var _textReady = false;
   late bool boolean;
   bool? optionalBoolean;
   int? sliderValue;
@@ -201,30 +219,35 @@ final class _FieldEditorState extends State<_FieldEditor> {
         ? value?.integerValue
         : null;
     choice = value?.kind == FieldValueKindDto.enum_ ? value?.textValue : null;
-    text = TextEditingController(
-      text: switch (widget.field.fieldType.kind) {
-        FieldTypeKindDto.fixedDecimal =>
-          value == null || value.integerValue == null
-              ? ''
-              : formatScaled(
-                  value.integerValue!,
-                  widget.field.fieldType.scale ?? 0,
-                ),
-        FieldTypeKindDto.text ||
-        FieldTypeKindDto.enum_ => value?.textValue ?? '',
-        FieldTypeKindDto.date =>
-          value?.integerValue == null
-              ? ''
-              : _dateFromDays(
-                  value!.integerValue!,
-                ).toIso8601String().split('T').first,
-        FieldTypeKindDto.dateTime =>
-          value?.integerValue == null
-              ? ''
-              : formatDateTime(value!.integerValue!),
-        _ => value?.integerValue?.toString() ?? '',
-      },
-    );
+  }
+
+  /// The initial text needs the locale's decimal separator, so it is set once dependencies exist.
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_textReady) return;
+    _textReady = true;
+    final value = widget.initial;
+    text.text = switch (widget.field.fieldType.kind) {
+      FieldTypeKindDto.fixedDecimal =>
+        value == null || value.integerValue == null
+            ? ''
+            : formatScaled(
+                value.integerValue!,
+                widget.field.fieldType.scale ?? 0,
+                decimalSeparator: decimalSeparatorOf(context),
+              ),
+      FieldTypeKindDto.text || FieldTypeKindDto.enum_ => value?.textValue ?? '',
+      FieldTypeKindDto.date =>
+        value?.integerValue == null
+            ? ''
+            : _dateFromDays(
+                value!.integerValue!,
+              ).toIso8601String().split('T').first,
+      FieldTypeKindDto.dateTime =>
+        value?.integerValue == null ? '' : formatDateTime(value!.integerValue!),
+      _ => value?.integerValue?.toString() ?? '',
+    };
   }
 
   @override
@@ -279,6 +302,7 @@ final class _FieldEditorState extends State<_FieldEditor> {
 
   @override
   Widget build(BuildContext context) {
+    final l = context.l10n;
     final field = widget.field;
     if (field.fieldType.kind == FieldTypeKindDto.boolean) {
       if (widget.allowClear) {
@@ -290,10 +314,10 @@ final class _FieldEditorState extends State<_FieldEditor> {
           label: _inputLabel,
           required: _required,
           errors: widget.errors,
-          items: const [
-            DropdownMenuItem<bool?>(value: null, child: Text('None')),
-            DropdownMenuItem<bool?>(value: true, child: Text('True')),
-            DropdownMenuItem<bool?>(value: false, child: Text('False')),
+          items: [
+            DropdownMenuItem<bool?>(value: null, child: Text(l.commonNone)),
+            DropdownMenuItem<bool?>(value: true, child: Text(l.inputTrue)),
+            DropdownMenuItem<bool?>(value: false, child: Text(l.inputFalse)),
           ],
           onChanged: (value) => widget.onChanged(
             value == null
@@ -308,7 +332,10 @@ final class _FieldEditorState extends State<_FieldEditor> {
       if (!field.required_) {
         // Yes, No or not set.
         return FiSegmented<bool>(
-          segments: const [FiSegment(true, 'Yes'), FiSegment(false, 'No')],
+          segments: [
+            FiSegment(true, l.commonYes),
+            FiSegment(false, l.commonNo),
+          ],
           value: optionalBoolean,
           allowClear: true,
           label: _inputLabel,
@@ -366,7 +393,7 @@ final class _FieldEditorState extends State<_FieldEditor> {
           required: _required,
           errors: widget.errors,
           items: [
-            const DropdownMenuItem<String>(value: null, child: Text('None')),
+            DropdownMenuItem<String>(value: null, child: Text(l.commonNone)),
             ...active.map(
               (option) =>
                   DropdownMenuItem(value: option.id, child: Text(option.label)),
@@ -414,11 +441,11 @@ final class _FieldEditorState extends State<_FieldEditor> {
       return FiPickerInput(
         controller: text,
         label: _inputLabel,
-        hint: Nocturne.isPhone(context) ? 'Pick a date' : 'YYYY-MM-DD',
+        hint: Nocturne.isPhone(context) ? l.inputPickDate : 'YYYY-MM-DD',
         required: _required,
         errors: widget.errors,
         icon: FiIcons.date,
-        quickAction: widget.quickFill ? 'Today' : null,
+        quickAction: widget.quickFill ? l.inputToday : null,
         quickActionKey: _quickKey('Today'),
         onQuickAction: () => _setDate(clock.now()),
         onClear: _canClear ? _clear : null,
@@ -442,12 +469,12 @@ final class _FieldEditorState extends State<_FieldEditor> {
         controller: text,
         label: _inputLabel,
         hint: Nocturne.isPhone(context)
-            ? 'Pick date & time'
+            ? l.inputPickDateTime
             : 'YYYY-MM-DD HH:MM',
         required: _required,
         errors: widget.errors,
         icon: FiIcons.dateTime,
-        quickAction: widget.quickFill ? 'Now' : null,
+        quickAction: widget.quickFill ? l.inputNow : null,
         quickActionKey: _quickKey('Now'),
         onQuickAction: () => _setDateTime(clock.now()),
         onClear: _canClear ? _clear : null,
@@ -543,10 +570,14 @@ final class _FieldEditorState extends State<_FieldEditor> {
           : TextInputType.text,
       label: _inputLabel,
       hint: decimal
-          ? formatScaled(0, scale)
+          ? formatScaled(
+              0,
+              scale,
+              decimalSeparator: decimalSeparatorOf(context),
+            )
           : widget.showLabel
           ? null
-          : 'Empty',
+          : l.inputEmpty,
       required: _required,
       errors: widget.errors,
       // The scale is the contract for what the typed digits mean, so it is stated where they
@@ -578,7 +609,11 @@ final class _FieldEditorState extends State<_FieldEditor> {
           ),
           FieldTypeKindDto.fixedDecimal => FieldValueDto(
             kind: FieldValueKindDto.fixedDecimal,
-            integerValue: parseScaled(raw, scale),
+            integerValue: parseScaled(
+              raw,
+              scale,
+              decimalSeparator: decimalSeparatorOf(context),
+            ),
           ),
           _ => null,
         };

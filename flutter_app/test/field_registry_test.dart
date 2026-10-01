@@ -1,6 +1,7 @@
 import 'package:clock/clock.dart';
 import 'package:fi/exact_format.dart';
 import 'package:fi/field_registry.dart';
+import 'package:fi/l10n/l10n.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/theme/choice_input.dart';
 import 'package:fi/theme/inputs.dart';
@@ -8,6 +9,7 @@ import 'package:fi/theme/nocturne_widgets.dart';
 import 'package:fi/theme/nocturne.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/intl.dart';
 
 FieldDefinitionDto field(
   String id,
@@ -698,4 +700,35 @@ void main() {
       expect(emitted.last.kind, FieldValueKindDto.null_);
     });
   });
+
+  testWidgets(
+    'a Spanish decimal input takes a comma and stores the exact value',
+    (tester) async {
+      addTearDown(() => Intl.defaultLocale = null);
+      final amount = field('amount', FieldTypeKindDto.fixedDecimal, scale: 2);
+      FieldValueDto? stored;
+      Widget host(FieldValueDto? value) => MaterialApp(
+        locale: const Locale('es'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: Scaffold(
+          body: Column(
+            children: [
+              const FieldRendererRegistry().editor(
+                amount,
+                value,
+                (updated) => stored = updated,
+              ),
+              const FieldRendererRegistry().display(amount, value),
+            ],
+          ),
+        ),
+      );
+      await tester.pumpWidget(host(null));
+      await tester.enterText(find.byType(TextField), '12,50');
+      expect(stored?.integerValue, 1250);
+      await tester.pumpWidget(host(stored));
+      expect(find.text('12,50'), findsWidgets);
+    },
+  );
 }

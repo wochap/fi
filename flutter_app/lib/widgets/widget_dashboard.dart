@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:fi/l10n/error_text.dart';
+import 'package:fi/l10n/l10n.dart';
 import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/controllers.dart';
 import 'package:fi/help_button.dart';
@@ -37,40 +39,48 @@ final class CollectionDashboard extends StatelessWidget {
   Widget build(BuildContext context) {
     final definitions = controller.widgetDefinitions;
     final schema = controller.schema;
+    final l = context.l10n;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            const Expanded(child: SectionLabel('Dashboard')),
-            if (controller.widgetErrorMessage case final message?)
+            Expanded(child: SectionLabel(l.widgetDashboard)),
+            if (controller.widgetFailure case final failure?)
               Expanded(
                 child: Text(
-                  message,
+                  bridgeMessage(context.l10n, failure),
                   style: const TextStyle(fontSize: 12, color: Nocturne.error),
                 ),
               ),
-            TextButton.icon(
-              key: const Key('reorder-widgets'),
-              style: TextButton.styleFrom(foregroundColor: Nocturne.muted(.6)),
-              onPressed: definitions.length < 2
-                  ? null
-                  : () => unawaited(showWidgetReorder(context, controller)),
-              icon: const Icon(FiIcons.reorder),
-              label: const Text('Reorder'),
+            Flexible(
+              child: TextButton.icon(
+                key: const Key('reorder-widgets'),
+                style: TextButton.styleFrom(
+                  foregroundColor: Nocturne.muted(.6),
+                ),
+                onPressed: definitions.length < 2
+                    ? null
+                    : () => unawaited(showWidgetReorder(context, controller)),
+                icon: const Icon(FiIcons.reorder),
+                label: Text(l.widgetReorder),
+              ),
             ),
-            TextButton.icon(
-              key: const Key('add-widget'),
-              onPressed: () => unawaited(showWidgetEditor(context, controller)),
-              icon: const Icon(FiIcons.add),
-              label: const Text('Add widget'),
+            Flexible(
+              child: TextButton.icon(
+                key: const Key('add-widget'),
+                onPressed: () =>
+                    unawaited(showWidgetEditor(context, controller)),
+                icon: const Icon(FiIcons.add),
+                label: Text(l.widgetAdd),
+              ),
             ),
           ],
         ),
         const SizedBox(height: 10),
         if (definitions.isEmpty)
           Text(
-            'No widgets yet. Add one to summarize this collection.',
+            l.widgetEmptyDashboard,
             style: TextStyle(fontSize: 12, color: Nocturne.muted(.55)),
           )
         else
@@ -109,7 +119,7 @@ final class CollectionDashboard extends StatelessWidget {
                             definition: definition,
                             evaluation: controller.evaluationFor(definition.id),
                             enumLabels: labels,
-                            summary: _summary(definition, schema),
+                            summary: _summary(l, definition, schema),
                           ),
                         ),
                       ),
@@ -122,12 +132,12 @@ final class CollectionDashboard extends StatelessWidget {
                     child: DashedSlot(
                       onTap: () =>
                           unawaited(showWidgetEditor(context, controller)),
-                      child: const Row(
+                      child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(FiIcons.add),
-                          SizedBox(width: 8),
-                          Text('Add widget'),
+                          const Icon(FiIcons.add),
+                          const SizedBox(width: 8),
+                          Text(l.widgetAdd),
                         ],
                       ),
                     ),
@@ -142,6 +152,7 @@ final class CollectionDashboard extends StatelessWidget {
 
   /// The query in words for the tile's meta line, e.g. `Sum of Amount · all records`.
   String? _summary(
+    AppLocalizations l,
     WidgetDefinitionDto definition,
     CollectionSchemaDto? schema,
   ) {
@@ -150,9 +161,9 @@ final class CollectionDashboard extends StatelessWidget {
         .where((item) => item.id == definition.queryId)
         .firstOrNull;
     if (query == null) return null;
-    final description = describeQuery(query, schema);
+    final description = describeQuery(l, query, schema);
     return query.query?.filter == null
-        ? '$description · all records'
+        ? l.widgetAllRecords(description)
         : description;
   }
 }
@@ -188,7 +199,7 @@ Future<void> showWidgetReorder(
   await showDialog<void>(
     context: context,
     builder: (dialog) => AlertDialog(
-      title: const Text('Widget order'),
+      title: Text(context.l10n.widgetOrder),
       content: SizedBox(
         width: 420,
         height: 360,
@@ -225,7 +236,7 @@ Future<void> showWidgetReorder(
       actions: [
         FilledButton(
           onPressed: () => Navigator.pop(dialog),
-          child: const Text('Done'),
+          child: Text(context.l10n.commonDone),
         ),
       ],
     ),
@@ -333,14 +344,17 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
   FormIssues get _blockers {
     var issues = FormIssues.none;
     if (title.text.trim().isEmpty) {
-      issues = issues.withField('title', 'Give the widget a title.');
+      issues = issues.withField('title', context.l10n.widgetTitleRequired);
     }
     if (reuseQuery) {
       if (savedQueryId == null) {
-        issues = issues.withField('query', 'Choose a saved query.');
+        issues = issues.withField(
+          'query',
+          context.l10n.widgetSavedQueryRequired,
+        );
       }
     } else {
-      issues = issues.withForm(query.blocker);
+      issues = issues.withForm(query.blocker(context.l10n));
     }
     return issues;
   }
@@ -374,6 +388,7 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
   Widget build(BuildContext context) {
     final schema = controller.schema;
     final shown = _shown;
+    final l = context.l10n;
     final form = Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -383,13 +398,15 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
           FiSelect<String>(
             key: const Key('widget-type'),
             value: widgetType,
-            label: 'Widget type',
+            label: l.widgetType,
             suffixIcon: const HelpButton(HelpId.widgetType),
             items: [
               for (final descriptor in controller.widgetDescriptors)
                 DropdownMenuItem(
                   value: descriptor.widgetType,
-                  child: Text(descriptor.label),
+                  child: Text(
+                    widgetTypeName(l, descriptor.widgetType, descriptor.label),
+                  ),
                 ),
             ],
             onChanged: (value) => setState(() {
@@ -401,25 +418,24 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
           ),
         ] else ...[
           // An unsupported widget keeps its type; only safe metadata is editable.
-          Text('Widget type: ${existing?.widgetType}'),
+          Text(l.widgetTypeValue('${existing?.widgetType}')),
           Text(
-            'This build cannot render this widget. Title, query, size, and order stay '
-            'editable and its configuration is preserved untouched.',
+            l.widgetUnsupportedNotice,
             style: Theme.of(context).textTheme.bodySmall,
           ),
         ],
         FiTextInput(
           key: const Key('widget-title'),
           controller: title,
-          label: 'Title',
+          label: l.widgetTitle,
           required: true,
-          errors: shown.of('title'),
+          errors: shown.fieldLines(context.l10n, 'title'),
           onChanged: (_) => setState(() => _edited('title')),
         ),
         FiSwitchTile(
           key: const Key('reuse-query'),
           contentPadding: EdgeInsets.zero,
-          title: const Text('Use a saved query'),
+          title: Text(l.widgetUseSavedQuery),
           secondary: const HelpButton(HelpId.widgetUseSavedQuery),
           value: reuseQuery,
           onChanged: (value) => setState(() {
@@ -436,9 +452,9 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
                 )
                 ? savedQueryId
                 : null,
-            label: 'Saved query',
+            label: l.widgetSavedQuery,
             required: true,
-            errors: shown.of('query'),
+            errors: shown.fieldLines(context.l10n, 'query'),
             items: [
               for (final query in controller.queryDefinitions)
                 DropdownMenuItem(value: query.id, child: Text(query.name)),
@@ -457,25 +473,36 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
             onChanged: (next) => setState(() => query = next),
           ),
         const Divider(height: 8),
-        Text('Presentation', style: Theme.of(context).textTheme.titleSmall),
+        Text(
+          l.widgetPresentation,
+          style: Theme.of(context).textTheme.titleSmall,
+        ),
         if (supported)
-          ..._presentationFields()
+          ..._presentationFields(l)
         else
           Text(
-            'Configuration version ${existing?.configuration.version} is preserved as is.',
+            l.widgetConfigVersionPreserved(
+              '${existing?.configuration.version}',
+            ),
             style: Theme.of(context).textTheme.bodySmall,
           ),
         const Divider(height: 8),
-        Text('Size', style: TextStyle(fontSize: 12, color: Nocturne.muted(.7))),
+        Text(
+          l.widgetSize,
+          style: TextStyle(fontSize: 12, color: Nocturne.muted(.7)),
+        ),
         const SizedBox(height: 5),
         SegmentedButton<WidgetSizeDto>(
           key: const Key('widget-size'),
           showSelectedIcon: false,
-          segments: const [
-            ButtonSegment(value: WidgetSizeDto.small, label: Text('S')),
-            ButtonSegment(value: WidgetSizeDto.medium, label: Text('M')),
-            ButtonSegment(value: WidgetSizeDto.large, label: Text('L')),
-            ButtonSegment(value: WidgetSizeDto.full, label: Text('Full')),
+          segments: [
+            const ButtonSegment(value: WidgetSizeDto.small, label: Text('S')),
+            const ButtonSegment(value: WidgetSizeDto.medium, label: Text('M')),
+            const ButtonSegment(value: WidgetSizeDto.large, label: Text('L')),
+            ButtonSegment(
+              value: WidgetSizeDto.full,
+              label: Text(l.widgetSizeFull),
+            ),
           ],
           selected: {size},
           onSelectionChanged: (value) => setState(() => size = value.single),
@@ -485,7 +512,7 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
     // Wide screens get the form beside a live preview of the tile (mock 2d); narrower ones pin
     // a compact preview above the buttons.
     return FormSurface(
-      title: existing == null ? 'Add widget' : 'Edit widget',
+      title: existing == null ? l.widgetAdd : l.widgetEdit,
       width: 520,
       body: form,
       aside: _preview(schema),
@@ -493,14 +520,17 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
       showRequiredLegend: true,
       message: shown.form.isEmpty
           ? null
-          : FormErrorLines(shown.form, key: const Key('widget-editor-error')),
+          : FormErrorLines(
+              shown.formLines(context.l10n),
+              key: const Key('widget-editor-error'),
+            ),
       headerActions: [
         if (existing != null)
           FormHeaderAction(
             key: const Key('remove-widget'),
             icon: FiIcons.delete,
-            label: 'Remove',
-            tooltip: 'Remove widget',
+            label: l.widgetRemove,
+            tooltip: l.widgetRemoveTooltip,
             onPressed: () async {
               // Capture the navigator before the await so no BuildContext crosses the gap.
               final navigator = Navigator.of(context);
@@ -510,7 +540,7 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
           ),
       ],
       primaryKey: const Key('save-widget'),
-      primaryLabel: 'Save',
+      primaryLabel: l.commonSave,
       // Save stays enabled; pressing it shows what is missing under the input it belongs to.
       onPrimary: _save,
     );
@@ -520,23 +550,31 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
   /// query in words for a new one, and what the chosen size spans. [compact] keeps only the
   /// label and a short tile, for pinning above the buttons on a narrow screen.
   Widget _preview(CollectionSchemaDto? schema, {bool compact = false}) {
+    final l = context.l10n;
     final source = reuseQuery
         ? _selectedQuery
-        : schema == null || query.blocker != null
+        : schema == null || query.blocker(l) != null
         ? null
-        : query.toDefinition(schema, title.text.trim(), 0);
+        : query.toDefinition(
+            schema,
+            title.text.trim(),
+            0,
+            decimalSeparator: decimalSeparatorOf(context),
+          );
     final summary = source == null || schema == null
         ? null
-        : describeQuery(source, schema);
+        : describeQuery(l, source, schema);
     final definition = existing;
-    final heading = title.text.trim().isEmpty ? 'Untitled' : title.text.trim();
+    final heading = title.text.trim().isEmpty
+        ? l.widgetUntitled
+        : title.text.trim();
     final evaluation = definition == null
         ? null
         : controller.evaluationFor(definition.id);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const SectionLabel('Preview'),
+        SectionLabel(l.widgetPreview),
         SizedBox(height: compact ? 6 : 10),
         SizedBox(
           height: compact ? 118 : _tileHeight(size).clamp(118, 220),
@@ -570,7 +608,7 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
                           ),
                         ),
                         Text(
-                          summary ?? 'Choose the data to show',
+                          summary ?? l.widgetChooseData,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
@@ -586,13 +624,10 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
         if (!compact) ...[
           const SizedBox(height: 10),
           Text(switch (size) {
-            WidgetSizeDto.small =>
-              'Small spans one of three dashboard columns at its lowest height.',
-            WidgetSizeDto.medium =>
-              'Medium spans one of three dashboard columns.',
-            WidgetSizeDto.large =>
-              'Large spans two of three dashboard columns.',
-            WidgetSizeDto.full => 'Full spans the whole dashboard row.',
+            WidgetSizeDto.small => l.widgetSizeSmallHint,
+            WidgetSizeDto.medium => l.widgetSizeMediumHint,
+            WidgetSizeDto.large => l.widgetSizeLargeHint,
+            WidgetSizeDto.full => l.widgetSizeFullHint,
           }, style: TextStyle(fontSize: 12, color: Nocturne.muted(.5))),
         ],
       ],
@@ -606,21 +641,18 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
     QueryDefinitionDto selected,
   ) {
     final used = widgetsUsingQuery(controller, selected.id);
+    final l = context.l10n;
     return [
       Padding(
         padding: const EdgeInsets.only(top: 8),
         child: Text(
-          describeQuery(selected, schema),
+          describeQuery(l, selected, schema),
           key: const Key('saved-query-summary'),
           style: Theme.of(context).textTheme.bodySmall,
         ),
       ),
       Text(
-        switch (used) {
-          0 => 'Used by no widgets',
-          1 => 'Used by 1 widget',
-          _ => 'Used by $used widgets',
-        },
+        l.queryUsedBy(used),
         key: const Key('saved-query-usage'),
         style: Theme.of(context).textTheme.bodySmall,
       ),
@@ -631,13 +663,13 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
             key: const Key('edit-saved-query'),
             onPressed: () =>
                 unawaited(_editSavedQuery(schema, selected, asNew: false)),
-            child: const Text('Edit this query'),
+            child: Text(l.queryEditThis),
           ),
           TextButton(
             key: const Key('save-query-as-new'),
             onPressed: () =>
                 unawaited(_editSavedQuery(schema, selected, asNew: true)),
-            child: const Text('Save as new'),
+            child: Text(l.querySaveAsNew),
           ),
         ],
       ),
@@ -653,9 +685,17 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
       context: context,
       builder: (dialog) => QueryEditorDialog(
         schema: schema,
-        heading: asNew ? 'Save as new query' : 'Edit query',
-        initialName: asNew ? '${selected.name} copy' : selected.name,
-        initialState: QueryBuilderState.fromDefinition(selected, schema),
+        heading: asNew
+            ? context.l10n.querySaveAsNewTitle
+            : context.l10n.queryEditTitle,
+        initialName: asNew
+            ? context.l10n.queryCopyName(selected.name)
+            : selected.name,
+        initialState: QueryBuilderState.fromDefinition(
+          selected,
+          schema,
+          decimalSeparator: decimalSeparatorOf(context),
+        ),
         // Saving as new starts from the same contents but must not inherit the id.
         existing: asNew ? null : selected,
         order: controller.queryDefinitions.length,
@@ -675,21 +715,21 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
     if (mounted) setState(() {});
   }
 
-  List<Widget> _presentationFields() => switch (widgetType) {
+  List<Widget> _presentationFields(AppLocalizations l) => switch (widgetType) {
     'core.aggregate-number' => [
       FiTextInput(
         key: const Key('config-suffix'),
         controller: suffix,
-        label: 'Unit suffix (optional)',
+        label: l.widgetUnitSuffix,
         suffixIcon: const HelpButton(HelpId.widgetUnitSuffix),
-        helperText: 'Shown after the exact value, for example "EUR".',
+        helperText: l.widgetUnitSuffixHelper,
       ),
     ],
     'core.line-chart' => [
       FiSwitchTile(
         key: const Key('config-show-points'),
         contentPadding: EdgeInsets.zero,
-        title: const Text('Show points'),
+        title: Text(l.widgetShowPoints),
         secondary: const HelpButton(HelpId.widgetShowPoints),
         value: showPoints,
         onChanged: (value) => setState(() => showPoints = value),
@@ -697,7 +737,7 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
       FiTextInput(
         key: const Key('config-axis-label'),
         controller: axisLabel,
-        label: 'Y axis label (optional)',
+        label: l.widgetYAxisLabel,
         suffixIcon: const HelpButton(HelpId.widgetAxisLabel),
       ),
     ],
@@ -706,14 +746,14 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
         key: const Key('config-bar-width'),
         initialValue: barWidth?.toString() ?? '',
         keyboardType: TextInputType.number,
-        label: 'Bar width (optional)',
+        label: l.widgetBarWidth,
         suffixIcon: const HelpButton(HelpId.widgetBarWidth),
         onChanged: (value) => setState(() => barWidth = int.tryParse(value)),
       ),
       FiTextInput(
         key: const Key('config-axis-label'),
         controller: axisLabel,
-        label: 'Y axis label (optional)',
+        label: l.widgetYAxisLabel,
         suffixIcon: const HelpButton(HelpId.widgetAxisLabel),
       ),
     ],
@@ -722,14 +762,14 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
         key: const Key('config-point-radius'),
         initialValue: pointRadius?.toString() ?? '',
         keyboardType: TextInputType.number,
-        label: 'Point radius (optional)',
+        label: l.widgetPointRadius,
         suffixIcon: const HelpButton(HelpId.widgetPointRadius),
         onChanged: (value) => setState(() => pointRadius = int.tryParse(value)),
       ),
       FiTextInput(
         key: const Key('config-axis-label'),
         controller: axisLabel,
-        label: 'Y axis label (optional)',
+        label: l.widgetYAxisLabel,
         suffixIcon: const HelpButton(HelpId.widgetAxisLabel),
       ),
     ],
@@ -750,8 +790,11 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
           : await controller.createQueryDefinition(
               query.toDefinition(
                 schema,
-                title.text.trim().isEmpty ? 'Widget query' : title.text.trim(),
+                title.text.trim().isEmpty
+                    ? context.l10n.queryDefaultName
+                    : title.text.trim(),
                 controller.queryDefinitions.length,
+                decimalSeparator: decimalSeparatorOf(context),
               ),
             );
       // Omitting configuration for an unsupported widget leaves its opaque value untouched.
@@ -829,6 +872,16 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
   WidgetConfigurationDto _emptyConfiguration() =>
       WidgetConfigurationDto(version: 1, body: _emptyStructuredMap());
 }
+
+/// The localized name of a known widget type; [fallback] (the core's label) otherwise.
+String widgetTypeName(AppLocalizations l, String widgetType, String fallback) =>
+    switch (widgetType) {
+      'core.aggregate-number' => l.widgetTypeAggregateNumber,
+      'core.line-chart' => l.widgetTypeLineChart,
+      'core.bar-chart' => l.widgetTypeBarChart,
+      'core.scatter-plot' => l.widgetTypeScatterPlot,
+      _ => fallback,
+    };
 
 IconData _typeIcon(String widgetType) => switch (widgetType) {
   'core.aggregate-number' => FiIcons.number,

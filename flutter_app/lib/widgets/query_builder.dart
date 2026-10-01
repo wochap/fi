@@ -1,6 +1,7 @@
 import 'package:fi/exact_format.dart';
 import 'package:fi/help_button.dart';
 import 'package:fi/help_copy.dart';
+import 'package:fi/l10n/l10n.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/theme/inputs.dart';
 import 'package:flutter/material.dart';
@@ -11,11 +12,11 @@ const Object _keep = Object();
 /// The presets offered above the chart builder.
 enum ChartPreset { dailyTotal, monthlyTotal, countPerDay, latestValues }
 
-String presetLabel(ChartPreset preset) => switch (preset) {
-  ChartPreset.dailyTotal => 'Daily total',
-  ChartPreset.monthlyTotal => 'Monthly total',
-  ChartPreset.countPerDay => 'Count per day',
-  ChartPreset.latestValues => 'Latest values',
+String presetLabel(AppLocalizations l, ChartPreset preset) => switch (preset) {
+  ChartPreset.dailyTotal => l.queryPresetDailyTotal,
+  ChartPreset.monthlyTotal => l.queryPresetMonthlyTotal,
+  ChartPreset.countPerDay => l.queryPresetCountPerDay,
+  ChartPreset.latestValues => l.queryPresetLatestValues,
 };
 
 /// Everything the guided query builder can express, as plain data.
@@ -123,25 +124,25 @@ final class QueryBuilderState {
   bool get aggregationDisabled => showsAggregation && !needsAggregation;
 
   /// What still has to be chosen before this query can be submitted.
-  String? get blocker {
+  String? blocker(AppLocalizations l) {
     if (needsAggregation) {
       if (aggregation != AggregationKindDto.count && operandFieldId == null) {
-        return 'Choose the field to aggregate.';
+        return l.queryBlockerOperand;
       }
       if (widgetType != 'core.aggregate-number' && categoryFieldId == null) {
-        return 'Choose the category or period field.';
+        return l.queryBlockerCategoryOrPeriod;
       }
     }
     if (needsSeries && (seriesXFieldId == null || seriesYFieldId == null)) {
-      return 'Choose both axes.';
+      return l.queryBlockerAxes;
     }
     if (widgetType == 'core.bar-chart' &&
         bucket == null &&
         categoryFieldId == null) {
-      return 'Choose the category field.';
+      return l.queryBlockerCategory;
     }
     if (filterFieldId != null && filterValue.trim().isEmpty) {
-      return 'Enter the filter value or clear the filter.';
+      return l.queryBlockerFilterValue;
     }
     return null;
   }
@@ -153,6 +154,7 @@ final class QueryBuilderState {
     String id = '',
     bool deleted = false,
     int queryVersion = 1,
+    String decimalSeparator = '.',
   }) => QueryDefinitionDto(
     id: id,
     collectionId: schema.id,
@@ -160,7 +162,7 @@ final class QueryBuilderState {
     queryVersion: queryVersion,
     query: CollectionQueryDto(
       collectionId: schema.id,
-      filter: _filterExpression(schema),
+      filter: _filterExpression(schema, decimalSeparator),
       grouping: bucket == null || categoryFieldId == null
           ? null
           : GroupingDto(
@@ -257,12 +259,15 @@ final class QueryBuilderState {
     ),
   };
 
-  ExpressionDto? _filterExpression(CollectionSchemaDto schema) {
+  ExpressionDto? _filterExpression(
+    CollectionSchemaDto schema,
+    String decimalSeparator,
+  ) {
     final fieldId = filterFieldId;
     if (fieldId == null) return null;
     final field = schema.fields.where((item) => item.id == fieldId).firstOrNull;
     if (field == null) return null;
-    final constant = _constant(field);
+    final constant = _constant(field, decimalSeparator);
     if (constant == null) return null;
     return ExpressionDto(
       root: 2,
@@ -285,7 +290,7 @@ final class QueryBuilderState {
     );
   }
 
-  TypedValueDto? _constant(FieldDefinitionDto field) {
+  TypedValueDto? _constant(FieldDefinitionDto field, String decimalSeparator) {
     final raw = filterValue.trim();
     final kind = valueKindFor(field.fieldType.kind);
     final valueType = ValueTypeDto(kind: kind, scale: field.fieldType.scale);
@@ -304,7 +309,11 @@ final class QueryBuilderState {
       ),
       ValueTypeKindDto.fixedDecimal => TypedValueDto(
         valueType: valueType,
-        integerValue: parseScaled(raw, field.fieldType.scale ?? 0),
+        integerValue: parseScaled(
+          raw,
+          field.fieldType.scale ?? 0,
+          decimalSeparator: decimalSeparator,
+        ),
       ),
       _ => TypedValueDto(valueType: valueType, integerValue: int.tryParse(raw)),
     };
@@ -315,8 +324,9 @@ final class QueryBuilderState {
   /// anything unrecognized is refused and the caller falls back to a read-only view.
   static QueryBuilderState? fromDefinition(
     QueryDefinitionDto definition,
-    CollectionSchemaDto schema,
-  ) {
+    CollectionSchemaDto schema, {
+    String decimalSeparator = '.',
+  }) {
     final query = definition.query;
     if (query == null) return null;
     if (query.calendar.timezone != 'UTC' ||
@@ -330,7 +340,7 @@ final class QueryBuilderState {
 
     // Filter: only the one comparison shape the builder emits is representable.
     if (query.filter case final filter?) {
-      final parsed = _parseFilter(filter, schema);
+      final parsed = _parseFilter(filter, schema, decimalSeparator);
       if (parsed == null) return null;
       state = state.copyWith(
         filterFieldId: parsed.fieldId,
@@ -456,16 +466,17 @@ T? _soleOrNull<T>(List<T> items) => items.length == 1 ? items.single : null;
 
 /// A one-line description of a saved query, for the places that offer to edit it.
 String describeQuery(
+  AppLocalizations l,
   QueryDefinitionDto definition,
   CollectionSchemaDto schema,
 ) {
   final query = definition.query;
-  if (query == null) return 'Made elsewhere; not editable here.';
+  if (query == null) return l.queryMadeElsewhere;
   String fieldName(ExpressionDto expression) {
     final id = _fieldIdOf(expression);
     return schema.fields.where((item) => item.id == id).firstOrNull?.name ??
         id ??
-        'an expression';
+        l.queryAnExpression;
   }
 
   final parts = <String>[];
@@ -473,40 +484,54 @@ String describeQuery(
   if (aggregation != null) {
     parts.add(
       aggregation.kind == AggregationKindDto.count
-          ? 'Count'
-          : '${_aggregationLabel(aggregation.kind)} of '
-                '${aggregation.expression == null ? '?' : fieldName(aggregation.expression!)}',
+          ? l.queryAggCount
+          : l.queryDescAggregationOf(
+              _aggregationLabel(l, aggregation.kind),
+              aggregation.expression == null
+                  ? '?'
+                  : fieldName(aggregation.expression!),
+            ),
     );
   }
   switch (query.shape.kind) {
     case QueryShapeKindDto.series:
       parts.add(
-        'each record, ${query.shape.x == null ? '?' : fieldName(query.shape.x!)} '
-        'against ${query.shape.y == null ? '?' : fieldName(query.shape.y!)}',
+        l.queryDescSeries(
+          query.shape.x == null ? '?' : fieldName(query.shape.x!),
+          query.shape.y == null ? '?' : fieldName(query.shape.y!),
+        ),
       );
     case QueryShapeKindDto.categorySeries:
       parts.add(
-        'by ${query.shape.category == null ? '?' : fieldName(query.shape.category!)}',
+        l.queryDescBy(
+          query.shape.category == null ? '?' : fieldName(query.shape.category!),
+        ),
       );
     case QueryShapeKindDto.scalar:
     case QueryShapeKindDto.recordSet:
       break;
   }
   if (query.grouping case final grouping?) {
-    parts.add('per ${grouping.period.name}');
+    parts.add(switch (grouping.period) {
+      BucketPeriodDto.day => l.queryDescPerDay,
+      BucketPeriodDto.week => l.queryDescPerWeek,
+      BucketPeriodDto.month => l.queryDescPerMonth,
+      BucketPeriodDto.year => l.queryDescPerYear,
+    });
   }
-  if (query.filter != null) parts.add('filtered');
-  if (query.limit case final limit?) parts.add('limit $limit');
-  return parts.isEmpty ? 'Every record' : parts.join(', ');
+  if (query.filter != null) parts.add(l.queryDescFiltered);
+  if (query.limit case final limit?) parts.add(l.queryDescLimit(limit));
+  return parts.isEmpty ? l.queryDescEveryRecord : parts.join(', ');
 }
 
-String _aggregationLabel(AggregationKindDto kind) => switch (kind) {
-  AggregationKindDto.count => 'Count',
-  AggregationKindDto.sum => 'Sum',
-  AggregationKindDto.average => 'Average',
-  AggregationKindDto.min => 'Min',
-  AggregationKindDto.max => 'Max',
-};
+String _aggregationLabel(AppLocalizations l, AggregationKindDto kind) =>
+    switch (kind) {
+      AggregationKindDto.count => l.queryAggCount,
+      AggregationKindDto.sum => l.queryAggSum,
+      AggregationKindDto.average => l.queryAggAverage,
+      AggregationKindDto.min => l.queryAggMin,
+      AggregationKindDto.max => l.queryAggMax,
+    };
 
 /// The single-node field expression the builder emits everywhere it names a field.
 ExpressionDto fieldExpression(String fieldId) => ExpressionDto(
@@ -570,7 +595,11 @@ final class _ParsedFilter {
   final String value;
 }
 
-_ParsedFilter? _parseFilter(ExpressionDto filter, CollectionSchemaDto schema) {
+_ParsedFilter? _parseFilter(
+  ExpressionDto filter,
+  CollectionSchemaDto schema,
+  String decimalSeparator,
+) {
   if (filter.nodes.length != 3 || filter.root != 2) return null;
   final left = filter.nodes[0];
   final constant = filter.nodes[1];
@@ -593,21 +622,26 @@ _ParsedFilter? _parseFilter(ExpressionDto filter, CollectionSchemaDto schema) {
   final value = constant.value;
   if (operator == null || value == null) return null;
   if (value.valueType.kind != valueKindFor(field.fieldType.kind)) return null;
-  final text = _constantText(value);
+  final text = _constantText(value, decimalSeparator);
   if (text == null) return null;
   return _ParsedFilter(reference.id, operator, text);
 }
 
 /// The inverse of the constant the builder emits, so a saved filter reloads into its text box.
-String? _constantText(TypedValueDto value) => switch (value.valueType.kind) {
-  ValueTypeKindDto.text || ValueTypeKindDto.enum_ => value.textValue,
-  ValueTypeKindDto.boolean => value.booleanValue?.toString(),
-  ValueTypeKindDto.fixedDecimal =>
-    value.integerValue == null
-        ? null
-        : formatScaled(value.integerValue!, value.valueType.scale ?? 0),
-  _ => value.integerValue?.toString(),
-};
+String? _constantText(TypedValueDto value, String decimalSeparator) =>
+    switch (value.valueType.kind) {
+      ValueTypeKindDto.text || ValueTypeKindDto.enum_ => value.textValue,
+      ValueTypeKindDto.boolean => value.booleanValue?.toString(),
+      ValueTypeKindDto.fixedDecimal =>
+        value.integerValue == null
+            ? null
+            : formatScaled(
+                value.integerValue!,
+                value.valueType.scale ?? 0,
+                decimalSeparator: decimalSeparator,
+              ),
+      _ => value.integerValue?.toString(),
+    };
 
 ValueTypeKindDto valueKindFor(FieldTypeKindDto kind) => switch (kind) {
   FieldTypeKindDto.text => ValueTypeKindDto.text,
@@ -720,234 +754,247 @@ class _QueryBuilderState extends State<QueryBuilder> {
   void _emit(QueryBuilderState next) => widget.onChanged(next);
 
   @override
-  Widget build(BuildContext context) => Column(
-    mainAxisSize: MainAxisSize.min,
-    crossAxisAlignment: CrossAxisAlignment.start,
-    // Outlined inputs need air between them; the labels sit on their top edges.
-    spacing: 14,
-    children: [
-      Text('Query', style: Theme.of(context).textTheme.titleSmall),
-      if (widget.showPresets &&
-          (state.widgetType == 'core.line-chart' ||
-              state.widgetType == 'core.bar-chart'))
-        Padding(
-          padding: const EdgeInsets.only(top: 4, bottom: 4),
-          child: Wrap(
-            spacing: 8,
-            children: [
-              for (final preset in ChartPreset.values)
-                ActionChip(
-                  key: Key('preset-${preset.name}'),
-                  label: Text(presetLabel(preset)),
-                  onPressed: () => _emit(applyPreset(preset, state, schema)),
-                ),
-            ],
-          ),
-        ),
-      // Group by comes first: a user thinks "per day, sum of amount", not the other way round.
-      if (state.isChart && !state.isScatter) ...[
-        FiSelect<BucketPeriodDto?>(
-          key: const Key('bucket-period'),
-          value: state.bucket,
-          label: 'Group by',
-          suffixIcon: const HelpButton(HelpId.widgetGroupBy),
-          items: const [
-            DropdownMenuItem(value: null, child: Text('None')),
-            DropdownMenuItem(value: BucketPeriodDto.day, child: Text('Day')),
-            DropdownMenuItem(value: BucketPeriodDto.week, child: Text('Week')),
-            DropdownMenuItem(
-              value: BucketPeriodDto.month,
-              child: Text('Month'),
-            ),
-            DropdownMenuItem(value: BucketPeriodDto.year, child: Text('Year')),
-          ],
-          onChanged: (value) => _emit(
-            // Switching the period swaps the allowed field kinds, so the previous choice cannot
-            // be carried over.
-            state.copyWith(
-              bucket: value,
-              categoryFieldId: value == null ? state.categoryFieldId : null,
-            ),
-          ),
-        ),
-        _fieldDropdown(
-          key: ValueKey('category-field-${state.bucket}'),
-          label: state.bucket == null ? 'Category field' : 'Date field',
-          help: state.bucket == null
-              ? HelpId.widgetCategoryField
-              : HelpId.widgetDateField,
-          fields: state.bucket == null
-              ? categoryFieldsOf(schema)
-              : timeFieldsOf(schema),
-          value: state.categoryFieldId,
-          onChanged: (value) => _emit(state.copyWith(categoryFieldId: value)),
-        ),
-      ],
-      if (state.showsAggregation) ...[
-        FiSelect<AggregationKindDto>(
-          key: const Key('aggregation'),
-          value: state.aggregation,
-          label: 'Aggregation',
-          suffixIcon: const HelpButton(HelpId.widgetAggregation),
-          helperText: state.aggregationDisabled
-              ? 'Choose a Group by period to aggregate'
-              : null,
-          items: const [
-            DropdownMenuItem(
-              value: AggregationKindDto.count,
-              child: Text('Count'),
-            ),
-            DropdownMenuItem(value: AggregationKindDto.sum, child: Text('Sum')),
-            DropdownMenuItem(
-              value: AggregationKindDto.average,
-              child: Text('Average'),
-            ),
-            DropdownMenuItem(value: AggregationKindDto.min, child: Text('Min')),
-            DropdownMenuItem(value: AggregationKindDto.max, child: Text('Max')),
-          ],
-          onChanged: state.aggregationDisabled
-              ? null
-              : (value) => _emit(
-                  state.copyWith(
-                    aggregation: value ?? state.aggregation,
-                    operandFieldId: value == AggregationKindDto.count
-                        ? null
-                        : state.operandFieldId,
+  Widget build(BuildContext context) {
+    final l = context.l10n;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      // Outlined inputs need air between them; the labels sit on their top edges.
+      spacing: 14,
+      children: [
+        Text(l.queryTitle, style: Theme.of(context).textTheme.titleSmall),
+        if (widget.showPresets &&
+            (state.widgetType == 'core.line-chart' ||
+                state.widgetType == 'core.bar-chart'))
+          Padding(
+            padding: const EdgeInsets.only(top: 4, bottom: 4),
+            child: Wrap(
+              spacing: 8,
+              children: [
+                for (final preset in ChartPreset.values)
+                  ActionChip(
+                    key: Key('preset-${preset.name}'),
+                    label: Text(presetLabel(l, preset)),
+                    onPressed: () => _emit(applyPreset(preset, state, schema)),
                   ),
-                ),
-        ),
-        if (state.aggregation != AggregationKindDto.count)
-          _fieldDropdown(
-            // Keyed by the aggregation so switching back to Count clears the displayed operand
-            // instead of leaving a stale choice the state no longer holds.
-            key: ValueKey('operand-field-${state.aggregation}'),
-            label: 'Field to aggregate',
-            help: HelpId.widgetOperandField,
-            fields: numericFieldsOf(schema),
-            value: state.operandFieldId,
-            enabled: !state.aggregationDisabled,
-            onChanged: (value) => _emit(state.copyWith(operandFieldId: value)),
+              ],
+            ),
           ),
-        // An exact numeric policy is mandatory for Average so no implicit rounding is invented.
-        if (state.aggregation == AggregationKindDto.average) ...[
-          FiTextInput(
-            key: const Key('output-scale'),
-            initialValue: '${state.outputScale}',
-            enabled: !state.aggregationDisabled,
-            keyboardType: TextInputType.number,
-            label: 'Output scale',
-            suffixIcon: const HelpButton(HelpId.widgetOutputScale),
+        // Group by comes first: a user thinks "per day, sum of amount", not the other way round.
+        if (state.isChart && !state.isScatter) ...[
+          FiSelect<BucketPeriodDto?>(
+            key: const Key('bucket-period'),
+            value: state.bucket,
+            label: l.queryGroupBy,
+            suffixIcon: const HelpButton(HelpId.widgetGroupBy),
+            items: [
+              DropdownMenuItem(value: null, child: Text(l.commonNone)),
+              DropdownMenuItem(
+                value: BucketPeriodDto.day,
+                child: Text(l.queryPeriodDay),
+              ),
+              DropdownMenuItem(
+                value: BucketPeriodDto.week,
+                child: Text(l.queryPeriodWeek),
+              ),
+              DropdownMenuItem(
+                value: BucketPeriodDto.month,
+                child: Text(l.queryPeriodMonth),
+              ),
+              DropdownMenuItem(
+                value: BucketPeriodDto.year,
+                child: Text(l.queryPeriodYear),
+              ),
+            ],
             onChanged: (value) => _emit(
+              // Switching the period swaps the allowed field kinds, so the previous choice cannot
+              // be carried over.
               state.copyWith(
-                outputScale: int.tryParse(value) ?? state.outputScale,
+                bucket: value,
+                categoryFieldId: value == null ? state.categoryFieldId : null,
               ),
             ),
           ),
-          FiSelect<RoundingPolicyDto>(
-            key: const Key('rounding'),
-            value: state.rounding,
-            label: 'Rounding policy',
-            suffixIcon: const HelpButton(HelpId.widgetRounding),
-            items: const [
-              DropdownMenuItem(
-                value: RoundingPolicyDto.halfEven,
-                child: Text('Half to even'),
-              ),
-              DropdownMenuItem(
-                value: RoundingPolicyDto.rejectInexact,
-                child: Text('Reject inexact'),
-              ),
+          _fieldDropdown(
+            key: ValueKey('category-field-${state.bucket}'),
+            label: state.bucket == null
+                ? l.queryCategoryField
+                : l.queryDateField,
+            help: state.bucket == null
+                ? HelpId.widgetCategoryField
+                : HelpId.widgetDateField,
+            fields: state.bucket == null
+                ? categoryFieldsOf(schema)
+                : timeFieldsOf(schema),
+            value: state.categoryFieldId,
+            onChanged: (value) => _emit(state.copyWith(categoryFieldId: value)),
+          ),
+        ],
+        if (state.showsAggregation) ...[
+          FiSelect<AggregationKindDto>(
+            key: const Key('aggregation'),
+            value: state.aggregation,
+            label: l.queryAggregation,
+            suffixIcon: const HelpButton(HelpId.widgetAggregation),
+            helperText: state.aggregationDisabled
+                ? l.queryAggregationNeedsGroup
+                : null,
+            items: [
+              for (final kind in AggregationKindDto.values)
+                DropdownMenuItem(
+                  value: kind,
+                  child: Text(_aggregationLabel(l, kind)),
+                ),
             ],
             onChanged: state.aggregationDisabled
                 ? null
-                : (value) =>
-                      _emit(state.copyWith(rounding: value ?? state.rounding)),
+                : (value) => _emit(
+                    state.copyWith(
+                      aggregation: value ?? state.aggregation,
+                      operandFieldId: value == AggregationKindDto.count
+                          ? null
+                          : state.operandFieldId,
+                    ),
+                  ),
           ),
-        ],
-      ],
-      if (state.needsSeries) ...[
-        _fieldDropdown(
-          key: const Key('series-x'),
-          label: 'X axis',
-          help: HelpId.widgetXAxis,
-          fields: plotFieldsOf(schema),
-          value: state.seriesXFieldId,
-          onChanged: (value) => _emit(state.copyWith(seriesXFieldId: value)),
-        ),
-        _fieldDropdown(
-          key: const Key('series-y'),
-          label: 'Y axis',
-          help: HelpId.widgetYAxis,
-          fields: numericFieldsOf(schema),
-          value: state.seriesYFieldId,
-          onChanged: (value) => _emit(state.copyWith(seriesYFieldId: value)),
-        ),
-      ],
-      const Divider(height: 20),
-      _fieldDropdown(
-        key: const Key('filter-field'),
-        label: 'Filter field (optional)',
-        help: HelpId.widgetFilter,
-        fields: activeFieldsOf(schema),
-        value: state.filterFieldId,
-        allowClear: true,
-        onChanged: (value) => _emit(state.copyWith(filterFieldId: value)),
-      ),
-      if (state.filterFieldId != null) ...[
-        // The condition is one inline row: operator beside value.
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          spacing: 8,
-          children: [
-            Expanded(
-              child: FiSelect<ComparisonOperatorDto>.compact(
-                key: const Key('filter-operator'),
-                value: state.filterOperator,
-                label: 'Filter operator',
-                items: const [
-                  DropdownMenuItem(
-                    value: ComparisonOperatorDto.equal,
-                    child: Text('equals'),
-                  ),
-                  DropdownMenuItem(
-                    value: ComparisonOperatorDto.notEqual,
-                    child: Text('is not'),
-                  ),
-                  DropdownMenuItem(
-                    value: ComparisonOperatorDto.greaterThan,
-                    child: Text('greater than'),
-                  ),
-                  DropdownMenuItem(
-                    value: ComparisonOperatorDto.greaterThanOrEqual,
-                    child: Text('at least'),
-                  ),
-                  DropdownMenuItem(
-                    value: ComparisonOperatorDto.lessThan,
-                    child: Text('less than'),
-                  ),
-                  DropdownMenuItem(
-                    value: ComparisonOperatorDto.lessThanOrEqual,
-                    child: Text('at most'),
-                  ),
-                ],
-                onChanged: (value) => _emit(
-                  state.copyWith(filterOperator: value ?? state.filterOperator),
+          if (state.aggregation != AggregationKindDto.count)
+            _fieldDropdown(
+              // Keyed by the aggregation so switching back to Count clears the displayed operand
+              // instead of leaving a stale choice the state no longer holds.
+              key: ValueKey('operand-field-${state.aggregation}'),
+              label: l.queryOperandField,
+              help: HelpId.widgetOperandField,
+              fields: numericFieldsOf(schema),
+              value: state.operandFieldId,
+              enabled: !state.aggregationDisabled,
+              onChanged: (value) =>
+                  _emit(state.copyWith(operandFieldId: value)),
+            ),
+          // An exact numeric policy is mandatory for Average so no implicit rounding is invented.
+          if (state.aggregation == AggregationKindDto.average) ...[
+            FiTextInput(
+              key: const Key('output-scale'),
+              initialValue: '${state.outputScale}',
+              enabled: !state.aggregationDisabled,
+              keyboardType: TextInputType.number,
+              label: l.queryOutputScale,
+              suffixIcon: const HelpButton(HelpId.widgetOutputScale),
+              onChanged: (value) => _emit(
+                state.copyWith(
+                  outputScale: int.tryParse(value) ?? state.outputScale,
                 ),
               ),
             ),
-            Expanded(
-              child: FiTextInput.compact(
-                key: const Key('filter-value'),
-                controller: filterValue,
-                label: 'Filter value',
-                onChanged: (value) => _emit(state.copyWith(filterValue: value)),
-              ),
+            FiSelect<RoundingPolicyDto>(
+              key: const Key('rounding'),
+              value: state.rounding,
+              label: l.queryRoundingPolicy,
+              suffixIcon: const HelpButton(HelpId.widgetRounding),
+              items: [
+                DropdownMenuItem(
+                  value: RoundingPolicyDto.halfEven,
+                  child: Text(l.queryRoundingHalfEven),
+                ),
+                DropdownMenuItem(
+                  value: RoundingPolicyDto.rejectInexact,
+                  child: Text(l.queryRoundingRejectInexact),
+                ),
+              ],
+              onChanged: state.aggregationDisabled
+                  ? null
+                  : (value) => _emit(
+                      state.copyWith(rounding: value ?? state.rounding),
+                    ),
             ),
           ],
+        ],
+        if (state.needsSeries) ...[
+          _fieldDropdown(
+            key: const Key('series-x'),
+            label: l.queryXAxis,
+            help: HelpId.widgetXAxis,
+            fields: plotFieldsOf(schema),
+            value: state.seriesXFieldId,
+            onChanged: (value) => _emit(state.copyWith(seriesXFieldId: value)),
+          ),
+          _fieldDropdown(
+            key: const Key('series-y'),
+            label: l.queryYAxis,
+            help: HelpId.widgetYAxis,
+            fields: numericFieldsOf(schema),
+            value: state.seriesYFieldId,
+            onChanged: (value) => _emit(state.copyWith(seriesYFieldId: value)),
+          ),
+        ],
+        const Divider(height: 20),
+        _fieldDropdown(
+          key: const Key('filter-field'),
+          label: l.queryFilterField,
+          help: HelpId.widgetFilter,
+          fields: activeFieldsOf(schema),
+          value: state.filterFieldId,
+          allowClear: true,
+          onChanged: (value) => _emit(state.copyWith(filterFieldId: value)),
         ),
+        if (state.filterFieldId != null) ...[
+          // The condition is one inline row: operator beside value.
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            spacing: 8,
+            children: [
+              Expanded(
+                child: FiSelect<ComparisonOperatorDto>.compact(
+                  key: const Key('filter-operator'),
+                  value: state.filterOperator,
+                  label: l.queryFilterOperator,
+                  items: [
+                    DropdownMenuItem(
+                      value: ComparisonOperatorDto.equal,
+                      child: Text(l.queryOpEquals),
+                    ),
+                    DropdownMenuItem(
+                      value: ComparisonOperatorDto.notEqual,
+                      child: Text(l.queryOpIsNot),
+                    ),
+                    DropdownMenuItem(
+                      value: ComparisonOperatorDto.greaterThan,
+                      child: Text(l.queryOpGreaterThan),
+                    ),
+                    DropdownMenuItem(
+                      value: ComparisonOperatorDto.greaterThanOrEqual,
+                      child: Text(l.queryOpAtLeast),
+                    ),
+                    DropdownMenuItem(
+                      value: ComparisonOperatorDto.lessThan,
+                      child: Text(l.queryOpLessThan),
+                    ),
+                    DropdownMenuItem(
+                      value: ComparisonOperatorDto.lessThanOrEqual,
+                      child: Text(l.queryOpAtMost),
+                    ),
+                  ],
+                  onChanged: (value) => _emit(
+                    state.copyWith(
+                      filterOperator: value ?? state.filterOperator,
+                    ),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: FiTextInput.compact(
+                  key: const Key('filter-value'),
+                  controller: filterValue,
+                  label: l.queryFilterValue,
+                  onChanged: (value) =>
+                      _emit(state.copyWith(filterValue: value)),
+                ),
+              ),
+            ],
+          ),
+        ],
       ],
-    ],
-  );
+    );
+  }
 
   Widget _fieldDropdown({
     required Key key,
@@ -967,7 +1014,10 @@ class _QueryBuilderState extends State<QueryBuilder> {
       suffixIcon: HelpButton(help),
       items: [
         if (allowClear)
-          const DropdownMenuItem<String>(value: null, child: Text('None')),
+          DropdownMenuItem<String>(
+            value: null,
+            child: Text(context.l10n.commonNone),
+          ),
         for (final field in fields)
           DropdownMenuItem(value: field.id, child: Text(field.name)),
       ],

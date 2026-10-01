@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:fi/l10n/l10n.dart';
 import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/theme/nocturne.dart';
 import 'package:fi/theme/nocturne_widgets.dart';
@@ -121,7 +122,7 @@ class _SideSheetFrame extends StatelessWidget {
               ),
             ),
             IconButton(
-              tooltip: 'Close',
+              tooltip: context.l10n.commonClose,
               onPressed: () => Navigator.pop(context),
               icon: const Icon(FiIcons.close),
             ),
@@ -144,7 +145,7 @@ class _SideSheetFrame extends StatelessWidget {
             ),
             FilledButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Done'),
+              child: Text(context.l10n.commonDone),
             ),
           ],
         ),

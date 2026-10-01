@@ -1,13 +1,25 @@
+import 'package:fi/l10n/l10n.dart';
 import 'package:fi/status_time.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/date_symbol_data_local.dart';
+import 'package:intl/intl.dart';
+
+final en = lookupAppLocalizations(const Locale('en'));
+final es = lookupAppLocalizations(const Locale('es'));
 
 void main() {
+  setUpAll(() => initializeDateFormatting());
+  tearDown(() => Intl.defaultLocale = null);
   final now = DateTime(2026, 9, 24, 13, 0);
-  String ago(Duration delta) =>
-      formatStatusTime(now.subtract(delta).millisecondsSinceEpoch, now: now);
+  String ago(Duration delta) => formatStatusTime(
+    en,
+    now.subtract(delta).millisecondsSinceEpoch,
+    now: now,
+  );
 
   test('absent value reads never', () {
-    expect(formatStatusTime(null, now: now), 'never');
+    expect(formatStatusTime(en, null, now: now), 'never');
   });
 
   test('under one minute reads just now', () {
@@ -34,23 +46,39 @@ void main() {
   });
 
   test('twenty-four hours or older reads a short local date', () {
-    expect(ago(const Duration(hours: 24)), 'Wed 23 Sep 13:00');
+    expect(ago(const Duration(hours: 24)), 'Wed, Sep 23 13:00');
     expect(
       formatStatusTime(
+        en,
         DateTime(2026, 9, 22, 13, 0).millisecondsSinceEpoch,
         now: now,
       ),
-      'Tue 22 Sep 13:00',
+      'Tue, Sep 22 13:00',
     );
   });
 
   test('a previous year includes the year', () {
     expect(
       formatStatusTime(
+        en,
         DateTime(2025, 12, 31, 23, 5).millisecondsSinceEpoch,
         now: DateTime(2026, 1, 2, 9, 0),
       ),
-      'Wed 31 Dec 2025 23:05',
+      'Wed, Dec 31, 2025 23:05',
     );
+  });
+
+  test('Spanish status times', () {
+    Intl.defaultLocale = 'es';
+    String ago(Duration delta) => formatStatusTime(
+      es,
+      now.subtract(delta).millisecondsSinceEpoch,
+      now: now,
+    );
+    expect(formatStatusTime(es, null, now: now), 'nunca');
+    expect(ago(Duration.zero), 'justo ahora');
+    expect(ago(const Duration(minutes: 5)), 'hace 5 min');
+    expect(ago(const Duration(hours: 3)), 'hace 3 h');
+    expect(ago(const Duration(hours: 24)), contains('sept'));
   });
 }

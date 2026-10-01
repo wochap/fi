@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:clock/clock.dart';
+import 'package:fi/l10n/l10n.dart';
 import 'package:fi/controllers.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/status_time.dart';
@@ -27,15 +28,16 @@ String groupedDeviceId(String id) {
   return [...groups.take(2), '…', ...groups.skip(groups.length - 2)].join(' ');
 }
 
-String connectionLabel(PeerConnectionKindDto state) => switch (state) {
-  PeerConnectionKindDto.offline => 'Offline',
-  PeerConnectionKindDto.searching => 'Searching',
-  PeerConnectionKindDto.connected => 'Connected',
-  PeerConnectionKindDto.syncing => 'Syncing',
-  PeerConnectionKindDto.synced => 'Synced',
-  PeerConnectionKindDto.error => 'Error',
-  PeerConnectionKindDto.paused => 'Paused',
-};
+String connectionLabel(AppLocalizations l, PeerConnectionKindDto state) =>
+    switch (state) {
+      PeerConnectionKindDto.offline => l.devicesStatusOffline,
+      PeerConnectionKindDto.searching => l.devicesStatusSearching,
+      PeerConnectionKindDto.connected => l.devicesStatusConnected,
+      PeerConnectionKindDto.syncing => l.devicesStatusSyncing,
+      PeerConnectionKindDto.synced => l.devicesStatusSynced,
+      PeerConnectionKindDto.error => l.devicesStatusError,
+      PeerConnectionKindDto.paused => l.devicesStatusPaused,
+    };
 
 /// A trusted row's state: accent with a dot while connected, syncing or synced; neutral
 /// otherwise.
@@ -47,26 +49,33 @@ class DeviceStateTag extends StatelessWidget {
   @override
   Widget build(BuildContext context) =>
       switch ((device.revoked, device.connection)) {
-        (true, _) => const Tag.neutral('Revoked'),
+        (true, _) => Tag.neutral(context.l10n.devicesStatusRevoked),
         (
           _,
           PeerConnectionKindDto.connected ||
               PeerConnectionKindDto.syncing ||
               PeerConnectionKindDto.synced,
         ) =>
-          Tag(connectionLabel(device.connection), leading: FiIcons.dot),
-        _ => Tag.neutral(connectionLabel(device.connection)),
+          Tag(
+            connectionLabel(context.l10n, device.connection),
+            leading: FiIcons.dot,
+          ),
+        _ => Tag.neutral(connectionLabel(context.l10n, device.connection)),
       };
 }
 
 /// "Seen <time> · Synced <time>", with "Never seen" / "Never synced" for absent values.
-String seenSyncedLine(TrustedDeviceDto device, DateTime now) => [
+String seenSyncedLine(
+  AppLocalizations l,
+  TrustedDeviceDto device,
+  DateTime now,
+) => [
   device.lastSeenMs == null
-      ? 'Never seen'
-      : 'Seen ${formatStatusTime(device.lastSeenMs, now: now)}',
+      ? l.devicesNeverSeen
+      : l.devicesSeen(formatStatusTime(l, device.lastSeenMs, now: now)),
   device.lastSyncMs == null
-      ? 'Never synced'
-      : 'Synced ${formatStatusTime(device.lastSyncMs, now: now)}',
+      ? l.devicesNeverSynced
+      : l.devicesSynced(formatStatusTime(l, device.lastSyncMs, now: now)),
 ].join(' · ');
 
 /// Which connection log lines Details shows.
@@ -133,19 +142,33 @@ class _DeviceDetailsState extends State<DeviceDetails> {
         : ([...logs.peer, ...logs.local]
             ..sort((a, b) => a.atMs.compareTo(b.atMs)));
     final shown = compact ? events : events.where(_shown).toList();
+    final l = context.l10n;
+    // The first field keys the widget and stays English.
     final facts = [
       (
         'State',
-        device.revoked ? 'Revoked' : connectionLabel(device.connection),
+        l.devicesFactState,
+        device.revoked
+            ? l.devicesStatusRevoked
+            : connectionLabel(l, device.connection),
       ),
-      ('Endpoint', device.attemptEndpoint ?? '—'),
+      ('Endpoint', l.devicesFactEndpoint, device.attemptEndpoint ?? '—'),
       (
         'Last attempt',
+        l.devicesFactLastAttempt,
         device.lastAttemptMs == null
             ? '—'
-            : formatStatusTime(device.lastAttemptMs, now: widget.now),
+            : formatStatusTime(
+                context.l10n,
+                device.lastAttemptMs,
+                now: widget.now,
+              ),
       ),
-      ('Sync port', '${controller.syncPort ?? 'not bound'}'),
+      (
+        'Sync port',
+        l.devicesFactSyncPort,
+        '${controller.syncPort ?? l.devicesNotBound}',
+      ),
     ];
     final label = TextStyle(
       fontSize: 11,
@@ -166,34 +189,34 @@ class _DeviceDetailsState extends State<DeviceDetails> {
               key: Key('device-reconnect-$id'),
               onPressed: onReconnect,
               icon: const Icon(FiIcons.refresh, size: 18),
-              label: const Text('Reconnect'),
+              label: Text(l.devicesReconnect),
             ),
           )
         : OutlinedButton.icon(
             key: Key('device-reconnect-$id'),
             onPressed: onReconnect,
             icon: const Icon(FiIcons.refresh, size: 18),
-            label: const Text('Reconnect'),
+            label: Text(l.devicesReconnect),
           );
     final copyLog = compact
         ? TextButton.icon(
             key: Key('device-copy-$id'),
             onPressed: widget.onCopyLog,
             icon: const Icon(FiIcons.copy, size: 16),
-            label: const Text('Copy'),
+            label: Text(l.commonCopy),
           )
         : OutlinedButton.icon(
             key: Key('device-copy-$id'),
             onPressed: widget.onCopyLog,
             icon: const Icon(FiIcons.copy, size: 18),
-            label: const Text('Copy log'),
+            label: Text(l.devicesCopyLog),
           );
     return Column(
       key: Key('device-details-panel-$id'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (compact)
-          for (final (name, text) in facts)
+          for (final (key, name, text) in facts)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 6),
               child: Row(
@@ -202,7 +225,7 @@ class _DeviceDetailsState extends State<DeviceDetails> {
                   Expanded(
                     child: Text(
                       text,
-                      key: Key('device-fact-$name'),
+                      key: Key('device-fact-$key'),
                       textAlign: TextAlign.right,
                       style: value,
                     ),
@@ -214,7 +237,7 @@ class _DeviceDetailsState extends State<DeviceDetails> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              for (final (name, text) in facts)
+              for (final (key, name, text) in facts)
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -223,7 +246,7 @@ class _DeviceDetailsState extends State<DeviceDetails> {
                       const SizedBox(height: 4),
                       Text(
                         text,
-                        key: Key('device-fact-$name'),
+                        key: Key('device-fact-$key'),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: value,
@@ -268,9 +291,10 @@ class _DeviceDetailsState extends State<DeviceDetails> {
             FiIconButton(
               key: Key('device-copy-id-$id'),
               icon: FiIcons.copy,
-              tooltip: 'Copy ID',
-              onPressed: () =>
-                  unawaited(copyWithConfirmation(context, id, 'ID copied')),
+              tooltip: l.devicesCopyId,
+              onPressed: () => unawaited(
+                copyWithConfirmation(context, id, l.devicesIdCopied),
+              ),
             ),
           ],
         ),
@@ -279,8 +303,7 @@ class _DeviceDetailsState extends State<DeviceDetails> {
           children: [
             Expanded(
               child: Text(
-                'Connection log · ${events.length} '
-                '${events.length == 1 ? 'event' : 'events'}',
+                l.devicesLogHeading(events.length),
                 key: Key('device-log-heading-$id'),
                 style: const TextStyle(
                   fontSize: 13,
@@ -294,13 +317,19 @@ class _DeviceDetailsState extends State<DeviceDetails> {
               SegmentedButton<LogFilter>(
                 key: Key('device-log-filter-$id'),
                 showSelectedIcon: false,
-                segments: const [
-                  ButtonSegment(value: LogFilter.all, label: Text('All')),
+                segments: [
+                  ButtonSegment(
+                    value: LogFilter.all,
+                    label: Text(l.devicesLogAll),
+                  ),
                   ButtonSegment(
                     value: LogFilter.pairing,
-                    label: Text('Pairing'),
+                    label: Text(l.devicesLogPairing),
                   ),
-                  ButtonSegment(value: LogFilter.peer, label: Text('Peer')),
+                  ButtonSegment(
+                    value: LogFilter.peer,
+                    label: Text(l.devicesLogPeer),
+                  ),
                 ],
                 selected: {_filter},
                 onSelectionChanged: (value) =>
@@ -318,15 +347,15 @@ class _DeviceDetailsState extends State<DeviceDetails> {
             border: Border.all(color: Nocturne.divider),
           ),
           child: logs == null
-              ? const Padding(
-                  padding: EdgeInsets.all(10),
-                  child: Text('Loading…', style: mono),
+              ? Padding(
+                  padding: const EdgeInsets.all(10),
+                  child: Text(l.commonLoading, style: mono),
                 )
               : shown.isEmpty
               ? Padding(
                   padding: const EdgeInsets.all(10),
                   child: Text(
-                    'No events.',
+                    l.devicesNoEvents,
                     style: mono.copyWith(color: Nocturne.muted(.5)),
                   ),
                 )
@@ -360,6 +389,7 @@ class LogLineRow extends StatelessWidget {
 
   final LogEventDto event;
 
+  // Log lines are technical and stay locale-invariant, like the event text beside them.
   static final _time = DateFormat('HH:mm:ss');
   static const _mono = TextStyle(fontFamily: Nocturne.monoFamily, fontSize: 12);
 
@@ -446,7 +476,7 @@ class _DeviceDetailsScreenState extends State<DeviceDetailsScreen> {
                       children: [
                         FiIconButton(
                           icon: FiIcons.back,
-                          tooltip: 'Back',
+                          tooltip: context.l10n.commonBack,
                           size: 20,
                           onPressed: () => Navigator.maybePop(context),
                         ),

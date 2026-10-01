@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:clock/clock.dart';
+import 'package:fi/l10n/error_text.dart';
+import 'package:fi/l10n/l10n.dart';
 import 'package:fi/status_time.dart';
 import 'package:fi/theme/action_sheet.dart';
 import 'package:fi/theme/fi_icons.dart';
@@ -42,29 +44,37 @@ const double _wideContent = 760;
 /// Below this screen width the app is laid out for a phone.
 const double _phoneScreen = 720;
 
-/// `1 record`, `6 records`.
-String _plural(int count, String noun) =>
-    '$count ${count == 1 ? noun : '${noun}s'}';
+/// `6 records · 3 fields`.
+String _counts(AppLocalizations l, int records, int fields) =>
+    '${l.collectionsRecordCount(records)} · ${l.collectionsFieldCount(fields)}';
 
 /// What a collection row's menu can do.
 enum _CollectionAction {
-  rename('Rename', FiIcons.edit),
-  duplicate('Duplicate', FiIcons.copy),
-  importCsv('Import CSV…', FiIcons.importFile),
-  exportCsv('Export CSV', FiIcons.exportFile),
-  exportJson('Export JSON', FiIcons.exportFile),
-  delete('Delete…', FiIcons.delete);
+  rename(FiIcons.edit),
+  duplicate(FiIcons.copy),
+  importCsv(FiIcons.importFile),
+  exportCsv(FiIcons.exportFile),
+  exportJson(FiIcons.exportFile),
+  delete(FiIcons.delete);
 
-  const _CollectionAction(this.label, this.icon);
+  const _CollectionAction(this.icon);
 
-  final String label;
   final IconData icon;
+
+  String label(AppLocalizations l) => switch (this) {
+    rename => l.commonRename,
+    duplicate => l.collectionsDuplicate,
+    importCsv => l.collectionsImportCsv,
+    exportCsv => l.collectionsExportCsv,
+    exportJson => l.collectionsExportJson,
+    delete => l.collectionsDeleteEllipsis,
+  };
 
   /// The "Data" group.
   static const data = [importCsv, exportCsv, exportJson];
 
-  ActionSheetItem<_CollectionAction> get sheetItem =>
-      ActionSheetItem(value: this, label: label, icon: icon);
+  ActionSheetItem<_CollectionAction> sheetItem(AppLocalizations l) =>
+      ActionSheetItem(value: this, label: label(l), icon: icon);
 }
 
 /// The collections list order control: the current order, and a menu of both.
@@ -79,15 +89,16 @@ class _SortButton extends StatelessWidget {
   final bool compact;
   final ValueChanged<CollectionSort> onSelected;
 
-  static String label(CollectionSort sort) => switch (sort) {
-    CollectionSort.lastEdited => 'Last edited',
-    CollectionSort.name => 'Name',
-  };
+  static String label(AppLocalizations l, CollectionSort sort) =>
+      switch (sort) {
+        CollectionSort.lastEdited => l.collectionsSortLastEdited,
+        CollectionSort.name => l.collectionsSortName,
+      };
 
   @override
   Widget build(BuildContext context) => PopupMenuButton<CollectionSort>(
     key: const Key('collections-sort'),
-    tooltip: 'Sort',
+    tooltip: context.l10n.collectionsSort,
     initialValue: sort,
     onSelected: onSelected,
     itemBuilder: (_) => [
@@ -106,7 +117,7 @@ class _SortButton extends StatelessWidget {
                       )
                     : null,
               ),
-              Text(label(value)),
+              Text(label(context.l10n, value)),
             ],
           ),
         ),
@@ -120,7 +131,7 @@ class _SortButton extends StatelessWidget {
           if (!compact) ...[
             const SizedBox(width: 6),
             Text(
-              label(sort),
+              label(context.l10n, sort),
               key: const Key('collections-sort-label'),
               style: TextStyle(fontSize: 13, color: Nocturne.muted(.7)),
             ),
@@ -146,6 +157,7 @@ class CollectionsPage extends StatelessWidget {
     // `clock` rather than `DateTime.now()` so widget tests can pin the time.
     final now = clock.now();
     final collections = controller.sortedCollections;
+    final l = context.l10n;
     return LayoutBuilder(
       builder: (context, constraints) {
         final padding = phone
@@ -160,7 +172,7 @@ class CollectionsPage extends StatelessWidget {
                 children: [
                   Expanded(
                     child: Text(
-                      'Collections',
+                      l.collectionsTitle,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: phone
@@ -176,7 +188,7 @@ class CollectionsPage extends StatelessWidget {
                   const SizedBox(width: 4),
                   PopupMenuButton<String>(
                     key: const Key('collections-transfer-menu'),
-                    tooltip: 'Import and export',
+                    tooltip: l.collectionsImportExport,
                     icon: Icon(
                       FiIcons.importExport,
                       size: 18,
@@ -188,19 +200,19 @@ class CollectionsPage extends StatelessWidget {
                       _ => _exportSelected(context),
                     }),
                     itemBuilder: (_) => [
-                      const PopupMenuItem(
+                      PopupMenuItem(
                         value: 'import-json',
-                        child: Text('Import JSON'),
+                        child: Text(l.collectionsImportJson),
                       ),
                       PopupMenuItem(
                         value: 'export-all',
                         enabled: controller.collections.isNotEmpty,
-                        child: const Text('Export all'),
+                        child: Text(l.collectionsExportAll),
                       ),
                       PopupMenuItem(
                         value: 'export-selected',
                         enabled: controller.collections.isNotEmpty,
-                        child: const Text('Export selected'),
+                        child: Text(l.collectionsExportSelected),
                       ),
                     ],
                   ),
@@ -211,14 +223,16 @@ class CollectionsPage extends StatelessWidget {
                         : null,
                     onPressed: () => _editCollection(context),
                     icon: const Icon(FiIcons.add),
-                    label: Text(phone ? 'New' : 'New collection'),
+                    label: Text(
+                      phone ? l.commonNew : l.collectionsNewCollection,
+                    ),
                   ),
                 ],
               ),
             ),
-            if (controller.errorMessage case final error?)
+            if (controller.failure case final failure?)
               MaterialBanner(
-                content: Text(error),
+                content: Text(bridgeMessage(context.l10n, failure)),
                 actions: const [SizedBox.shrink()],
               ),
             Expanded(
@@ -227,7 +241,7 @@ class CollectionsPage extends StatelessWidget {
                   : controller.collections.isEmpty
                   ? Center(
                       child: Text(
-                        'Create a collection to start shaping your data.',
+                        l.collectionsEmpty,
                         style: TextStyle(color: Nocturne.muted(.6)),
                       ),
                     )
@@ -271,9 +285,10 @@ class CollectionsPage extends StatelessWidget {
       fontFeatures: Nocturne.tabular,
       color: Nocturne.muted(.55),
     );
+    final l = context.l10n;
     final edited = item.lastEditedMs == null
         ? null
-        : formatStatusTime(item.lastEditedMs, now: now);
+        : formatStatusTime(l, item.lastEditedMs, now: now);
     final Widget details;
     if (phone) {
       details = Column(
@@ -288,11 +303,11 @@ class CollectionsPage extends StatelessWidget {
           const SizedBox(height: 2),
           Text(
             [
-              _plural(item.recordCount, 'record'),
+              l.collectionsRecordCount(item.recordCount),
               if (item.incompleteCount > 0)
-                '${item.incompleteCount} incomplete'
+                l.collectionsIncomplete(item.incompleteCount)
               else if (edited != null)
-                'edited $edited',
+                l.collectionsEditedLower(edited),
             ].join(' · '),
             key: Key('collection-subtitle-${item.id}'),
             maxLines: 1,
@@ -324,7 +339,7 @@ class CollectionsPage extends StatelessWidget {
                     if (item.incompleteCount > 0) ...[
                       const SizedBox(width: 8),
                       Tag.outline(
-                        '${item.incompleteCount} incomplete',
+                        l.collectionsIncomplete(item.incompleteCount),
                         key: Key('collection-incomplete-${item.id}'),
                         leading: FiIcons.warning,
                       ),
@@ -333,8 +348,7 @@ class CollectionsPage extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '${_plural(item.recordCount, 'record')} · '
-                  '${_plural(item.fieldCount, 'field')}',
+                  _counts(l, item.recordCount, item.fieldCount),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: muted,
@@ -345,7 +359,7 @@ class CollectionsPage extends StatelessWidget {
           if (edited != null) ...[
             const SizedBox(width: 12),
             Text(
-              'Edited $edited',
+              l.collectionsEdited(edited),
               key: Key('collection-edited-${item.id}'),
               style: muted,
             ),
@@ -373,18 +387,18 @@ class CollectionsPage extends StatelessWidget {
                 if (phone)
                   FiIconButton(
                     icon: FiIcons.more,
-                    tooltip: 'Collection actions',
+                    tooltip: l.collectionsActions,
                     color: Nocturne.muted(.7),
                     onPressed: () =>
                         unawaited(_collectionActionSheet(context, item)),
                   )
                 else
                   PopupMenuButton<_CollectionAction>(
-                    tooltip: 'Collection actions',
+                    tooltip: l.collectionsActions,
                     icon: Icon(FiIcons.more, color: Nocturne.muted(.7)),
                     onSelected: (action) =>
                         _runCollectionAction(context, item, action),
-                    itemBuilder: (_) => _collectionMenuItems(),
+                    itemBuilder: (_) => _collectionMenuItems(l),
                   ),
               ],
             ),
@@ -395,12 +409,14 @@ class CollectionsPage extends StatelessWidget {
   }
 
   /// The row menu on wide screens: Rename (F2), Duplicate, the "Data" group, then Delete….
-  List<PopupMenuEntry<_CollectionAction>> _collectionMenuItems() => [
+  List<PopupMenuEntry<_CollectionAction>> _collectionMenuItems(
+    AppLocalizations l,
+  ) => [
     PopupMenuItem(
       value: _CollectionAction.rename,
       child: Row(
         children: [
-          const Expanded(child: Text('Rename')),
+          Expanded(child: Text(l.commonRename)),
           const SizedBox(width: 24),
           Text(
             'F2',
@@ -413,22 +429,22 @@ class CollectionsPage extends StatelessWidget {
         ],
       ),
     ),
-    const PopupMenuItem(
+    PopupMenuItem(
       value: _CollectionAction.duplicate,
-      child: Text('Duplicate'),
+      child: Text(l.collectionsDuplicate),
     ),
     const PopupMenuDivider(),
-    const PopupMenuItem(
+    PopupMenuItem(
       enabled: false,
       height: 28,
-      child: SectionLabel('Data'),
+      child: SectionLabel(l.collectionsData),
     ),
     for (final action in _CollectionAction.data)
-      PopupMenuItem(value: action, child: Text(action.label)),
+      PopupMenuItem(value: action, child: Text(action.label(l))),
     const PopupMenuDivider(),
     PopupMenuItem(
       value: _CollectionAction.delete,
-      child: Text(_CollectionAction.delete.label),
+      child: Text(_CollectionAction.delete.label(l)),
     ),
   ];
 
@@ -459,25 +475,24 @@ class CollectionsPage extends StatelessWidget {
     BuildContext context,
     CollectionDto item,
   ) async {
+    final l = context.l10n;
     final chosen = await showActionSheet<_CollectionAction>(
       context,
       icon: FiIcons.collection,
       title: item.name,
-      subtitle:
-          '${_plural(item.recordCount, 'record')} · '
-          '${_plural(item.fieldCount, 'field')}',
+      subtitle: _counts(l, item.recordCount, item.fieldCount),
       groups: [
         ActionSheetGroup([
           for (final action in [
             _CollectionAction.rename,
             _CollectionAction.duplicate,
           ])
-            action.sheetItem,
+            action.sheetItem(l),
         ]),
         ActionSheetGroup([
-          for (final action in _CollectionAction.data) action.sheetItem,
-        ], label: 'Data'),
-        ActionSheetGroup([_CollectionAction.delete.sheetItem]),
+          for (final action in _CollectionAction.data) action.sheetItem(l),
+        ], label: l.collectionsData),
+        ActionSheetGroup([_CollectionAction.delete.sheetItem(l)]),
       ],
     );
     if (chosen == null || !context.mounted) return;
@@ -491,13 +506,18 @@ class CollectionsPage extends StatelessWidget {
     Future<String?> Function() export,
   ) async {
     final messenger = ScaffoldMessenger.of(context);
+    final l = context.l10n;
     try {
       final name = await export();
       if (name != null) {
-        messenger.showSnackBar(SnackBar(content: Text('Exported to $name')));
+        messenger.showSnackBar(
+          SnackBar(content: Text(l.collectionsExportedTo(name))),
+        );
       }
     } catch (failure) {
-      messenger.showSnackBar(SnackBar(content: Text(bridgeMessage(failure))));
+      messenger.showSnackBar(
+        SnackBar(content: Text(bridgeMessage(l, failure))),
+      );
     }
   }
 
@@ -508,11 +528,12 @@ class CollectionsPage extends StatelessWidget {
   /// or choosing none exports nothing.
   Future<void> _exportSelected(BuildContext context) async {
     final chosen = <String>{};
+    final l = context.l10n;
     final picked = await showDialog<List<CollectionDto>>(
       context: context,
       builder: (dialog) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
-          title: const Text('Export collections'),
+          title: Text(l.collectionsExportTitle),
           content: SizedBox(
             width: 360,
             child: ListView(
@@ -535,7 +556,7 @@ class CollectionsPage extends StatelessWidget {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialog),
-              child: const Text('Cancel'),
+              child: Text(l.commonCancel),
             ),
             FilledButton(
               key: const Key('confirm-export-selected'),
@@ -545,7 +566,7 @@ class CollectionsPage extends StatelessWidget {
                       for (final item in controller.collections)
                         if (chosen.contains(item.id)) item,
                     ]),
-              child: const Text('Export'),
+              child: Text(l.collectionsExport),
             ),
           ],
         ),
@@ -569,14 +590,17 @@ class CollectionsPage extends StatelessWidget {
     required bool csv,
   }) async {
     final messenger = ScaffoldMessenger.of(context);
+    final l = context.l10n;
     try {
       final outcome = await run();
       if (outcome == null) return;
       messenger.showSnackBar(
-        SnackBar(content: Text(importOutcomeMessage(outcome, csv: csv))),
+        SnackBar(content: Text(importOutcomeMessage(l, outcome, csv: csv))),
       );
     } catch (failure) {
-      messenger.showSnackBar(SnackBar(content: Text(bridgeMessage(failure))));
+      messenger.showSnackBar(
+        SnackBar(content: Text(bridgeMessage(l, failure))),
+      );
     }
   }
 
@@ -590,16 +614,17 @@ class CollectionsPage extends StatelessWidget {
     // Ignored here so a failed count never surfaces as an unhandled error;
     // the FutureBuilder still sees it and keeps the generic sentence.
     final contents = controller.contentsOf(item.id)..ignore();
+    final l = context.l10n;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialog) => AlertDialog(
-        title: Text('Delete "${item.name}"?'),
+        title: Text(l.collectionsDeleteTitle(item.name)),
         content: FutureBuilder<CollectionContents>(
           future: contents,
           builder: (context, snapshot) => Text(
             snapshot.hasData
-                ? collectionContentsSentence(snapshot.requireData)
-                : 'Its records, widgets and saved queries are deleted with it.',
+                ? collectionContentsSentence(l, snapshot.requireData)
+                : l.collectionsDeleteGeneric,
             style: const TextStyle(fontFeatures: Nocturne.tabular),
           ),
         ),
@@ -607,12 +632,12 @@ class CollectionsPage extends StatelessWidget {
           TextButton(
             key: const Key('dismiss-delete-collection'),
             onPressed: () => Navigator.pop(dialog, false),
-            child: const Text('Cancel'),
+            child: Text(l.commonCancel),
           ),
           FilledButton(
             key: const Key('confirm-delete-collection'),
             onPressed: () => Navigator.pop(dialog, true),
-            child: const Text('Delete'),
+            child: Text(l.commonDelete),
           ),
         ],
       ),
@@ -627,6 +652,7 @@ class CollectionsPage extends StatelessWidget {
     final fields = schema.fields.where((field) => !field.deleted).toList()
       ..sort(_fieldOrder);
     final phone = MediaQuery.sizeOf(context).width < _phoneScreen;
+    final l = context.l10n;
     return LayoutBuilder(
       builder: (context, constraints) {
         // Between the phone breakpoint and a content width that fits four labelled buttons, the
@@ -661,11 +687,11 @@ class CollectionsPage extends StatelessWidget {
                     _wideHeader(context, schema, fields)
                   else
                     _narrowHeader(context, schema, fields),
-                  if (controller.errorMessage case final error?)
+                  if (controller.failure case final failure?)
                     Padding(
                       padding: const EdgeInsets.only(top: 12),
                       child: MaterialBanner(
-                        content: Text(error),
+                        content: Text(bridgeMessage(context.l10n, failure)),
                         actions: const [SizedBox.shrink()],
                       ),
                     ),
@@ -683,14 +709,18 @@ class CollectionsPage extends StatelessWidget {
                   const SizedBox(height: 22),
                   Row(
                     children: [
-                      const SectionLabel('Records'),
+                      SectionLabel(l.recordsSection),
                       const Spacer(),
                       if (phone && records.isNotEmpty)
-                        Text(
-                          'Newest first',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Nocturne.muted(.5),
+                        Flexible(
+                          flex: 3,
+                          child: Text(
+                            l.recordsNewestFirst,
+                            textAlign: TextAlign.right,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Nocturne.muted(.5),
+                            ),
                           ),
                         ),
                     ],
@@ -710,7 +740,7 @@ class CollectionsPage extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(vertical: 32),
                   child: Center(
                     child: Text(
-                      'No records yet.',
+                      l.recordsEmpty,
                       style: TextStyle(color: Nocturne.muted(.55)),
                     ),
                   ),
@@ -768,10 +798,10 @@ class CollectionsPage extends StatelessWidget {
                 child: SizedBox(
                   height: 52,
                   child: FloatingActionButton.extended(
-                    tooltip: 'New record',
+                    tooltip: l.recordsNewRecord,
                     onPressed: () => _recordEditor(context, schema),
                     icon: const Icon(FiIcons.add, size: 18),
-                    label: const Text('Record'),
+                    label: Text(l.recordsFab),
                   ),
                 ),
               ),
@@ -800,11 +830,10 @@ class CollectionsPage extends StatelessWidget {
   }
 
   String _countLine(
+    AppLocalizations l,
     CollectionSchemaDto schema,
     List<FieldDefinitionDto> fields,
-  ) =>
-      '${_plural(controller.records.length, 'record')} · '
-      '${_plural(fields.length, 'field')}';
+  ) => _counts(l, controller.records.length, fields.length);
 
   /// The list row's entry for the open collection, for the actions it shares with the list.
   CollectionDto _openCollectionEntry(
@@ -833,10 +862,13 @@ class CollectionsPage extends StatelessWidget {
     String name,
   ) async {
     final messenger = ScaffoldMessenger.of(context);
+    final l = context.l10n;
     try {
       await controller.renameCollection(id, name);
     } catch (failure) {
-      messenger.showSnackBar(SnackBar(content: Text(bridgeMessage(failure))));
+      messenger.showSnackBar(
+        SnackBar(content: Text(bridgeMessage(l, failure))),
+      );
     }
   }
 
@@ -847,6 +879,7 @@ class CollectionsPage extends StatelessWidget {
     List<FieldDefinitionDto> fields,
   ) {
     final theme = Theme.of(context);
+    final l = context.l10n;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
@@ -855,7 +888,7 @@ class CollectionsPage extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Tooltip(
-                message: 'Back to collections',
+                message: l.recordsBackToCollections,
                 child: InkWell(
                   borderRadius: BorderRadius.circular(Nocturne.radiusSm),
                   onTap: () => unawaited(controller.selectCollection(null)),
@@ -871,7 +904,7 @@ class CollectionsPage extends StatelessWidget {
                         ),
                         const SizedBox(width: 6),
                         Text(
-                          'Collections  /',
+                          l.recordsBreadcrumb,
                           style: TextStyle(
                             fontSize: 12,
                             color: Nocturne.muted(.55),
@@ -897,7 +930,7 @@ class CollectionsPage extends StatelessWidget {
                   ),
                   const SizedBox(width: 12),
                   Text(
-                    _countLine(schema, fields),
+                    _countLine(l, schema, fields),
                     style: TextStyle(
                       fontSize: 13,
                       fontFeatures: Nocturne.tabular,
@@ -913,13 +946,13 @@ class CollectionsPage extends StatelessWidget {
         OutlinedButton.icon(
           onPressed: () => _schemaEditor(context, schema),
           icon: const Icon(FiIcons.filter),
-          label: const Text('Schema'),
+          label: Text(l.recordsSchema),
         ),
         const SizedBox(width: 8),
         OutlinedButton.icon(
           onPressed: () => _queryEditor(context, schema),
           icon: const Icon(FiIcons.query),
-          label: const Text('Queries'),
+          label: Text(l.recordsQueries),
         ),
         const SizedBox(width: 8),
         OutlinedButton.icon(
@@ -928,13 +961,13 @@ class CollectionsPage extends StatelessWidget {
               ? null
               : controller.startSelection,
           icon: const Icon(FiIcons.select),
-          label: const Text('Select'),
+          label: Text(l.recordsSelect),
         ),
         const SizedBox(width: 8),
         FilledButton.icon(
           onPressed: () => _recordEditor(context, schema),
           icon: const Icon(FiIcons.add),
-          label: const Text('New record'),
+          label: Text(l.recordsNewRecord),
         ),
       ],
     );
@@ -950,7 +983,7 @@ class CollectionsPage extends StatelessWidget {
     children: [
       FiIconButton(
         icon: FiIcons.back,
-        tooltip: 'Back to collections',
+        tooltip: context.l10n.recordsBackToCollections,
         size: 20,
         onPressed: () => unawaited(controller.selectCollection(null)),
       ),
@@ -958,20 +991,20 @@ class CollectionsPage extends StatelessWidget {
       Expanded(child: _compactTitle(context, schema, fields)),
       FiIconButton(
         icon: FiIcons.filter,
-        tooltip: 'Schema',
+        tooltip: context.l10n.recordsSchema,
         size: 20,
         onPressed: () => _schemaEditor(context, schema),
       ),
       FiIconButton(
         icon: FiIcons.query,
-        tooltip: 'Queries',
+        tooltip: context.l10n.recordsQueries,
         size: 20,
         onPressed: () => _queryEditor(context, schema),
       ),
       FiIconButton(
         key: const Key('select-records'),
         icon: FiIcons.select,
-        tooltip: 'Select',
+        tooltip: context.l10n.recordsSelect,
         size: 20,
         onPressed: controller.records.isEmpty
             ? null
@@ -979,7 +1012,7 @@ class CollectionsPage extends StatelessWidget {
       ),
       FiIconButton(
         icon: FiIcons.add,
-        tooltip: 'New record',
+        tooltip: context.l10n.recordsNewRecord,
         size: 20,
         onPressed: () => _recordEditor(context, schema),
       ),
@@ -997,7 +1030,7 @@ class CollectionsPage extends StatelessWidget {
     children: [
       FiIconButton(
         icon: FiIcons.back,
-        tooltip: 'Back to collections',
+        tooltip: context.l10n.recordsBackToCollections,
         size: 20,
         onPressed: () => unawaited(controller.selectCollection(null)),
       ),
@@ -1005,13 +1038,13 @@ class CollectionsPage extends StatelessWidget {
       Expanded(child: _compactTitle(context, schema, fields)),
       FiIconButton(
         icon: FiIcons.filter,
-        tooltip: 'Schema',
+        tooltip: context.l10n.recordsSchema,
         size: 20,
         onPressed: () => _schemaEditor(context, schema),
       ),
       PopupMenuButton<String>(
         key: const Key('collection-more'),
-        tooltip: 'More actions',
+        tooltip: context.l10n.recordsMoreActions,
         icon: const Icon(FiIcons.more, size: 20),
         style: IconButton.styleFrom(
           minimumSize: const Size(Nocturne.touchTarget, Nocturne.touchTarget),
@@ -1033,16 +1066,19 @@ class CollectionsPage extends StatelessWidget {
           }
         },
         itemBuilder: (_) => [
-          const PopupMenuItem(value: 'queries', child: Text('Queries')),
+          PopupMenuItem(
+            value: 'queries',
+            child: Text(context.l10n.recordsQueries),
+          ),
           PopupMenuItem(
             key: const Key('select-records'),
             value: 'select',
             enabled: controller.records.isNotEmpty,
-            child: const Text('Select records'),
+            child: Text(context.l10n.recordsSelectRecords),
           ),
-          const PopupMenuItem(
+          PopupMenuItem(
             value: 'actions',
-            child: Text('Collection actions…'),
+            child: Text(context.l10n.recordsCollectionActions),
           ),
         ],
       ),
@@ -1066,7 +1102,7 @@ class CollectionsPage extends StatelessWidget {
         onRename: (name) => unawaited(_renameInline(context, schema.id, name)),
       ),
       Text(
-        _countLine(schema, fields),
+        _countLine(context.l10n, schema, fields),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
@@ -1096,14 +1132,15 @@ class CollectionsPage extends StatelessWidget {
     };
     final shown = fields.take(3).toList();
     final more = fields.length - shown.length;
+    final l = context.l10n;
     final created = switch (record.createdAtMs) {
-      final ms? => DateFormat(
-        'MMM d, y',
+      final ms? => DateFormat.yMMMd(
+        l.localeName,
       ).format(DateTime.fromMillisecondsSinceEpoch(ms)),
       null => null,
     };
     final footer = [
-      if (more > 0) '+ $more more ${more == 1 ? 'field' : 'fields'}',
+      if (more > 0) l.recordsMoreFields(more),
       ?created,
     ].join(' · ');
     final muted = TextStyle(fontSize: 12, color: Nocturne.muted(.55));
@@ -1140,7 +1177,7 @@ class CollectionsPage extends StatelessWidget {
                   children: [
                     if (!record.valid)
                       Tag.outline(
-                        'Incomplete',
+                        l.recordsIncomplete,
                         key: Key('record-incomplete-${record.id}'),
                         leading: FiIcons.warning,
                       ),
@@ -1183,6 +1220,10 @@ class CollectionsPage extends StatelessWidget {
                                       _recordValue(record, field.id),
                                       human: true,
                                       short: true,
+                                      l: context.l10n,
+                                      decimalSeparator: decimalSeparatorOf(
+                                        context,
+                                      ),
                                     ),
                                     selected: selected,
                                   ),
@@ -1202,7 +1243,7 @@ class CollectionsPage extends StatelessWidget {
               if (!selecting)
                 FiIconButton(
                   icon: FiIcons.delete,
-                  tooltip: 'Delete record',
+                  tooltip: l.recordsDeleteRecord,
                   color: Nocturne.muted(.45),
                   onPressed: () =>
                       unawaited(controller.deleteRecord(record.id)),
@@ -1242,7 +1283,9 @@ class CollectionsPage extends StatelessWidget {
       context,
       builder: (route) => StatefulBuilder(
         builder: (context, setState) => FormSurface(
-          title: collection == null ? 'New collection' : 'Rename collection',
+          title: collection == null
+              ? context.l10n.collectionsNewCollection
+              : context.l10n.collectionsRenameTitle,
           width: 420,
           showRequiredLegend: true,
           body: Column(
@@ -1254,9 +1297,9 @@ class CollectionsPage extends StatelessWidget {
                 key: const Key('collection-name'),
                 controller: name,
                 autofocus: true,
-                label: 'Name',
+                label: context.l10n.collectionsSortName,
                 required: true,
-                errors: issues.of('name'),
+                errors: issues.fieldLines(context.l10n, 'name'),
                 // The shown issue is about the old text, so it goes as soon as the name changes.
                 onChanged: (_) {
                   if (issues.of('name').isEmpty) return;
@@ -1264,11 +1307,14 @@ class CollectionsPage extends StatelessWidget {
                 },
               ),
               if (collection == null)
-                FiTextInput(controller: description, label: 'Description'),
+                FiTextInput(
+                  controller: description,
+                  label: context.l10n.collectionsDescription,
+                ),
             ],
           ),
-          errors: issues.form,
-          primaryLabel: 'Save',
+          errors: issues.formLines(context.l10n),
+          primaryLabel: context.l10n.commonSave,
           onPrimary: () async {
             try {
               if (collection == null) {
@@ -1296,30 +1342,32 @@ class CollectionsPage extends StatelessWidget {
     BuildContext context,
     CollectionDto source,
   ) async {
-    final name = TextEditingController(text: '${source.name} (copy)');
+    final name = TextEditingController(
+      text: context.l10n.collectionsCopyName(source.name),
+    );
     const nameKeys = {'name', 'collection_name'};
     var issues = FormIssues.none;
     await showFormSurface<void>(
       context,
       builder: (route) => StatefulBuilder(
         builder: (context, setState) => FormSurface(
-          title: 'Duplicate collection',
+          title: context.l10n.collectionsDuplicateTitle,
           width: 420,
           showRequiredLegend: true,
           body: FiTextInput(
             key: const Key('duplicate-collection-name'),
             controller: name,
             autofocus: true,
-            label: 'Name',
+            label: context.l10n.collectionsSortName,
             required: true,
-            errors: issues.of('name'),
+            errors: issues.fieldLines(context.l10n, 'name'),
             onChanged: (_) {
               if (issues.of('name').isEmpty) return;
               setState(() => issues = issues.without('name'));
             },
           ),
-          errors: issues.form,
-          primaryLabel: 'Save',
+          errors: issues.formLines(context.l10n),
+          primaryLabel: context.l10n.commonSave,
           onPrimary: () async {
             try {
               await controller.cloneCollection(source.id, name.text.trim());
@@ -1347,6 +1395,7 @@ class CollectionsPage extends StatelessWidget {
     CollectionSchemaDto schema,
   ) async {
     final phone = MediaQuery.sizeOf(context).width < _phoneScreen;
+    final l = context.l10n;
 
     /// The field whose inline panel is open: its id, '' for a new field, null for none.
     String? editing;
@@ -1362,14 +1411,13 @@ class CollectionsPage extends StatelessWidget {
                   .length ??
               0;
           return Kicker(
-            '${controller.schema?.name ?? schema.name} · ${_plural(count, 'field')}',
+            '${controller.schema?.name ?? schema.name} · '
+            '${l.collectionsFieldCount(count)}',
           );
         },
       ),
-      title: 'Collection schema',
-      footerNote: phone
-          ? 'Long-press to reorder'
-          : 'Drag to reorder · click a field to edit',
+      title: l.recordsSchemaTitle,
+      footerNote: phone ? l.recordsReorderPhone : l.recordsReorderDesktop,
       body: (sheet) => StatefulBuilder(
         builder: (sheet, setState) => ListenableBuilder(
           listenable: controller,
@@ -1414,12 +1462,12 @@ class CollectionsPage extends StatelessWidget {
                     child: DashedSlot(
                       key: const Key('add-field'),
                       onTap: () => _openFieldScreen(sheet),
-                      child: const Row(
+                      child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(FiIcons.add),
-                          SizedBox(width: 8),
-                          Text('Add field'),
+                          const Icon(FiIcons.add),
+                          const SizedBox(width: 8),
+                          Text(l.recordsAddField),
                         ],
                       ),
                     ),
@@ -1465,7 +1513,7 @@ class CollectionsPage extends StatelessWidget {
                       key: const Key('new-field'),
                       onPressed: () => setState(() => editing = ''),
                       icon: const Icon(FiIcons.add),
-                      label: const Text('New field'),
+                      label: Text(l.recordsNewField),
                     ),
                   ),
               ],
@@ -1517,11 +1565,13 @@ class CollectionsPage extends StatelessWidget {
             ? requiredLabel(field.name)
             : Text(field.name, maxLines: 1, overflow: TextOverflow.ellipsis),
       ),
-      Text(
-        fieldSummary(field),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(fontSize: 12, color: Nocturne.muted(.55)),
+      Builder(
+        builder: (context) => Text(
+          fieldSummary(context.l10n, field),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(fontSize: 12, color: Nocturne.muted(.55)),
+        ),
       ),
     ],
   );
@@ -1581,6 +1631,7 @@ class CollectionsPage extends StatelessWidget {
     ComputedFieldDefinitionDto item,
   ) {
     final editable = isEditableComputedField(item);
+    final l = context.l10n;
     void open() => unawaited(
       showComputedFieldEditor(
         context,
@@ -1596,22 +1647,22 @@ class CollectionsPage extends StatelessWidget {
       subtitle: editable
           ? null
           : item.unsupportedBodyJson != null
-          ? 'Made by a newer version (expression v${item.expressionVersion}); not editable here'
-          : 'Uses operations this editor does not offer; not editable here',
+          ? l.recordsComputedNewer('${item.expressionVersion}')
+          : l.recordsComputedUnsupported,
       tag: editable
-          ? '${describeValueType(item.declaredType)}'
-                '${item.nullable ? ' · may be empty' : ''}'
+          ? '${describeValueType(context.l10n, item.declaredType)}'
+                '${item.nullable ? ' · ${l.recordsMayBeEmpty}' : ''}'
           : null,
       onTap: editable ? open : null,
       actions: [
         if (editable)
           IconButton(
-            tooltip: 'Edit computed field',
+            tooltip: l.recordsEditComputed,
             icon: const Icon(FiIcons.edit),
             onPressed: open,
           ),
         IconButton(
-          tooltip: 'Remove computed field',
+          tooltip: l.recordsRemoveComputed,
           icon: const Icon(FiIcons.delete),
           onPressed: () => unawaited(controller.removeComputedField(item.id)),
         ),
@@ -1624,6 +1675,7 @@ class CollectionsPage extends StatelessWidget {
     BuildContext context,
     CollectionSchemaDto schema,
   ) async {
+    final l = context.l10n;
     Widget heading(String title, HelpId help, String description) => Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1646,16 +1698,16 @@ class CollectionsPage extends StatelessWidget {
     await showSideSheet(
       context,
       kicker: schema.name,
-      title: 'Computed fields & queries',
+      title: l.recordsComputedSheetTitle,
       body: (sheet) => ListenableBuilder(
         listenable: controller,
         builder: (sheet, _) => ListView(
           padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
           children: [
             heading(
-              'Computed fields',
+              l.recordsComputedFields,
               HelpId.computedFields,
-              'Calculated per record from other fields.',
+              l.recordsComputedFieldsHint,
             ),
             for (final item in controller.computedFields)
               Padding(
@@ -1674,14 +1726,14 @@ class CollectionsPage extends StatelessWidget {
                   ),
                 ),
                 icon: const Icon(FiIcons.add),
-                label: const Text('Add computed field'),
+                label: Text(l.recordsAddComputed),
               ),
             ),
             const SizedBox(height: 22),
             heading(
-              'Saved queries',
+              l.recordsSavedQueries,
               HelpId.querySavedQueries,
-              'Aggregates across records. Widgets can reuse them.',
+              l.recordsSavedQueriesHint,
             ),
             for (final item in controller.queryDefinitions)
               Padding(
@@ -1691,12 +1743,12 @@ class CollectionsPage extends StatelessWidget {
                   icon: _queryIcon(item),
                   title: item.name,
                   subtitle:
-                      '${describeQuery(item, schema)} · '
-                      '${_usage(widgetsUsingQuery(controller, item.id))}',
+                      '${describeQuery(l, item, schema)} · '
+                      '${l.recordsUsedBy(widgetsUsingQuery(controller, item.id))}',
                   actions: [
                     IconButton(
                       key: ValueKey('edit-query-${item.id}'),
-                      tooltip: 'Edit query',
+                      tooltip: l.recordsEditQuery,
                       icon: const Icon(FiIcons.edit),
                       onPressed: () => unawaited(
                         showSavedQueryEditor(
@@ -1711,7 +1763,7 @@ class CollectionsPage extends StatelessWidget {
                       ),
                     ),
                     IconButton(
-                      tooltip: 'Remove query',
+                      tooltip: l.recordsRemoveQuery,
                       icon: const Icon(FiIcons.delete),
                       onPressed: () =>
                           unawaited(controller.removeQueryDefinition(item.id)),
@@ -1726,7 +1778,7 @@ class CollectionsPage extends StatelessWidget {
                   QueryDefinitionDto(
                     id: '',
                     collectionId: schema.id,
-                    name: 'Record count',
+                    name: l.recordsCountQueryName,
                     queryVersion: 1,
                     query: CollectionQueryDto(
                       collectionId: schema.id,
@@ -1748,7 +1800,7 @@ class CollectionsPage extends StatelessWidget {
                   ),
                 ),
                 icon: const Icon(FiIcons.add),
-                label: const Text('Add record-count query'),
+                label: Text(l.recordsAddCountQuery),
               ),
             ),
           ],
@@ -1764,6 +1816,7 @@ class CollectionsPage extends StatelessWidget {
     required bool wide,
   }) {
     final count = controller.selectedRecordIds.length;
+    final l = context.l10n;
     final unselected = controller.records
         .where((record) => !controller.selectedRecordIds.contains(record.id))
         .map((record) => record.id)
@@ -1792,7 +1845,7 @@ class CollectionsPage extends StatelessWidget {
         children: [
           IconButton(
             key: const Key('cancel-selection'),
-            tooltip: 'Cancel',
+            tooltip: l.commonCancel,
             style: onAccent,
             onPressed: controller.clearSelection,
             icon: const Icon(FiIcons.close),
@@ -1801,7 +1854,7 @@ class CollectionsPage extends StatelessWidget {
           Flexible(
             flex: 2,
             child: Text(
-              '$count selected',
+              l.recordsSelected(count),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
@@ -1814,7 +1867,7 @@ class CollectionsPage extends StatelessWidget {
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              'in ${schema.name}',
+              l.recordsInCollection(schema.name),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontSize: 13, color: Nocturne.accent200),
@@ -1825,7 +1878,7 @@ class CollectionsPage extends StatelessWidget {
               style: TextButton.styleFrom(foregroundColor: Nocturne.accent100),
               onPressed: unselected.isEmpty ? null : selectAll,
               icon: const Icon(FiIcons.selectAll),
-              label: const Text('Select all'),
+              label: Text(l.recordsSelectAll),
             ),
             const SizedBox(width: 8),
             OutlinedButton.icon(
@@ -1833,7 +1886,7 @@ class CollectionsPage extends StatelessWidget {
               style: outlined,
               onPressed: count == 0 ? null : edit,
               icon: const Icon(FiIcons.edit),
-              label: const Text('Edit'),
+              label: Text(l.commonEdit),
             ),
             const SizedBox(width: 8),
             OutlinedButton.icon(
@@ -1841,25 +1894,25 @@ class CollectionsPage extends StatelessWidget {
               style: outlined,
               onPressed: count == 0 ? null : delete,
               icon: const Icon(FiIcons.delete),
-              label: const Text('Delete'),
+              label: Text(l.commonDelete),
             ),
           ] else ...[
             IconButton(
-              tooltip: 'Select all',
+              tooltip: l.recordsSelectAll,
               style: onAccent,
               onPressed: unselected.isEmpty ? null : selectAll,
               icon: const Icon(FiIcons.selectAll),
             ),
             IconButton(
               key: const Key('batch-edit'),
-              tooltip: 'Edit field',
+              tooltip: l.recordsEditField,
               style: onAccent,
               onPressed: count == 0 ? null : edit,
               icon: const Icon(FiIcons.edit),
             ),
             IconButton(
               key: const Key('batch-delete'),
-              tooltip: 'Delete',
+              tooltip: l.commonDelete,
               style: onAccent,
               onPressed: count == 0 ? null : delete,
               icon: const Icon(FiIcons.delete),
@@ -1875,21 +1928,22 @@ class CollectionsPage extends StatelessWidget {
   Future<void> _batchDelete(BuildContext context) async {
     final count = controller.selectedRecordIds.length;
     final messenger = ScaffoldMessenger.of(context);
+    final l = context.l10n;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialog) => AlertDialog(
-        title: Text('Delete $count records?'),
-        content: const Text('Every selected record is deleted in one step.'),
+        title: Text(l.recordsBatchDeleteTitle(count)),
+        content: Text(l.recordsBatchDeleteBody),
         actions: [
           TextButton(
             key: const Key('dismiss-batch-delete'),
             onPressed: () => Navigator.pop(dialog, false),
-            child: const Text('Cancel'),
+            child: Text(l.commonCancel),
           ),
           FilledButton(
             key: const Key('confirm-batch-delete'),
             onPressed: () => Navigator.pop(dialog, true),
-            child: const Text('Delete'),
+            child: Text(l.commonDelete),
           ),
         ],
       ),
@@ -1898,7 +1952,7 @@ class CollectionsPage extends StatelessWidget {
     try {
       final affected = await controller.deleteSelected();
       messenger.showSnackBar(
-        SnackBar(content: Text('$affected records deleted')),
+        SnackBar(content: Text(l.recordsDeletedSnack(affected))),
       );
     } catch (_) {
       // The typed error is already on the controller's banner and the
@@ -1917,6 +1971,7 @@ class CollectionsPage extends StatelessWidget {
     if (fields.isEmpty) return;
     final count = controller.selectedRecordIds.length;
     final messenger = ScaffoldMessenger.of(context);
+    final l = context.l10n;
     var field = fields.first;
     FieldValueDto? value;
     var issues = FormIssues.none;
@@ -1926,7 +1981,7 @@ class CollectionsPage extends StatelessWidget {
     String? blocker() =>
         FieldRendererRegistry.marksRequired(field) &&
             (value?.kind ?? FieldValueKindDto.null_) == FieldValueKindDto.null_
-        ? 'Required'
+        ? l.commonRequired
         : null;
 
     Future<void> apply(BuildContext route, StateSetter setState) async {
@@ -1935,17 +1990,17 @@ class CollectionsPage extends StatelessWidget {
       final confirmed = await showDialog<bool>(
         context: route,
         builder: (dialog) => AlertDialog(
-          title: Text('Set ${field.name} on $count records?'),
-          content: const Text('Every selected record is updated in one step.'),
+          title: Text(l.recordsBatchSetTitle(field.name, count)),
+          content: Text(l.recordsBatchSetBody),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialog, false),
-              child: const Text('Cancel'),
+              child: Text(l.commonCancel),
             ),
             FilledButton(
               key: const Key('confirm-batch-edit'),
               onPressed: () => Navigator.pop(dialog, true),
-              child: const Text('Set'),
+              child: Text(l.recordsSet),
             ),
           ],
         ),
@@ -1958,7 +2013,7 @@ class CollectionsPage extends StatelessWidget {
         );
         if (route.mounted) Navigator.pop(route);
         messenger.showSnackBar(
-          SnackBar(content: Text('$affected records updated')),
+          SnackBar(content: Text(l.recordsUpdatedSnack(affected))),
         );
       } catch (failure) {
         if (route.mounted) {
@@ -1973,7 +2028,7 @@ class CollectionsPage extends StatelessWidget {
       context,
       builder: (route) => StatefulBuilder(
         builder: (context, setState) => FormSurface(
-          title: 'Edit field on $count records',
+          title: l.recordsBatchEditTitle(count),
           showRequiredLegend: FieldRendererRegistry.marksRequired(field),
           body: Column(
             mainAxisSize: MainAxisSize.min,
@@ -1983,7 +2038,7 @@ class CollectionsPage extends StatelessWidget {
               FiSelect<String>(
                 key: const Key('batch-field'),
                 value: field.id,
-                label: 'Field',
+                label: l.recordsField,
                 items: [
                   for (final item in fields)
                     DropdownMenuItem(value: item.id, child: Text(item.name)),
@@ -2001,14 +2056,22 @@ class CollectionsPage extends StatelessWidget {
                   value = updated;
                   issues = issues.without(field.id);
                 }),
-                errors: [...issues.of(field.id), if (attempted) ?blocker()],
+                errors: [
+                  ...issues.fieldLines(
+                    context.l10n,
+                    field.id,
+                    field: field,
+                    decimalSeparator: decimalSeparatorOf(context),
+                  ),
+                  if (attempted) ?blocker(),
+                ],
                 quickFill: true,
               ),
             ],
           ),
-          errors: issues.form,
+          errors: issues.formLines(context.l10n),
           primaryKey: const Key('batch-edit-continue'),
-          primaryLabel: 'Continue',
+          primaryLabel: l.recordsContinue,
           onPrimary: () => apply(route, setState),
         ),
       ),
@@ -2355,24 +2418,23 @@ class _RecordEditorFormState extends State<_RecordEditorForm> {
       Navigator.pop(context);
       return;
     }
+    final l = context.l10n;
     final discard = await showDialog<bool>(
       context: context,
       builder: (dialog) => AlertDialog(
         key: const Key('voice-discard-dialog'),
-        title: const Text('Discard this record?'),
-        content: const Text(
-          'Voice processing will stop and the fields you changed will be lost.',
-        ),
+        title: Text(l.recordDiscardTitle),
+        content: Text(l.recordDiscardBody),
         actions: [
           OutlinedButton(
             key: const Key('voice-discard'),
             onPressed: () => Navigator.pop(dialog, true),
-            child: const Text('Discard'),
+            child: Text(l.recordDiscard),
           ),
           FilledButton(
             key: const Key('voice-keep-editing'),
             onPressed: () => Navigator.pop(dialog, false),
-            child: const Text('Keep editing'),
+            child: Text(l.recordKeepEditing),
           ),
         ],
       ),
@@ -2491,21 +2553,22 @@ class _RecordEditorFormState extends State<_RecordEditorForm> {
   /// Asks, then logically deletes the record and closes the editor. Cancelling keeps the editor
   /// open with its edits.
   Future<void> _delete() async {
+    final l = context.l10n;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialog) => AlertDialog(
-        title: const Text('Delete this record?'),
-        content: const Text('It is removed from the collection.'),
+        title: Text(l.recordDeleteTitle),
+        content: Text(l.recordDeleteBody),
         actions: [
           TextButton(
             key: const Key('dismiss-record-delete'),
             onPressed: () => Navigator.pop(dialog, false),
-            child: const Text('Cancel'),
+            child: Text(l.commonCancel),
           ),
           FilledButton(
             key: const Key('confirm-record-delete'),
             onPressed: () => Navigator.pop(dialog, true),
-            child: const Text('Delete'),
+            child: Text(l.commonDelete),
           ),
         ],
       ),
@@ -2537,16 +2600,16 @@ class _RecordEditorFormState extends State<_RecordEditorForm> {
     widget.onDuplicate?.call(copy);
   }
 
-  String get _contextLabel {
+  String _contextLabel(AppLocalizations l) {
     final created = switch (widget.existing?.createdAtMs) {
-      final ms? => DateFormat(
-        'MMM d, y',
+      final ms? => DateFormat.yMMMd(
+        l.localeName,
       ).format(DateTime.fromMillisecondsSinceEpoch(ms)),
       null => null,
     };
     return [
-      'in ${widget.schema.name}',
-      if (created != null) 'created $created',
+      l.recordsInCollection(widget.schema.name),
+      if (created != null) l.recordCreated(created),
     ].join(' · ');
   }
 
@@ -2598,16 +2661,15 @@ class _RecordEditorFormState extends State<_RecordEditorForm> {
     final dialog = FormSurfaceScope.modeOf(context) != FormSurfaceMode.sheet;
     final needed = fields.where((field) => _stillNeeded(field.id)).length;
     final existing = widget.existing;
-    final title = existing == null ? 'New record' : 'Edit record';
+    final l = context.l10n;
+    final title = existing == null ? l.recordsNewRecord : l.recordEditTitle;
     final withErrors = attempted
         ? fields.where((field) => issues.of(field.id).isNotEmpty).toList()
         : const <FieldDefinitionDto>[];
     return FormSurface(
       // Wide screens say how much is left to finish an incomplete record.
-      title: dialog && needed > 0
-          ? '$title · $needed ${needed == 1 ? 'field' : 'fields'} needed'
-          : title,
-      contextLabel: _contextLabel,
+      title: dialog && needed > 0 ? l.recordTitleNeeded(title, needed) : title,
+      contextLabel: _contextLabel(l),
       showContextInDialog: true,
       closeInHeader: true,
       onCancel: voice == null ? null : () => unawaited(_close()),
@@ -2615,13 +2677,13 @@ class _RecordEditorFormState extends State<_RecordEditorForm> {
       phoneFooterLeading: voice == null ? null : _mic(voice),
       top: voice == null ? null : VoicePanel(controller: voice),
       submitOnCtrlEnter: true,
-      footerHint: existing == null ? '* Required · Ctrl+Enter to save' : null,
+      footerHint: existing == null ? l.recordFooterHint : null,
       leadingFooterAction: existing == null
           ? null
           : FormHeaderAction(
               key: const Key('record-delete'),
               icon: FiIcons.delete,
-              label: 'Delete…',
+              label: l.collectionsDeleteEllipsis,
               onPressed: _delete,
             ),
       menuActions: existing == null
@@ -2629,13 +2691,13 @@ class _RecordEditorFormState extends State<_RecordEditorForm> {
           : [
               FormMenuAction(
                 key: const Key('record-duplicate'),
-                label: 'Duplicate',
+                label: l.collectionsDuplicate,
                 icon: FiIcons.copy,
                 onPressed: _duplicate,
               ),
               FormMenuAction(
                 key: const Key('record-delete-menu'),
-                label: 'Delete record…',
+                label: l.recordDeleteRecordEllipsis,
                 icon: FiIcons.delete,
                 onPressed: _delete,
               ),
@@ -2672,7 +2734,12 @@ class _RecordEditorFormState extends State<_RecordEditorForm> {
                       field,
                       values[field.id],
                       (value) => _changed(field.id, value),
-                      errors: issues.of(field.id),
+                      errors: issues.fieldLines(
+                        context.l10n,
+                        field.id,
+                        field: field,
+                        decimalSeparator: decimalSeparatorOf(context),
+                      ),
                       quickFill: true,
                       showLabel: false,
                     ),
@@ -2682,8 +2749,8 @@ class _RecordEditorFormState extends State<_RecordEditorForm> {
             ),
         ],
       ),
-      errors: issues.form,
-      primaryLabel: existing == null ? 'Save record' : 'Save changes',
+      errors: issues.formLines(context.l10n),
+      primaryLabel: existing == null ? l.recordSave : l.recordSaveChanges,
       // Voice fill never saves by itself, and Save waits while a turn listens or processes.
       onPrimary: voice?.busy ?? false ? null : _save,
     );
@@ -2845,7 +2912,7 @@ class _RecordTableState extends State<_RecordTable> {
           Padding(
             padding: const EdgeInsets.only(top: 6),
             child: Text(
-              'Scroll for more columns →',
+              context.l10n.recordScrollMore,
               key: const Key('table-scroll-hint'),
               textAlign: TextAlign.right,
               style: TextStyle(fontSize: 12, color: Nocturne.muted(.5)),
@@ -2906,7 +2973,7 @@ class _RecordTableState extends State<_RecordTable> {
       content = Center(
         child: FiIconButton(
           icon: FiIcons.delete,
-          tooltip: 'Delete record',
+          tooltip: context.l10n.recordsDeleteRecord,
           color: Nocturne.muted(.5),
           onPressed: () => widget.onDelete(record),
         ),
@@ -2921,15 +2988,20 @@ class _RecordTableState extends State<_RecordTable> {
     } else {
       final field = widget.fields[column];
       content = missing.contains(field.id)
-          ? const Align(
+          ? Align(
               alignment: Alignment.centerLeft,
-              child: Tag('Required', key: Key('required-cell')),
+              child: Tag(
+                context.l10n.commonRequired,
+                key: const Key('required-cell'),
+              ),
             )
           : CollectionsPage._cell(
               const FieldRendererRegistry().displayText(
                 field,
                 _recordValue(record, field.id),
                 human: true,
+                l: context.l10n,
+                decimalSeparator: decimalSeparatorOf(context),
               ),
               selected: selected,
             );
@@ -2991,12 +3063,11 @@ class _IncompleteLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lead = count == 1
-        ? '1 record is missing a required field'
-        : '$count records are missing a required field';
+    final l = context.l10n;
+    final lead = l.recordIncompleteLead(count);
     final action = phone
-        ? (count == 1 ? 'Tap it to finish.' : 'Tap one to finish.')
-        : (count == 1 ? 'Click it to finish.' : 'Click one to finish.');
+        ? l.recordTapToFinish(count)
+        : l.recordClickToFinish(count);
     const style = TextStyle(fontSize: 13, color: Nocturne.accent300);
     return Row(
       key: const Key('incomplete-status'),
@@ -3098,14 +3169,6 @@ class _SheetRow extends StatelessWidget {
   );
 }
 
-/// Creates or edits one field. Inline in the schema sheet for a new field (mock 1c), inside a
-/// dialog when editing an existing one.
-String _usage(int count) => switch (count) {
-  0 => 'used by no widgets',
-  1 => 'used by 1 widget',
-  _ => 'used by $count widgets',
-};
-
 IconData _queryIcon(QueryDefinitionDto query) => switch (query.query?.shape) {
   QueryShapeDto(kind: QueryShapeKindDto.scalar, :final aggregation?) =>
     aggregation.kind == AggregationKindDto.count
@@ -3130,18 +3193,23 @@ int _fieldOrder(FieldDefinitionDto left, FieldDefinitionDto right) {
 
 /// States what deleting a collection takes with it, leaving out zero counts:
 /// "142 records, 3 widgets and 2 saved queries are deleted with it."
-String collectionContentsSentence(CollectionContents contents) {
-  String count(int n, String one, String many) => '$n ${n == 1 ? one : many}';
+String collectionContentsSentence(
+  AppLocalizations l,
+  CollectionContents contents,
+) {
   final parts = [
-    if (contents.records > 0) count(contents.records, 'record', 'records'),
-    if (contents.widgets > 0) count(contents.widgets, 'widget', 'widgets'),
+    if (contents.records > 0) l.collectionsContentsRecords(contents.records),
+    if (contents.widgets > 0) l.collectionsContentsWidgets(contents.widgets),
     if (contents.savedQueries > 0)
-      count(contents.savedQueries, 'saved query', 'saved queries'),
+      l.collectionsContentsSavedQueries(contents.savedQueries),
   ];
-  if (parts.isEmpty) return 'This collection is empty.';
+  if (parts.isEmpty) return l.collectionsContentsEmpty;
   final list = parts.length == 1
       ? parts.single
-      : '${parts.sublist(0, parts.length - 1).join(', ')} and ${parts.last}';
+      : l.collectionsContentsJoin(
+          parts.sublist(0, parts.length - 1).join(', '),
+          parts.last,
+        );
   final total = contents.records + contents.widgets + contents.savedQueries;
-  return '$list ${total == 1 ? 'is' : 'are'} deleted with it.';
+  return l.collectionsContentsDeleted(total, list);
 }

@@ -40,7 +40,8 @@ Future<void> _openSettings(
   VoiceServices? voice,
   bool settle = true,
   PlatformCapabilities capabilities = PlatformCapabilities.androidPhone,
-  Size size = const Size(390, 844),
+  // Tall enough that the lazy list builds the sections below Language.
+  Size size = const Size(390, 1400),
   FakeCollectionBridge? bridge,
 }) async {
   await _open(
@@ -146,7 +147,7 @@ void main() {
   });
 
   for (final (name, size) in [
-    ('desktop shows only About', const Size(1240, 900)),
+    ('desktop shows only Language and About', const Size(1240, 900)),
     ('desktop capabilities at phone width', const Size(390, 844)),
   ]) {
     testWidgets(name, (tester) async {
@@ -156,6 +157,7 @@ void main() {
         capabilities: PlatformCapabilities.desktop,
         size: size,
       );
+      expect(find.byKey(const Key('settings-language')), findsOneWidget);
       expect(find.byKey(const Key('settings-about')), findsOneWidget);
       expect(
         find.descendant(
@@ -173,7 +175,7 @@ void main() {
   }
 
   testWidgets(
-    'Android with voice shows Voice input, Microphone, About in order',
+    'Android with voice shows Language, Voice input, Microphone, About in order',
     (tester) async {
       // Tall enough that the lazy list builds every section.
       await _openSettings(
@@ -182,11 +184,12 @@ void main() {
         size: const Size(390, 2400),
       );
       final tops = [
-        for (final label in ['VOICE INPUT', 'MICROPHONE', 'ABOUT'])
+        for (final label in ['LANGUAGE', 'VOICE INPUT', 'MICROPHONE', 'ABOUT'])
           tester.getTopLeft(find.text(label)).dy,
       ];
       expect(tops[0], lessThan(tops[1]));
       expect(tops[1], lessThan(tops[2]));
+      expect(tops[2], lessThan(tops[3]));
       expect(find.byKey(const Key('settings-subtitle')), findsNothing);
     },
   );
@@ -240,8 +243,11 @@ void main() {
     expect(find.byKey(const Key('build-version')), findsNothing);
   });
 
-  testWidgets('without voice services only About shows', (tester) async {
+  testWidgets('without voice services only Language and About show', (
+    tester,
+  ) async {
     await _openSettings(tester);
+    expect(find.byKey(const Key('settings-language')), findsOneWidget);
     expect(find.text('VOICE INPUT'), findsNothing);
     expect(find.byKey(const Key('settings-microphone')), findsNothing);
     await pumpUntilFound(tester, find.byKey(const Key('build-version')));
@@ -253,6 +259,7 @@ void main() {
       tester,
       voice: fakeVoiceServices(engine: const UnavailableVoiceEngine()),
     );
+    expect(find.byKey(const Key('settings-language')), findsOneWidget);
     expect(find.byKey(const Key('settings-voice')), findsNothing);
     expect(find.byKey(const Key('settings-microphone')), findsNothing);
     expect(find.byKey(const Key('settings-about')), findsOneWidget);

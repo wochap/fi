@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:fi/bridge/collection_bridge.dart';
 import 'package:fi/file_dialogs.dart';
+import 'package:fi/l10n/app_localizations.dart';
+import 'package:fi/l10n/error_text.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/ui_prefs.dart';
 import 'package:flutter/foundation.dart';
@@ -18,14 +20,16 @@ final class BootstrapController extends ChangeNotifier {
   final Future<void> Function() initializeRust;
   final Future<String> Function() dataDirProvider;
   BootstrapDto? state;
-  String? fatalError;
 
-  /// Whether [fatalError] is one a dataset reset resolves (unsupported
+  /// The failure that stopped startup; shown through `bridgeMessage`.
+  Object? fatalFailure;
+
+  /// Whether [fatalFailure] is one a dataset reset resolves (unsupported
   /// schema, incomplete local store). False for transient failures such as a
   /// locked keystore, where retry is the right affordance.
   bool fatalResetResolvable = false;
 
-  /// Whether [fatalError] is the desktop secure key store being locked, which
+  /// Whether [fatalFailure] is the desktop secure key store being locked, which
   /// the user fixes by unlocking the keyring and retrying in place.
   bool fatalSecureStoreLocked = false;
 
@@ -33,8 +37,11 @@ final class BootstrapController extends ChangeNotifier {
   /// secure store was locked or unavailable. Local data stays usable.
   NetworkingDeferredDto? networkingDeferred;
 
+  /// The sync port range, read when [networkingDeferred] is exhausted ports.
+  NetworkPortsDto? deferredPorts;
+
   /// Why the last networking retry failed, if it did.
-  String? networkingRetryError;
+  Object? networkingRetryFailure;
   bool retryingNetworking = false;
   bool loading = true;
   bool creating = false;
@@ -96,14 +103,14 @@ final class BootstrapController extends ChangeNotifier {
   }
 
   void _setFatal(Object error) {
-    fatalError = bridgeMessage(error);
+    fatalFailure = error;
     fatalResetResolvable = error is BridgeError && error.resetResolvable;
     fatalSecureStoreLocked =
         error is BridgeError && error.kind == BridgeErrorKind.secureStoreLocked;
   }
 
   void _clearFatal() {
-    fatalError = null;
+    fatalFailure = null;
     fatalResetResolvable = false;
     fatalSecureStoreLocked = false;
   }
@@ -111,6 +118,10 @@ final class BootstrapController extends ChangeNotifier {
   Future<void> _refreshNetworkingDeferred() async {
     try {
       networkingDeferred = await bridge.networkingDeferred();
+      if (networkingDeferred?.kind ==
+          NetworkingDeferredKindDto.portsExhausted) {
+        deferredPorts = await bridge.networkPorts();
+      }
     } catch (_) {
       // A core that cannot answer at all is already reported as a fatal error.
       networkingDeferred = null;
@@ -122,7 +133,7 @@ final class BootstrapController extends ChangeNotifier {
   /// failure the reason is kept so the explanation stays on screen.
   Future<void> retryNetworking() async {
     retryingNetworking = true;
-    networkingRetryError = null;
+    networkingRetryFailure = null;
     notifyListeners();
     try {
       await bridge.retryNetworking();
@@ -131,7 +142,7 @@ final class BootstrapController extends ChangeNotifier {
       state = await bridge.bootstrapState();
       await _listen();
     } catch (error) {
-      networkingRetryError = bridgeMessage(error);
+      networkingRetryFailure = error;
       await _refreshNetworkingDeferred();
     } finally {
       retryingNetworking = false;
@@ -148,7 +159,7 @@ final class BootstrapController extends ChangeNotifier {
     try {
       state = await bridge.createNewDataset();
     } catch (error) {
-      fatalError = bridgeMessage(error);
+      fatalFailure = error;
     } finally {
       creating = false;
       notifyListeners();
@@ -245,8 +256,10 @@ final class CollectionsController extends ChangeNotifier {
   ProjectionDto projection = const ProjectionDto(
     kind: ProjectionKindDto.unavailable,
   );
-  String? errorMessage;
-  String? widgetErrorMessage;
+
+  /// The last failure (a [BridgeError], a [BridgeErrorEventDto] or anything else).
+  Object? failure;
+  Object? widgetFailure;
 
   /// Records picked in selection mode, keyed by stable record ID so a refresh
   /// that reorders or drops rows never shifts the selection onto other records.
@@ -265,7 +278,7 @@ final class CollectionsController extends ChangeNotifier {
     _listenForInvalidations();
     _listenForProjection();
     _errorSubscription = bridge.errorEvents().listen((event) {
-      errorMessage = event.message;
+      failure = event;
       notifyListeners();
     });
     widgetDescriptors = await bridge.listWidgetDescriptors();
@@ -351,9 +364,9 @@ final class CollectionsController extends ChangeNotifier {
         widgetEvaluations = const [];
       }
       _pruneSelection();
-      errorMessage = null;
+      failure = null;
     } catch (error) {
-      errorMessage = bridgeMessage(error);
+      failure = error;
     } finally {
       loading = false;
       notifyListeners();
@@ -372,9 +385,9 @@ final class CollectionsController extends ChangeNotifier {
         id,
         DateTime.now().millisecondsSinceEpoch,
       );
-      widgetErrorMessage = null;
+      widgetFailure = null;
     } catch (error) {
-      widgetErrorMessage = bridgeMessage(error);
+      widgetFailure = error;
     }
     if (!_disposed) notifyListeners();
   }
@@ -794,7 +807,7 @@ final class CollectionsController extends ChangeNotifier {
   /// selection; the typed error then replaces the message that refresh cleared.
   Future<void> _reportBatchFailure(Object failure) async {
     await refresh();
-    errorMessage = bridgeMessage(failure);
+    this.failure = failure;
     notifyListeners();
   }
 
@@ -975,7 +988,7 @@ final class DevicesController extends ChangeNotifier {
 
   /// Lines requested per query for the Details panel.
   static const logLimit = 200;
-  String? errorMessage;
+  Object? failure;
 
   /// Set when a revocation committed but the follow-up discovery-secret
   /// rotation failed; cleared by a successful [retryRotation].
@@ -1188,7 +1201,7 @@ final class DevicesController extends ChangeNotifier {
     reconnecting.clear();
     details.clear();
     syncPort = null;
-    errorMessage = null;
+    failure = null;
     rotationError = null;
     busy = false;
     await start();
@@ -1276,7 +1289,7 @@ final class DevicesController extends ChangeNotifier {
   Future<void> refreshDevices() async {
     try {
       devices = await bridge.trustedDevices();
-      errorMessage = null;
+      failure = null;
     } catch (error) {
       _setError(error);
     }
@@ -1285,7 +1298,7 @@ final class DevicesController extends ChangeNotifier {
 
   Future<void> _run(Future<void> Function() operation) async {
     busy = true;
-    errorMessage = null;
+    failure = null;
     notifyListeners();
     try {
       await operation();
@@ -1314,7 +1327,7 @@ final class DevicesController extends ChangeNotifier {
   }
 
   void _setError(Object error) {
-    errorMessage = bridgeMessage(error);
+    failure = error;
     if (!_disposed) notifyListeners();
   }
 
@@ -1337,80 +1350,111 @@ String exportFileStem(String name) {
 }
 
 /// What an import did, for a snackbar: the count on success, otherwise where and why it stopped.
-String importOutcomeMessage(ImportOutcomeDto outcome, {required bool csv}) {
+/// Rust's reason is shown as given.
+String importOutcomeMessage(
+  AppLocalizations l,
+  ImportOutcomeDto outcome, {
+  required bool csv,
+}) {
   if (outcome.imported) {
-    if (csv) {
-      final count = outcome.recordCount;
-      return '$count ${count == 1 ? 'record' : 'records'} imported';
-    }
-    final count = outcome.collectionIds.length;
-    return '$count ${count == 1 ? 'collection' : 'collections'} imported';
+    return csv
+        ? l.importRecords(outcome.recordCount)
+        : l.importCollections(outcome.collectionIds.length);
   }
   final reason = outcome.reason ?? outcome.message;
   if (outcome.row case final row?) {
     final column = outcome.column ?? '';
-    final place = row == 0 ? 'Header' : 'Row $row';
+    final place = row == 0 ? l.importPlaceHeader : l.importPlaceRow(row);
     return column.isEmpty
-        ? 'Import stopped. $place: $reason'
-        : 'Import stopped. $place, column $column: $reason';
+        ? l.importStoppedAt(place, reason)
+        : l.importStoppedAtColumn(place, column, reason);
   }
   final place = [
-    if (outcome.collectionIndex case final index?) 'Collection ${index + 1}',
+    if (outcome.collectionIndex case final index?)
+      l.importPlaceCollection(index + 1),
     ?outcome.item,
   ].join(', ');
   return place.isEmpty
-      ? 'Import stopped: $reason'
-      : 'Import stopped. $place: $reason';
+      ? l.importStopped(reason)
+      : l.importStoppedAt(place, reason);
 }
 
-String bridgeMessage(Object error) => switch (error) {
-  BridgeError(:final message) => message,
-  _ => 'The local collection service encountered an unexpected error.',
-};
-
 /// Validation problems split by where a form shows them: an issue naming exactly one field goes
-/// under that input ([byField], one line per issue), anything else in the form-level slot above
-/// the buttons ([form]).
+/// under that input ([byField]), anything else in the form-level slot above the buttons ([form]).
+/// Entries stay typed (a [BridgeIssueDto], a failure, or an already localized `String`) until
+/// [fieldLines] and [formLines] turn them into text in the active language.
 final class FormIssues {
   const FormIssues({this.byField = const {}, this.form = const []});
 
   /// Splits Rust issues by field count, keeping Rust's order.
   factory FormIssues.fromIssues(List<BridgeIssueDto> issues) {
-    final byField = <String, List<String>>{};
-    final form = <String>[];
+    final byField = <String, List<Object>>{};
+    final form = <Object>[];
     for (final issue in issues) {
       if (issue.fields case [final field]) {
-        byField.putIfAbsent(field, () => []).add(issue.message);
+        byField.putIfAbsent(field, () => []).add(issue);
       } else {
-        form.add(issue.message);
+        form.add(issue);
       }
     }
     return FormIssues(byField: byField, form: form);
   }
 
   /// A failure as form issues: a validation error splits by field; anything else (or a
-  /// validation error without issues) is one form-level line.
+  /// validation error without issues) is one form-level entry.
   factory FormIssues.from(Object error) => switch (error) {
     BridgeError(:final issues) when issues.isNotEmpty => FormIssues.fromIssues(
       issues,
     ),
-    _ => FormIssues(form: [bridgeMessage(error)]),
+    _ => FormIssues(form: [error]),
   };
 
   static const none = FormIssues();
 
-  final Map<String, List<String>> byField;
-  final List<String> form;
+  final Map<String, List<Object>> byField;
+  final List<Object> form;
 
   bool get isEmpty => form.isEmpty && byField.values.every((l) => l.isEmpty);
 
-  /// The lines for [key]; empty when it has none.
-  List<String> of(String key) => byField[key] ?? const [];
+  /// The entries for [key]; empty when it has none.
+  List<Object> of(String key) => byField[key] ?? const [];
+
+  /// The lines for [key] in the active language; [field] supplies bounds for range and length.
+  List<String> fieldLines(
+    AppLocalizations l,
+    String key, {
+    FieldDefinitionDto? field,
+    String decimalSeparator = '.',
+  }) => [
+    for (final entry in of(key))
+      _line(l, entry, field: field, decimalSeparator: decimalSeparator),
+  ];
+
+  /// The form-level lines in the active language.
+  List<String> formLines(AppLocalizations l) => [
+    for (final entry in form) _line(l, entry),
+  ];
+
+  static String _line(
+    AppLocalizations l,
+    Object entry, {
+    FieldDefinitionDto? field,
+    String decimalSeparator = '.',
+  }) => switch (entry) {
+    final String line => line,
+    final BridgeIssueDto issue => issueText(
+      l,
+      issue,
+      field: field,
+      decimalSeparator: decimalSeparator,
+    ),
+    _ => bridgeMessage(l, entry),
+  };
 
   /// Renames each key through [inputs] (issue key to input key) and moves every key without an
   /// input into the form slot, so no issue is lost when a form has no input for it.
   FormIssues keyed(Map<String, String> inputs) {
-    final byField = <String, List<String>>{};
+    final byField = <String, List<Object>>{};
     final form = [...this.form];
     for (final MapEntry(:key, :value) in this.byField.entries) {
       if (inputs[key] case final input?) {

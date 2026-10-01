@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:fi/l10n/l10n.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/ui_prefs.dart';
 import 'package:fi/voice/controller.dart';
@@ -145,8 +146,9 @@ Future<void> _openNewRecord(
 
 Finder _mic() => find.byKey(const Key('voice-mic'));
 
-String? _micLabel(WidgetTester tester) =>
-    tester.widget<VoiceMicButton>(find.byType(VoiceMicButton)).label;
+String? _micLabel(WidgetTester tester) => tester
+    .widget<VoiceMicButton>(find.byType(VoiceMicButton))
+    .labelOf(lookupAppLocalizations(const Locale('en')));
 
 FilledButton _save(WidgetTester tester) => tester.widget<FilledButton>(
   find.ancestor(

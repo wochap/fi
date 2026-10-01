@@ -1,3 +1,4 @@
+import 'package:fi/l10n/l10n.dart';
 import 'package:flutter/material.dart';
 
 /// Callback an entry point invokes once the user confirmed the reset.
@@ -37,28 +38,23 @@ class ResetDatasetDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AlertDialog(
     key: const Key('reset-dataset-dialog'),
-    title: const Text("Reset this device's data?"),
+    title: Text(context.l10n.resetTitle),
     content: Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(lead),
         const SizedBox(height: 12),
-        const _Consequence(
-          'This deletes the only copy of the dataset on this device.',
-        ),
-        const _Consequence('Your other devices keep their copies.'),
-        const _Consequence(
-          'If this is the only device, the data is permanently lost.',
-        ),
-        const _Consequence('Other devices are not told about this reset.'),
+        _Consequence(context.l10n.resetOnlyCopy),
+        _Consequence(context.l10n.resetOthersKeep),
+        _Consequence(context.l10n.resetLostIfOnly),
+        _Consequence(context.l10n.resetNotTold),
         if (trustedDeviceCount case final count?) ...[
           const SizedBox(height: 12),
-          Text(switch (count) {
-            0 => 'This device currently trusts no other devices.',
-            1 => 'This device currently trusts 1 other device.',
-            _ => 'This device currently trusts $count other devices.',
-          }, key: const Key('reset-trusted-count')),
+          Text(
+            context.l10n.resetTrustedCount(count),
+            key: const Key('reset-trusted-count'),
+          ),
         ],
       ],
     ),
@@ -66,12 +62,12 @@ class ResetDatasetDialog extends StatelessWidget {
       TextButton(
         key: const Key('reset-cancel'),
         onPressed: () => Navigator.pop(context, false),
-        child: const Text('Cancel'),
+        child: Text(context.l10n.commonCancel),
       ),
       FilledButton(
         key: const Key('reset-confirm'),
         onPressed: () => Navigator.pop(context, true),
-        child: const Text("Reset this device's data"),
+        child: Text(context.l10n.resetConfirm),
       ),
     ],
   );

@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:fi/l10n/l10n.dart';
 import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/theme/form_errors.dart';
 import 'package:fi/theme/nocturne.dart';
@@ -739,12 +740,12 @@ class _FiDurationInputState extends State<FiDurationInput> {
         key: const Key('duration-text'),
         controller: _text,
         label: widget.label,
-        hint: 'e.g. 1h 30m or −45s',
+        hint: context.l10n.inputDurationHint('1h 30m', '−45s'),
         required: widget.required,
         size: widget.size,
         errors: [
           if (_unparsed && value.text.trim().isNotEmpty)
-            'Use units like 1h 30m',
+            context.l10n.inputDurationUnparsed('1h 30m'),
           ...widget.errors,
         ],
         prefixIcon: const Icon(FiIcons.duration, size: 18),
@@ -970,7 +971,7 @@ class FiSlider extends StatelessWidget {
           ),
           onPressed: interactive ? () => _report(min) : null,
           icon: const Icon(FiIcons.add, size: 14),
-          label: const Text('Set'),
+          label: Text(context.l10n.themeSet),
         )
       else
         Padding(

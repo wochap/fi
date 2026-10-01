@@ -1,26 +1,34 @@
 import 'dart:async';
 
+import 'package:fi/l10n/l10n.dart';
 import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/theme/nocturne.dart';
 import 'package:fi/theme/nocturne_widgets.dart';
-import 'package:fi/voice/model_strings.dart';
 import 'package:fi/voice/services.dart';
 import 'package:flutter/material.dart';
 
 TextStyle _muted(double opacity, [double size = 12]) =>
     TextStyle(fontSize: size, color: Nocturne.muted(opacity), height: 1.4);
 
+/// The display name of a model role.
+String modelRoleName(AppLocalizations l, ModelRoleDto role) => switch (role) {
+  ModelRoleDto.speech => l.modelRoleSpeech,
+  ModelRoleDto.understanding => l.modelRoleUnderstanding,
+};
+
+/// The models' language as shown in the UI; null covers all languages.
+String modelLanguageName(AppLocalizations l, String? code) =>
+    code == null ? l.modelAllLanguages : languageEndonym(code);
+
 /// The failure title and line for a failed status.
-(String, String) modelFailureText(ModelStatusDto status) {
+(String, String) modelFailureText(AppLocalizations l, ModelStatusDto status) {
   final error = status.error;
   return switch (error?.kind) {
-    ModelErrorKindDto.network || ModelErrorKindDto.httpStatus => (
-      ModelStrings.networkTitle,
-      ModelStrings.networkLine,
-    ),
+    ModelErrorKindDto.network ||
+    ModelErrorKindDto.httpStatus => (l.modelNetworkTitle, l.modelNetworkLine),
     ModelErrorKindDto.notEnoughStorage => (
-      ModelStrings.storageTitle,
-      ModelStrings.storageLine(formatBytes(error?.neededBytes ?? 0)),
+      l.modelStorageTitle,
+      l.modelStorageLine(formatBytes(error?.neededBytes ?? 0)),
     ),
     ModelErrorKindDto.checksum => () {
       final file =
@@ -29,14 +37,14 @@ TextStyle _muted(double opacity, [double size = 12]) =>
               .where((file) => file.state == ModelFileStateDto.damaged)
               .firstOrNull;
       return (
-        ModelStrings.damagedTitle,
-        ModelStrings.damagedLine(
-          file?.role ?? ModelRoleDto.understanding,
-          formatBytes(file?.sizeBytes ?? status.remainingBytes),
-        ),
+        l.modelDamagedTitle,
+        l.modelDamagedLine(switch (file?.role ?? ModelRoleDto.understanding) {
+          ModelRoleDto.speech => l.modelRoleSpeechInSentence,
+          ModelRoleDto.understanding => l.modelRoleUnderstandingInSentence,
+        }, formatBytes(file?.sizeBytes ?? status.remainingBytes)),
       );
     }(),
-    _ => (ModelStrings.ioTitle, ModelStrings.ioLine),
+    _ => (l.modelIoTitle, l.modelIoLine),
   };
 }
 
@@ -44,33 +52,33 @@ TextStyle _muted(double opacity, [double size = 12]) =>
 Future<bool> showCancelDownloadDialog(BuildContext context, int doneBytes) =>
     _confirm(
       context,
-      title: ModelStrings.cancelDialogTitle,
-      body: ModelStrings.cancelDialogBody(formatBytes(doneBytes)),
-      destructive: ModelStrings.cancelDialogConfirm,
+      title: context.l10n.modelCancelDialogTitle,
+      body: context.l10n.modelCancelDialogBody(formatBytes(doneBytes)),
+      destructive: context.l10n.modelCancelDialogConfirm,
       destructiveKey: const Key('confirm-cancel-download'),
-      safe: ModelStrings.cancelDialogKeep,
+      safe: context.l10n.modelCancelDialogKeep,
     );
 
 /// Asks before deleting the models (mock 8e).
 Future<bool> showDeleteModelsDialog(BuildContext context, int sizeBytes) =>
     _confirm(
       context,
-      title: ModelStrings.deleteDialogTitle,
-      body: ModelStrings.deleteDialogBody(formatBytes(sizeBytes)),
-      destructive: ModelStrings.deleteDialogConfirm,
+      title: context.l10n.modelDeleteDialogTitle,
+      body: context.l10n.modelDeleteDialogBody(formatBytes(sizeBytes)),
+      destructive: context.l10n.commonDelete,
       destructiveKey: const Key('confirm-delete-model'),
-      safe: ModelStrings.deleteDialogKeep,
+      safe: context.l10n.modelKeepModels,
     );
 
 /// Asks before re-downloading the models.
 Future<bool> showRedownloadModelsDialog(BuildContext context, int sizeBytes) =>
     _confirm(
       context,
-      title: ModelStrings.redownloadDialogTitle,
-      body: ModelStrings.redownloadDialogBody(formatBytes(sizeBytes)),
-      destructive: ModelStrings.redownloadDialogConfirm,
+      title: context.l10n.modelRedownloadDialogTitle,
+      body: context.l10n.modelRedownloadDialogBody(formatBytes(sizeBytes)),
+      destructive: context.l10n.modelRedownloadDialogConfirm,
       destructiveKey: const Key('confirm-redownload'),
-      safe: ModelStrings.redownloadDialogKeep,
+      safe: context.l10n.modelKeepModels,
     );
 
 Future<bool> _confirm(
@@ -165,27 +173,33 @@ class _VoiceModelsCardState extends State<VoiceModelsCard> {
   );
 
   Widget _header(ModelStatusDto status) {
-    final language = ModelStrings.languageName(status.speechLanguage);
+    final language = modelLanguageName(context.l10n, status.speechLanguage);
     final total = formatBytes(status.totalBytes);
     final done = formatBytes(status.doneBytes);
     final summary = switch (status.kind) {
-      ModelStatusKindDto.notDownloaded => ModelStrings.summaryTotal(
+      ModelStatusKindDto.notDownloaded => context.l10n.modelSummaryTotal(
         language,
         total,
       ),
       ModelStatusKindDto.downloading || ModelStatusKindDto.reconnecting =>
-        ModelStrings.summaryProgress(language, done, total),
-      ModelStatusKindDto.verifying => ModelStrings.summarySize(language, total),
-      ModelStatusKindDto.paused => ModelStrings.summaryPaused(
+        context.l10n.modelSummaryProgress(language, done, total),
+      ModelStatusKindDto.verifying => context.l10n.modelSummarySize(
+        language,
+        total,
+      ),
+      ModelStatusKindDto.paused => context.l10n.modelSummaryPaused(
         language,
         done,
         total,
       ),
       ModelStatusKindDto.failed =>
         status.error?.kind == ModelErrorKindDto.checksum
-            ? ModelStrings.summaryCheckFailed(language)
-            : ModelStrings.summaryStopped(language, done),
-      ModelStatusKindDto.ready => ModelStrings.summaryReady(language, total),
+            ? context.l10n.modelSummaryCheckFailed(language)
+            : context.l10n.modelSummaryStopped(language, done),
+      ModelStatusKindDto.ready => context.l10n.modelSummaryReady(
+        language,
+        total,
+      ),
     };
     return Row(
       children: [
@@ -196,7 +210,7 @@ class _VoiceModelsCardState extends State<VoiceModelsCard> {
             crossAxisAlignment: CrossAxisAlignment.start,
             spacing: 2,
             children: [
-              const Text(ModelStrings.cardTitle),
+              Text(context.l10n.modelCardTitle),
               Text(
                 summary,
                 key: const Key('settings-model-summary'),
@@ -212,34 +226,34 @@ class _VoiceModelsCardState extends State<VoiceModelsCard> {
   }
 
   Widget _tag(ModelStatusDto status) => switch (status.kind) {
-    ModelStatusKindDto.notDownloaded => const Tag.neutral(
-      ModelStrings.tagNotDownloaded,
+    ModelStatusKindDto.notDownloaded => Tag.neutral(
+      context.l10n.modelTagNotDownloaded,
       leading: FiIcons.download,
     ),
-    ModelStatusKindDto.downloading => const Tag(
-      ModelStrings.tagDownloading,
+    ModelStatusKindDto.downloading => Tag(
+      context.l10n.modelTagDownloading,
       leading: FiIcons.syncing,
     ),
-    ModelStatusKindDto.reconnecting => const Tag.neutral(
-      ModelStrings.tagReconnecting,
+    ModelStatusKindDto.reconnecting => Tag.neutral(
+      context.l10n.modelTagReconnecting,
       leading: FiIcons.offline,
     ),
-    ModelStatusKindDto.verifying => const Tag(
-      ModelStrings.tagVerifying,
+    ModelStatusKindDto.verifying => Tag(
+      context.l10n.modelTagVerifying,
       leading: FiIcons.searching,
     ),
-    ModelStatusKindDto.paused => const Tag.neutral(
-      ModelStrings.tagPaused,
+    ModelStatusKindDto.paused => Tag.neutral(
+      context.l10n.modelTagPaused,
       leading: FiIcons.paused,
     ),
-    ModelStatusKindDto.failed => const Tag(
-      ModelStrings.tagFailed,
+    ModelStatusKindDto.failed => Tag(
+      context.l10n.modelTagFailed,
       background: Nocturne.neutral800,
       color: Nocturne.error,
       leading: FiIcons.error,
     ),
-    ModelStatusKindDto.ready => const Tag(
-      ModelStrings.tagReady,
+    ModelStatusKindDto.ready => Tag(
+      context.l10n.modelTagReady,
       background: Nocturne.accent900,
       leading: FiIcons.check,
     ),
@@ -248,11 +262,11 @@ class _VoiceModelsCardState extends State<VoiceModelsCard> {
   Widget _row(ModelFileDto file) {
     final size = formatBytes(file.sizeBytes);
     final detail = switch (file.state) {
-      ModelFileStateDto.checking => ModelStrings.rowChecking,
-      ModelFileStateDto.damaged => ModelStrings.rowDamaged(size),
+      ModelFileStateDto.checking => context.l10n.modelRowChecking,
+      ModelFileStateDto.damaged => context.l10n.modelRowDamaged(size),
       ModelFileStateDto.ready => size,
       _ when file.storedBytes > 0 && file.storedBytes < file.sizeBytes =>
-        ModelStrings.rowProgress(formatBytes(file.storedBytes), size),
+        context.l10n.modelRowProgress(formatBytes(file.storedBytes), size),
       _ => size,
     };
     return Row(
@@ -262,7 +276,10 @@ class _VoiceModelsCardState extends State<VoiceModelsCard> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(ModelStrings.roleName(file.role), style: _muted(.55, 11)),
+              Text(
+                modelRoleName(context.l10n, file.role),
+                style: _muted(.55, 11),
+              ),
               Text(file.label, style: const TextStyle(fontSize: 13)),
             ],
           ),
@@ -304,7 +321,7 @@ class _VoiceModelsCardState extends State<VoiceModelsCard> {
     children: [
       Expanded(
         child: Text(
-          ModelStrings.percent(_percent(status)),
+          context.l10n.modelPercent(_percent(status)),
           key: const Key('settings-model-progress'),
           style: _muted(.6).copyWith(fontFeatures: Nocturne.tabular),
         ),
@@ -320,13 +337,13 @@ class _VoiceModelsCardState extends State<VoiceModelsCard> {
     key: const Key('settings-model-pause'),
     onPressed: () => unawaited(models.pause()),
     icon: const Icon(FiIcons.pause, size: 18),
-    label: const Text(ModelStrings.pause),
+    label: Text(context.l10n.modelPause),
   );
 
   Widget _cancelButton(ModelStatusDto status) => TextButton(
     key: const Key('settings-model-cancel'),
     onPressed: () => unawaited(_cancel(status)),
-    child: const Text(ModelStrings.cancel),
+    child: Text(context.l10n.commonCancel),
   );
 
   List<Widget> _body(ModelStatusDto status) {
@@ -339,17 +356,22 @@ class _VoiceModelsCardState extends State<VoiceModelsCard> {
             children: [
               Icon(FiIcons.wifi, size: 16, color: Nocturne.muted(.7)),
               const SizedBox(width: 8),
-              Text(ModelStrings.wifiRecommended, style: _muted(.7)),
+              Text(context.l10n.modelWifiRecommended, style: _muted(.7)),
             ],
           ),
-          Text(ModelStrings.needsSpace(remaining, free), style: _muted(.55)),
+          Text(
+            free == null
+                ? context.l10n.modelNeeds(remaining)
+                : context.l10n.modelNeedsWithFree(remaining, free),
+            style: _muted(.55),
+          ),
           Align(
             alignment: AlignmentDirectional.centerStart,
             child: FilledButton.icon(
               key: const Key('settings-model-download'),
               onPressed: () => unawaited(widget.run(models.start)),
               icon: const Icon(FiIcons.download, size: 18),
-              label: Text(ModelStrings.download(remaining)),
+              label: Text(context.l10n.modelDownload(remaining)),
             ),
           ),
         ];
@@ -360,7 +382,7 @@ class _VoiceModelsCardState extends State<VoiceModelsCard> {
             status,
             status.secondsLeft == null
                 ? null
-                : formatTimeLeft(status.secondsLeft!),
+                : formatTimeLeft(context.l10n, status.secondsLeft!),
           ),
           _buttons([_pauseButton(), _cancelButton(status)]),
         ];
@@ -370,31 +392,31 @@ class _VoiceModelsCardState extends State<VoiceModelsCard> {
             children: [
               Icon(FiIcons.offline, size: 16, color: Nocturne.muted(.7)),
               const SizedBox(width: 8),
-              const Expanded(
+              Expanded(
                 child: Text(
-                  ModelStrings.reconnectingTitle,
-                  style: TextStyle(fontSize: 13),
+                  context.l10n.modelReconnectingTitle,
+                  style: const TextStyle(fontSize: 13),
                 ),
               ),
             ],
           ),
           _bar(status, frozen: true),
-          Text(ModelStrings.reconnectingResumes, style: _muted(.6)),
-          Text(ModelStrings.reconnectingKeepOpen, style: _muted(.55)),
+          Text(context.l10n.modelReconnectingResumes, style: _muted(.6)),
+          Text(context.l10n.modelReconnectingKeepOpen, style: _muted(.55)),
           _buttons([_pauseButton(), _cancelButton(status)]),
         ];
       case ModelStatusKindDto.verifying:
         return [
           Row(
             children: [
-              const Expanded(
+              Expanded(
                 child: Text(
-                  ModelStrings.verifyingTitle,
-                  style: TextStyle(fontSize: 13),
+                  context.l10n.modelVerifyingTitle,
+                  style: const TextStyle(fontSize: 13),
                 ),
               ),
               if (status.secondsLeft case final seconds?)
-                Text(formatTimeLeft(seconds), style: _muted(.6)),
+                Text(formatTimeLeft(context.l10n, seconds), style: _muted(.6)),
             ],
           ),
           _bar(status, frozen: false),
@@ -403,19 +425,19 @@ class _VoiceModelsCardState extends State<VoiceModelsCard> {
       case ModelStatusKindDto.paused:
         return [
           _bar(status, frozen: true),
-          _progressLine(status, ModelStrings.resumesFromHere),
+          _progressLine(status, context.l10n.modelResumesFromHere),
           _buttons([
             FilledButton.icon(
               key: const Key('settings-model-resume'),
               onPressed: () => unawaited(widget.run(models.start)),
               icon: const Icon(FiIcons.download, size: 18),
-              label: const Text(ModelStrings.resume),
+              label: Text(context.l10n.modelResume),
             ),
             _cancelButton(status),
           ]),
         ];
       case ModelStatusKindDto.failed:
-        final (title, line) = modelFailureText(status);
+        final (title, line) = modelFailureText(context.l10n, status);
         return [
           Container(
             key: const Key('settings-model-failure'),
@@ -448,12 +470,12 @@ class _VoiceModelsCardState extends State<VoiceModelsCard> {
               key: const Key('settings-model-retry'),
               onPressed: () => unawaited(widget.run(models.start)),
               icon: const Icon(FiIcons.refresh, size: 18),
-              label: const Text(ModelStrings.retry),
+              label: Text(context.l10n.commonRetry),
             ),
             TextButton(
               key: const Key('settings-model-cancel-delete'),
               onPressed: () => unawaited(_cancel(status)),
-              child: const Text(ModelStrings.cancelAndDelete),
+              child: Text(context.l10n.modelCancelAndDelete),
             ),
           ]),
         ];

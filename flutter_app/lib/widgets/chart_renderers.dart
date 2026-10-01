@@ -1,3 +1,4 @@
+import 'package:fi/l10n/l10n.dart';
 import 'package:fi/exact_format.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/theme/nocturne.dart';
@@ -45,13 +46,19 @@ final class _Plot {
     for (var i = 0; i < points.length; i++) xAt(i),
   ];
 
-  List<String> get xLabels => [for (final point in points) point.x.label];
+  List<String> xLabels(AppLocalizations l, String decimalSeparator) => [
+    for (final point in points)
+      point.x.label(l, decimalSeparator: decimalSeparator),
+  ];
 
   List<double> get yCoordinates => [
     for (final point in points) point.y.coordinate,
   ];
 
-  List<String> get yLabels => [for (final point in points) point.y.label];
+  List<String> yLabels(AppLocalizations l, String decimalSeparator) => [
+    for (final point in points)
+      point.y.label(l, decimalSeparator: decimalSeparator),
+  ];
 
   ({double min, double max}) get xRange => _range(xCoordinates);
 
@@ -94,10 +101,14 @@ final class _AxisLabels {
   final List<String> x;
 }
 
-_AxisLabels _axisLabelsFor(_Plot plot) {
+_AxisLabels _axisLabelsFor(BuildContext context, _Plot plot) {
+  final l = context.l10n;
+  final separator = decimalSeparatorOf(context);
+  final xLabels = plot.xLabels(l, separator);
+  final yLabels = plot.yLabels(l, separator);
   final x = [
     for (final index in _labelIndices(plot.points.length, _maxAxisLabels))
-      plot.xLabels[index],
+      xLabels[index],
   ];
   if (plot.points.isEmpty) return _AxisLabels(y: const [], x: x);
   var minIndex = 0;
@@ -109,17 +120,17 @@ _AxisLabels _axisLabelsFor(_Plot plot) {
   }
   return _AxisLabels(
     y: minIndex == maxIndex
-        ? [plot.yLabels[maxIndex]]
-        : [plot.yLabels[maxIndex], plot.yLabels[minIndex]],
+        ? [yLabels[maxIndex]]
+        : [yLabels[maxIndex], yLabels[minIndex]],
     x: x,
   );
 }
 
 /// Lays a chart out between exact axis labels. The chart package draws only the geometry.
 final class _ChartFrame extends StatelessWidget {
-  const _ChartFrame({required this.labels, required this.chart, this.yName});
+  const _ChartFrame({required this.plot, required this.chart, this.yName});
 
-  final _AxisLabels labels;
+  final _Plot plot;
   final Widget chart;
   final String? yName;
 
@@ -128,6 +139,7 @@ final class _ChartFrame extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final labels = _axisLabelsFor(context, plot);
     Widget axis(String text) => Text(
       text,
       maxLines: 1,
@@ -243,7 +255,7 @@ Widget renderLineChart(WidgetRenderContext context) {
       (result.points.isEmpty && result.categoryPoints.isEmpty)) {
     return WidgetTile(
       title: title,
-      child: const WidgetEmpty(message: 'No observations yet.'),
+      child: const WidgetEmpty(reason: WidgetEmptyReason.noObservations),
     );
   }
   final config = WidgetConfig(context.configuration);
@@ -253,7 +265,7 @@ Widget renderLineChart(WidgetRenderContext context) {
   return WidgetTile(
     title: context.definition.title,
     child: _ChartFrame(
-      labels: _axisLabelsFor(plot),
+      plot: plot,
       yName: config.textAt('y_axis_label'),
       chart: LineChart(
         LineChartData(
@@ -316,7 +328,7 @@ Widget renderBarChart(WidgetRenderContext context) {
       (result.points.isEmpty && result.categoryPoints.isEmpty)) {
     return WidgetTile(
       title: title,
-      child: const WidgetEmpty(message: 'Nothing to chart yet.'),
+      child: const WidgetEmpty(reason: WidgetEmptyReason.nothingToChart),
     );
   }
   final plot = _plotFromGroupedOrSeries(result, context.enumLabels);
@@ -326,7 +338,7 @@ Widget renderBarChart(WidgetRenderContext context) {
   return WidgetTile(
     title: context.definition.title,
     child: _ChartFrame(
-      labels: _axisLabelsFor(plot),
+      plot: plot,
       yName: config.textAt('y_axis_label'),
       chart: BarChart(
         BarChartData(
@@ -375,7 +387,7 @@ Widget renderScatterPlot(WidgetRenderContext context) {
   if (result == null || result.points.isEmpty) {
     return WidgetTile(
       title: title,
-      child: const WidgetEmpty(message: 'No observations yet.'),
+      child: const WidgetEmpty(reason: WidgetEmptyReason.noObservations),
     );
   }
   final plot = _plotFromSeries(result, context.enumLabels);
@@ -386,7 +398,7 @@ Widget renderScatterPlot(WidgetRenderContext context) {
   return WidgetTile(
     title: context.definition.title,
     child: _ChartFrame(
-      labels: _axisLabelsFor(plot),
+      plot: plot,
       yName: config.textAt('y_axis_label'),
       chart: ScatterChart(
         ScatterChartData(

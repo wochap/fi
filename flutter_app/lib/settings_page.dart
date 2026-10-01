@@ -1,19 +1,22 @@
 import 'dart:async';
 
 import 'package:fi/build_label.dart';
+import 'package:fi/l10n/l10n.dart';
+import 'package:fi/l10n/language.dart';
 import 'package:fi/platform_capabilities.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/theme/nocturne.dart';
 import 'package:fi/theme/nocturne_widgets.dart';
-import 'package:fi/voice/model_strings.dart';
+import 'package:fi/ui_prefs.dart';
 import 'package:fi/voice/models_card.dart';
 import 'package:fi/voice/services.dart';
 import 'package:flutter/material.dart';
 
 /// The Network row of About; mirrors `DEFAULT_SYNC_PORT_RANGE` in
 /// `crates/app_core/src/application.rs` and mDNS on 5353.
-const networkSummary = 'Local network only · UDP 47380–47389 · mDNS 5353';
+String networkSummary(AppLocalizations l) =>
+    l.settingsNetworkSummary(47380, 47389, 5353);
 
 typedef _Section = ({String label, Widget child});
 
@@ -89,22 +92,29 @@ class _SettingsPageState extends State<SettingsPage>
     final voice = VoiceScope.of(context);
     final voiceShown = caps.onDeviceVoice && voice != null;
     final micShown = caps.android && voiceShown;
-    // In display order; a new section (Language) is one more entry here.
+    // In display order.
     final sections = <_Section>[
+      (label: context.l10n.settingsLanguage, child: const _LanguageSection()),
       if (voiceShown)
-        (label: 'Voice input', child: _VoiceInputSection(services: voice)),
+        (
+          label: context.l10n.settingsVoiceInput,
+          child: _VoiceInputSection(services: voice),
+        ),
       if (micShown && services != null)
-        (label: 'Microphone', child: _microphone(services)),
-      (label: 'About', child: _about()),
+        (label: context.l10n.settingsMicrophone, child: _microphone(services)),
+      (label: context.l10n.settingsAbout, child: _about()),
     ];
     return ListView(
       key: const Key('settings-page'),
       padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
       children: [
-        Text('Settings', style: Theme.of(context).textTheme.headlineSmall),
+        Text(
+          context.l10n.settingsTitle,
+          style: Theme.of(context).textTheme.headlineSmall,
+        ),
         if (!caps.android)
           Text(
-            'Preferences for this computer.',
+            context.l10n.settingsSubtitle,
             key: const Key('settings-subtitle'),
             style: TextStyle(fontSize: 13, color: Nocturne.muted(.6)),
           ),
@@ -124,30 +134,34 @@ class _SettingsPageState extends State<SettingsPage>
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (widget.buildInfo case final info?) ...[
-          _AboutRow(label: 'Version', value: BuildLabel(info)),
+          _AboutRow(
+            label: context.l10n.settingsVersion,
+            value: BuildLabel(info),
+          ),
           const FadedRule(),
         ],
-        const _AboutRow(
-          key: Key('settings-network'),
-          label: 'Network',
-          detail: networkSummary,
+        _AboutRow(
+          key: const Key('settings-network'),
+          label: context.l10n.settingsNetwork,
+          detail: networkSummary(context.l10n),
         ),
       ],
     ),
   );
 
   Widget _microphone(VoiceServices services) {
+    final l = context.l10n;
     final (text, detail) = switch (_permission) {
-      MicPermission.granted => ('Allowed', null),
+      MicPermission.granted => (l.settingsMicAllowed, null),
       MicPermission.notGranted => (
-        'Not allowed yet',
-        'Fi asks the first time you use voice.',
+        l.settingsMicNotAllowed,
+        l.settingsMicAsksFirst,
       ),
       MicPermission.permanentlyDenied => (
-        'Off',
-        'Turn it on in Android settings to fill by voice.',
+        l.settingsMicOff,
+        l.settingsMicTurnOn,
       ),
-      null => (_permissionKnown ? 'Unknown' : '…', null),
+      null => (_permissionKnown ? l.settingsMicUnknown : '…', null),
     };
     return NocturneCard(
       key: const Key('settings-microphone'),
@@ -159,7 +173,7 @@ class _SettingsPageState extends State<SettingsPage>
             children: [
               Icon(FiIcons.microphone, size: 18, color: Nocturne.muted(.7)),
               const SizedBox(width: 10),
-              const Expanded(child: Text('Microphone access')),
+              Expanded(child: Text(l.settingsMicAccess)),
               Text(
                 text,
                 key: const Key('settings-microphone-status'),
@@ -177,10 +191,97 @@ class _SettingsPageState extends State<SettingsPage>
             child: TextButton(
               key: const Key('settings-android-settings'),
               onPressed: () => unawaited(services.permission.openSettings()),
-              child: const Text('Android settings'),
+              child: Text(l.settingsAndroidSettings),
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// The interface language (mocks 8a, 8b): a dropdown on desktop, a radio list
+/// on Android.
+class _LanguageSection extends StatelessWidget {
+  const _LanguageSection();
+
+  static Key _optionKey(AppLanguage language) => Key(
+    'language-option-${language == AppLanguage.system ? 'system' : language.code}',
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = LanguageScope.of(context);
+    final l = context.l10n;
+    final systemName = languageEndonym(
+      resolveAppLocale(
+        WidgetsBinding.instance.platformDispatcher.locales,
+        AppLocalizations.supportedLocales,
+      ).languageCode,
+    );
+    void choose(AppLanguage? value) {
+      if (value != null) unawaited(controller.set(value));
+    }
+
+    String name(AppLanguage language) => switch (language) {
+      AppLanguage.system => l.langSystemDefaultNamed(systemName),
+      AppLanguage.english => languageEndonym('en'),
+      AppLanguage.spanish => languageEndonym('es'),
+    };
+
+    if (!PlatformScope.of(context).android) {
+      return NocturneCard(
+        key: const Key('settings-language'),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: 6,
+          children: [
+            Text(l.langAppLanguage),
+            Text(
+              l.langAppLanguageHint,
+              style: TextStyle(fontSize: 13, color: Nocturne.muted(.6)),
+            ),
+            DropdownButton<AppLanguage>(
+              isExpanded: true,
+              key: const Key('settings-language-dropdown'),
+              value: controller.value,
+              onChanged: choose,
+              items: [
+                for (final language in AppLanguage.values)
+                  DropdownMenuItem(
+                    key: _optionKey(language),
+                    value: language,
+                    child: Text(name(language)),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
+    return NocturneCard(
+      key: const Key('settings-language'),
+      padding: EdgeInsets.zero,
+      child: RadioGroup<AppLanguage>(
+        groupValue: controller.value,
+        onChanged: choose,
+        child: Column(
+          children: [
+            for (final language in AppLanguage.values)
+              RadioListTile<AppLanguage>(
+                key: _optionKey(language),
+                value: language,
+                title: Text(
+                  language == AppLanguage.system
+                      ? l.langSystemDefault
+                      : name(language),
+                ),
+                subtitle: language == AppLanguage.system
+                    ? Text(l.langSameAsPhone(systemName))
+                    : null,
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -241,17 +342,18 @@ class _VoiceInputSection extends StatelessWidget {
     Future<void> Function() action,
   ) async {
     final messenger = ScaffoldMessenger.maybeOf(context);
+    final l = context.l10n;
     try {
       await action();
     } on ModelErrorDto catch (error) {
       messenger?.showSnackBar(
         SnackBar(
           content: Text(switch (error.kind) {
-            ModelErrorKindDto.notEnoughStorage =>
-              'Not enough storage: ${formatBytes(error.neededBytes ?? 0)} needed.',
-            ModelErrorKindDto.voiceTurnActive =>
-              'Finish the voice fill in progress first.',
-            _ => "Couldn't change the voice models. Try again.",
+            ModelErrorKindDto.notEnoughStorage => l.settingsNotEnoughStorage(
+              formatBytes(error.neededBytes ?? 0),
+            ),
+            ModelErrorKindDto.voiceTurnActive => l.settingsFinishVoiceFirst,
+            _ => l.settingsCouldntChangeModels,
           }),
         ),
       );
@@ -289,9 +391,9 @@ class _VoiceInputSection extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         spacing: 2,
                         children: [
-                          const Text('Hands-free spoken feedback'),
+                          Text(context.l10n.settingsHandsFree),
                           Text(
-                            'Speaks the “still need” question and a short confirmation',
+                            context.l10n.settingsHandsFreeDetail,
                             style: TextStyle(
                               fontSize: 12,
                               color: Nocturne.muted(.55),
@@ -302,7 +404,7 @@ class _VoiceInputSection extends StatelessWidget {
                     ),
                     const SizedBox(width: 12),
                     Semantics(
-                      label: 'Hands-free spoken feedback',
+                      label: context.l10n.settingsHandsFree,
                       child: FiSwitch(
                         key: const Key('settings-hands-free'),
                         value: services.prefs.handsFree,
@@ -317,7 +419,7 @@ class _VoiceInputSection extends StatelessWidget {
               _actionRow(
                 key: const Key('settings-redownload'),
                 icon: FiIcons.refresh,
-                label: ModelStrings.redownload,
+                label: context.l10n.modelRedownload,
                 detail: size,
                 onTap: () async {
                   if (!await showRedownloadModelsDialog(
@@ -333,8 +435,8 @@ class _VoiceInputSection extends StatelessWidget {
               _actionRow(
                 key: const Key('settings-delete-model'),
                 icon: FiIcons.delete,
-                label: ModelStrings.delete,
-                detail: ModelStrings.frees(size),
+                label: context.l10n.modelDelete,
+                detail: context.l10n.modelFrees(size),
                 onTap: () async {
                   if (!await showDeleteModelsDialog(
                     context,
@@ -352,7 +454,7 @@ class _VoiceInputSection extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.all(16),
               child: Text(
-                'Audio is processed on this device and never saved. English only for now.',
+                context.l10n.voicePrivacyLine,
                 style: TextStyle(fontSize: 12, color: Nocturne.muted(.55)),
               ),
             ),

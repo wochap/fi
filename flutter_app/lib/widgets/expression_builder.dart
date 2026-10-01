@@ -1,7 +1,8 @@
 import 'dart:async';
 
+import 'package:fi/l10n/error_text.dart';
+import 'package:fi/l10n/l10n.dart';
 import 'package:fi/theme/fi_icons.dart';
-import 'package:fi/controllers.dart';
 import 'package:fi/exact_format.dart';
 import 'package:fi/help_button.dart';
 import 'package:fi/help_copy.dart';
@@ -92,25 +93,27 @@ final class AbsNode extends ExprNode {
   final ExprNode child;
 }
 
-/// Why a tree cannot be submitted yet, keyed by node path. Empty when the tree is complete.
-Map<String, String> incompleteNodes(ExprNode node, [String path = r'$']) =>
+/// The leaves that keep a tree from being submitted yet, keyed by node path. Empty when the tree
+/// is complete. [incompleteText] words each one.
+Map<String, ExprNode> incompleteNodes(ExprNode node, [String path = r'$']) =>
     switch (node) {
-      FieldLeaf(fieldId: null) => {path: 'Pick a field.'},
+      FieldLeaf(fieldId: null) => {path: node},
       FieldLeaf() => const {},
       ConstantLeaf(:final text, :final scale) =>
-        _parseConstant(text, scale) == null
-            ? {
-                path: scale == null
-                    ? 'Enter a whole number.'
-                    : 'Enter a number with at most $scale decimals.',
-              }
-            : const {},
+        _parseConstant(text, scale) == null ? {path: node} : const {},
       BinaryNode(:final left, :final right) => {
         ...incompleteNodes(left, '$path.left'),
         ...incompleteNodes(right, '$path.right'),
       },
       AbsNode(:final child) => incompleteNodes(child, '$path.expression'),
     };
+
+/// Why [leaf] (an entry of [incompleteNodes]) is incomplete.
+String incompleteText(AppLocalizations l, ExprNode leaf) => switch (leaf) {
+  ConstantLeaf(scale: null) => l.exprWholeNumberIssue,
+  ConstantLeaf(:final scale?) => l.exprDecimalsIssue(scale),
+  _ => l.exprPickFieldIssue,
+};
 
 int? _parseConstant(String text, int? scale) {
   final trimmed = text.trim();
@@ -310,17 +313,18 @@ ExprNode replaceAt(ExprNode root, String path, ExprNode replacement) {
 String _parentPath(String path) => path.substring(0, path.lastIndexOf('.'));
 
 /// A human label for an inferred type, e.g. `Decimal, scale 2`, in the words of `fieldKindLabel`.
-String describeValueType(ValueTypeDto type) => switch (type.kind) {
-  ValueTypeKindDto.integer => 'Integer',
-  ValueTypeKindDto.fixedDecimal => 'Decimal, scale ${type.scale ?? 0}',
-  ValueTypeKindDto.duration => 'Duration',
-  ValueTypeKindDto.date => 'Date',
-  ValueTypeKindDto.dateTime => 'Date & time',
-  ValueTypeKindDto.boolean => 'Boolean',
-  ValueTypeKindDto.text => 'Text',
-  ValueTypeKindDto.enum_ => 'Choice',
-  ValueTypeKindDto.null_ => 'Empty',
-};
+String describeValueType(AppLocalizations l, ValueTypeDto type) =>
+    switch (type.kind) {
+      ValueTypeKindDto.integer => l.exprTypeInteger,
+      ValueTypeKindDto.fixedDecimal => l.exprTypeDecimal(type.scale ?? 0),
+      ValueTypeKindDto.duration => l.exprTypeDuration,
+      ValueTypeKindDto.date => l.exprTypeDate,
+      ValueTypeKindDto.dateTime => l.exprTypeDateTime,
+      ValueTypeKindDto.boolean => l.exprTypeBoolean,
+      ValueTypeKindDto.text => l.exprTypeText,
+      ValueTypeKindDto.enum_ => l.exprTypeChoice,
+      ValueTypeKindDto.null_ => l.exprTypeEmpty,
+    };
 
 /// What the builder currently holds, reported on every change and every inference answer.
 ///
@@ -444,7 +448,7 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
           _errorPath = path;
           _errorMessage = message;
         } else if (failure != null) {
-          _resultError = bridgeMessage(failure);
+          _resultError = bridgeMessage(context.l10n, failure);
         }
       });
       widget.onChanged(
@@ -558,11 +562,13 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
           FieldLeaf(:final fieldId) => [
             switch (_field(fieldId)) {
               final field? => Tag(field.name),
-              null => slot('field?'),
+              null => slot(context.l10n.exprSlotField),
             },
           ],
           ConstantLeaf(:final text) =>
-            text.trim().isEmpty ? [slot('number?')] : [symbol(text.trim())],
+            text.trim().isEmpty
+                ? [slot(context.l10n.exprSlotNumber)]
+                : [symbol(text.trim())],
           BinaryNode(:final operator, :final left, :final right) => [
             if (nested) symbol('(', paren),
             ...pieces(left, nested: true),
@@ -601,7 +607,7 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
 
   Widget _resultLine(BuildContext context) {
     final theme = Theme.of(context);
-    final (text, isError) = _resultText();
+    final (text, isError) = _resultText(context.l10n);
     final missing = incompleteNodes(root).length;
     return Row(
       children: [
@@ -628,29 +634,25 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
     );
   }
 
-  (String, bool) _resultText() {
+  (String, bool) _resultText(AppLocalizations l) {
     final missing = incompleteNodes(root).length;
-    if (missing > 0) {
-      return (
-        missing == 1
-            ? '1 term still needs a value'
-            : '$missing terms still need a value',
-        false,
-      );
-    }
+    if (missing > 0) return (l.exprTermsMissing(missing), false);
     if (_resultError case final error?) return (error, true);
     if (_errorMessage != null) {
-      return ('Result: not valid, see the highlighted part', true);
+      return (l.exprResultInvalid, true);
     }
-    if (_pending) return ('Result: checking…', false);
+    if (_pending) return (l.exprResultChecking, false);
     if (_inferred case final inferred?) {
       return (
-        'Result: ${describeValueType(inferred.valueType)}'
-            '${inferred.nullable ? ' · may be empty' : ''}',
+        inferred.nullable
+            ? l.exprResultTypeMaybeEmpty(
+                describeValueType(l, inferred.valueType),
+              )
+            : l.exprResultType(describeValueType(l, inferred.valueType)),
         false,
       );
     }
-    return ('Result: unknown', false);
+    return (l.exprResultUnknown, false);
   }
 
   Widget _card(
@@ -661,7 +663,13 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
   }) {
     final theme = Theme.of(context);
     final localIssue = switch (node) {
-      FieldLeaf() || ConstantLeaf() => incompleteNodes(node, path)[path],
+      FieldLeaf() || ConstantLeaf() => switch (incompleteNodes(
+        node,
+        path,
+      )[path]) {
+        final leaf? => incompleteText(context.l10n, leaf),
+        null => null,
+      },
       _ => null,
     };
     final error = path == _errorPath ? _errorMessage : null;
@@ -696,7 +704,7 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
               if (!parentIsAbs && node is! AbsNode)
                 IconButton(
                   key: Key('abs-$path'),
-                  tooltip: 'Absolute value',
+                  tooltip: context.l10n.exprAbsoluteValue,
                   icon: const Icon(FiIcons.unfold),
                   onPressed: () => _update(
                     replaceAt(root, path, AbsNode(node)),
@@ -706,7 +714,7 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
               if (_canWrapInOperator(path))
                 PopupMenuButton<ExprOperator>(
                   key: Key('add-operator-$path'),
-                  tooltip: 'Add operator',
+                  tooltip: context.l10n.exprAddOperator,
                   icon: const Icon(FiIcons.addCircle),
                   onSelected: (operator) => _wrapInOperator(path, operator),
                   itemBuilder: (_) => [
@@ -748,9 +756,9 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
         SegmentedButton<bool>(
           key: Key('leaf-kind-$path'),
           showSelectedIcon: false,
-          segments: const [
-            ButtonSegment(value: false, label: Text('Field')),
-            ButtonSegment(value: true, label: Text('Number')),
+          segments: [
+            ButtonSegment(value: false, label: Text(context.l10n.exprField)),
+            ButtonSegment(value: true, label: Text(context.l10n.exprNumber)),
           ],
           selected: {isConstant},
           onSelectionChanged: (selection) => _update(
@@ -768,7 +776,7 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
             child: FiSelect<String>.compact(
               key: Key('field-$path'),
               value: _field(fieldId)?.id,
-              hint: 'Pick a field',
+              hint: context.l10n.exprPickField,
               items: [
                 for (final field in _fields)
                   DropdownMenuItem(value: field.id, child: Text(field.name)),
@@ -789,7 +797,7 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
                 signed: true,
                 decimal: true,
               ),
-              label: 'Number',
+              label: context.l10n.exprNumber,
               onChanged: (value) => _update(
                 replaceAt(root, path, ConstantLeaf(text: value, scale: scale)),
               ),
@@ -801,11 +809,14 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
               key: Key('constant-scale-$path'),
               value: scale,
               items: [
-                const DropdownMenuItem<int?>(value: null, child: Text('Whole')),
+                DropdownMenuItem<int?>(
+                  value: null,
+                  child: Text(context.l10n.exprWhole),
+                ),
                 for (var i = 0; i <= 18; i++)
                   DropdownMenuItem<int?>(
                     value: i,
-                    child: Text('Decimal, scale $i'),
+                    child: Text(context.l10n.exprTypeDecimal(i)),
                   ),
               ],
               onChanged: (next) => _update(
@@ -848,10 +859,10 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
             ),
           ),
           if (node.operator == ExprOperator.divide)
-            ..._divideControls(node, path),
+            ..._divideControls(context, node, path),
           IconButton(
             key: Key('remove-$path'),
-            tooltip: 'Remove operator (keep the left side)',
+            tooltip: context.l10n.exprRemoveOperator,
             icon: const Icon(FiIcons.close),
             onPressed: () =>
                 _update(replaceAt(root, path, node.left), structural: true),
@@ -862,14 +873,18 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
     ],
   );
 
-  List<Widget> _divideControls(BinaryNode node, String path) => [
+  List<Widget> _divideControls(
+    BuildContext context,
+    BinaryNode node,
+    String path,
+  ) => [
     Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const Text('Scale'),
+        Text(context.l10n.exprScale),
         IconButton(
           key: Key('scale-down-$path'),
-          tooltip: 'Fewer decimals',
+          tooltip: context.l10n.exprFewerDecimals,
           icon: const Icon(FiIcons.remove),
           onPressed: node.outputScale <= 0
               ? null
@@ -884,7 +899,7 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
         Text('${node.outputScale}', key: Key('scale-$path')),
         IconButton(
           key: Key('scale-up-$path'),
-          tooltip: 'More decimals',
+          tooltip: context.l10n.exprMoreDecimals,
           icon: const Icon(FiIcons.add),
           onPressed: node.outputScale >= 18
               ? null
@@ -903,14 +918,14 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
       child: FiSelect<RoundingPolicyDto>.compact(
         key: Key('rounding-$path'),
         value: node.rounding,
-        items: const [
+        items: [
           DropdownMenuItem(
             value: RoundingPolicyDto.halfEven,
-            child: Text('Round half to even'),
+            child: Text(context.l10n.exprRoundHalfEven),
           ),
           DropdownMenuItem(
             value: RoundingPolicyDto.rejectInexact,
-            child: Text('Reject inexact'),
+            child: Text(context.l10n.queryRoundingRejectInexact),
           ),
         ],
         onChanged: (rounding) {
@@ -933,14 +948,14 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
               borderRadius: BorderRadius.circular(6),
               border: Border.all(color: Nocturne.accent),
             ),
-            child: const Row(
+            child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(FiIcons.formula, size: 12, color: Nocturne.accent),
-                SizedBox(width: 4),
+                const Icon(FiIcons.formula, size: 12, color: Nocturne.accent),
+                const SizedBox(width: 4),
                 Text(
-                  'Absolute value',
-                  style: TextStyle(fontSize: 11, color: Nocturne.accent),
+                  context.l10n.exprAbsoluteValue,
+                  style: const TextStyle(fontSize: 11, color: Nocturne.accent),
                 ),
               ],
             ),
@@ -948,13 +963,13 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              'of',
+              context.l10n.exprOf,
               style: TextStyle(fontSize: 13, color: Nocturne.muted(.55)),
             ),
           ),
           IconButton(
             key: Key('unabs-$path'),
-            tooltip: 'Remove absolute value',
+            tooltip: context.l10n.exprRemoveAbsolute,
             icon: const Icon(FiIcons.close),
             onPressed: () =>
                 _update(replaceAt(root, path, node.child), structural: true),

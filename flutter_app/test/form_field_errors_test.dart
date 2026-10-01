@@ -1,4 +1,5 @@
 import 'package:fi/controllers.dart';
+import 'package:fi/l10n/l10n.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/theme/form_errors.dart';
 import 'package:flutter/material.dart';
@@ -19,13 +20,14 @@ FieldDefinitionDto _field(
   bool required = false,
   FieldValueDto? defaultValue,
   int order = 0,
+  ValidationMetadataDto validation = const ValidationMetadataDto(),
 }) => FieldDefinitionDto(
   id: id,
   name: name,
   fieldType: FieldTypeDto(kind: kind),
   required_: required,
   defaultValue: defaultValue,
-  validation: const ValidationMetadataDto(),
+  validation: validation,
   display: const DisplayMetadataDto(
     multiline: false,
     slider: false,
@@ -60,7 +62,13 @@ FakeCollectionBridge _seeded({List<RecordDto> records = const []}) {
     description: '',
     fields: [
       _field(_title, 'Title', FieldTypeKindDto.text, required: true),
-      _field(_intensity, 'Intensity', FieldTypeKindDto.integer, order: 1),
+      _field(
+        _intensity,
+        'Intensity',
+        FieldTypeKindDto.integer,
+        order: 1,
+        validation: const ValidationMetadataDto(minInteger: 1, maxInteger: 10),
+      ),
       _field(
         _mood,
         'Mood',
@@ -323,11 +331,14 @@ void main() {
       BridgeIssueDto(fields: ['a', 'b'], code: 'invalid', message: 'Both'),
       BridgeIssueDto(fields: ['c'], code: 'invalid', message: 'Elsewhere'),
     ]);
-    expect(issues.of('a'), ['Required', 'Too long']);
-    expect(issues.form, ['Both']);
+    final en = lookupAppLocalizations(const Locale('en'));
+    final es = lookupAppLocalizations(const Locale('es'));
+    expect(issues.fieldLines(en, 'a'), ['Required', 'Length is not allowed']);
+    expect(issues.fieldLines(es, 'a').first, 'Obligatorio');
+    expect(issues.formLines(en), ['Both']);
     final restricted = issues.restrictTo({'a'});
     expect(restricted.of('c'), isEmpty);
-    expect(restricted.form, ['Both', 'Elsewhere']);
+    expect(restricted.formLines(en), ['Both', 'Elsewhere']);
     expect(
       FormIssues.from(
         const BridgeError(
@@ -336,7 +347,7 @@ void main() {
           message: 'Local data could not be saved or loaded.',
           resetResolvable: false,
         ),
-      ).form,
+      ).formLines(en),
       ['Local data could not be saved or loaded.'],
     );
   });

@@ -5,6 +5,7 @@ import 'package:fi/pairing_card.dart';
 import 'package:fi/platform_capabilities.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/ui_prefs.dart';
+import 'package:fi/l10n/l10n.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -591,7 +592,11 @@ void main() {
         'Pairing turns itself off after 2 minutes.',
       );
       expect(
-        find.text(PairingCard.discoveryOffNote),
+        find.text(
+          PairingCard.discoveryOffNote(
+            lookupAppLocalizations(const Locale('en')),
+          ),
+        ),
         discoverable ? findsNothing : findsOneWidget,
       );
       final start = tester.widget<ButtonStyleButton>(

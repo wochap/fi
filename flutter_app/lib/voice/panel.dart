@@ -1,10 +1,10 @@
+import 'package:fi/l10n/l10n.dart';
 import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/theme/nocturne.dart';
 import 'package:fi/voice/controller.dart';
 import 'package:fi/voice/engine.dart';
 import 'package:fi/voice/example.dart';
 import 'package:fi/voice/mic_button.dart';
-import 'package:fi/voice/model_strings.dart';
 import 'package:fi/voice/models_card.dart';
 import 'package:fi/voice/services.dart';
 import 'package:flutter/material.dart';
@@ -42,11 +42,11 @@ Widget _announced(String text, {TextStyle style = _title, Key? key}) =>
       child: Text(text, key: key, style: style),
     );
 
-String _ordinal(int n) => switch (n) {
-  1 => '1st',
-  2 => '2nd',
-  3 => '3rd',
-  _ => '${n}th',
+String _ordinal(AppLocalizations l, int n) => switch (n) {
+  1 => l.voiceOrdinalFirst,
+  2 => l.voiceOrdinalSecond,
+  3 => l.voiceOrdinalThird,
+  _ => l.voiceOrdinalOther(n),
 };
 
 /// The voice slot at the top of the New record sheet: the one-time tip, first-use setup,
@@ -120,18 +120,15 @@ class _VoicePanelState extends State<VoicePanel> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Fill by voice', style: _title),
+              Text(context.l10n.voiceFillByVoice, style: _title),
               const SizedBox(height: 2),
-              Text(
-                'Tap the mic below and say the details. You review before saving.',
-                style: _muted(.6),
-              ),
+              Text(context.l10n.voiceTipLine, style: _muted(.6)),
             ],
           ),
         ),
         IconButton(
           key: const Key('voice-tip-dismiss'),
-          tooltip: 'Dismiss tip',
+          tooltip: context.l10n.voiceDismissTip,
           onPressed: () => c.services.prefs.dismissTip(),
           icon: Icon(FiIcons.close, size: 18, color: Nocturne.muted(.6)),
         ),
@@ -196,25 +193,19 @@ class _VoicePanelState extends State<VoicePanel> {
           spacing: 4,
           children: [
             _announced(
-              'Speak to fill records',
+              context.l10n.voicePrimerTitle,
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
             ),
-            Text(
-              'Audio is processed on this device and never saved. English only for now.',
-              style: _muted(.7, 13),
-            ),
+            Text(context.l10n.voicePrivacyLine, style: _muted(.7, 13)),
           ],
         ),
-        Text(
-          'Next, Android will ask for microphone access.',
-          style: _muted(.55),
-        ),
+        Text(context.l10n.voicePrimerNext, style: _muted(.55)),
         _twoButtons(
           secondaryKey: const Key('voice-primer-not-now'),
-          secondary: 'Not now',
+          secondary: context.l10n.voiceNotNow,
           onSecondary: c.primerNotNow,
           primaryKey: const Key('voice-primer-continue'),
-          primary: 'Continue',
+          primary: context.l10n.voiceContinue,
           onPrimary: c.primerContinue,
         ),
       ],
@@ -227,7 +218,7 @@ class _VoicePanelState extends State<VoicePanel> {
     }
     final status = c.services.models.status;
     final size = formatBytes(status.remainingBytes);
-    final language = ModelStrings.languageName(status.speechLanguage);
+    final language = modelLanguageName(context.l10n, status.speechLanguage);
     final mobile = _network == NetworkKind.mobile;
     final error = c.downloadError;
     return Container(
@@ -244,7 +235,7 @@ class _VoicePanelState extends State<VoicePanel> {
               const SizedBox(width: 10),
               Expanded(
                 child: _announced(
-                  ModelStrings.offerTitle,
+                  context.l10n.modelOfferTitle,
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w500,
@@ -253,7 +244,10 @@ class _VoicePanelState extends State<VoicePanel> {
               ),
             ],
           ),
-          Text(ModelStrings.offerLine(language, size), style: _muted(.7, 13)),
+          Text(
+            context.l10n.modelOfferLine(language, size),
+            style: _muted(.7, 13),
+          ),
           Column(
             spacing: 6,
             children: [
@@ -266,7 +260,7 @@ class _VoicePanelState extends State<VoicePanel> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            ModelStrings.roleName(file.role),
+                            modelRoleName(context.l10n, file.role),
                             style: _muted(.55, 11),
                           ),
                           Text(
@@ -295,19 +289,19 @@ class _VoicePanelState extends State<VoicePanel> {
                   icon: mobile ? FiIcons.mobileData : FiIcons.wifi,
                   iconColor: mobile ? Nocturne.accent300 : Nocturne.muted(.7),
                   text: mobile
-                      ? ModelStrings.onMobileData
-                      : ModelStrings.onWifi,
-                  trailing: mobile ? ModelStrings.wifiRecommended : null,
+                      ? context.l10n.modelOnMobileData
+                      : context.l10n.modelOnWifi,
+                  trailing: mobile ? context.l10n.modelWifiRecommended : null,
                   trailingColor: Nocturne.accent300,
                 ),
               _infoRow(
                 key: const Key('voice-offer-storage'),
                 icon: FiIcons.storage,
                 iconColor: Nocturne.muted(.7),
-                text: ModelStrings.storage,
+                text: context.l10n.modelStorage,
                 trailing: _freeBytes == null
                     ? null
-                    : ModelStrings.free(formatBytes(_freeBytes!)),
+                    : context.l10n.modelFree(formatBytes(_freeBytes!)),
                 trailingColor: Nocturne.muted(.6),
               ),
             ],
@@ -315,10 +309,10 @@ class _VoicePanelState extends State<VoicePanel> {
           if (error != null) _downloadErrorLine(error),
           _twoButtons(
             secondaryKey: const Key('voice-offer-later'),
-            secondary: ModelStrings.later,
+            secondary: context.l10n.modelLater,
             onSecondary: c.offerLater,
             primaryKey: const Key('voice-offer-download'),
-            primary: ModelStrings.download(size),
+            primary: context.l10n.modelDownload(size),
             primaryIcon: FiIcons.download,
             onPrimary: c.offerDownload,
           ),
@@ -329,12 +323,13 @@ class _VoicePanelState extends State<VoicePanel> {
 
   Widget _downloadErrorLine(ModelErrorDto error) {
     final (title, line) = modelFailureText(
+      context.l10n,
       c.services.models.status.error == error
           ? c.services.models.status
           : modelStatusOf(ModelStatusKindDto.failed, error: error),
     );
     return Text(
-      ModelStrings.errorLine(title, line),
+      context.l10n.modelErrorLine(title, line),
       key: const Key('voice-download-error'),
       style: const TextStyle(fontSize: 12, color: Nocturne.error),
     );
@@ -368,10 +363,10 @@ class _VoicePanelState extends State<VoicePanel> {
     final stopped = paused || status.kind == ModelStatusKindDto.failed;
     final verifying = status.kind == ModelStatusKindDto.verifying;
     final title = switch (status.kind) {
-      ModelStatusKindDto.reconnecting => ModelStrings.reconnectingShort,
-      ModelStatusKindDto.verifying => ModelStrings.verifyingTitle,
-      ModelStatusKindDto.paused => ModelStrings.pausedTitle,
-      _ => ModelStrings.downloadingTitle,
+      ModelStatusKindDto.reconnecting => context.l10n.modelReconnectingShort,
+      ModelStatusKindDto.verifying => context.l10n.modelVerifyingTitle,
+      ModelStatusKindDto.paused => context.l10n.modelPausedTitle,
+      _ => context.l10n.modelDownloadingTitle,
     };
     final error = c.downloadError;
     return Container(
@@ -391,8 +386,8 @@ class _VoicePanelState extends State<VoicePanel> {
                 IconButton(
                   key: const Key('voice-download-pause'),
                   tooltip: stopped
-                      ? ModelStrings.resumeDownload
-                      : ModelStrings.pauseDownload,
+                      ? context.l10n.modelResumeDownload
+                      : context.l10n.modelPauseDownload,
                   onPressed: stopped ? c.resumeDownload : c.pauseDownload,
                   icon: Icon(
                     stopped ? FiIcons.download : FiIcons.pause,
@@ -401,7 +396,7 @@ class _VoicePanelState extends State<VoicePanel> {
                 ),
               IconButton(
                 key: const Key('voice-download-hide'),
-                tooltip: ModelStrings.hide,
+                tooltip: context.l10n.modelHide,
                 onPressed: c.hideDownload,
                 icon: Icon(
                   FiIcons.collapse,
@@ -412,8 +407,8 @@ class _VoicePanelState extends State<VoicePanel> {
             ],
           ),
           Semantics(
-            label: 'Download progress',
-            value: '$percent%',
+            label: context.l10n.voiceDownloadProgressLabel,
+            value: context.l10n.modelPercent(percent),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(2),
               child: LinearProgressIndicator(
@@ -430,7 +425,7 @@ class _VoicePanelState extends State<VoicePanel> {
             children: [
               Expanded(
                 child: Text(
-                  ModelStrings.progressLine(
+                  context.l10n.modelProgressLine(
                     formatBytes(status.doneBytes),
                     formatBytes(status.totalBytes),
                     percent,
@@ -440,11 +435,11 @@ class _VoicePanelState extends State<VoicePanel> {
                 ),
               ),
               if (status.secondsLeft case final seconds? when !stopped)
-                Text(formatTimeLeft(seconds), style: _muted(.6)),
+                Text(formatTimeLeft(context.l10n, seconds), style: _muted(.6)),
             ],
           ),
           if (error != null) _downloadErrorLine(error),
-          Text(ModelStrings.keepFilling, style: _muted(.55)),
+          Text(context.l10n.modelKeepFilling, style: _muted(.55)),
         ],
       ),
     );
@@ -478,7 +473,7 @@ class _VoicePanelState extends State<VoicePanel> {
                 ),
               ),
               const SizedBox(width: 10),
-              Expanded(child: _announced('Listening')),
+              Expanded(child: _announced(context.l10n.voiceListening)),
               Text(
                 timer,
                 key: const Key('voice-timer'),
@@ -496,7 +491,7 @@ class _VoicePanelState extends State<VoicePanel> {
               key: const Key('voice-example'),
               TextSpan(
                 children: [
-                  const TextSpan(text: 'Try: '),
+                  TextSpan(text: context.l10n.voiceTry),
                   TextSpan(
                     text: '“$example”',
                     style: const TextStyle(color: Nocturne.accent100),
@@ -509,14 +504,14 @@ class _VoicePanelState extends State<VoicePanel> {
             children: [
               Expanded(
                 child: Text(
-                  'Tap stop when done, or hold the mic to talk',
+                  context.l10n.voiceListeningHint,
                   style: _muted(.55),
                 ),
               ),
               TextButton(
                 key: const Key('voice-cancel'),
                 onPressed: c.cancel,
-                child: const Text('Cancel'),
+                child: Text(context.l10n.commonCancel),
               ),
             ],
           ),
@@ -565,18 +560,26 @@ class _VoicePanelState extends State<VoicePanel> {
         children: [
           Semantics(
             liveRegion: true,
-            label: transcribed ? 'Filling fields' : 'Transcribing',
+            label: transcribed
+                ? context.l10n.voiceFillingFields
+                : context.l10n.voiceTranscribing,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               spacing: 8,
               children: [
                 step(
-                  transcribed ? 'Transcribed' : 'Transcribing…',
+                  transcribed
+                      ? context.l10n.voiceTranscribed
+                      : context.l10n.voiceTranscribingStep,
                   done: transcribed,
                   active: !transcribed,
                 ),
                 if (transcribed)
-                  step('Filling fields…', done: false, active: true),
+                  step(
+                    context.l10n.voiceFillingFieldsStep,
+                    done: false,
+                    active: true,
+                  ),
               ],
             ),
           ),
@@ -595,11 +598,16 @@ class _VoicePanelState extends State<VoicePanel> {
             ),
           Row(
             children: [
-              Expanded(child: Text('Usually 4–8 seconds', style: _muted(.55))),
+              Expanded(
+                child: Text(
+                  context.l10n.voiceUsuallySeconds,
+                  style: _muted(.55),
+                ),
+              ),
               TextButton(
                 key: const Key('voice-cancel'),
                 onPressed: c.cancel,
-                child: const Text('Cancel'),
+                child: Text(context.l10n.commonCancel),
               ),
             ],
           ),
@@ -613,7 +621,10 @@ class _VoicePanelState extends State<VoicePanel> {
     onPressed: () => setState(() => _heardOpen = !_heardOpen),
     iconAlignment: IconAlignment.end,
     icon: Icon(_heardOpen ? FiIcons.collapse : FiIcons.expand, size: 14),
-    label: Text('Heard', style: TextStyle(color: Nocturne.muted(.65))),
+    label: Text(
+      context.l10n.voiceHeard,
+      style: TextStyle(color: Nocturne.muted(.65)),
+    ),
   );
 
   Widget _heardList() => Padding(
@@ -628,7 +639,7 @@ class _VoicePanelState extends State<VoicePanel> {
             TextSpan(
               children: [
                 TextSpan(
-                  text: '${_ordinal(index + 1).toUpperCase()} ',
+                  text: '${_ordinal(context.l10n, index + 1).toUpperCase()} ',
                   style: TextStyle(
                     fontSize: 11,
                     letterSpacing: .66,
@@ -660,13 +671,15 @@ class _VoicePanelState extends State<VoicePanel> {
   Widget? _keptLine() => c.lastKeptTyped.isEmpty
       ? null
       : Text(
-          'Your ${c.lastKeptTyped.length == 1 ? 'edit' : 'edits'} to ${c.namesOf(c.lastKeptTyped)} '
-          '${c.lastKeptTyped.length == 1 ? 'was' : 'were'} kept.',
+          context.l10n.voiceKept(
+            c.lastKeptTyped.length,
+            c.namesOf(c.lastKeptTyped),
+          ),
           key: const Key('voice-kept'),
           style: _muted(.55),
         );
 
-  String _filledCount(int n) => 'Filled $n ${n == 1 ? 'field' : 'fields'}';
+  String _filledCount(int n) => context.l10n.voiceFilledCount(n);
 
   Widget _speakAgain(String label) => OutlinedButton.icon(
     key: const Key('voice-speak-again'),
@@ -694,9 +707,9 @@ class _VoicePanelState extends State<VoicePanel> {
         Row(
           children: [
             Expanded(
-              child: Text('Check the fields, then save.', style: _muted(.55)),
+              child: Text(context.l10n.voiceCheckThenSave, style: _muted(.55)),
             ),
-            _speakAgain('Speak again'),
+            _speakAgain(context.l10n.voiceSpeakAgain),
           ],
         ),
       ],
@@ -715,13 +728,13 @@ class _VoicePanelState extends State<VoicePanel> {
           FiIcons.needed,
           c.stillNeedLine,
           trailing: Text(
-            '${c.round} of $maxAskingRounds',
+            context.l10n.voiceRound(c.round, maxAskingRounds),
             key: const Key('voice-round'),
             style: _muted(.5, 11),
           ),
         ),
         Text(
-          '${_filledCount(c.lastApplied.length)}. Say the rest, or type into the marked fields.',
+          context.l10n.voiceNeedLine(_filledCount(c.lastApplied.length)),
           style: _muted(.6),
         ),
         ?_keptLine(),
@@ -732,7 +745,7 @@ class _VoicePanelState extends State<VoicePanel> {
             style: OutlinedButton.styleFrom(minimumSize: const Size(0, 44)),
             onPressed: c.begin,
             icon: const Icon(FiIcons.microphone, size: 18),
-            label: const Text('Answer by voice'),
+            label: Text(context.l10n.voiceAnswerByVoice),
           ),
         ),
       ],
@@ -749,12 +762,11 @@ class _VoicePanelState extends State<VoicePanel> {
       children: [
         _headline(
           FiIcons.needed,
-          "Couldn't get the ${c.missingRequired.map((field) => field.name).join(', ')}",
+          context.l10n.voiceCouldntGet(
+            c.missingRequired.map((field) => field.name).join(', '),
+          ),
         ),
-        Text(
-          'Type it in the marked field, then save. The mic still works if you want to try again.',
-          style: _muted(.6),
-        ),
+        Text(context.l10n.voiceExhaustedLine, style: _muted(.6)),
       ],
     ),
   );
@@ -769,7 +781,7 @@ class _VoicePanelState extends State<VoicePanel> {
       children: [
         _headline(
           FiIcons.sparkle,
-          'Updated ${c.namesOf(c.lastApplied)}',
+          context.l10n.voiceUpdated(c.namesOf(c.lastApplied)),
           trailing: _heardToggle(),
         ),
         if (_heardOpen) _heardList(),
@@ -790,8 +802,8 @@ class _VoicePanelState extends State<VoicePanel> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Speaking',
+              Text(
+                context.l10n.voiceSpeaking,
                 style: TextStyle(fontSize: 12, color: Nocturne.accent200),
               ),
               const SizedBox(height: 2),
@@ -801,7 +813,7 @@ class _VoicePanelState extends State<VoicePanel> {
         ),
         IconButton(
           key: const Key('voice-mute'),
-          tooltip: 'Mute spoken feedback',
+          tooltip: context.l10n.voiceMute,
           onPressed: c.muteSpeech,
           icon: const Icon(FiIcons.mute, size: 20),
         ),
@@ -811,7 +823,8 @@ class _VoicePanelState extends State<VoicePanel> {
 
   Widget _error(VoiceFailureKind kind) {
     final openSettings = VoiceScope.openSettingsOf(context);
-    final copy = voiceErrorCopy(kind);
+    final l = context.l10n;
+    final copy = voiceErrorCopy(l, kind);
     Widget text(String label, VoidCallback? onPressed, String key) =>
         TextButton(key: Key(key), onPressed: onPressed, child: Text(label));
     Widget primary(String label, VoidCallback? onPressed, String key) =>
@@ -823,34 +836,34 @@ class _VoicePanelState extends State<VoicePanel> {
         );
     final actions = switch (kind) {
       VoiceFailureKind.noSpeech => [
-        text('Dismiss', c.dismissError, 'voice-error-dismiss'),
-        primary('Try again', c.retry, 'voice-error-retry'),
+        text(l.voiceDismiss, c.dismissError, 'voice-error-dismiss'),
+        primary(l.commonTryAgain, c.retry, 'voice-error-retry'),
       ],
       VoiceFailureKind.nothingMatched ||
       VoiceFailureKind.micBusy ||
       VoiceFailureKind.lowMemory ||
       VoiceFailureKind.cancelled => [
-        primary('Try again', c.retry, 'voice-error-retry'),
+        primary(l.commonTryAgain, c.retry, 'voice-error-retry'),
       ],
       VoiceFailureKind.permissionDenied => [
-        text('Not now', c.dismissError, 'voice-error-dismiss'),
+        text(l.voiceNotNow, c.dismissError, 'voice-error-dismiss'),
         primary(
-          'Open settings',
+          l.voiceOpenSettings,
           c.openPermissionSettings,
           'voice-error-open-settings',
         ),
       ],
       VoiceFailureKind.modelLoadFailed => [
-        text('Settings', () {
+        text(l.voiceSettings, () {
           c.dismissError();
           Navigator.maybePop(context);
           openSettings?.call();
         }, 'voice-error-settings'),
-        primary('Retry', c.retry, 'voice-error-retry'),
+        primary(l.commonRetry, c.retry, 'voice-error-retry'),
       ],
       VoiceFailureKind.interruptedBackground ||
       VoiceFailureKind.interruptedCall => [
-        primary('Speak again', c.retry, 'voice-error-retry'),
+        primary(l.voiceSpeakAgain, c.retry, 'voice-error-retry'),
       ],
     };
     return Container(
@@ -884,55 +897,53 @@ class _VoicePanelState extends State<VoicePanel> {
 
 /// Title, line and icon of each voice error panel (mock 7j).
 ({IconData icon, String title, String line}) voiceErrorCopy(
+  AppLocalizations l,
   VoiceFailureKind kind,
 ) => switch (kind) {
   VoiceFailureKind.noSpeech => (
     icon: FiIcons.noSpeech,
-    title: "Didn't hear anything",
-    line: "Check the mic isn't covered, then try again.",
+    title: l.voiceErrorNoSpeechTitle,
+    line: l.voiceErrorNoSpeechLine,
   ),
   VoiceFailureKind.nothingMatched => (
     icon: FiIcons.nothingMatched,
-    title: 'Nothing matched',
-    line:
-        "I couldn't match anything to this collection's fields. Try naming a field, like “amount 12.50”.",
+    title: l.voiceErrorNothingMatchedTitle,
+    line: l.voiceErrorNothingMatchedLine,
   ),
   VoiceFailureKind.permissionDenied => (
     icon: FiIcons.microphoneOff,
-    title: 'Microphone access is off',
-    line:
-        'Allow microphone access in Android settings to fill by voice. You can keep typing.',
+    title: l.voiceErrorPermissionDeniedTitle,
+    line: l.voiceErrorPermissionDeniedLine,
   ),
   VoiceFailureKind.micBusy => (
     icon: FiIcons.microphoneBusy,
-    title: 'Microphone is busy',
-    line: 'Another app is using the microphone. Close it, then try again.',
+    title: l.voiceErrorMicBusyTitle,
+    line: l.voiceErrorMicBusyLine,
   ),
   VoiceFailureKind.modelLoadFailed => (
     icon: FiIcons.modelBroken,
-    title: "Voice model couldn't load",
-    line:
-        'The model file may be damaged. Retry, or re-download it in Settings.',
+    title: l.voiceErrorModelLoadFailedTitle,
+    line: l.voiceErrorModelLoadFailedLine,
   ),
   VoiceFailureKind.lowMemory => (
     icon: FiIcons.lowMemory,
-    title: 'Not enough memory',
-    line: 'Close other apps and try again. Your form is kept.',
+    title: l.voiceErrorLowMemoryTitle,
+    line: l.voiceErrorLowMemoryLine,
   ),
   VoiceFailureKind.interruptedBackground => (
     icon: FiIcons.backgrounded,
-    title: 'Recording stopped',
-    line: 'Fi went to the background, so recording stopped. Nothing was kept.',
+    title: l.voiceErrorInterruptedBackgroundTitle,
+    line: l.voiceErrorInterruptedBackgroundLine,
   ),
   VoiceFailureKind.interruptedCall => (
     icon: FiIcons.callInterrupted,
-    title: 'Stopped for a call',
-    line: 'Recording stopped when a call came in. Nothing was kept.',
+    title: l.voiceErrorInterruptedCallTitle,
+    line: l.voiceErrorInterruptedCallLine,
   ),
   VoiceFailureKind.cancelled => (
     icon: FiIcons.info,
-    title: 'Stopped',
-    line: 'Nothing was kept.',
+    title: l.voiceErrorCancelledTitle,
+    line: l.voiceErrorCancelledLine,
   ),
 };
 
@@ -1032,7 +1043,7 @@ class VoiceEvidencePopover extends StatelessWidget {
     final (before, match, after) = split(transcript, evidence);
     return Semantics(
       container: true,
-      label: 'What was heard',
+      label: context.l10n.voiceWhatWasHeard,
       child: Container(
         padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
         decoration: BoxDecoration(
@@ -1049,7 +1060,7 @@ class VoiceEvidencePopover extends StatelessWidget {
                 const Icon(FiIcons.voice, size: 12, color: Nocturne.accent),
                 const SizedBox(width: 6),
                 Text(
-                  'HEARD',
+                  context.l10n.voiceHeardCaps,
                   style: TextStyle(
                     fontSize: 11,
                     letterSpacing: .66,
@@ -1081,13 +1092,13 @@ class VoiceEvidencePopover extends StatelessWidget {
                 TextButton(
                   key: const Key('voice-evidence-clear'),
                   onPressed: onClear,
-                  child: const Text('Clear field'),
+                  child: Text(context.l10n.voiceClearField),
                 ),
                 const Spacer(),
                 TextButton(
                   key: const Key('voice-evidence-done'),
                   onPressed: onDone,
-                  child: const Text('Done'),
+                  child: Text(context.l10n.commonDone),
                 ),
               ],
             ),

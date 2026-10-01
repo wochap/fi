@@ -1,3 +1,4 @@
+import 'package:fi/l10n/app_localizations.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:intl/intl.dart';
 
@@ -10,8 +11,8 @@ import 'package:intl/intl.dart';
 sealed class ExactValue {
   const ExactValue();
 
-  /// The exact human-readable representation.
-  String get label;
+  /// The exact human-readable representation; [decimalSeparator] is the active locale's.
+  String label(AppLocalizations l, {String decimalSeparator = '.'});
 
   /// The value as a drawing coordinate. The only place a double appears.
   double get coordinate;
@@ -22,7 +23,7 @@ sealed class ExactValue {
 final class ExactMissing extends ExactValue {
   const ExactMissing();
   @override
-  String get label => '—';
+  String label(AppLocalizations l, {String decimalSeparator = '.'}) => '—';
   @override
   double get coordinate => 0;
   @override
@@ -30,9 +31,10 @@ final class ExactMissing extends ExactValue {
 }
 
 final class ExactText extends ExactValue {
-  const ExactText(this.label);
+  const ExactText(this.text);
+  final String text;
   @override
-  final String label;
+  String label(AppLocalizations l, {String decimalSeparator = '.'}) => text;
   @override
   double get coordinate => 0;
   @override
@@ -43,7 +45,8 @@ final class ExactBoolean extends ExactValue {
   const ExactBoolean(this.value);
   final bool value;
   @override
-  String get label => value ? 'Yes' : 'No';
+  String label(AppLocalizations l, {String decimalSeparator = '.'}) =>
+      value ? l.commonYes : l.commonNo;
   @override
   double get coordinate => value ? 1 : 0;
   @override
@@ -58,7 +61,8 @@ final class ExactDecimal extends ExactValue {
   final int scale;
 
   @override
-  String get label => formatScaled(representation, scale);
+  String label(AppLocalizations l, {String decimalSeparator = '.'}) =>
+      formatScaled(representation, scale, decimalSeparator: decimalSeparator);
 
   @override
   double get coordinate => representation / pow10(scale);
@@ -75,12 +79,13 @@ final class ExactInteger extends ExactValue {
   final ExactIntegerFormatter? formatter;
 
   @override
-  String get label => switch (formatter) {
-    null => '$value',
-    ExactIntegerFormatter.date => formatDate(value),
-    ExactIntegerFormatter.dateTime => formatDateTime(value),
-    ExactIntegerFormatter.duration => formatDuration(value),
-  };
+  String label(AppLocalizations l, {String decimalSeparator = '.'}) =>
+      switch (formatter) {
+        null => '$value',
+        ExactIntegerFormatter.date => formatDate(value),
+        ExactIntegerFormatter.dateTime => formatDateTime(value),
+        ExactIntegerFormatter.duration => formatDuration(value),
+      };
 
   @override
   double get coordinate => value.toDouble();
@@ -128,20 +133,30 @@ ExactValue exactFromTypedValue(
 }
 
 /// Formats a scaled integer exactly, without a double intermediate.
-String formatScaled(int representation, int scale) {
+String formatScaled(
+  int representation,
+  int scale, {
+  String decimalSeparator = '.',
+}) {
   final negative = representation < 0;
   final digits = BigInt.from(
     representation,
   ).abs().toString().padLeft(scale + 1, '0');
   final value = scale == 0
       ? digits
-      : '${digits.substring(0, digits.length - scale)}.${digits.substring(digits.length - scale)}';
+      : '${digits.substring(0, digits.length - scale)}$decimalSeparator${digits.substring(digits.length - scale)}';
   return negative ? '-$value' : value;
 }
 
 /// Parses a decimal string into an exact scaled integer, rejecting precision the scale cannot hold.
-int? parseScaled(String input, int scale) {
-  final match = RegExp(r'^([+-]?)([0-9]+)(?:\.([0-9]*))?$').firstMatch(input);
+/// Accepts [decimalSeparator] and `.` as the separator.
+int? parseScaled(String input, int scale, {String decimalSeparator = '.'}) {
+  final normalized = decimalSeparator == '.'
+      ? input
+      : input.replaceFirst(decimalSeparator, '.');
+  final match = RegExp(
+    r'^([+-]?)([0-9]+)(?:\.([0-9]*))?$',
+  ).firstMatch(normalized);
   if (match == null) return null;
   final fraction = match.group(3) ?? '';
   if (fraction.length > scale) return null;
@@ -175,15 +190,20 @@ String formatDateTime(int epochMs) => DateFormat(
   'yyyy-MM-dd HH:mm',
 ).format(DateTime.fromMillisecondsSinceEpoch(epochMs, isUtc: true).toLocal());
 
-/// A record timestamp for reading rather than editing: `Sep 22, 2026 · 14:05` in local time, or
-/// `Sep 22 · 14:05` when [short]. Editors keep [formatDateTime]'s sortable form.
-String formatDateTimeHuman(int epochMs, {bool short = false}) => DateFormat(
-  short ? 'MMM d · HH:mm' : 'MMM d, y · HH:mm',
-).format(DateTime.fromMillisecondsSinceEpoch(epochMs, isUtc: true).toLocal());
+/// A record timestamp for reading rather than editing, in the active locale: `Sep 22, 2026 · 14:05`
+/// in local time, or `Sep 22 · 14:05` when [short]. Editors keep [formatDateTime]'s sortable form.
+String formatDateTimeHuman(int epochMs, {bool short = false}) {
+  final time = DateTime.fromMillisecondsSinceEpoch(
+    epochMs,
+    isUtc: true,
+  ).toLocal();
+  final date = short ? DateFormat.MMMd() : DateFormat.yMMMd();
+  return '${date.format(time)} · ${DateFormat.Hm().format(time)}';
+}
 
-/// A calendar day for reading: `Sep 22, 2026`, or `Sep 22` when [short].
+/// A calendar day for reading, in the active locale: `Sep 22, 2026`, or `Sep 22` when [short].
 String formatDateHuman(int epochDays, {bool short = false}) =>
-    DateFormat(short ? 'MMM d' : 'MMM d, y').format(
+    (short ? DateFormat.MMMd() : DateFormat.yMMMd()).format(
       DateTime.fromMillisecondsSinceEpoch(
         epochDays * Duration.millisecondsPerDay,
         isUtc: true,

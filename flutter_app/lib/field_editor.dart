@@ -1,4 +1,5 @@
 import 'package:clock/clock.dart';
+import 'package:fi/l10n/l10n.dart';
 import 'package:fi/controllers.dart';
 import 'package:fi/exact_format.dart';
 import 'package:fi/field_registry.dart';
@@ -28,19 +29,28 @@ enum FieldEditorHost {
 
 /// An option chip of the field editor. Each applies to some types only ([_chipsFor]).
 enum _Chip {
-  required('Required', 'chip-required', HelpId.fieldRequired),
-  multiline('Multiline', 'chip-multiline', HelpId.fieldMultiline),
-  lengthLimits('Length limits', 'chip-length', HelpId.fieldMinMaxLength),
-  range('Range', 'chip-range', HelpId.fieldMinMax),
-  slider('Show as slider', 'field-slider', HelpId.fieldSlider),
-  dateRange('Date range', 'chip-date-range', HelpId.fieldMinMax),
-  defaultValue('Default value', 'chip-default', HelpId.fieldDefault);
+  required('chip-required', HelpId.fieldRequired),
+  multiline('chip-multiline', HelpId.fieldMultiline),
+  lengthLimits('chip-length', HelpId.fieldMinMaxLength),
+  range('chip-range', HelpId.fieldMinMax),
+  slider('field-slider', HelpId.fieldSlider),
+  dateRange('chip-date-range', HelpId.fieldMinMax),
+  defaultValue('chip-default', HelpId.fieldDefault);
 
-  const _Chip(this.label, this.key, this.help);
+  const _Chip(this.key, this.help);
 
-  final String label;
   final String key;
   final HelpId help;
+
+  String label(AppLocalizations l) => switch (this) {
+    required => l.commonRequired,
+    multiline => l.fieldEditorChipMultiline,
+    lengthLimits => l.fieldEditorChipLengthLimits,
+    range => l.fieldEditorChipRange,
+    slider => l.fieldEditorChipSlider,
+    dateRange => l.fieldEditorChipDateRange,
+    defaultValue => l.fieldEditorChipDefaultValue,
+  };
 }
 
 List<_Chip> _chipsFor(FieldTypeKindDto kind) => [
@@ -70,9 +80,9 @@ const _typeGrid = [
 
 /// A field's kind and its main settings in a few words, for the schema sheet's rows: "Integer ·
 /// 5–30", "Text · multiline", "Decimal · 2 dp", and for a Choice field its option labels in order.
-String fieldSummary(FieldDefinitionDto field) {
+String fieldSummary(AppLocalizations l, FieldDefinitionDto field) {
   final kind = field.fieldType.kind;
-  final label = fieldKindLabel(kind);
+  final label = fieldKindLabel(l, kind);
   final min = field.validation.minInteger;
   final max = field.validation.maxInteger;
   final detail = switch (kind) {
@@ -82,8 +92,11 @@ String fieldSummary(FieldDefinitionDto field) {
           ? null
           : options.map((option) => option.label).join(', ');
     }(),
-    FieldTypeKindDto.text when field.display.multiline => 'multiline',
-    FieldTypeKindDto.fixedDecimal => '${field.fieldType.scale ?? 0} dp',
+    FieldTypeKindDto.text when field.display.multiline =>
+      l.fieldEditorSummaryMultiline,
+    FieldTypeKindDto.fixedDecimal => l.fieldEditorSummaryScale(
+      field.fieldType.scale ?? 0,
+    ),
     FieldTypeKindDto.integer when min != null && max != null => '$min–$max',
     _ => null,
   };
@@ -91,12 +104,13 @@ String fieldSummary(FieldDefinitionDto field) {
 }
 
 /// A text of [label] characters count constraint, such as "4–8".
-String _lengthRange(int? min, int? max) => switch ((min, max)) {
-  (final min?, final max?) => '$min–$max',
-  (final min?, null) => 'at least $min',
-  (null, final max?) => 'at most $max',
-  _ => '',
-};
+String _lengthRange(AppLocalizations l, int? min, int? max) =>
+    switch ((min, max)) {
+      (final min?, final max?) => '$min–$max',
+      (final min?, null) => l.fieldEditorAtLeast(min),
+      (null, final max?) => l.fieldEditorAtMost(max),
+      _ => '',
+    };
 
 /// One Choice option as the field editor holds it until Save. [id] is the stored ID, or one made
 /// by [tempOptionId] for an option this editor added.
@@ -228,13 +242,15 @@ class _SettingsBlock extends StatelessWidget {
       children: [
         Row(
           children: [
-            Expanded(child: SectionLabel(chip.label)),
+            Expanded(child: SectionLabel(chip.label(context.l10n))),
             HelpButton(chip.help),
             FiIconButton(
               key: Key('close-${chip.key}'),
               icon: FiIcons.close,
               size: 14,
-              tooltip: 'Turn off ${chip.label}',
+              tooltip: context.l10n.fieldEditorTurnOff(
+                chip.label(context.l10n),
+              ),
               onPressed: onClose,
             ),
           ],
@@ -378,10 +394,10 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
     if (!slider || !_sliderAvailable || sliderStep.text.isEmpty) return null;
     final step = int.tryParse(sliderStep.text);
     if (step == null || step <= 0) {
-      return 'Step must be a positive whole number';
+      return context.l10n.fieldEditorStepPositive;
     }
     if ((maximum! - minimum!) % step != 0) {
-      return 'Step must divide the range from minimum to maximum exactly';
+      return context.l10n.fieldEditorStepDivides;
     }
     return null;
   }
@@ -506,6 +522,7 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
   /// range rules.
   String? get _defaultIssue {
     if (!open.contains(_Chip.defaultValue)) return null;
+    final l = context.l10n;
     final value = defaultValue;
     if (kind == FieldTypeKindDto.text && value?.textValue != null) {
       final min = int.tryParse(minLength.text);
@@ -514,10 +531,13 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
       if ((min != null && length < min) || (max != null && length > max)) {
         return switch ((min, max)) {
           (final min?, final max?) when min == max =>
-            'Default must be exactly $min characters.',
-          (final min?, final max?) => 'Default must be $min–$max characters.',
-          (final min?, null) => 'Default must be at least $min characters.',
-          (null, final max?) => 'Default must be at most $max characters.',
+            l.fieldEditorDefaultExactLength(min),
+          (final min?, final max?) => l.fieldEditorDefaultLengthBetween(
+            min,
+            max,
+          ),
+          (final min?, null) => l.fieldEditorDefaultMinLength(min),
+          (null, final max?) => l.fieldEditorDefaultMaxLength(max),
           _ => null,
         };
       }
@@ -531,10 +551,9 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
         final low = _boundText(minimum);
         final high = _boundText(maximum);
         return switch ((low, high)) {
-          (final low?, final high?) =>
-            'Default must be between $low and $high.',
-          (final low?, null) => 'Default must be at least $low.',
-          (null, final high?) => 'Default must be at most $high.',
+          (final low?, final high?) => l.fieldEditorDefaultBetween(low, high),
+          (final low?, null) => l.fieldEditorDefaultAtLeast(low),
+          (null, final high?) => l.fieldEditorDefaultAtMost(high),
           _ => null,
         };
       }
@@ -548,6 +567,8 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
     return const FieldRendererRegistry().displayText(
       _slotField('bound', ''),
       _boundValue(bound, kind, scale),
+      l: context.l10n,
+      decimalSeparator: decimalSeparatorOf(context),
     );
   }
 
@@ -556,22 +577,18 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
       context: context,
       builder: (dialog) => AlertDialog(
         key: const Key('required-confirmation'),
-        title: const Text('Make this field required?'),
-        content: Text(
-          '$missing ${missing == 1 ? 'record has' : 'records have'} no value for this field. '
-          '${missing == 1 ? 'It' : 'They'} will be marked invalid until you fill the field in. '
-          'Nothing is deleted.',
-        ),
+        title: Text(dialog.l10n.fieldEditorMakeRequiredTitle),
+        content: Text(dialog.l10n.fieldEditorMakeRequiredBody(missing)),
         actions: [
           TextButton(
             key: const Key('required-cancel'),
             onPressed: () => Navigator.pop(dialog, false),
-            child: const Text('Cancel'),
+            child: Text(context.l10n.commonCancel),
           ),
           FilledButton(
             key: const Key('required-confirm'),
             onPressed: () => Navigator.pop(dialog, true),
-            child: const Text('Make required'),
+            child: Text(dialog.l10n.fieldEditorMakeRequired),
           ),
         ],
       ),
@@ -647,22 +664,18 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
         context: context,
         builder: (dialog) => AlertDialog(
           key: const Key('option-delete-confirmation'),
-          title: Text('Delete “$label”?'),
-          content: Text(
-            '$used ${used == 1 ? 'record uses' : 'records use'} this option and '
-            '${used == 1 ? 'keeps' : 'keep'} it, shown as “$label (deleted)”. '
-            "It can't be picked for new records.",
-          ),
+          title: Text(dialog.l10n.fieldEditorDeleteOptionTitle(label)),
+          content: Text(dialog.l10n.fieldEditorDeleteOptionBody(used, label)),
           actions: [
             TextButton(
               key: const Key('option-delete-cancel'),
               onPressed: () => Navigator.pop(dialog, false),
-              child: const Text('Cancel'),
+              child: Text(context.l10n.commonCancel),
             ),
             FilledButton(
               key: const Key('option-delete-confirm'),
               onPressed: () => Navigator.pop(dialog, true),
-              child: const Text('Delete'),
+              child: Text(dialog.l10n.commonDelete),
             ),
           ],
         ),
@@ -682,17 +695,17 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (widget.host == FieldEditorHost.panel && existing == null)
-          const Padding(
-            padding: EdgeInsets.only(bottom: 14),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 14),
             child: Row(
               children: [
-                Icon(FiIcons.addCircle, size: 18, color: Nocturne.accent),
-                SizedBox(width: 8),
+                const Icon(FiIcons.addCircle, size: 18, color: Nocturne.accent),
+                const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'New field',
+                    context.l10n.fieldEditorNewField,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w500,
                       color: Nocturne.accent200,
@@ -706,15 +719,15 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
           key: const Key('field-name'),
           controller: name,
           autofocus: existing == null && widget.host == FieldEditorHost.panel,
-          label: 'Name',
+          label: context.l10n.fieldEditorName,
           required: true,
-          hint: 'e.g. note',
-          errors: issues.of('name'),
+          hint: context.l10n.fieldEditorNameHint,
+          errors: issues.fieldLines(context.l10n, 'name'),
           onChanged: (_) => setState(() => _edited('name')),
         ),
-        const Padding(
-          padding: EdgeInsets.only(top: 16, bottom: 8),
-          child: SectionLabel('Type'),
+        Padding(
+          padding: const EdgeInsets.only(top: 16, bottom: 8),
+          child: SectionLabel(context.l10n.fieldEditorType),
         ),
         _typeGridView(),
         if (kind == FieldTypeKindDto.fixedDecimal)
@@ -723,9 +736,9 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
             child: FiTextInput(
               initialValue: '$scale',
               keyboardType: TextInputType.number,
-              label: 'Decimal scale',
+              label: context.l10n.fieldEditorDecimalScale,
               suffixIcon: const HelpButton(HelpId.fieldDecimalScale),
-              errors: issues.of('scale'),
+              errors: issues.fieldLines(context.l10n, 'scale'),
               // The scale decides what the stored integer means, so a change to it
               // cannot leave a default or a bound behind reading as something else.
               onChanged: (value) => setState(() {
@@ -747,7 +760,7 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
               for (final chip in _chipsFor(kind))
                 FieldOptionChip(
                   key: Key(chip.key),
-                  label: chip.label,
+                  label: chip.label(context.l10n),
                   selected: _chipOn(chip),
                   onTap: chip == _Chip.slider && !_sliderAvailable
                       ? null
@@ -760,7 +773,7 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
           Padding(
             padding: const EdgeInsets.only(top: 6),
             child: Text(
-              'Show as slider needs a range with both ends.',
+              context.l10n.fieldEditorSliderNeedsRange,
               style: TextStyle(fontSize: 12, color: Nocturne.muted(.5)),
             ),
           ),
@@ -771,11 +784,13 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
           Padding(
             key: const Key('field-editor-errors'),
             padding: const EdgeInsets.only(top: 14),
-            child: FormErrorLines(issues.form),
+            child: FormErrorLines(issues.formLines(context.l10n)),
           ),
       ],
     );
-    final saveLabel = existing == null ? 'Add field' : 'Save field';
+    final saveLabel = existing == null
+        ? context.l10n.fieldEditorAddField
+        : context.l10n.fieldEditorSaveField;
     final canSave = _defaultIssue == null;
     if (widget.host == FieldEditorHost.screen) {
       return Column(
@@ -819,7 +834,7 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
                 FiIconButton(
                   key: const Key('field-delete'),
                   icon: FiIcons.delete,
-                  tooltip: 'Delete field',
+                  tooltip: context.l10n.fieldEditorDeleteField,
                   color: Nocturne.muted(.6),
                   onPressed: () async {
                     await controller.removeField(field.id);
@@ -829,7 +844,7 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
               const Spacer(),
               TextButton(
                 onPressed: widget.onClosed,
-                child: const Text('Cancel'),
+                child: Text(context.l10n.commonCancel),
               ),
               const SizedBox(width: 8),
               FilledButton(
@@ -885,7 +900,7 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
                             : Nocturne.muted(.6),
                       ),
                       Text(
-                        fieldKindLabel(value),
+                        fieldKindLabel(context.l10n, value),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
@@ -927,9 +942,7 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              '$missing ${missing == 1 ? 'record has' : 'records have'} no value for '
-              'this field and will be marked invalid until you fill them in. '
-              'Add a default to avoid this.',
+              context.l10n.fieldEditorRequiredWarning(missing),
               style: const TextStyle(fontSize: 12, color: Nocturne.accent300),
             ),
           ),
@@ -959,7 +972,7 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
                   controller: minLength,
                   keyboardType: TextInputType.number,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  label: 'Min characters',
+                  label: context.l10n.fieldEditorMinCharacters,
                   onChanged: (_) => setState(() => _edited('max-length')),
                 ),
               ),
@@ -969,8 +982,8 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
                   controller: maxLength,
                   keyboardType: TextInputType.number,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  label: 'Max characters',
-                  errors: issues.of('max-length'),
+                  label: context.l10n.fieldEditorMaxCharacters,
+                  errors: issues.fieldLines(context.l10n, 'max-length'),
                   onChanged: (_) => setState(() => _edited('max-length')),
                 ),
               ),
@@ -987,7 +1000,9 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
               Expanded(
                 child: _slot(
                   'field-minimum',
-                  dates ? 'Earliest' : 'Minimum',
+                  dates
+                      ? context.l10n.fieldEditorEarliest
+                      : context.l10n.fieldEditorMinimum,
                   _boundValue(minimum, kind, scale),
                   (value) => setState(() {
                     _edited('maximum');
@@ -999,14 +1014,16 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
               Expanded(
                 child: _slot(
                   'field-maximum',
-                  dates ? 'Latest' : 'Maximum',
+                  dates
+                      ? context.l10n.fieldEditorLatest
+                      : context.l10n.fieldEditorMaximum,
                   _boundValue(maximum, kind, scale),
                   (value) => setState(() {
                     _edited('maximum');
                     maximum = value?.integerValue;
                     _dropUnavailableSlider();
                   }),
-                  errors: issues.of('maximum'),
+                  errors: issues.fieldLines(context.l10n, 'maximum'),
                 ),
               ),
             ],
@@ -1018,11 +1035,11 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
           FiTextInput(
             key: const Key('field-slider-step'),
             controller: sliderStep,
-            label: 'Step (optional)',
+            label: context.l10n.fieldEditorStepOptional,
             hint: '1',
             keyboardType: TextInputType.number,
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            errors: issues.of('slider-step'),
+            errors: issues.fieldLines(context.l10n, 'slider-step'),
             onChanged: (_) => setState(() => _edited('slider-step')),
           ),
         );
@@ -1036,13 +1053,15 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
     final relativeEditor = kind == FieldTypeKindDto.date;
     final Widget fixed = _slot(
       'field-default',
-      relativeEditor ? 'Date' : 'Default',
+      relativeEditor
+          ? context.l10n.fieldEditorDate
+          : context.l10n.fieldEditorDefault,
       defaultValue,
       (value) => setState(() {
         _edited('default');
         defaultValue = value;
       }),
-      errors: issues.of('default'),
+      errors: issues.fieldLines(context.l10n, 'default'),
       enumOptions: draftOptions(),
       revision: [
         for (final option in options) '${option.id}=${option.label.text}',
@@ -1058,9 +1077,9 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
         if (relativeEditor)
           FiSegmented<bool>(
             key: const Key('default-mode'),
-            segments: const [
-              FiSegment(true, 'Day of creation'),
-              FiSegment(false, 'Fixed date'),
+            segments: [
+              FiSegment(true, context.l10n.fieldEditorDayOfCreation),
+              FiSegment(false, context.l10n.fieldEditorFixedDate),
             ],
             value: relative,
             onChanged: (value) => setState(() {
@@ -1095,7 +1114,10 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
                   onChanged: (_) => setState(() => _edited('default')),
                 ),
               ),
-              Text('days', style: TextStyle(color: Nocturne.muted(.6))),
+              Text(
+                context.l10n.fieldEditorDays,
+                style: TextStyle(color: Nocturne.muted(.6)),
+              ),
               Expanded(
                 child: Text(
                   '→ ${formatDateHuman(_localEpochDay() + _signedRelativeDays)}',
@@ -1115,7 +1137,7 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
         if (text && (min != null || max != null))
           Text(
             '${defaultValue?.textValue?.characters.length ?? 0} / '
-            '${_lengthRange(min, max)}',
+            '${_lengthRange(context.l10n, min, max)}',
             key: const Key('default-counter'),
             textAlign: TextAlign.end,
             style: TextStyle(
@@ -1158,11 +1180,14 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
   /// each with a drag handle, its label, and a delete action; then the note on deleted options.
   List<Widget> _optionsEditor() {
     final removed = existing?.enumOptions.where((option) => option.deleted);
-    final example = removed?.lastOrNull?.label ?? 'option';
+    final example =
+        removed?.lastOrNull?.label ?? context.l10n.fieldEditorOptionFallback;
     return [
       Padding(
         padding: const EdgeInsets.only(top: 16, bottom: 6),
-        child: SectionLabel('Options · ${options.length}'),
+        child: SectionLabel(
+          context.l10n.fieldEditorOptionsCount(options.length),
+        ),
       ),
       ReorderableListView(
         key: const Key('field-options'),
@@ -1197,13 +1222,13 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
                       autofocus:
                           isTempOptionId(option.id) &&
                           option.label.text.isEmpty,
-                      hint: 'Option label',
+                      hint: context.l10n.fieldEditorOptionLabel,
                       onChanged: (_) => setState(() {}),
                     ),
                   ),
                   FiIconButton(
                     key: ValueKey('remove-option-${option.id}'),
-                    tooltip: 'Delete option',
+                    tooltip: context.l10n.fieldEditorDeleteOption,
                     icon: FiIcons.delete,
                     color: Nocturne.muted(.55),
                     onPressed: () => _removeOption(option),
@@ -1221,14 +1246,13 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
             () => options.add(_DraftOption(tempOptionId(++addedOptions), '')),
           ),
           icon: const Icon(FiIcons.add),
-          label: const Text('Add option'),
+          label: Text(context.l10n.fieldEditorAddOption),
         ),
       ),
       Padding(
         padding: const EdgeInsets.only(top: 4),
         child: Text(
-          'Records that already use a deleted option keep it. It shows as '
-          "“$example (deleted)” and can't be picked for new records.",
+          context.l10n.fieldEditorDeletedOptionNote(example),
           key: const Key('deleted-option-note'),
           style: TextStyle(fontSize: 12, color: Nocturne.muted(.55)),
         ),
@@ -1342,7 +1366,7 @@ class FieldEditorScreen extends StatelessWidget {
                 children: [
                   FiIconButton(
                     icon: FiIcons.back,
-                    tooltip: 'Back',
+                    tooltip: context.l10n.commonBack,
                     onPressed: () => Navigator.pop(context),
                   ),
                   const SizedBox(width: 4),
@@ -1351,13 +1375,13 @@ class FieldEditorScreen extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          existing?.name ?? 'New field',
+                          existing?.name ?? context.l10n.fieldEditorNewField,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: Theme.of(context).textTheme.titleMedium,
                         ),
                         Text(
-                          'Field in $collectionName',
+                          context.l10n.fieldEditorFieldIn(collectionName),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
@@ -1371,7 +1395,7 @@ class FieldEditorScreen extends StatelessWidget {
                   if (existing != null)
                     PopupMenuButton<void>(
                       key: const Key('field-menu'),
-                      tooltip: 'More',
+                      tooltip: context.l10n.fieldEditorMore,
                       icon: const Icon(FiIcons.more, size: 20),
                       itemBuilder: (_) => [
                         PopupMenuItem<void>(
@@ -1380,11 +1404,11 @@ class FieldEditorScreen extends StatelessWidget {
                             await controller.removeField(existing.id);
                             if (context.mounted) Navigator.pop(context);
                           },
-                          child: const Row(
+                          child: Row(
                             children: [
-                              Icon(FiIcons.delete, size: 18),
-                              SizedBox(width: 12),
-                              Text('Delete field'),
+                              const Icon(FiIcons.delete, size: 18),
+                              const SizedBox(width: 12),
+                              Text(context.l10n.fieldEditorDeleteField),
                             ],
                           ),
                         ),

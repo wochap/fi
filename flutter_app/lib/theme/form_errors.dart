@@ -1,3 +1,4 @@
+import 'package:fi/l10n/l10n.dart';
 import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/theme/nocturne.dart';
 import 'package:flutter/material.dart';
@@ -80,12 +81,11 @@ class FormErrorSummary extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              "Couldn't save. $count ${count == 1 ? 'field needs' : 'fields need'} "
-              'attention.',
+              context.l10n.formCouldntSave(count),
               style: const TextStyle(fontSize: 13, color: Nocturne.text),
             ),
           ),
-          TextButton(onPressed: onShow, child: const Text('Show')),
+          TextButton(onPressed: onShow, child: Text(context.l10n.commonShow)),
         ],
       ),
     ),
@@ -129,15 +129,17 @@ String? decorationErrorText(InputDecoration? decoration) =>
 
 /// An input label for a required value: the name, then an `*` in `accent300` (not the error
 /// color). Screen readers hear "name, required". Use as `InputDecoration.label`.
-Widget requiredLabel(String name) => Semantics(
-  label: '$name, required',
-  excludeSemantics: true,
-  child: Row(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      Flexible(child: Text(name, overflow: TextOverflow.ellipsis)),
-      const Text(' *', style: TextStyle(color: Nocturne.accent300)),
-    ],
+Widget requiredLabel(String name) => Builder(
+  builder: (context) => Semantics(
+    label: context.l10n.formRequiredSemantics(name),
+    excludeSemantics: true,
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Flexible(child: Text(name, overflow: TextOverflow.ellipsis)),
+        const Text(' *', style: TextStyle(color: Nocturne.accent300)),
+      ],
+    ),
   ),
 );
 
@@ -154,7 +156,7 @@ class RequiredLegend extends StatelessWidget {
           style: TextStyle(color: Nocturne.accent300),
         ),
         TextSpan(
-          text: ' required',
+          text: context.l10n.formRequiredLegend,
           style: TextStyle(color: Nocturne.muted(.55)),
         ),
       ],

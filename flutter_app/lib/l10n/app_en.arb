@@ -1,0 +1,3893 @@
+{
+  "@@locale": "en",
+  "navCollections": "Collections",
+  "@navCollections": {
+    "description": "Navigation label for the collections destination."
+  },
+  "navDevices": "Devices",
+  "@navDevices": {
+    "description": "Navigation label for the devices destination."
+  },
+  "navSettings": "Settings",
+  "@navSettings": {
+    "description": "Navigation label for the settings destination."
+  },
+  "settingsLanguage": "Language",
+  "@settingsLanguage": {
+    "description": "Settings section label for the interface language."
+  },
+  "langAppLanguage": "App language",
+  "@langAppLanguage": {
+    "description": "Title of the language setting."
+  },
+  "langAppLanguageHint": "Menus, labels and dates. Changes apply right away.",
+  "@langAppLanguageHint": {
+    "description": "Explains what the language setting changes."
+  },
+  "langSystemDefault": "System default",
+  "@langSystemDefault": {
+    "description": "Language option that follows the system language."
+  },
+  "langSystemDefaultNamed": "System default ({language})",
+  "@langSystemDefaultNamed": {
+    "description": "Language option that follows the system language, naming the resolved language.",
+    "placeholders": {
+      "language": {
+        "type": "String"
+      }
+    }
+  },
+  "langSameAsPhone": "{language} — same as your phone",
+  "@langSameAsPhone": {
+    "description": "Subtitle of the system default language option on Android.",
+    "placeholders": {
+      "language": {
+        "type": "String"
+      }
+    }
+  },
+  "errorUnexpected": "The local collection service encountered an unexpected error.",
+  "@errorUnexpected": {
+    "description": "Shown for a failure that is not a typed bridge error."
+  },
+  "errorInitialization": "Secure device networking could not be initialized.",
+  "@errorInitialization": {
+    "description": "Bridge error: initialization failed."
+  },
+  "errorSecureStoreLocked": "Your login keyring is locked, so secure device networking cannot start. Unlock the keyring and retry.",
+  "@errorSecureStoreLocked": {
+    "description": "Bridge error: the desktop secure key store is locked."
+  },
+  "errorPaused": "Sync with paired devices is off.",
+  "@errorPaused": {
+    "description": "Bridge error: sync with paired devices is turned off."
+  },
+  "errorBootstrap": "This device's local data cannot be opened.",
+  "@errorBootstrap": {
+    "description": "Bridge error: the local dataset could not be opened."
+  },
+  "errorPersistence": "Local data could not be saved or loaded.",
+  "@errorPersistence": {
+    "description": "Bridge error: storage failed."
+  },
+  "errorProjection": "The local read model could not be refreshed.",
+  "@errorProjection": {
+    "description": "Bridge error: the read model could not be refreshed."
+  },
+  "errorLifecycle": "The device could not be reached, or the local service is not running.",
+  "@errorLifecycle": {
+    "description": "Bridge error: lifecycle failure."
+  },
+  "errorInternal": "The local collection data is not supported by this application version.",
+  "@errorInternal": {
+    "description": "Bridge error: internal failure."
+  },
+  "errorValidation": "{count, plural, =1{1 problem needs attention} other{{count} problems need attention}}",
+  "@errorValidation": {
+    "description": "Summary of several validation problems.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "issueRequired": "Required",
+  "@issueRequired": {
+    "description": "Validation issue: a value is required."
+  },
+  "issueTypeMismatch": "Value does not match this field's type",
+  "@issueTypeMismatch": {
+    "description": "Validation issue: wrong value type."
+  },
+  "issueInactiveOption": "Pick an active option",
+  "@issueInactiveOption": {
+    "description": "Validation issue: the chosen option was removed."
+  },
+  "issueFieldUnavailable": "This field is no longer available",
+  "@issueFieldUnavailable": {
+    "description": "Validation issue: the field was removed."
+  },
+  "issueLengthRange": "Must be {min}–{max} characters",
+  "@issueLengthRange": {
+    "description": "Validation issue: text length outside a range.",
+    "placeholders": {
+      "min": {
+        "type": "int"
+      },
+      "max": {
+        "type": "int"
+      }
+    }
+  },
+  "issueLengthExact": "{count, plural, =1{Must be exactly 1 character} other{Must be exactly {count} characters}}",
+  "@issueLengthExact": {
+    "description": "Validation issue: text must have an exact length.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "issueLengthMin": "{count, plural, =1{Must be at least 1 character} other{Must be at least {count} characters}}",
+  "@issueLengthMin": {
+    "description": "Validation issue: text too short.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "issueLengthMax": "{count, plural, =1{Must be at most 1 character} other{Must be at most {count} characters}}",
+  "@issueLengthMax": {
+    "description": "Validation issue: text too long.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "issueLength": "Length is not allowed",
+  "@issueLength": {
+    "description": "Validation issue: length problem without known bounds."
+  },
+  "issueRangeBetween": "Must be between {min} and {max}",
+  "@issueRangeBetween": {
+    "description": "Validation issue: value outside a range.",
+    "placeholders": {
+      "min": {
+        "type": "String"
+      },
+      "max": {
+        "type": "String"
+      }
+    }
+  },
+  "issueRangeMin": "Must be at least {min}",
+  "@issueRangeMin": {
+    "description": "Validation issue: value too small.",
+    "placeholders": {
+      "min": {
+        "type": "String"
+      }
+    }
+  },
+  "issueRangeMax": "Must be at most {max}",
+  "@issueRangeMax": {
+    "description": "Validation issue: value too large.",
+    "placeholders": {
+      "max": {
+        "type": "String"
+      }
+    }
+  },
+  "issueRange": "Value is out of range",
+  "@issueRange": {
+    "description": "Validation issue: range problem without known bounds."
+  },
+  "networkingKeyringLocked": "Your login keyring is locked, so this device cannot reach your other devices. Unlock the keyring, then retry. Everything stored here still works.",
+  "@networkingKeyringLocked": {
+    "description": "Networking banner when the keyring is locked."
+  },
+  "networkingUnavailable": "Secure device networking is unavailable on this device, so it cannot reach your other devices. Everything stored here still works.",
+  "@networkingUnavailable": {
+    "description": "Networking banner when the secure store is unavailable."
+  },
+  "networkingPortsExhausted": "Every network port Fi uses (UDP {first}–{last}) is already in use, so this device cannot reach your other devices. Close the other program or instance holding them, then retry.",
+  "@networkingPortsExhausted": {
+    "description": "Networking banner when every sync port is taken.",
+    "placeholders": {
+      "first": {
+        "type": "int"
+      },
+      "last": {
+        "type": "int"
+      }
+    }
+  },
+  "pairingDidNotComplete": "Pairing did not complete.",
+  "@pairingDidNotComplete": {
+    "description": "Pairing failed for an unspecified reason."
+  },
+  "widgetErrorRemoved": "This widget was removed.",
+  "@widgetErrorRemoved": {
+    "description": "Widget error: removed."
+  },
+  "widgetErrorUnsupportedType": "This widget type is not supported by this version of the app.",
+  "@widgetErrorUnsupportedType": {
+    "description": "Widget error: unsupported type."
+  },
+  "widgetErrorUnsupportedConfigurationVersion": "This widget was saved by a newer version of the app.",
+  "@widgetErrorUnsupportedConfigurationVersion": {
+    "description": "Widget error: unsupported configuration version."
+  },
+  "widgetErrorInvalidConfiguration": "This widget's settings are not valid.",
+  "@widgetErrorInvalidConfiguration": {
+    "description": "Widget error: invalid configuration."
+  },
+  "widgetErrorUnknownQuery": "The saved query of this widget is no longer available.",
+  "@widgetErrorUnknownQuery": {
+    "description": "Widget error: unknown query."
+  },
+  "widgetErrorInvalidQuery": "The saved query of this widget is not valid.",
+  "@widgetErrorInvalidQuery": {
+    "description": "Widget error: invalid query."
+  },
+  "widgetErrorShapeMismatch": "The saved query returns a result this widget cannot show.",
+  "@widgetErrorShapeMismatch": {
+    "description": "Widget error: query result shape does not fit."
+  },
+  "widgetErrorOverflow": "The result is too large to compute exactly.",
+  "@widgetErrorOverflow": {
+    "description": "Widget error: aggregation overflowed."
+  },
+  "widgetErrorQueryFailed": "The saved query could not run.",
+  "@widgetErrorQueryFailed": {
+    "description": "Widget error: the query failed."
+  },
+  "importRecords": "{count, plural, =1{1 record imported} other{{count} records imported}}",
+  "@importRecords": {
+    "description": "Snackbar after a CSV import.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "importCollections": "{count, plural, =1{1 collection imported} other{{count} collections imported}}",
+  "@importCollections": {
+    "description": "Snackbar after a JSON import.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "importStoppedAt": "Import stopped. {place}: {reason}",
+  "@importStoppedAt": {
+    "description": "Import failed at a place; reason is Rust's text.",
+    "placeholders": {
+      "place": {
+        "type": "String"
+      },
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "importStoppedAtColumn": "Import stopped. {place}, column {column}: {reason}",
+  "@importStoppedAtColumn": {
+    "description": "Import failed at a place and column.",
+    "placeholders": {
+      "place": {
+        "type": "String"
+      },
+      "column": {
+        "type": "String"
+      },
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "importStopped": "Import stopped: {reason}",
+  "@importStopped": {
+    "description": "Import failed without a place.",
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "importPlaceHeader": "Header",
+  "@importPlaceHeader": {
+    "description": "Import place: the CSV header row."
+  },
+  "importPlaceRow": "Row {row}",
+  "@importPlaceRow": {
+    "description": "Import place: a CSV row.",
+    "placeholders": {
+      "row": {
+        "type": "int"
+      }
+    }
+  },
+  "importPlaceCollection": "Collection {index}",
+  "@importPlaceCollection": {
+    "description": "Import place: a collection in a JSON file.",
+    "placeholders": {
+      "index": {
+        "type": "int"
+      }
+    }
+  },
+  "widgetNotEvaluated": "This widget could not be evaluated.",
+  "@widgetNotEvaluated": {
+    "description": "Widget failure without a typed kind."
+  },
+  "commonYes": "Yes",
+  "@commonYes": {
+    "description": "Boolean true value."
+  },
+  "commonNo": "No",
+  "@commonNo": {
+    "description": "Boolean false value."
+  },
+  "timeNever": "never",
+  "@timeNever": {
+    "description": "Status time when something never happened."
+  },
+  "timeJustNow": "just now",
+  "@timeJustNow": {
+    "description": "Status time under one minute ago."
+  },
+  "timeMinutesAgo": "{minutes} min ago",
+  "@timeMinutesAgo": {
+    "description": "Status time in minutes.",
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "timeHoursAgo": "{hours} h ago",
+  "@timeHoursAgo": {
+    "description": "Status time in hours.",
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      }
+    }
+  },
+  "devicesNeverSeen": "Never seen",
+  "@devicesNeverSeen": {
+    "description": "Trusted device was never seen."
+  },
+  "devicesNeverSynced": "Never synced",
+  "@devicesNeverSynced": {
+    "description": "Trusted device never synced."
+  },
+  "devicesSeen": "Seen {time}",
+  "@devicesSeen": {
+    "description": "When a device was last seen; time is a status time like '5 min ago'.",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "devicesSynced": "Synced {time}",
+  "@devicesSynced": {
+    "description": "When a device last synced.",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "timeLeftMinutes": "about {minutes} min left",
+  "@timeLeftMinutes": {
+    "description": "Download time left in minutes.",
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "timeLeftSeconds": "about {seconds} s left",
+  "@timeLeftSeconds": {
+    "description": "Download time left in seconds.",
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+  "commonCancel": "Cancel",
+  "@commonCancel": {
+    "description": "Generic button: cancel."
+  },
+  "commonSave": "Save",
+  "@commonSave": {
+    "description": "Generic button: save."
+  },
+  "commonDelete": "Delete",
+  "@commonDelete": {
+    "description": "Generic button: delete."
+  },
+  "commonClose": "Close",
+  "@commonClose": {
+    "description": "Generic button or tooltip: close."
+  },
+  "commonDone": "Done",
+  "@commonDone": {
+    "description": "Generic button: done."
+  },
+  "commonRetry": "Retry",
+  "@commonRetry": {
+    "description": "Generic button: retry."
+  },
+  "commonTryAgain": "Try again",
+  "@commonTryAgain": {
+    "description": "Generic button: try again."
+  },
+  "commonShow": "Show",
+  "@commonShow": {
+    "description": "Generic button: show."
+  },
+  "commonClear": "Clear",
+  "@commonClear": {
+    "description": "Generic button or tooltip: clear a value."
+  },
+  "commonRename": "Rename",
+  "@commonRename": {
+    "description": "Generic action: rename."
+  },
+  "commonEdit": "Edit",
+  "@commonEdit": {
+    "description": "Generic action: edit."
+  },
+  "commonAdd": "Add",
+  "@commonAdd": {
+    "description": "Generic action: add."
+  },
+  "commonBack": "Back",
+  "@commonBack": {
+    "description": "Generic button or tooltip: back."
+  },
+  "commonOk": "OK",
+  "@commonOk": {
+    "description": "Generic button: OK."
+  },
+  "commonCopy": "Copy",
+  "@commonCopy": {
+    "description": "Generic action: copy."
+  },
+  "commonNone": "None",
+  "@commonNone": {
+    "description": "Generic option: no value chosen."
+  },
+  "commonLoading": "Loading…",
+  "@commonLoading": {
+    "description": "Generic loading text."
+  },
+  "commonRequired": "Required",
+  "@commonRequired": {
+    "description": "Tag marking a required field."
+  },
+  "commonDetails": "Details",
+  "@commonDetails": {
+    "description": "Generic action or title: details."
+  },
+  "commonNew": "New",
+  "@commonNew": {
+    "description": "Generic short button: create something new."
+  },
+  "themeChoose": "Choose…",
+  "@themeChoose": {
+    "description": "Hint for an empty choice input"
+  },
+  "themeSearchOptions": "Search {count} options",
+  "@themeSearchOptions": {
+    "description": "Hint for a searchable choice sheet",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "themeTypeToSearchOptions": "Type to search {count} options",
+  "@themeTypeToSearchOptions": {
+    "description": "Hint for a desktop searchable choice field",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "themeMatchesFooter": "{matches} of {total} · ↑↓ to move, Enter to pick",
+  "@themeMatchesFooter": {
+    "description": "Footer under choice search results",
+    "placeholders": {
+      "matches": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "themeSearch": "Search",
+  "@themeSearch": {
+    "description": "Search box hint"
+  },
+  "themeMore": "More",
+  "@themeMore": {
+    "description": "Overflow menu tooltip"
+  },
+  "themeSet": "Set",
+  "@themeSet": {
+    "description": "Button that sets a bounded number input to its minimum"
+  },
+  "themeVoice": "Voice",
+  "@themeVoice": {
+    "description": "Chip marking a field filled by voice"
+  },
+  "themeFilledByVoice": "{field}, filled by voice",
+  "@themeFilledByVoice": {
+    "description": "Semantics label of the voice chip",
+    "placeholders": {
+      "field": {
+        "type": "String"
+      }
+    }
+  },
+  "themeDefault": "Default",
+  "@themeDefault": {
+    "description": "Marker for a field holding its default value"
+  },
+  "themeNeeded": "Needed",
+  "@themeNeeded": {
+    "description": "Marker for a required field without a value"
+  },
+  "queryPresetDailyTotal": "Daily total",
+  "@queryPresetDailyTotal": {
+    "description": "Chart preset"
+  },
+  "queryPresetMonthlyTotal": "Monthly total",
+  "@queryPresetMonthlyTotal": {
+    "description": "Chart preset"
+  },
+  "queryPresetCountPerDay": "Count per day",
+  "@queryPresetCountPerDay": {
+    "description": "Chart preset"
+  },
+  "queryPresetLatestValues": "Latest values",
+  "@queryPresetLatestValues": {
+    "description": "Chart preset"
+  },
+  "queryBlockerOperand": "Choose the field to aggregate.",
+  "@queryBlockerOperand": {
+    "description": "Query blocker"
+  },
+  "queryBlockerCategoryOrPeriod": "Choose the category or period field.",
+  "@queryBlockerCategoryOrPeriod": {
+    "description": "Query blocker"
+  },
+  "queryBlockerAxes": "Choose both axes.",
+  "@queryBlockerAxes": {
+    "description": "Query blocker"
+  },
+  "queryBlockerCategory": "Choose the category field.",
+  "@queryBlockerCategory": {
+    "description": "Query blocker"
+  },
+  "queryBlockerFilterValue": "Enter the filter value or clear the filter.",
+  "@queryBlockerFilterValue": {
+    "description": "Query blocker"
+  },
+  "queryMadeElsewhere": "Made elsewhere; not editable here.",
+  "@queryMadeElsewhere": {
+    "description": "Query description"
+  },
+  "queryAnExpression": "an expression",
+  "@queryAnExpression": {
+    "description": "Query description fallback field"
+  },
+  "queryDescAggregationOf": "{aggregation} of {field}",
+  "@queryDescAggregationOf": {
+    "description": "Query description",
+    "placeholders": {
+      "aggregation": {
+        "type": "String"
+      },
+      "field": {
+        "type": "String"
+      }
+    }
+  },
+  "queryDescSeries": "each record, {x} against {y}",
+  "@queryDescSeries": {
+    "description": "Query description",
+    "placeholders": {
+      "x": {
+        "type": "String"
+      },
+      "y": {
+        "type": "String"
+      }
+    }
+  },
+  "queryDescBy": "by {field}",
+  "@queryDescBy": {
+    "description": "Query description",
+    "placeholders": {
+      "field": {
+        "type": "String"
+      }
+    }
+  },
+  "queryDescPerDay": "per day",
+  "@queryDescPerDay": {
+    "description": "Query description"
+  },
+  "queryDescPerWeek": "per week",
+  "@queryDescPerWeek": {
+    "description": "Query description"
+  },
+  "queryDescPerMonth": "per month",
+  "@queryDescPerMonth": {
+    "description": "Query description"
+  },
+  "queryDescPerYear": "per year",
+  "@queryDescPerYear": {
+    "description": "Query description"
+  },
+  "queryDescFiltered": "filtered",
+  "@queryDescFiltered": {
+    "description": "Query description"
+  },
+  "queryDescLimit": "limit {limit}",
+  "@queryDescLimit": {
+    "description": "Query description",
+    "placeholders": {
+      "limit": {
+        "type": "int"
+      }
+    }
+  },
+  "queryDescEveryRecord": "Every record",
+  "@queryDescEveryRecord": {
+    "description": "Query description"
+  },
+  "queryAggCount": "Count",
+  "@queryAggCount": {
+    "description": "Aggregation"
+  },
+  "queryAggSum": "Sum",
+  "@queryAggSum": {
+    "description": "Aggregation"
+  },
+  "queryAggAverage": "Average",
+  "@queryAggAverage": {
+    "description": "Aggregation"
+  },
+  "queryAggMin": "Min",
+  "@queryAggMin": {
+    "description": "Aggregation"
+  },
+  "queryAggMax": "Max",
+  "@queryAggMax": {
+    "description": "Aggregation"
+  },
+  "queryTitle": "Query",
+  "@queryTitle": {
+    "description": "Section title"
+  },
+  "queryGroupBy": "Group by",
+  "@queryGroupBy": {
+    "description": "Label"
+  },
+  "queryPeriodDay": "Day",
+  "@queryPeriodDay": {
+    "description": "Period"
+  },
+  "queryPeriodWeek": "Week",
+  "@queryPeriodWeek": {
+    "description": "Period"
+  },
+  "queryPeriodMonth": "Month",
+  "@queryPeriodMonth": {
+    "description": "Period"
+  },
+  "queryPeriodYear": "Year",
+  "@queryPeriodYear": {
+    "description": "Period"
+  },
+  "queryCategoryField": "Category field",
+  "@queryCategoryField": {
+    "description": "Label"
+  },
+  "queryDateField": "Date field",
+  "@queryDateField": {
+    "description": "Label"
+  },
+  "queryAggregation": "Aggregation",
+  "@queryAggregation": {
+    "description": "Label"
+  },
+  "queryAggregationNeedsGroup": "Choose a Group by period to aggregate",
+  "@queryAggregationNeedsGroup": {
+    "description": "Helper"
+  },
+  "queryOperandField": "Field to aggregate",
+  "@queryOperandField": {
+    "description": "Label"
+  },
+  "queryOutputScale": "Output scale",
+  "@queryOutputScale": {
+    "description": "Label"
+  },
+  "queryRoundingPolicy": "Rounding policy",
+  "@queryRoundingPolicy": {
+    "description": "Label"
+  },
+  "queryRoundingHalfEven": "Half to even",
+  "@queryRoundingHalfEven": {
+    "description": "Rounding"
+  },
+  "queryRoundingRejectInexact": "Reject inexact",
+  "@queryRoundingRejectInexact": {
+    "description": "Rounding"
+  },
+  "queryXAxis": "X axis",
+  "@queryXAxis": {
+    "description": "Label"
+  },
+  "queryYAxis": "Y axis",
+  "@queryYAxis": {
+    "description": "Label"
+  },
+  "queryFilterField": "Filter field (optional)",
+  "@queryFilterField": {
+    "description": "Label"
+  },
+  "queryFilterOperator": "Filter operator",
+  "@queryFilterOperator": {
+    "description": "Label"
+  },
+  "queryFilterValue": "Filter value",
+  "@queryFilterValue": {
+    "description": "Label"
+  },
+  "queryOpEquals": "equals",
+  "@queryOpEquals": {
+    "description": "Operator"
+  },
+  "queryOpIsNot": "is not",
+  "@queryOpIsNot": {
+    "description": "Operator"
+  },
+  "queryOpGreaterThan": "greater than",
+  "@queryOpGreaterThan": {
+    "description": "Operator"
+  },
+  "queryOpAtLeast": "at least",
+  "@queryOpAtLeast": {
+    "description": "Operator"
+  },
+  "queryOpLessThan": "less than",
+  "@queryOpLessThan": {
+    "description": "Operator"
+  },
+  "queryOpAtMost": "at most",
+  "@queryOpAtMost": {
+    "description": "Operator"
+  },
+  "queryUsedBy": "{count, plural, =0{Used by no widgets} =1{Used by 1 widget} other{Used by {count} widgets}}",
+  "@queryUsedBy": {
+    "description": "Query usage",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "queryNameRequired": "Give the query a name.",
+  "@queryNameRequired": {
+    "description": "Validation"
+  },
+  "queryName": "Query name",
+  "@queryName": {
+    "description": "Label"
+  },
+  "queryNotEditable": "This query was made elsewhere and cannot be edited here.",
+  "@queryNotEditable": {
+    "description": "Notice"
+  },
+  "queryEditTitle": "Edit query",
+  "@queryEditTitle": {
+    "description": "Dialog title"
+  },
+  "querySaveAsNewTitle": "Save as new query",
+  "@querySaveAsNewTitle": {
+    "description": "Dialog title"
+  },
+  "queryCopyName": "{name} copy",
+  "@queryCopyName": {
+    "description": "Default name for copied query",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "queryEditThis": "Edit this query",
+  "@queryEditThis": {
+    "description": "Button"
+  },
+  "querySaveAsNew": "Save as new",
+  "@querySaveAsNew": {
+    "description": "Button"
+  },
+  "queryDefaultName": "Widget query",
+  "@queryDefaultName": {
+    "description": "Default query name"
+  },
+  "modelCardTitle": "Voice models",
+  "@modelCardTitle": {
+    "description": "Title of the voice models card"
+  },
+  "modelTagNotDownloaded": "Not downloaded",
+  "@modelTagNotDownloaded": {
+    "description": "Model state tag"
+  },
+  "modelTagDownloading": "Downloading",
+  "@modelTagDownloading": {
+    "description": "Model state tag"
+  },
+  "modelTagReconnecting": "Reconnecting",
+  "@modelTagReconnecting": {
+    "description": "Model state tag"
+  },
+  "modelTagVerifying": "Verifying",
+  "@modelTagVerifying": {
+    "description": "Model state tag"
+  },
+  "modelTagPaused": "Paused",
+  "@modelTagPaused": {
+    "description": "Model state tag"
+  },
+  "modelTagFailed": "Failed",
+  "@modelTagFailed": {
+    "description": "Model state tag"
+  },
+  "modelTagReady": "Ready",
+  "@modelTagReady": {
+    "description": "Model state tag"
+  },
+  "modelRoleSpeech": "Speech recognition",
+  "@modelRoleSpeech": {
+    "description": "Speech model role name"
+  },
+  "modelRoleUnderstanding": "Understanding",
+  "@modelRoleUnderstanding": {
+    "description": "Understanding model role name"
+  },
+  "modelRoleSpeechInSentence": "speech recognition",
+  "@modelRoleSpeechInSentence": {
+    "description": "Speech role inside a sentence"
+  },
+  "modelRoleUnderstandingInSentence": "understanding",
+  "@modelRoleUnderstandingInSentence": {
+    "description": "Understanding role inside a sentence"
+  },
+  "modelAllLanguages": "All languages",
+  "@modelAllLanguages": {
+    "description": "Model language when it covers all languages"
+  },
+  "modelSummaryTotal": "{language} · {total} total",
+  "@modelSummaryTotal": {
+    "description": "Card summary, not downloaded",
+    "placeholders": {
+      "language": {
+        "type": "String"
+      },
+      "total": {
+        "type": "String"
+      }
+    }
+  },
+  "modelSummaryProgress": "{language} · {done} of {total}",
+  "@modelSummaryProgress": {
+    "description": "Card summary while downloading",
+    "placeholders": {
+      "language": {
+        "type": "String"
+      },
+      "done": {
+        "type": "String"
+      },
+      "total": {
+        "type": "String"
+      }
+    }
+  },
+  "modelSummarySize": "{language} · {total}",
+  "@modelSummarySize": {
+    "description": "Card summary while verifying",
+    "placeholders": {
+      "language": {
+        "type": "String"
+      },
+      "total": {
+        "type": "String"
+      }
+    }
+  },
+  "modelSummaryPaused": "{language} · paused at {done} of {total}",
+  "@modelSummaryPaused": {
+    "description": "Card summary when paused",
+    "placeholders": {
+      "language": {
+        "type": "String"
+      },
+      "done": {
+        "type": "String"
+      },
+      "total": {
+        "type": "String"
+      }
+    }
+  },
+  "modelSummaryStopped": "{language} · stopped at {done}",
+  "@modelSummaryStopped": {
+    "description": "Card summary when failed",
+    "placeholders": {
+      "language": {
+        "type": "String"
+      },
+      "done": {
+        "type": "String"
+      }
+    }
+  },
+  "modelSummaryCheckFailed": "{language} · check failed",
+  "@modelSummaryCheckFailed": {
+    "description": "Card summary when the checksum failed",
+    "placeholders": {
+      "language": {
+        "type": "String"
+      }
+    }
+  },
+  "modelSummaryReady": "{language} · {total} used on this phone",
+  "@modelSummaryReady": {
+    "description": "Card summary when ready",
+    "placeholders": {
+      "language": {
+        "type": "String"
+      },
+      "total": {
+        "type": "String"
+      }
+    }
+  },
+  "modelRowProgress": "{stored} of {size}",
+  "@modelRowProgress": {
+    "description": "Model row progress",
+    "placeholders": {
+      "stored": {
+        "type": "String"
+      },
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "modelRowChecking": "Checking",
+  "@modelRowChecking": {
+    "description": "Model row while checking"
+  },
+  "modelRowDamaged": "{size} · damaged",
+  "@modelRowDamaged": {
+    "description": "Model row when damaged",
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "modelWifiRecommended": "Wi-Fi recommended",
+  "@modelWifiRecommended": {
+    "description": "Hint to use Wi-Fi"
+  },
+  "modelNeeds": "Needs {needed}",
+  "@modelNeeds": {
+    "description": "Space needed",
+    "placeholders": {
+      "needed": {
+        "type": "String"
+      }
+    }
+  },
+  "modelNeedsWithFree": "Needs {needed} · {free} free on this phone",
+  "@modelNeedsWithFree": {
+    "description": "Space needed and free",
+    "placeholders": {
+      "needed": {
+        "type": "String"
+      },
+      "free": {
+        "type": "String"
+      }
+    }
+  },
+  "modelDownload": "Download {size}",
+  "@modelDownload": {
+    "description": "Download button with size",
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "modelPause": "Pause",
+  "@modelPause": {
+    "description": "Pause button"
+  },
+  "modelResume": "Resume",
+  "@modelResume": {
+    "description": "Resume button"
+  },
+  "modelCancelAndDelete": "Cancel and delete",
+  "@modelCancelAndDelete": {
+    "description": "Cancel and delete button"
+  },
+  "modelPercent": "{percent}%",
+  "@modelPercent": {
+    "description": "Percent",
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "modelTimeLeft": "about {time}",
+  "@modelTimeLeft": {
+    "description": "Approximate time left",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "modelReconnectingTitle": "Connection lost — reconnecting…",
+  "@modelReconnectingTitle": {
+    "description": "Reconnecting title"
+  },
+  "modelReconnectingResumes": "The download resumes where it stopped.",
+  "@modelReconnectingResumes": {
+    "description": "Reconnecting line"
+  },
+  "modelReconnectingKeepOpen": "Leaving Fi can pause the network. Keep it open to finish faster.",
+  "@modelReconnectingKeepOpen": {
+    "description": "Reconnecting hint"
+  },
+  "modelVerifyingTitle": "Checking downloaded data…",
+  "@modelVerifyingTitle": {
+    "description": "Verifying title"
+  },
+  "modelResumesFromHere": "resumes from here",
+  "@modelResumesFromHere": {
+    "description": "Progress note when paused"
+  },
+  "modelNetworkTitle": "No connection",
+  "@modelNetworkTitle": {
+    "description": "Network failure title"
+  },
+  "modelNetworkLine": "Couldn't reach the download server. Check your Wi-Fi, then retry. Downloaded data is kept.",
+  "@modelNetworkLine": {
+    "description": "Network failure line"
+  },
+  "modelStorageTitle": "Not enough storage",
+  "@modelStorageTitle": {
+    "description": "Storage failure title"
+  },
+  "modelStorageLine": "Free up {needed} on this phone, then retry.",
+  "@modelStorageLine": {
+    "description": "Storage failure line",
+    "placeholders": {
+      "needed": {
+        "type": "String"
+      }
+    }
+  },
+  "modelDamagedTitle": "Downloaded file is damaged",
+  "@modelDamagedTitle": {
+    "description": "Checksum failure title"
+  },
+  "modelDamagedLine": "The {role} model failed its check. Retry downloads it again ({size}).",
+  "@modelDamagedLine": {
+    "description": "Checksum failure line",
+    "placeholders": {
+      "role": {
+        "type": "String"
+      },
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "modelIoTitle": "Couldn't save the download",
+  "@modelIoTitle": {
+    "description": "IO failure title"
+  },
+  "modelIoLine": "Storage error. Retry; downloaded data is kept.",
+  "@modelIoLine": {
+    "description": "IO failure line"
+  },
+  "modelRedownload": "Re-download models",
+  "@modelRedownload": {
+    "description": "Re-download action"
+  },
+  "modelDelete": "Delete models",
+  "@modelDelete": {
+    "description": "Delete action"
+  },
+  "modelFrees": "frees {size}",
+  "@modelFrees": {
+    "description": "Space freed",
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "modelCancelDialogTitle": "Cancel download?",
+  "@modelCancelDialogTitle": {
+    "description": "Cancel dialog title"
+  },
+  "modelCancelDialogBody": "Downloaded data ({done}) will be deleted.",
+  "@modelCancelDialogBody": {
+    "description": "Cancel dialog body",
+    "placeholders": {
+      "done": {
+        "type": "String"
+      }
+    }
+  },
+  "modelCancelDialogConfirm": "Cancel download",
+  "@modelCancelDialogConfirm": {
+    "description": "Cancel dialog confirm"
+  },
+  "modelCancelDialogKeep": "Keep downloading",
+  "@modelCancelDialogKeep": {
+    "description": "Cancel dialog keep"
+  },
+  "modelDeleteDialogTitle": "Delete voice models?",
+  "@modelDeleteDialogTitle": {
+    "description": "Delete dialog title"
+  },
+  "modelDeleteDialogBody": "Frees {size}. Voice fill won’t work until you download them again.",
+  "@modelDeleteDialogBody": {
+    "description": "Delete dialog body",
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "modelKeepModels": "Keep models",
+  "@modelKeepModels": {
+    "description": "Keep models button"
+  },
+  "modelRedownloadDialogTitle": "Re-download voice models?",
+  "@modelRedownloadDialogTitle": {
+    "description": "Re-download dialog title"
+  },
+  "modelRedownloadDialogBody": "The models are deleted and downloaded again ({size}).",
+  "@modelRedownloadDialogBody": {
+    "description": "Re-download dialog body",
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "modelRedownloadDialogConfirm": "Re-download",
+  "@modelRedownloadDialogConfirm": {
+    "description": "Re-download confirm"
+  },
+  "modelOfferTitle": "Download voice models",
+  "@modelOfferTitle": {
+    "description": "Download offer title"
+  },
+  "modelOfferLine": "{language} · {size} total, one time. Everything runs on this phone.",
+  "@modelOfferLine": {
+    "description": "Download offer line",
+    "placeholders": {
+      "language": {
+        "type": "String"
+      },
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "modelOnMobileData": "You're on mobile data",
+  "@modelOnMobileData": {
+    "description": "Network row, mobile"
+  },
+  "modelOnWifi": "You're on Wi-Fi",
+  "@modelOnWifi": {
+    "description": "Network row, Wi-Fi"
+  },
+  "modelStorage": "Storage",
+  "@modelStorage": {
+    "description": "Storage row"
+  },
+  "modelFree": "{size} free",
+  "@modelFree": {
+    "description": "Free space",
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "modelLater": "Later",
+  "@modelLater": {
+    "description": "Later button"
+  },
+  "modelDownloadingTitle": "Downloading voice models",
+  "@modelDownloadingTitle": {
+    "description": "Downloading title"
+  },
+  "modelReconnectingShort": "Reconnecting…",
+  "@modelReconnectingShort": {
+    "description": "Short reconnecting title"
+  },
+  "modelPausedTitle": "Download paused",
+  "@modelPausedTitle": {
+    "description": "Paused title"
+  },
+  "modelProgressLine": "{done} of {total} · {percent}%",
+  "@modelProgressLine": {
+    "description": "Download progress line",
+    "placeholders": {
+      "done": {
+        "type": "String"
+      },
+      "total": {
+        "type": "String"
+      },
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "modelKeepFilling": "Keep filling by hand. The mic turns on when it's ready.",
+  "@modelKeepFilling": {
+    "description": "Hint while downloading"
+  },
+  "modelPauseDownload": "Pause download",
+  "@modelPauseDownload": {
+    "description": "Pause tooltip"
+  },
+  "modelResumeDownload": "Resume download",
+  "@modelResumeDownload": {
+    "description": "Resume tooltip"
+  },
+  "modelHide": "Hide",
+  "@modelHide": {
+    "description": "Hide tooltip"
+  },
+  "modelErrorLine": "{title}. {line}",
+  "@modelErrorLine": {
+    "description": "Error title and line",
+    "placeholders": {
+      "title": {
+        "type": "String"
+      },
+      "line": {
+        "type": "String"
+      }
+    }
+  },
+  "helpFieldRequiredTitle": "Required",
+  "@helpFieldRequiredTitle": {
+    "description": "Help popup title for fieldRequired"
+  },
+  "helpFieldRequiredBody": "A required field must hold a value. New records cannot be saved without it.\n\nTurning this on for a field that existing records do not have marks those records invalid until you fill the field in. They are never deleted, and you can still open and repair them from the record list.\n\nSetting a default avoids that: the default counts as the value for every record that does not have one.",
+  "@helpFieldRequiredBody": {
+    "description": "Help popup body for fieldRequired"
+  },
+  "helpFieldDefaultTitle": "Default",
+  "@helpFieldDefaultTitle": {
+    "description": "Help popup title for fieldDefault"
+  },
+  "helpFieldDefaultBody": "The value used when a record does not supply one. It fills new records as you create them, and it satisfies the Required rule for existing records that lack the field.\n\nLeave it empty if every record should state its own value.",
+  "@helpFieldDefaultBody": {
+    "description": "Help popup body for fieldDefault"
+  },
+  "helpFieldDecimalScaleTitle": "Decimal scale",
+  "@helpFieldDecimalScaleTitle": {
+    "description": "Help popup title for fieldDecimalScale"
+  },
+  "helpFieldDecimalScaleBody": "How many digits are kept after the decimal point. Scale 2 stores 10.25 exactly; scale 0 stores whole numbers only.\n\nValues are stored as exact numbers, never as floating point, so sums and averages do not drift. The scale cannot be changed once records hold a value for this field.",
+  "@helpFieldDecimalScaleBody": {
+    "description": "Help popup body for fieldDecimalScale"
+  },
+  "helpFieldMinMaxTitle": "Minimum and Maximum",
+  "@helpFieldMinMaxTitle": {
+    "description": "Help popup title for fieldMinMax"
+  },
+  "helpFieldMinMaxBody": "The range a value is allowed to fall in, inclusive on both ends. A record outside the range is rejected when you save it.\n\nLeave either box empty for no limit on that side.",
+  "@helpFieldMinMaxBody": {
+    "description": "Help popup body for fieldMinMax"
+  },
+  "helpFieldMinMaxLengthTitle": "Minimum and Maximum length",
+  "@helpFieldMinMaxLengthTitle": {
+    "description": "Help popup title for fieldMinMaxLength"
+  },
+  "helpFieldMinMaxLengthBody": "How short and how long the text may be, counted in characters.\n\nLeave either box empty for no limit on that side.",
+  "@helpFieldMinMaxLengthBody": {
+    "description": "Help popup body for fieldMinMaxLength"
+  },
+  "helpFieldMultilineTitle": "Multiline",
+  "@helpFieldMultilineTitle": {
+    "description": "Help popup title for fieldMultiline"
+  },
+  "helpFieldMultilineBody": "Shows this text field as a box that accepts line breaks instead of a single line. It changes how the field is edited, not what may be stored in it.",
+  "@helpFieldMultilineBody": {
+    "description": "Help popup body for fieldMultiline"
+  },
+  "helpFieldSliderTitle": "Show as slider",
+  "@helpFieldSliderTitle": {
+    "description": "Help popup title for fieldSlider"
+  },
+  "helpFieldSliderBody": "Shows this number field as a slider that moves from the minimum to the maximum, with the picked value beside it. Until a value is picked the track shows no thumb; tap or drag it to pick one, and the number appears beside it.\n\nA row of numbers under the track shows the scale: every step when they all fit, otherwise only the minimum and the maximum at the two ends.\n\nStep sets how far each move goes, for example 10 on a 0 to 100 range. Leave it empty for whole steps of 1. The step must divide the distance from the minimum to the maximum exactly, so the last position lands on the maximum.\n\nAvailable only once both a minimum and a maximum are set. It changes how the field is edited, not what is stored: queries, charts, and the record list still see a number.",
+  "@helpFieldSliderBody": {
+    "description": "Help popup body for fieldSlider"
+  },
+  "helpWidgetTypeTitle": "Widget type",
+  "@helpWidgetTypeTitle": {
+    "description": "Help popup title for widgetType"
+  },
+  "helpWidgetTypeBody": "What the widget draws.\n\nNumber shows one aggregated value, such as a total or a count. Line chart draws a value over time. Bar chart compares one value across categories. Scatter plot places one point per record using two fields as the axes.",
+  "@helpWidgetTypeBody": {
+    "description": "Help popup body for widgetType"
+  },
+  "helpWidgetUseSavedQueryTitle": "Use a saved query",
+  "@helpWidgetUseSavedQueryTitle": {
+    "description": "Help popup title for widgetUseSavedQuery"
+  },
+  "helpWidgetUseSavedQueryBody": "On, the widget reuses a query you already saved, and editing that query updates every widget that uses it.\n\nOff, you build the query here and it is saved under the widget title.",
+  "@helpWidgetUseSavedQueryBody": {
+    "description": "Help popup body for widgetUseSavedQuery"
+  },
+  "helpWidgetAggregationTitle": "Aggregation",
+  "@helpWidgetAggregationTitle": {
+    "description": "Help popup title for widgetAggregation"
+  },
+  "helpWidgetAggregationBody": "How many records are reduced to one number.\n\nCount counts records and needs no field. Sum, Average, Min, and Max each read one numeric field, chosen below.\n\nWith a Group by period the aggregation is computed once per period rather than once over everything.",
+  "@helpWidgetAggregationBody": {
+    "description": "Help popup body for widgetAggregation"
+  },
+  "helpWidgetOperandFieldTitle": "Field to aggregate",
+  "@helpWidgetOperandFieldTitle": {
+    "description": "Help popup title for widgetOperandField"
+  },
+  "helpWidgetOperandFieldBody": "The numeric field the aggregation reads. Only number, decimal, and duration fields can be summed or averaged.\n\nCount ignores this because it counts records rather than values.",
+  "@helpWidgetOperandFieldBody": {
+    "description": "Help popup body for widgetOperandField"
+  },
+  "helpWidgetOutputScaleTitle": "Output scale",
+  "@helpWidgetOutputScaleTitle": {
+    "description": "Help popup title for widgetOutputScale"
+  },
+  "helpWidgetOutputScaleBody": "How many decimal places the average keeps. An average rarely divides evenly, so the result must state its own precision instead of inheriting one.",
+  "@helpWidgetOutputScaleBody": {
+    "description": "Help popup body for widgetOutputScale"
+  },
+  "helpWidgetRoundingTitle": "Rounding policy",
+  "@helpWidgetRoundingTitle": {
+    "description": "Help popup title for widgetRounding"
+  },
+  "helpWidgetRoundingBody": "What happens when the average does not fit the output scale exactly.\n\nHalf to even rounds to the nearest value and breaks ties toward the even digit, which keeps long runs of numbers unbiased. Reject inexact refuses to show a result rather than round, so you never read a rounded number as an exact one.",
+  "@helpWidgetRoundingBody": {
+    "description": "Help popup body for widgetRounding"
+  },
+  "helpWidgetGroupByTitle": "Group by",
+  "@helpWidgetGroupByTitle": {
+    "description": "Help popup title for widgetGroupBy"
+  },
+  "helpWidgetGroupByBody": "Buckets records by calendar period — day, week, month, or year — using the date field you choose, and computes the aggregation once per bucket. Each bucket becomes one point or one bar.\n\nChoose None to aggregate over everything at once, or to group by a category instead of a period.",
+  "@helpWidgetGroupByBody": {
+    "description": "Help popup body for widgetGroupBy"
+  },
+  "helpWidgetDateFieldTitle": "Date field",
+  "@helpWidgetDateFieldTitle": {
+    "description": "Help popup title for widgetDateField"
+  },
+  "helpWidgetDateFieldBody": "The date or timestamp used to decide which period a record falls into. Weeks start on Monday and periods are computed in UTC.",
+  "@helpWidgetDateFieldBody": {
+    "description": "Help popup body for widgetDateField"
+  },
+  "helpWidgetCategoryFieldTitle": "Category field",
+  "@helpWidgetCategoryFieldTitle": {
+    "description": "Help popup title for widgetCategoryField"
+  },
+  "helpWidgetCategoryFieldBody": "The field whose values become the categories along the axis: one bar or one point per distinct value. Records sharing a value are aggregated together.",
+  "@helpWidgetCategoryFieldBody": {
+    "description": "Help popup body for widgetCategoryField"
+  },
+  "helpWidgetXAxisTitle": "X axis",
+  "@helpWidgetXAxisTitle": {
+    "description": "Help popup title for widgetXAxis"
+  },
+  "helpWidgetXAxisBody": "The field plotted horizontally, one point per record. No aggregation happens: each record keeps its own point.",
+  "@helpWidgetXAxisBody": {
+    "description": "Help popup body for widgetXAxis"
+  },
+  "helpWidgetYAxisTitle": "Y axis",
+  "@helpWidgetYAxisTitle": {
+    "description": "Help popup title for widgetYAxis"
+  },
+  "helpWidgetYAxisBody": "The numeric field plotted vertically, one point per record.",
+  "@helpWidgetYAxisBody": {
+    "description": "Help popup body for widgetYAxis"
+  },
+  "helpWidgetFilterTitle": "Filter",
+  "@helpWidgetFilterTitle": {
+    "description": "Help popup title for widgetFilter"
+  },
+  "helpWidgetFilterBody": "Restricts the widget to records matching one condition, such as amount greater than 10 or category equals Migraine.\n\nLeave the field set to None to include every record. The filter changes what the widget shows; it never hides or deletes records anywhere else.",
+  "@helpWidgetFilterBody": {
+    "description": "Help popup body for widgetFilter"
+  },
+  "helpWidgetUnitSuffixTitle": "Unit suffix",
+  "@helpWidgetUnitSuffixTitle": {
+    "description": "Help popup title for widgetUnitSuffix"
+  },
+  "helpWidgetUnitSuffixBody": "Text shown after the value, such as EUR or mg. It is display only: the exact number is unchanged and the suffix is never stored with the data.",
+  "@helpWidgetUnitSuffixBody": {
+    "description": "Help popup body for widgetUnitSuffix"
+  },
+  "helpWidgetShowPointsTitle": "Show points",
+  "@helpWidgetShowPointsTitle": {
+    "description": "Help popup title for widgetShowPoints"
+  },
+  "helpWidgetShowPointsBody": "Draws a marker at every data point on the line, which helps when there are only a few points or when gaps matter.",
+  "@helpWidgetShowPointsBody": {
+    "description": "Help popup body for widgetShowPoints"
+  },
+  "helpWidgetAxisLabelTitle": "Y axis label",
+  "@helpWidgetAxisLabelTitle": {
+    "description": "Help popup title for widgetAxisLabel"
+  },
+  "helpWidgetAxisLabelBody": "Text shown beside the vertical axis to name what is being measured, such as \"Hours\" or \"EUR\". Leave it empty for no label.",
+  "@helpWidgetAxisLabelBody": {
+    "description": "Help popup body for widgetAxisLabel"
+  },
+  "helpWidgetBarWidthTitle": "Bar width",
+  "@helpWidgetBarWidthTitle": {
+    "description": "Help popup title for widgetBarWidth"
+  },
+  "helpWidgetBarWidthBody": "How wide each bar is drawn, in logical pixels. Leave it empty to let the chart size the bars to fit.",
+  "@helpWidgetBarWidthBody": {
+    "description": "Help popup body for widgetBarWidth"
+  },
+  "helpWidgetPointRadiusTitle": "Point radius",
+  "@helpWidgetPointRadiusTitle": {
+    "description": "Help popup title for widgetPointRadius"
+  },
+  "helpWidgetPointRadiusBody": "How large each plotted point is drawn, in logical pixels. Leave it empty for the default size.",
+  "@helpWidgetPointRadiusBody": {
+    "description": "Help popup body for widgetPointRadius"
+  },
+  "helpComputedFieldsTitle": "Computed fields",
+  "@helpComputedFieldsTitle": {
+    "description": "Help popup title for computedFields"
+  },
+  "helpComputedFieldsBody": "A computed field derives its value from other fields of the same record, such as amount × rate or ended − started. It is recalculated on this device whenever it is read, so it is never out of date, and only its definition is synchronised, never its values.\n\nUse one for totals with the sign removed, products like price × quantity, or the time between two dates. Queries and widgets can use it like any other field, and editing it changes every query and widget that uses it.",
+  "@helpComputedFieldsBody": {
+    "description": "Help popup body for computedFields"
+  },
+  "helpComputedFieldResultTitle": "Result type",
+  "@helpComputedFieldResultTitle": {
+    "description": "Help popup title for computedFieldResult"
+  },
+  "helpComputedFieldResultBody": "The result type is worked out from the expression; you never pick it.\n\n+ and − need both sides to have the same number of decimals. × adds the decimals of both sides (scale 2 × scale 3 gives scale 5). Whole numbers and decimals cannot be mixed in +, − or ×; turn the number into a decimal instead. Subtracting two dates gives a duration.\n\n÷ always gives a decimal at the scale you choose. \"Round half to even\" rounds the last digit; \"Reject inexact\" leaves the value empty when the answer does not fit exactly.\n\nIf any field used is empty for a record, the result is empty for that record (\"may be empty\").",
+  "@helpComputedFieldResultBody": {
+    "description": "Help popup body for computedFieldResult"
+  },
+  "helpQuerySavedQueriesTitle": "Saved queries",
+  "@helpQuerySavedQueriesTitle": {
+    "description": "Help popup title for querySavedQueries"
+  },
+  "helpQuerySavedQueriesBody": "A named query that widgets can reference. Editing one here updates every widget that uses it; the editor states how many widgets that is before you save.\n\nDeleting a query does not delete any record.",
+  "@helpQuerySavedQueriesBody": {
+    "description": "Help popup body for querySavedQueries"
+  },
+  "helpPairingStartPairingTitle": "Start pairing",
+  "@helpPairingStartPairingTitle": {
+    "description": "Help popup title for pairingStartPairing"
+  },
+  "helpPairingStartPairingBody": "Makes this device discoverable to nearby devices for a short window so the two can exchange trust.\n\nBoth devices must be nearby and on the same network, and both must have pairing on. Nothing is shared until you confirm the same six-digit code on both screens.",
+  "@helpPairingStartPairingBody": {
+    "description": "Help popup body for pairingStartPairing"
+  },
+  "helpPairingSingleInitiatorTitle": "Only one device connects",
+  "@helpPairingSingleInitiatorTitle": {
+    "description": "Help popup title for pairingSingleInitiator"
+  },
+  "helpPairingSingleInitiatorBody": "Both devices see each other, but only one may tap Connect. If both tap, the two attempts collide and the pairing fails.\n\nPick either device, tap Connect there, and let the other one wait.",
+  "@helpPairingSingleInitiatorBody": {
+    "description": "Help popup body for pairingSingleInitiator"
+  },
+  "helpDiscoverableTitle": "Discoverable",
+  "@helpDiscoverableTitle": {
+    "description": "Help popup title for discoverable"
+  },
+  "helpDiscoverableBody": "When on, this device announces itself to your paired devices on the local network and looks for their announcements, so they find each other automatically.\n\nWhen off, it neither announces nor looks. Paired devices can still connect while their address is known, for example a session that is already open or one that dials this device, but a device whose address changed will not be found again until you turn this back on.\n\nPairing a new device is not affected: it uses its own short announcement.",
+  "@helpDiscoverableBody": {
+    "description": "Help popup body for discoverable"
+  },
+  "helpSyncEnabledTitle": "Sync with paired devices",
+  "@helpSyncEnabledTitle": {
+    "description": "Help popup title for syncEnabled"
+  },
+  "helpSyncEnabledBody": "When on, this device connects to your paired devices and keeps the dataset in sync with them.\n\nWhen off, sync is paused: open sessions close, this device stops connecting, and connections from paired devices are refused. Your pairings and data are kept, and changes sync again once you turn this back on.\n\nPairing a new device still works while sync is paused.",
+  "@helpSyncEnabledBody": {
+    "description": "Help popup body for syncEnabled"
+  },
+  "helpAboutTooltip": "About {title}",
+  "@helpAboutTooltip": {
+    "description": "Tooltip of a help button",
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "bootResetLeadError": "This device's local data cannot be opened by this version of the app. Resetting it lets you create a new dataset or join one from another device.",
+  "@bootResetLeadError": {
+    "description": "Reset dialog lead when local data cannot be opened."
+  },
+  "recoveryResetLead": "Recovery needs one of your other devices. Resetting instead abandons the dataset recorded on this device; if you own no other device holding it, the set-aside copy is kept on disk but this app cannot read it.",
+  "@recoveryResetLead": {
+    "description": "Reset dialog lead from the recovery screen."
+  },
+  "bootRetryAfterUnlock": "Retry after unlocking",
+  "@bootRetryAfterUnlock": {
+    "description": "Button after unlocking the keyring."
+  },
+  "shellResetData": "Reset this device's data",
+  "@shellResetData": {
+    "description": "Button/row title to reset local data."
+  },
+  "bootServiceUnavailable": "The local collection service is unavailable.",
+  "@bootServiceUnavailable": {
+    "description": "Fallback boot state."
+  },
+  "recoveryNeedsDevice": "Recovery needs another device",
+  "@recoveryNeedsDevice": {
+    "description": "Recovery title."
+  },
+  "recoveryNoPeerBody": "This device lost its local copy of your dataset{root}. None of your other devices is reachable right now. Bring one of them online and recovery continues automatically; no pairing is needed.",
+  "@recoveryNoPeerBody": {
+    "description": "root is empty or ' (abc…)'.",
+    "placeholders": {
+      "root": {
+        "type": "String"
+      }
+    }
+  },
+  "recoveryResetInstead": "Reset this device's data instead",
+  "@recoveryResetInstead": {
+    "description": "Recovery reset button."
+  },
+  "recoveryRecovering": "Recovering your dataset from your other devices{root}…",
+  "@recoveryRecovering": {
+    "description": "root is empty or ' (abc…)'.",
+    "placeholders": {
+      "root": {
+        "type": "String"
+      }
+    }
+  },
+  "recoveryCorrupt": "The local copy could not be read and was set aside. Nothing was deleted.",
+  "@recoveryCorrupt": {
+    "description": "Recovery reason."
+  },
+  "recoveryMissing": "The local copy was missing. Nothing was deleted.",
+  "@recoveryMissing": {
+    "description": "Recovery reason."
+  },
+  "bootJoiningFrom": "Joining dataset from {name}…",
+  "@bootJoiningFrom": {
+    "description": "Joining surface.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "bootWaitingDataset": "Waiting for this local dataset to become available.",
+  "@bootWaitingDataset": {
+    "description": "Joining surface without a peer name."
+  },
+  "onboardTitle": "Your private collection space",
+  "@onboardTitle": {
+    "description": "Onboarding title."
+  },
+  "onboardIntro": "Create a new local dataset, or join the dataset on one of your other devices. Nothing is sent to a server.",
+  "@onboardIntro": {
+    "description": "Onboarding intro."
+  },
+  "onboardQuarantined": "Data found on this device was set aside because its dataset record was missing. Nothing was deleted: joining the same dataset from another device restores it.",
+  "@onboardQuarantined": {
+    "description": "Quarantine banner."
+  },
+  "onboardCreating": "Creating…",
+  "@onboardCreating": {
+    "description": "Create button busy."
+  },
+  "onboardCreate": "Create new dataset",
+  "@onboardCreate": {
+    "description": "Create button."
+  },
+  "onboardCreateBlocked": "Creating is unavailable while pairing is active. Stop pairing to create a new dataset here.",
+  "@onboardCreateBlocked": {
+    "description": "Why create is disabled."
+  },
+  "onboardJoin": "Join an existing dataset",
+  "@onboardJoin": {
+    "description": "Join button."
+  },
+  "onboardPairingPreconditions": "The other device must already have a dataset. Start pairing on both devices, then tap Connect on one device only.",
+  "@onboardPairingPreconditions": {
+    "description": "Pairing preconditions."
+  },
+  "sidebarPairedSummary": "{count} paired · {reach}",
+  "@sidebarPairedSummary": {
+    "description": "Sidebar status second line; reach is sidebarNoneNearby or sidebarConnected.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "reach": {
+        "type": "String"
+      }
+    }
+  },
+  "sidebarNoneNearby": "none nearby",
+  "@sidebarNoneNearby": {
+    "description": "No reachable devices."
+  },
+  "sidebarConnectedCount": "{count} connected",
+  "@sidebarConnectedCount": {
+    "description": "Reachable device count.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "devicesStatusOffline": "Offline",
+  "@devicesStatusOffline": {
+    "description": "Sync status."
+  },
+  "devicesStatusLooking": "Looking for paired devices",
+  "@devicesStatusLooking": {
+    "description": "Aggregate sync status searching."
+  },
+  "devicesStatusSearching": "Searching",
+  "@devicesStatusSearching": {
+    "description": "Peer sync status."
+  },
+  "devicesStatusConnected": "Connected",
+  "@devicesStatusConnected": {
+    "description": "Sync status."
+  },
+  "devicesStatusSyncing": "Syncing",
+  "@devicesStatusSyncing": {
+    "description": "Sync status."
+  },
+  "devicesStatusSynced": "Synced",
+  "@devicesStatusSynced": {
+    "description": "Sync status."
+  },
+  "devicesStatusError": "Error",
+  "@devicesStatusError": {
+    "description": "Sync status."
+  },
+  "devicesStatusPaused": "Paused",
+  "@devicesStatusPaused": {
+    "description": "Sync status."
+  },
+  "devicesStatusRevoked": "Revoked",
+  "@devicesStatusRevoked": {
+    "description": "Revoked device tag."
+  },
+  "devicesIntro": "Devices you trust sync this dataset directly with each other.",
+  "@devicesIntro": {
+    "description": "Devices page intro."
+  },
+  "devicesRotationError": "The device was revoked, but the discovery secret could not be rotated: {error}",
+  "@devicesRotationError": {
+    "description": "Rotation error; error is raw.",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "devicesRetryRotation": "Retry rotation",
+  "@devicesRetryRotation": {
+    "description": "Button."
+  },
+  "devicesOtherDevice": "the other device",
+  "@devicesOtherDevice": {
+    "description": "Fallback peer name."
+  },
+  "devicesTrustedHeading": "Trusted devices · {count}",
+  "@devicesTrustedHeading": {
+    "description": "Section label.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "devicesPairDevice": "Pair device",
+  "@devicesPairDevice": {
+    "description": "Button."
+  },
+  "devicesThisDevice": "This device",
+  "@devicesThisDevice": {
+    "description": "Section label."
+  },
+  "devicesActions": "Device actions",
+  "@devicesActions": {
+    "description": "Menu tooltip."
+  },
+  "devicesRevokeUnpair": "Revoke / unpair",
+  "@devicesRevokeUnpair": {
+    "description": "Menu item."
+  },
+  "devicesLogCopied": "Log copied",
+  "@devicesLogCopied": {
+    "description": "Snackbar."
+  },
+  "devicesResetLead": "You are about to abandon the dataset on this device and return to onboarding.",
+  "@devicesResetLead": {
+    "description": "Reset lead from devices page."
+  },
+  "devicesRenameTitle": "Rename device",
+  "@devicesRenameTitle": {
+    "description": "Dialog title."
+  },
+  "devicesFriendlyName": "Friendly name",
+  "@devicesFriendlyName": {
+    "description": "Field label."
+  },
+  "devicesRevokeTitle": "Revoke {name}?",
+  "@devicesRevokeTitle": {
+    "description": "Dialog title.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "devicesRevokeBody": "This device will be disconnected and will no longer be trusted. Its record is retained as revoked.",
+  "@devicesRevokeBody": {
+    "description": "Dialog body."
+  },
+  "devicesRevoke": "Revoke",
+  "@devicesRevoke": {
+    "description": "Button."
+  },
+  "devicesDeleteTitle": "Delete {name}?",
+  "@devicesDeleteTitle": {
+    "description": "Dialog title.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "devicesDeleteBody": "The revoked record will be removed from this device. The device can be paired again later.",
+  "@devicesDeleteBody": {
+    "description": "Dialog body."
+  },
+  "devicesConnections": "Connections",
+  "@devicesConnections": {
+    "description": "Section label."
+  },
+  "devicesDiscoverable": "Discoverable",
+  "@devicesDiscoverable": {
+    "description": "Switch title."
+  },
+  "devicesDiscoverableSubtitle": "Announce this device to paired devices on the local network.",
+  "@devicesDiscoverableSubtitle": {
+    "description": "Switch subtitle."
+  },
+  "devicesSyncEnabled": "Sync with paired devices",
+  "@devicesSyncEnabled": {
+    "description": "Switch title."
+  },
+  "devicesSyncEnabledSubtitle": "Connect to and accept connections from paired devices.",
+  "@devicesSyncEnabledSubtitle": {
+    "description": "Switch subtitle."
+  },
+  "devicesNoneYet": "No devices paired yet",
+  "@devicesNoneYet": {
+    "description": "Empty state title."
+  },
+  "devicesNoneBodyPhone": "Start pairing on both devices while they're nearby.",
+  "@devicesNoneBodyPhone": {
+    "description": "Empty state body (phone)."
+  },
+  "devicesNoneBody": "Start pairing on both devices while they're nearby. Pairing turns itself off after 2 minutes.",
+  "@devicesNoneBody": {
+    "description": "Empty state body."
+  },
+  "devicesPairedBanner": "Paired with {name}. The first sync starts automatically.",
+  "@devicesPairedBanner": {
+    "description": "Paired banner.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "devicesPairAnother": "Pair another",
+  "@devicesPairAnother": {
+    "description": "Button."
+  },
+  "devicesDismiss": "Dismiss",
+  "@devicesDismiss": {
+    "description": "Tooltip."
+  },
+  "devicesNetworkingMissing": "Networking is not set up on this device.",
+  "@devicesNetworkingMissing": {
+    "description": "No local identity."
+  },
+  "devicesIdCopied": "ID copied",
+  "@devicesIdCopied": {
+    "description": "Snackbar."
+  },
+  "devicesCopyId": "Copy ID",
+  "@devicesCopyId": {
+    "description": "Button."
+  },
+  "devicesResetBody": "Abandon the dataset here to create a new one or join another device's. Your device identity is kept.",
+  "@devicesResetBody": {
+    "description": "Reset row subtitle."
+  },
+  "devicesFactState": "State",
+  "@devicesFactState": {
+    "description": "Details label."
+  },
+  "devicesFactEndpoint": "Endpoint",
+  "@devicesFactEndpoint": {
+    "description": "Details label."
+  },
+  "devicesFactLastAttempt": "Last attempt",
+  "@devicesFactLastAttempt": {
+    "description": "Details label."
+  },
+  "devicesFactSyncPort": "Sync port",
+  "@devicesFactSyncPort": {
+    "description": "Details label."
+  },
+  "devicesNotBound": "not bound",
+  "@devicesNotBound": {
+    "description": "Sync port not bound."
+  },
+  "devicesReconnect": "Reconnect",
+  "@devicesReconnect": {
+    "description": "Button."
+  },
+  "devicesCopyLog": "Copy log",
+  "@devicesCopyLog": {
+    "description": "Button."
+  },
+  "devicesLogHeading": "Connection log · {count, plural, =1{1 event} other{{count} events}}",
+  "@devicesLogHeading": {
+    "description": "Log heading.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "devicesLogAll": "All",
+  "@devicesLogAll": {
+    "description": "Log filter."
+  },
+  "devicesLogPairing": "Pairing",
+  "@devicesLogPairing": {
+    "description": "Log filter."
+  },
+  "devicesLogPeer": "Peer",
+  "@devicesLogPeer": {
+    "description": "Log filter."
+  },
+  "devicesNoEvents": "No events.",
+  "@devicesNoEvents": {
+    "description": "Empty log."
+  },
+  "pairingTitle": "Pair a device",
+  "@pairingTitle": {
+    "description": "Pairing card title."
+  },
+  "pairingIdleBody": "Pairing is off. Start it only when both devices are nearby.",
+  "@pairingIdleBody": {
+    "description": "Idle body."
+  },
+  "pairingStart": "Start pairing",
+  "@pairingStart": {
+    "description": "Button."
+  },
+  "pairingDiscoveryOffNote": "Discovery is off, but pairing still works: it uses its own short announcement.",
+  "@pairingDiscoveryOffNote": {
+    "description": "Note when Discoverable is off."
+  },
+  "pairingSearching": "Searching for nearby devices · {seconds}s remaining",
+  "@pairingSearching": {
+    "description": "Discovery progress.",
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+  "pairingAlreadyPaired": "The devices found here are already paired with this one.",
+  "@pairingAlreadyPaired": {
+    "description": "All candidates paired."
+  },
+  "pairingNoCandidates": "No nearby pairing candidates yet.",
+  "@pairingNoCandidates": {
+    "description": "No candidates."
+  },
+  "pairingSingleInitiator": "Tap Connect on one device only; the other device just waits.",
+  "@pairingSingleInitiator": {
+    "description": "Hint."
+  },
+  "pairingNearbyDevice": "Nearby device",
+  "@pairingNearbyDevice": {
+    "description": "Candidate subtitle."
+  },
+  "pairingConnect": "Connect",
+  "@pairingConnect": {
+    "description": "Candidate action."
+  },
+  "pairingStop": "Stop pairing",
+  "@pairingStop": {
+    "description": "Button."
+  },
+  "pairingConnecting": "Connecting securely…",
+  "@pairingConnecting": {
+    "description": "State."
+  },
+  "pairingConfirmCode": "Confirm that this code matches on both devices:",
+  "@pairingConfirmCode": {
+    "description": "SAS prompt."
+  },
+  "pairingOtherDevice": "Other device: ",
+  "@pairingOtherDevice": {
+    "description": "Prefix before peer id (keep trailing space)."
+  },
+  "pairingReferenceOnly": "For reference only; the code above is what must match.",
+  "@pairingReferenceOnly": {
+    "description": "Peer id note."
+  },
+  "pairingCodesMatch": "Codes match",
+  "@pairingCodesMatch": {
+    "description": "Confirm."
+  },
+  "pairingCodesDiffer": "Codes do not match",
+  "@pairingCodesDiffer": {
+    "description": "Reject."
+  },
+  "pairingCommitting": "Saving trust and synchronizing the dataset…",
+  "@pairingCommitting": {
+    "description": "State."
+  },
+  "pairingSuccess": "Device paired successfully.",
+  "@pairingSuccess": {
+    "description": "State."
+  },
+  "pairingAnother": "Pair another device",
+  "@pairingAnother": {
+    "description": "Button."
+  },
+  "pairingBothRootless": "Neither device has a dataset yet, so there is nothing to join. Pair with a device that already has a dataset, or create a new dataset on one device first.",
+  "@pairingBothRootless": {
+    "description": "Failure."
+  },
+  "pairingAgain": "Pair again",
+  "@pairingAgain": {
+    "description": "Button."
+  },
+  "pairingRootMismatch": "These devices hold different datasets, and datasets cannot be merged. Pairing them again will not succeed. To use the other device's dataset here, this device's local data must be reset first.",
+  "@pairingRootMismatch": {
+    "description": "Failure."
+  },
+  "pairingDifferentDevice": "Pair a different device",
+  "@pairingDifferentDevice": {
+    "description": "Button."
+  },
+  "pairingKeyringLocked": "Your login keyring is locked, so this device could not save the pairing. Unlock the keyring, then retry — the other device may already show this one as paired.",
+  "@pairingKeyringLocked": {
+    "description": "Failure."
+  },
+  "pairingResetLead": "To join the other device's dataset, this device's local data must be reset first.",
+  "@pairingResetLead": {
+    "description": "Reset lead."
+  },
+  "resetTitle": "Reset this device's data?",
+  "@resetTitle": {
+    "description": "Dialog title."
+  },
+  "resetOnlyCopy": "This deletes the only copy of the dataset on this device.",
+  "@resetOnlyCopy": {
+    "description": "Consequence."
+  },
+  "resetOthersKeep": "Your other devices keep their copies.",
+  "@resetOthersKeep": {
+    "description": "Consequence."
+  },
+  "resetLostIfOnly": "If this is the only device, the data is permanently lost.",
+  "@resetLostIfOnly": {
+    "description": "Consequence."
+  },
+  "resetNotTold": "Other devices are not told about this reset.",
+  "@resetNotTold": {
+    "description": "Consequence."
+  },
+  "resetTrustedCount": "{count, plural, =0{This device currently trusts no other devices.} =1{This device currently trusts 1 other device.} other{This device currently trusts {count} other devices.}}",
+  "@resetTrustedCount": {
+    "description": "Trusted count.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "resetConfirm": "Reset this device's data",
+  "@resetConfirm": {
+    "description": "Confirm button."
+  },
+  "fieldTypeText": "Text",
+  "@fieldTypeText": {
+    "description": "Field kind name"
+  },
+  "fieldTypeInteger": "Integer",
+  "@fieldTypeInteger": {
+    "description": "Field kind name"
+  },
+  "fieldTypeDecimal": "Decimal",
+  "@fieldTypeDecimal": {
+    "description": "Field kind name"
+  },
+  "fieldTypeBoolean": "Boolean",
+  "@fieldTypeBoolean": {
+    "description": "Field kind name"
+  },
+  "fieldTypeDate": "Date",
+  "@fieldTypeDate": {
+    "description": "Field kind name"
+  },
+  "fieldTypeDateTime": "Date & time",
+  "@fieldTypeDateTime": {
+    "description": "Field kind name"
+  },
+  "fieldTypeDuration": "Duration",
+  "@fieldTypeDuration": {
+    "description": "Field kind name"
+  },
+  "fieldTypeChoice": "Choice",
+  "@fieldTypeChoice": {
+    "description": "Field kind name"
+  },
+  "inputTrue": "True",
+  "@inputTrue": {
+    "description": "Boolean value option"
+  },
+  "inputFalse": "False",
+  "@inputFalse": {
+    "description": "Boolean value option"
+  },
+  "inputPickDate": "Pick a date",
+  "@inputPickDate": {
+    "description": "Date input hint on phones"
+  },
+  "inputPickDateTime": "Pick date & time",
+  "@inputPickDateTime": {
+    "description": "Date-time input hint on phones"
+  },
+  "inputToday": "Today",
+  "@inputToday": {
+    "description": "Quick action filling today's date"
+  },
+  "inputNow": "Now",
+  "@inputNow": {
+    "description": "Quick action filling the current time"
+  },
+  "inputEmpty": "Empty",
+  "@inputEmpty": {
+    "description": "Hint of an empty value input"
+  },
+  "collectionsDuplicate": "Duplicate",
+  "@collectionsDuplicate": {
+    "description": "Duplicate action"
+  },
+  "collectionsImportCsv": "Import CSV…",
+  "@collectionsImportCsv": {
+    "description": "Collection menu item"
+  },
+  "collectionsExportCsv": "Export CSV",
+  "@collectionsExportCsv": {
+    "description": "Collection menu item"
+  },
+  "collectionsExportJson": "Export JSON",
+  "@collectionsExportJson": {
+    "description": "Collection menu item"
+  },
+  "collectionsDeleteEllipsis": "Delete…",
+  "@collectionsDeleteEllipsis": {
+    "description": "Delete action that asks first"
+  },
+  "collectionsSortLastEdited": "Last edited",
+  "@collectionsSortLastEdited": {
+    "description": "Sort order"
+  },
+  "collectionsSortName": "Name",
+  "@collectionsSortName": {
+    "description": "Sort order / name label"
+  },
+  "collectionsSort": "Sort",
+  "@collectionsSort": {
+    "description": "Sort menu tooltip"
+  },
+  "collectionsTitle": "Collections",
+  "@collectionsTitle": {
+    "description": "Collections list header"
+  },
+  "collectionsImportExport": "Import and export",
+  "@collectionsImportExport": {
+    "description": "Transfer menu tooltip"
+  },
+  "collectionsImportJson": "Import JSON",
+  "@collectionsImportJson": {
+    "description": "Transfer menu item"
+  },
+  "collectionsExportAll": "Export all",
+  "@collectionsExportAll": {
+    "description": "Transfer menu item"
+  },
+  "collectionsExportSelected": "Export selected",
+  "@collectionsExportSelected": {
+    "description": "Transfer menu item"
+  },
+  "collectionsNewCollection": "New collection",
+  "@collectionsNewCollection": {
+    "description": "Button and dialog title"
+  },
+  "collectionsEmpty": "Create a collection to start shaping your data.",
+  "@collectionsEmpty": {
+    "description": "Empty list"
+  },
+  "collectionsRecordCount": "{count, plural, =1{1 record} other{{count} records}}",
+  "@collectionsRecordCount": {
+    "description": "Record count",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "collectionsFieldCount": "{count, plural, =1{1 field} other{{count} fields}}",
+  "@collectionsFieldCount": {
+    "description": "Field count",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "collectionsIncomplete": "{count} incomplete",
+  "@collectionsIncomplete": {
+    "description": "Incomplete record count",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "collectionsEditedLower": "edited {time}",
+  "@collectionsEditedLower": {
+    "description": "Subtitle part",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "collectionsEdited": "Edited {time}",
+  "@collectionsEdited": {
+    "description": "Last edited line",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "collectionsActions": "Collection actions",
+  "@collectionsActions": {
+    "description": "Row menu tooltip"
+  },
+  "collectionsData": "Data",
+  "@collectionsData": {
+    "description": "Menu group label"
+  },
+  "collectionsExportedTo": "Exported to {name}",
+  "@collectionsExportedTo": {
+    "description": "Snackbar",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "collectionsExportTitle": "Export collections",
+  "@collectionsExportTitle": {
+    "description": "Dialog title"
+  },
+  "collectionsExport": "Export",
+  "@collectionsExport": {
+    "description": "Button"
+  },
+  "collectionsDeleteTitle": "Delete \"{name}\"?",
+  "@collectionsDeleteTitle": {
+    "description": "Dialog title",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "collectionsDeleteGeneric": "Its records, widgets and saved queries are deleted with it.",
+  "@collectionsDeleteGeneric": {
+    "description": "Delete dialog body"
+  },
+  "collectionsRenameTitle": "Rename collection",
+  "@collectionsRenameTitle": {
+    "description": "Dialog title"
+  },
+  "collectionsDescription": "Description",
+  "@collectionsDescription": {
+    "description": "Input label"
+  },
+  "collectionsDuplicateTitle": "Duplicate collection",
+  "@collectionsDuplicateTitle": {
+    "description": "Dialog title"
+  },
+  "collectionsCopyName": "{name} (copy)",
+  "@collectionsCopyName": {
+    "description": "Default name of a copy",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "collectionsContentsRecords": "{count, plural, =1{1 record} other{{count} records}}",
+  "@collectionsContentsRecords": {
+    "description": "Delete sentence part",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "collectionsContentsWidgets": "{count, plural, =1{1 widget} other{{count} widgets}}",
+  "@collectionsContentsWidgets": {
+    "description": "Delete sentence part",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "collectionsContentsSavedQueries": "{count, plural, =1{1 saved query} other{{count} saved queries}}",
+  "@collectionsContentsSavedQueries": {
+    "description": "Delete sentence part",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "collectionsContentsEmpty": "This collection is empty.",
+  "@collectionsContentsEmpty": {
+    "description": "Delete dialog body"
+  },
+  "collectionsContentsJoin": "{list} and {last}",
+  "@collectionsContentsJoin": {
+    "description": "List join",
+    "placeholders": {
+      "list": {
+        "type": "String"
+      },
+      "last": {
+        "type": "String"
+      }
+    }
+  },
+  "collectionsContentsDeleted": "{total, plural, =1{{list} is deleted with it.} other{{list} are deleted with it.}}",
+  "@collectionsContentsDeleted": {
+    "description": "Delete dialog body",
+    "placeholders": {
+      "total": {
+        "type": "int"
+      },
+      "list": {
+        "type": "String"
+      }
+    }
+  },
+  "recordsBackToCollections": "Back to collections",
+  "@recordsBackToCollections": {
+    "description": "Tooltip"
+  },
+  "recordsBreadcrumb": "Collections  /",
+  "@recordsBreadcrumb": {
+    "description": "Breadcrumb"
+  },
+  "recordsSchema": "Schema",
+  "@recordsSchema": {
+    "description": "Button"
+  },
+  "recordsQueries": "Queries",
+  "@recordsQueries": {
+    "description": "Button"
+  },
+  "recordsSelect": "Select",
+  "@recordsSelect": {
+    "description": "Button"
+  },
+  "recordsNewRecord": "New record",
+  "@recordsNewRecord": {
+    "description": "Button and title"
+  },
+  "recordsMoreActions": "More actions",
+  "@recordsMoreActions": {
+    "description": "Tooltip"
+  },
+  "recordsSelectRecords": "Select records",
+  "@recordsSelectRecords": {
+    "description": "Menu item"
+  },
+  "recordsCollectionActions": "Collection actions…",
+  "@recordsCollectionActions": {
+    "description": "Menu item"
+  },
+  "recordsSection": "Records",
+  "@recordsSection": {
+    "description": "Section label"
+  },
+  "recordsNewestFirst": "Newest first",
+  "@recordsNewestFirst": {
+    "description": "Order note"
+  },
+  "recordsEmpty": "No records yet.",
+  "@recordsEmpty": {
+    "description": "Empty state"
+  },
+  "recordsFab": "Record",
+  "@recordsFab": {
+    "description": "Floating button label"
+  },
+  "recordsMoreFields": "{count, plural, =1{+ 1 more field} other{+ {count} more fields}}",
+  "@recordsMoreFields": {
+    "description": "Card footer",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "recordsIncomplete": "Incomplete",
+  "@recordsIncomplete": {
+    "description": "Tag"
+  },
+  "recordsDeleteRecord": "Delete record",
+  "@recordsDeleteRecord": {
+    "description": "Tooltip"
+  },
+  "recordsSchemaTitle": "Collection schema",
+  "@recordsSchemaTitle": {
+    "description": "Sheet title"
+  },
+  "recordsReorderPhone": "Long-press to reorder",
+  "@recordsReorderPhone": {
+    "description": "Footer note"
+  },
+  "recordsReorderDesktop": "Drag to reorder · click a field to edit",
+  "@recordsReorderDesktop": {
+    "description": "Footer note"
+  },
+  "recordsAddField": "Add field",
+  "@recordsAddField": {
+    "description": "Button"
+  },
+  "recordsNewField": "New field",
+  "@recordsNewField": {
+    "description": "Button"
+  },
+  "recordsComputedNewer": "Made by a newer version (expression v{version}); not editable here",
+  "@recordsComputedNewer": {
+    "description": "Computed field note",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "recordsComputedUnsupported": "Uses operations this editor does not offer; not editable here",
+  "@recordsComputedUnsupported": {
+    "description": "Computed field note"
+  },
+  "recordsMayBeEmpty": "may be empty",
+  "@recordsMayBeEmpty": {
+    "description": "Computed field tag part"
+  },
+  "recordsEditComputed": "Edit computed field",
+  "@recordsEditComputed": {
+    "description": "Tooltip"
+  },
+  "recordsRemoveComputed": "Remove computed field",
+  "@recordsRemoveComputed": {
+    "description": "Tooltip"
+  },
+  "recordsComputedSheetTitle": "Computed fields & queries",
+  "@recordsComputedSheetTitle": {
+    "description": "Sheet title"
+  },
+  "recordsComputedFields": "Computed fields",
+  "@recordsComputedFields": {
+    "description": "Section"
+  },
+  "recordsComputedFieldsHint": "Calculated per record from other fields.",
+  "@recordsComputedFieldsHint": {
+    "description": "Section description"
+  },
+  "recordsAddComputed": "Add computed field",
+  "@recordsAddComputed": {
+    "description": "Button"
+  },
+  "recordsSavedQueries": "Saved queries",
+  "@recordsSavedQueries": {
+    "description": "Section"
+  },
+  "recordsSavedQueriesHint": "Aggregates across records. Widgets can reuse them.",
+  "@recordsSavedQueriesHint": {
+    "description": "Section description"
+  },
+  "recordsEditQuery": "Edit query",
+  "@recordsEditQuery": {
+    "description": "Tooltip"
+  },
+  "recordsRemoveQuery": "Remove query",
+  "@recordsRemoveQuery": {
+    "description": "Tooltip"
+  },
+  "recordsCountQueryName": "Record count",
+  "@recordsCountQueryName": {
+    "description": "Default saved query name"
+  },
+  "recordsAddCountQuery": "Add record-count query",
+  "@recordsAddCountQuery": {
+    "description": "Button"
+  },
+  "recordsUsedBy": "{count, plural, =0{used by no widgets} =1{used by 1 widget} other{used by {count} widgets}}",
+  "@recordsUsedBy": {
+    "description": "Query usage",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "recordsSelected": "{count} selected",
+  "@recordsSelected": {
+    "description": "Selection count",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "recordsInCollection": "in {name}",
+  "@recordsInCollection": {
+    "description": "Context label",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "recordsSelectAll": "Select all",
+  "@recordsSelectAll": {
+    "description": "Button"
+  },
+  "recordsEditField": "Edit field",
+  "@recordsEditField": {
+    "description": "Tooltip"
+  },
+  "recordsBatchDeleteTitle": "Delete {count} records?",
+  "@recordsBatchDeleteTitle": {
+    "description": "Dialog title",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "recordsBatchDeleteBody": "Every selected record is deleted in one step.",
+  "@recordsBatchDeleteBody": {
+    "description": "Dialog body"
+  },
+  "recordsDeletedSnack": "{count} records deleted",
+  "@recordsDeletedSnack": {
+    "description": "Snackbar",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "recordsBatchSetTitle": "Set {field} on {count} records?",
+  "@recordsBatchSetTitle": {
+    "description": "Dialog title",
+    "placeholders": {
+      "field": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "recordsBatchSetBody": "Every selected record is updated in one step.",
+  "@recordsBatchSetBody": {
+    "description": "Dialog body"
+  },
+  "recordsSet": "Set",
+  "@recordsSet": {
+    "description": "Button"
+  },
+  "recordsUpdatedSnack": "{count} records updated",
+  "@recordsUpdatedSnack": {
+    "description": "Snackbar",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "recordsBatchEditTitle": "Edit field on {count} records",
+  "@recordsBatchEditTitle": {
+    "description": "Form title",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "recordsField": "Field",
+  "@recordsField": {
+    "description": "Input label"
+  },
+  "recordsContinue": "Continue",
+  "@recordsContinue": {
+    "description": "Button"
+  },
+  "recordDiscardTitle": "Discard this record?",
+  "@recordDiscardTitle": {
+    "description": "Dialog title"
+  },
+  "recordDiscardBody": "Voice processing will stop and the fields you changed will be lost.",
+  "@recordDiscardBody": {
+    "description": "Dialog body"
+  },
+  "recordDiscard": "Discard",
+  "@recordDiscard": {
+    "description": "Button"
+  },
+  "recordKeepEditing": "Keep editing",
+  "@recordKeepEditing": {
+    "description": "Button"
+  },
+  "recordDeleteTitle": "Delete this record?",
+  "@recordDeleteTitle": {
+    "description": "Dialog title"
+  },
+  "recordDeleteBody": "It is removed from the collection.",
+  "@recordDeleteBody": {
+    "description": "Dialog body"
+  },
+  "recordCreated": "created {date}",
+  "@recordCreated": {
+    "description": "Context label part",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "recordEditTitle": "Edit record",
+  "@recordEditTitle": {
+    "description": "Form title"
+  },
+  "recordTitleNeeded": "{title} · {count, plural, =1{1 field needed} other{{count} fields needed}}",
+  "@recordTitleNeeded": {
+    "description": "Form title with missing count",
+    "placeholders": {
+      "title": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "recordFooterHint": "* Required · Ctrl+Enter to save",
+  "@recordFooterHint": {
+    "description": "Footer hint"
+  },
+  "recordDeleteRecordEllipsis": "Delete record…",
+  "@recordDeleteRecordEllipsis": {
+    "description": "Menu item"
+  },
+  "recordSave": "Save record",
+  "@recordSave": {
+    "description": "Button"
+  },
+  "recordSaveChanges": "Save changes",
+  "@recordSaveChanges": {
+    "description": "Button"
+  },
+  "recordScrollMore": "Scroll for more columns →",
+  "@recordScrollMore": {
+    "description": "Table hint"
+  },
+  "recordIncompleteLead": "{count, plural, =1{1 record is missing a required field} other{{count} records are missing a required field}}",
+  "@recordIncompleteLead": {
+    "description": "Incomplete line",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "recordTapToFinish": "{count, plural, =1{Tap it to finish.} other{Tap one to finish.}}",
+  "@recordTapToFinish": {
+    "description": "Incomplete line action",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "recordClickToFinish": "{count, plural, =1{Click it to finish.} other{Click one to finish.}}",
+  "@recordClickToFinish": {
+    "description": "Incomplete line action",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "formCouldntSave": "{count, plural, =1{Couldn't save. 1 field needs attention.} other{Couldn't save. {count} fields need attention.}}",
+  "@formCouldntSave": {
+    "description": "Error summary",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "formRequiredSemantics": "{name}, required",
+  "@formRequiredSemantics": {
+    "description": "Screen reader label",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "formRequiredLegend": " required",
+  "@formRequiredLegend": {
+    "description": "Legend after the asterisk"
+  },
+  "formNeeded": "Needed to complete this record",
+  "@formNeeded": {
+    "description": "Field note"
+  },
+  "widgetDashboard": "Dashboard",
+  "@widgetDashboard": {
+    "description": "Section label"
+  },
+  "widgetReorder": "Reorder",
+  "@widgetReorder": {
+    "description": "Button"
+  },
+  "widgetAdd": "Add widget",
+  "@widgetAdd": {
+    "description": "Button / title"
+  },
+  "widgetEdit": "Edit widget",
+  "@widgetEdit": {
+    "description": "Title"
+  },
+  "widgetEmptyDashboard": "No widgets yet. Add one to summarize this collection.",
+  "@widgetEmptyDashboard": {
+    "description": "Empty state"
+  },
+  "widgetAllRecords": "{description} · all records",
+  "@widgetAllRecords": {
+    "description": "Tile summary",
+    "placeholders": {
+      "description": {
+        "type": "String"
+      }
+    }
+  },
+  "widgetOrder": "Widget order",
+  "@widgetOrder": {
+    "description": "Dialog title"
+  },
+  "widgetTitleRequired": "Give the widget a title.",
+  "@widgetTitleRequired": {
+    "description": "Validation"
+  },
+  "widgetSavedQueryRequired": "Choose a saved query.",
+  "@widgetSavedQueryRequired": {
+    "description": "Validation"
+  },
+  "widgetType": "Widget type",
+  "@widgetType": {
+    "description": "Label"
+  },
+  "widgetTypeValue": "Widget type: {type}",
+  "@widgetTypeValue": {
+    "description": "Unsupported widget type line",
+    "placeholders": {
+      "type": {
+        "type": "String"
+      }
+    }
+  },
+  "widgetUnsupportedNotice": "This build cannot render this widget. Title, query, size, and order stay editable and its configuration is preserved untouched.",
+  "@widgetUnsupportedNotice": {
+    "description": "Notice"
+  },
+  "widgetTitle": "Title",
+  "@widgetTitle": {
+    "description": "Label"
+  },
+  "widgetUseSavedQuery": "Use a saved query",
+  "@widgetUseSavedQuery": {
+    "description": "Switch"
+  },
+  "widgetSavedQuery": "Saved query",
+  "@widgetSavedQuery": {
+    "description": "Label"
+  },
+  "widgetPresentation": "Presentation",
+  "@widgetPresentation": {
+    "description": "Section"
+  },
+  "widgetConfigVersionPreserved": "Configuration version {version} is preserved as is.",
+  "@widgetConfigVersionPreserved": {
+    "description": "Notice",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "widgetSize": "Size",
+  "@widgetSize": {
+    "description": "Label"
+  },
+  "widgetSizeFull": "Full",
+  "@widgetSizeFull": {
+    "description": "Size segment"
+  },
+  "widgetRemove": "Remove",
+  "@widgetRemove": {
+    "description": "Button"
+  },
+  "widgetRemoveTooltip": "Remove widget",
+  "@widgetRemoveTooltip": {
+    "description": "Tooltip"
+  },
+  "widgetUntitled": "Untitled",
+  "@widgetUntitled": {
+    "description": "Preview heading"
+  },
+  "widgetPreview": "Preview",
+  "@widgetPreview": {
+    "description": "Section label"
+  },
+  "widgetChooseData": "Choose the data to show",
+  "@widgetChooseData": {
+    "description": "Preview placeholder"
+  },
+  "widgetSizeSmallHint": "Small spans one of three dashboard columns at its lowest height.",
+  "@widgetSizeSmallHint": {
+    "description": "Size hint"
+  },
+  "widgetSizeMediumHint": "Medium spans one of three dashboard columns.",
+  "@widgetSizeMediumHint": {
+    "description": "Size hint"
+  },
+  "widgetSizeLargeHint": "Large spans two of three dashboard columns.",
+  "@widgetSizeLargeHint": {
+    "description": "Size hint"
+  },
+  "widgetSizeFullHint": "Full spans the whole dashboard row.",
+  "@widgetSizeFullHint": {
+    "description": "Size hint"
+  },
+  "widgetUnitSuffix": "Unit suffix (optional)",
+  "@widgetUnitSuffix": {
+    "description": "Label"
+  },
+  "widgetUnitSuffixHelper": "Shown after the exact value, for example \"EUR\".",
+  "@widgetUnitSuffixHelper": {
+    "description": "Helper"
+  },
+  "widgetShowPoints": "Show points",
+  "@widgetShowPoints": {
+    "description": "Switch"
+  },
+  "widgetYAxisLabel": "Y axis label (optional)",
+  "@widgetYAxisLabel": {
+    "description": "Label"
+  },
+  "widgetBarWidth": "Bar width (optional)",
+  "@widgetBarWidth": {
+    "description": "Label"
+  },
+  "widgetPointRadius": "Point radius (optional)",
+  "@widgetPointRadius": {
+    "description": "Label"
+  },
+  "widgetTypeAggregateNumber": "Aggregate number",
+  "@widgetTypeAggregateNumber": {
+    "description": "Widget type name"
+  },
+  "widgetTypeLineChart": "Line chart",
+  "@widgetTypeLineChart": {
+    "description": "Widget type name"
+  },
+  "widgetTypeBarChart": "Bar chart",
+  "@widgetTypeBarChart": {
+    "description": "Widget type name"
+  },
+  "widgetTypeScatterPlot": "Scatter plot",
+  "@widgetTypeScatterPlot": {
+    "description": "Widget type name"
+  },
+  "voiceFillByVoice": "Fill by voice",
+  "@voiceFillByVoice": {
+    "description": "Voice tip title and mic label"
+  },
+  "voiceTipLine": "Tap the mic below and say the details. You review before saving.",
+  "@voiceTipLine": {
+    "description": "Voice tip line"
+  },
+  "voiceDismissTip": "Dismiss tip",
+  "@voiceDismissTip": {
+    "description": "Tooltip to dismiss the voice tip"
+  },
+  "voicePrimerTitle": "Speak to fill records",
+  "@voicePrimerTitle": {
+    "description": "Primer title"
+  },
+  "voicePrivacyLine": "Audio is processed on this device and never saved. English only for now.",
+  "@voicePrivacyLine": {
+    "description": "Voice privacy line"
+  },
+  "voicePrimerNext": "Next, Android will ask for microphone access.",
+  "@voicePrimerNext": {
+    "description": "Primer line"
+  },
+  "voiceNotNow": "Not now",
+  "@voiceNotNow": {
+    "description": "Not now button"
+  },
+  "voiceContinue": "Continue",
+  "@voiceContinue": {
+    "description": "Continue button"
+  },
+  "voiceDownloadProgressLabel": "Download progress",
+  "@voiceDownloadProgressLabel": {
+    "description": "Semantics label of the download bar"
+  },
+  "voiceListening": "Listening",
+  "@voiceListening": {
+    "description": "Listening panel title"
+  },
+  "voiceTry": "Try: ",
+  "@voiceTry": {
+    "description": "Prefix before an example utterance"
+  },
+  "voiceListeningHint": "Tap stop when done, or hold the mic to talk",
+  "@voiceListeningHint": {
+    "description": "Listening hint"
+  },
+  "voiceFillingFields": "Filling fields",
+  "@voiceFillingFields": {
+    "description": "Semantics label while filling"
+  },
+  "voiceTranscribing": "Transcribing",
+  "@voiceTranscribing": {
+    "description": "Semantics label while transcribing"
+  },
+  "voiceTranscribed": "Transcribed",
+  "@voiceTranscribed": {
+    "description": "Processing step done"
+  },
+  "voiceTranscribingStep": "Transcribing…",
+  "@voiceTranscribingStep": {
+    "description": "Processing step"
+  },
+  "voiceFillingFieldsStep": "Filling fields…",
+  "@voiceFillingFieldsStep": {
+    "description": "Processing step"
+  },
+  "voiceUsuallySeconds": "Usually 4–8 seconds",
+  "@voiceUsuallySeconds": {
+    "description": "Processing duration hint"
+  },
+  "voiceHeard": "Heard",
+  "@voiceHeard": {
+    "description": "Heard toggle"
+  },
+  "voiceHeardCaps": "HEARD",
+  "@voiceHeardCaps": {
+    "description": "Heard popover label"
+  },
+  "voiceWhatWasHeard": "What was heard",
+  "@voiceWhatWasHeard": {
+    "description": "Semantics label of the heard popover"
+  },
+  "voiceClearField": "Clear field",
+  "@voiceClearField": {
+    "description": "Clear field button"
+  },
+  "voiceOrdinalFirst": "1st",
+  "@voiceOrdinalFirst": {
+    "description": "Ordinal 1"
+  },
+  "voiceOrdinalSecond": "2nd",
+  "@voiceOrdinalSecond": {
+    "description": "Ordinal 2"
+  },
+  "voiceOrdinalThird": "3rd",
+  "@voiceOrdinalThird": {
+    "description": "Ordinal 3"
+  },
+  "voiceOrdinalOther": "{n}th",
+  "@voiceOrdinalOther": {
+    "description": "Ordinal n",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "voiceFilledCount": "{count, plural, =1{Filled 1 field} other{Filled {count} fields}}",
+  "@voiceFilledCount": {
+    "description": "Filled fields count",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "voiceCheckThenSave": "Check the fields, then save.",
+  "@voiceCheckThenSave": {
+    "description": "Filled panel hint"
+  },
+  "voiceSpeakAgain": "Speak again",
+  "@voiceSpeakAgain": {
+    "description": "Speak again button"
+  },
+  "voiceRound": "{round} of {max}",
+  "@voiceRound": {
+    "description": "Asking round",
+    "placeholders": {
+      "round": {
+        "type": "int"
+      },
+      "max": {
+        "type": "int"
+      }
+    }
+  },
+  "voiceNeedLine": "{filled}. Say the rest, or type into the marked fields.",
+  "@voiceNeedLine": {
+    "description": "Need panel line",
+    "placeholders": {
+      "filled": {
+        "type": "String"
+      }
+    }
+  },
+  "voiceAnswerByVoice": "Answer by voice",
+  "@voiceAnswerByVoice": {
+    "description": "Answer by voice button"
+  },
+  "voiceCouldntGet": "Couldn't get the {fields}",
+  "@voiceCouldntGet": {
+    "description": "Exhausted headline",
+    "placeholders": {
+      "fields": {
+        "type": "String"
+      }
+    }
+  },
+  "voiceExhaustedLine": "Type it in the marked field, then save. The mic still works if you want to try again.",
+  "@voiceExhaustedLine": {
+    "description": "Exhausted line"
+  },
+  "voiceUpdated": "Updated {fields}",
+  "@voiceUpdated": {
+    "description": "Follow-up headline",
+    "placeholders": {
+      "fields": {
+        "type": "String"
+      }
+    }
+  },
+  "voiceSpeaking": "Speaking",
+  "@voiceSpeaking": {
+    "description": "Speaking panel label"
+  },
+  "voiceMute": "Mute spoken feedback",
+  "@voiceMute": {
+    "description": "Mute tooltip"
+  },
+  "voiceDismiss": "Dismiss",
+  "@voiceDismiss": {
+    "description": "Dismiss button"
+  },
+  "voiceOpenSettings": "Open settings",
+  "@voiceOpenSettings": {
+    "description": "Open settings button"
+  },
+  "voiceSettings": "Settings",
+  "@voiceSettings": {
+    "description": "Settings button"
+  },
+  "voiceErrorNoSpeechTitle": "Didn't hear anything",
+  "@voiceErrorNoSpeechTitle": {
+    "description": "Error title"
+  },
+  "voiceErrorNoSpeechLine": "Check the mic isn't covered, then try again.",
+  "@voiceErrorNoSpeechLine": {
+    "description": "Error line"
+  },
+  "voiceErrorNothingMatchedTitle": "Nothing matched",
+  "@voiceErrorNothingMatchedTitle": {
+    "description": "Error title"
+  },
+  "voiceErrorNothingMatchedLine": "I couldn't match anything to this collection's fields. Try naming a field, like “amount 12.50”.",
+  "@voiceErrorNothingMatchedLine": {
+    "description": "Error line"
+  },
+  "voiceErrorPermissionDeniedTitle": "Microphone access is off",
+  "@voiceErrorPermissionDeniedTitle": {
+    "description": "Error title"
+  },
+  "voiceErrorPermissionDeniedLine": "Allow microphone access in Android settings to fill by voice. You can keep typing.",
+  "@voiceErrorPermissionDeniedLine": {
+    "description": "Error line"
+  },
+  "voiceErrorMicBusyTitle": "Microphone is busy",
+  "@voiceErrorMicBusyTitle": {
+    "description": "Error title"
+  },
+  "voiceErrorMicBusyLine": "Another app is using the microphone. Close it, then try again.",
+  "@voiceErrorMicBusyLine": {
+    "description": "Error line"
+  },
+  "voiceErrorModelLoadFailedTitle": "Voice model couldn't load",
+  "@voiceErrorModelLoadFailedTitle": {
+    "description": "Error title"
+  },
+  "voiceErrorModelLoadFailedLine": "The model file may be damaged. Retry, or re-download it in Settings.",
+  "@voiceErrorModelLoadFailedLine": {
+    "description": "Error line"
+  },
+  "voiceErrorLowMemoryTitle": "Not enough memory",
+  "@voiceErrorLowMemoryTitle": {
+    "description": "Error title"
+  },
+  "voiceErrorLowMemoryLine": "Close other apps and try again. Your form is kept.",
+  "@voiceErrorLowMemoryLine": {
+    "description": "Error line"
+  },
+  "voiceErrorInterruptedBackgroundTitle": "Recording stopped",
+  "@voiceErrorInterruptedBackgroundTitle": {
+    "description": "Error title"
+  },
+  "voiceErrorInterruptedBackgroundLine": "Fi went to the background, so recording stopped. Nothing was kept.",
+  "@voiceErrorInterruptedBackgroundLine": {
+    "description": "Error line"
+  },
+  "voiceErrorInterruptedCallTitle": "Stopped for a call",
+  "@voiceErrorInterruptedCallTitle": {
+    "description": "Error title"
+  },
+  "voiceErrorInterruptedCallLine": "Recording stopped when a call came in. Nothing was kept.",
+  "@voiceErrorInterruptedCallLine": {
+    "description": "Error line"
+  },
+  "voiceErrorCancelledTitle": "Stopped",
+  "@voiceErrorCancelledTitle": {
+    "description": "Error title"
+  },
+  "voiceErrorCancelledLine": "Nothing was kept.",
+  "@voiceErrorCancelledLine": {
+    "description": "Error line"
+  },
+  "voiceMicStopListening": "Stop listening",
+  "@voiceMicStopListening": {
+    "description": "Mic label"
+  },
+  "voiceMicProcessing": "Processing speech",
+  "@voiceMicProcessing": {
+    "description": "Mic label"
+  },
+  "voiceMicDownloading": "Voice model downloading, {percent} percent",
+  "@voiceMicDownloading": {
+    "description": "Mic label",
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "settingsTitle": "Settings",
+  "@settingsTitle": {
+    "description": "Settings page title"
+  },
+  "settingsSubtitle": "Preferences for this computer.",
+  "@settingsSubtitle": {
+    "description": "Desktop settings subtitle"
+  },
+  "settingsVoiceInput": "Voice input",
+  "@settingsVoiceInput": {
+    "description": "Section label"
+  },
+  "settingsMicrophone": "Microphone",
+  "@settingsMicrophone": {
+    "description": "Section label"
+  },
+  "settingsAbout": "About",
+  "@settingsAbout": {
+    "description": "Section label"
+  },
+  "settingsVersion": "Version",
+  "@settingsVersion": {
+    "description": "About row"
+  },
+  "settingsNetwork": "Network",
+  "@settingsNetwork": {
+    "description": "About row"
+  },
+  "settingsNetworkSummary": "Local network only · UDP {first}–{last} · mDNS {mdns}",
+  "@settingsNetworkSummary": {
+    "description": "Network summary; numbers are ports",
+    "placeholders": {
+      "first": {
+        "type": "int"
+      },
+      "last": {
+        "type": "int"
+      },
+      "mdns": {
+        "type": "int"
+      }
+    }
+  },
+  "settingsMicAccess": "Microphone access",
+  "@settingsMicAccess": {
+    "description": "Microphone row"
+  },
+  "settingsMicAllowed": "Allowed",
+  "@settingsMicAllowed": {
+    "description": "Mic status"
+  },
+  "settingsMicNotAllowed": "Not allowed yet",
+  "@settingsMicNotAllowed": {
+    "description": "Mic status"
+  },
+  "settingsMicAsksFirst": "Fi asks the first time you use voice.",
+  "@settingsMicAsksFirst": {
+    "description": "Mic detail"
+  },
+  "settingsMicOff": "Off",
+  "@settingsMicOff": {
+    "description": "Mic status"
+  },
+  "settingsMicTurnOn": "Turn it on in Android settings to fill by voice.",
+  "@settingsMicTurnOn": {
+    "description": "Mic detail"
+  },
+  "settingsMicUnknown": "Unknown",
+  "@settingsMicUnknown": {
+    "description": "Mic status"
+  },
+  "settingsAndroidSettings": "Android settings",
+  "@settingsAndroidSettings": {
+    "description": "Button"
+  },
+  "settingsHandsFree": "Hands-free spoken feedback",
+  "@settingsHandsFree": {
+    "description": "Hands-free row"
+  },
+  "settingsHandsFreeDetail": "Speaks the “still need” question and a short confirmation",
+  "@settingsHandsFreeDetail": {
+    "description": "Hands-free detail"
+  },
+  "settingsNotEnoughStorage": "Not enough storage: {size} needed.",
+  "@settingsNotEnoughStorage": {
+    "description": "Snackbar",
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsFinishVoiceFirst": "Finish the voice fill in progress first.",
+  "@settingsFinishVoiceFirst": {
+    "description": "Snackbar"
+  },
+  "settingsCouldntChangeModels": "Couldn't change the voice models. Try again.",
+  "@settingsCouldntChangeModels": {
+    "description": "Snackbar"
+  },
+  "fieldEditorChipMultiline": "Multiline",
+  "@fieldEditorChipMultiline": {
+    "description": "Field editor option chip"
+  },
+  "fieldEditorChipLengthLimits": "Length limits",
+  "@fieldEditorChipLengthLimits": {
+    "description": "Field editor option chip"
+  },
+  "fieldEditorChipRange": "Range",
+  "@fieldEditorChipRange": {
+    "description": "Field editor option chip"
+  },
+  "fieldEditorChipSlider": "Show as slider",
+  "@fieldEditorChipSlider": {
+    "description": "Field editor option chip"
+  },
+  "fieldEditorChipDateRange": "Date range",
+  "@fieldEditorChipDateRange": {
+    "description": "Field editor option chip"
+  },
+  "fieldEditorChipDefaultValue": "Default value",
+  "@fieldEditorChipDefaultValue": {
+    "description": "Field editor option chip"
+  },
+  "fieldEditorSummaryMultiline": "multiline",
+  "@fieldEditorSummaryMultiline": {
+    "description": "Schema row detail for a multiline text field"
+  },
+  "fieldEditorSummaryScale": "{scale} dp",
+  "@fieldEditorSummaryScale": {
+    "description": "Schema row detail: decimal places of a decimal field",
+    "placeholders": {
+      "scale": {
+        "type": "int"
+      }
+    }
+  },
+  "fieldEditorAtLeast": "at least {min}",
+  "@fieldEditorAtLeast": {
+    "description": "Length constraint with only a minimum",
+    "placeholders": {
+      "min": {
+        "type": "int"
+      }
+    }
+  },
+  "fieldEditorAtMost": "at most {max}",
+  "@fieldEditorAtMost": {
+    "description": "Length constraint with only a maximum",
+    "placeholders": {
+      "max": {
+        "type": "int"
+      }
+    }
+  },
+  "fieldEditorTurnOff": "Turn off {option}",
+  "@fieldEditorTurnOff": {
+    "description": "Tooltip closing an option block",
+    "placeholders": {
+      "option": {
+        "type": "String"
+      }
+    }
+  },
+  "fieldEditorStepPositive": "Step must be a positive whole number",
+  "@fieldEditorStepPositive": {
+    "description": "Slider step error"
+  },
+  "fieldEditorStepDivides": "Step must divide the range from minimum to maximum exactly",
+  "@fieldEditorStepDivides": {
+    "description": "Slider step error"
+  },
+  "fieldEditorDefaultExactLength": "Default must be exactly {min} characters.",
+  "@fieldEditorDefaultExactLength": {
+    "description": "Default length error",
+    "placeholders": {
+      "min": {
+        "type": "int"
+      }
+    }
+  },
+  "fieldEditorDefaultLengthBetween": "Default must be {min}–{max} characters.",
+  "@fieldEditorDefaultLengthBetween": {
+    "description": "Default length error",
+    "placeholders": {
+      "min": {
+        "type": "int"
+      },
+      "max": {
+        "type": "int"
+      }
+    }
+  },
+  "fieldEditorDefaultMinLength": "Default must be at least {min} characters.",
+  "@fieldEditorDefaultMinLength": {
+    "description": "Default length error",
+    "placeholders": {
+      "min": {
+        "type": "int"
+      }
+    }
+  },
+  "fieldEditorDefaultMaxLength": "Default must be at most {max} characters.",
+  "@fieldEditorDefaultMaxLength": {
+    "description": "Default length error",
+    "placeholders": {
+      "max": {
+        "type": "int"
+      }
+    }
+  },
+  "fieldEditorDefaultBetween": "Default must be between {low} and {high}.",
+  "@fieldEditorDefaultBetween": {
+    "description": "Default range error",
+    "placeholders": {
+      "low": {
+        "type": "String"
+      },
+      "high": {
+        "type": "String"
+      }
+    }
+  },
+  "fieldEditorDefaultAtLeast": "Default must be at least {low}.",
+  "@fieldEditorDefaultAtLeast": {
+    "description": "Default range error",
+    "placeholders": {
+      "low": {
+        "type": "String"
+      }
+    }
+  },
+  "fieldEditorDefaultAtMost": "Default must be at most {high}.",
+  "@fieldEditorDefaultAtMost": {
+    "description": "Default range error",
+    "placeholders": {
+      "high": {
+        "type": "String"
+      }
+    }
+  },
+  "fieldEditorMakeRequiredTitle": "Make this field required?",
+  "@fieldEditorMakeRequiredTitle": {
+    "description": "Confirmation dialog title"
+  },
+  "fieldEditorMakeRequiredBody": "{count, plural, =1{1 record has no value for this field. It will be marked invalid until you fill the field in. Nothing is deleted.} other{{count} records have no value for this field. They will be marked invalid until you fill the field in. Nothing is deleted.}}",
+  "@fieldEditorMakeRequiredBody": {
+    "description": "Confirmation dialog body",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "fieldEditorMakeRequired": "Make required",
+  "@fieldEditorMakeRequired": {
+    "description": "Confirm button"
+  },
+  "fieldEditorDeleteOptionTitle": "Delete “{label}”?",
+  "@fieldEditorDeleteOptionTitle": {
+    "description": "Dialog title deleting a used option",
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "fieldEditorDeleteOptionBody": "{count, plural, =1{1 record uses this option and keeps it, shown as “{label} (deleted)”. It can't be picked for new records.} other{{count} records use this option and keep it, shown as “{label} (deleted)”. It can't be picked for new records.}}",
+  "@fieldEditorDeleteOptionBody": {
+    "description": "Dialog body deleting a used option",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "fieldEditorNewField": "New field",
+  "@fieldEditorNewField": {
+    "description": "Field editor header"
+  },
+  "fieldEditorName": "Name",
+  "@fieldEditorName": {
+    "description": "Field name input label"
+  },
+  "fieldEditorNameHint": "e.g. note",
+  "@fieldEditorNameHint": {
+    "description": "Field name input hint"
+  },
+  "fieldEditorType": "Type",
+  "@fieldEditorType": {
+    "description": "Section label"
+  },
+  "fieldEditorDecimalScale": "Decimal scale",
+  "@fieldEditorDecimalScale": {
+    "description": "Input label"
+  },
+  "fieldEditorSliderNeedsRange": "Show as slider needs a range with both ends.",
+  "@fieldEditorSliderNeedsRange": {
+    "description": "Hint under chips"
+  },
+  "fieldEditorAddField": "Add field",
+  "@fieldEditorAddField": {
+    "description": "Save button for a new field"
+  },
+  "fieldEditorSaveField": "Save field",
+  "@fieldEditorSaveField": {
+    "description": "Save button for an existing field"
+  },
+  "fieldEditorDeleteField": "Delete field",
+  "@fieldEditorDeleteField": {
+    "description": "Delete field action"
+  },
+  "fieldEditorRequiredWarning": "{count, plural, =1{1 record has no value for this field and will be marked invalid until you fill them in. Add a default to avoid this.} other{{count} records have no value for this field and will be marked invalid until you fill them in. Add a default to avoid this.}}",
+  "@fieldEditorRequiredWarning": {
+    "description": "Warning when turning Required on",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "fieldEditorMinCharacters": "Min characters",
+  "@fieldEditorMinCharacters": {
+    "description": "Input label"
+  },
+  "fieldEditorMaxCharacters": "Max characters",
+  "@fieldEditorMaxCharacters": {
+    "description": "Input label"
+  },
+  "fieldEditorEarliest": "Earliest",
+  "@fieldEditorEarliest": {
+    "description": "Date range lower bound label"
+  },
+  "fieldEditorLatest": "Latest",
+  "@fieldEditorLatest": {
+    "description": "Date range upper bound label"
+  },
+  "fieldEditorMinimum": "Minimum",
+  "@fieldEditorMinimum": {
+    "description": "Range lower bound label"
+  },
+  "fieldEditorMaximum": "Maximum",
+  "@fieldEditorMaximum": {
+    "description": "Range upper bound label"
+  },
+  "fieldEditorStepOptional": "Step (optional)",
+  "@fieldEditorStepOptional": {
+    "description": "Slider step input label"
+  },
+  "fieldEditorDate": "Date",
+  "@fieldEditorDate": {
+    "description": "Default slot label for a date field"
+  },
+  "fieldEditorDefault": "Default",
+  "@fieldEditorDefault": {
+    "description": "Default slot label"
+  },
+  "fieldEditorDayOfCreation": "Day of creation",
+  "@fieldEditorDayOfCreation": {
+    "description": "Relative date default mode"
+  },
+  "fieldEditorFixedDate": "Fixed date",
+  "@fieldEditorFixedDate": {
+    "description": "Fixed date default mode"
+  },
+  "fieldEditorDays": "days",
+  "@fieldEditorDays": {
+    "description": "Unit after a relative day count"
+  },
+  "fieldEditorOptionsCount": "Options · {count}",
+  "@fieldEditorOptionsCount": {
+    "description": "Section label with option count",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "fieldEditorOptionFallback": "option",
+  "@fieldEditorOptionFallback": {
+    "description": "Example option name when none was deleted"
+  },
+  "fieldEditorOptionLabel": "Option label",
+  "@fieldEditorOptionLabel": {
+    "description": "Option input hint"
+  },
+  "fieldEditorDeleteOption": "Delete option",
+  "@fieldEditorDeleteOption": {
+    "description": "Tooltip"
+  },
+  "fieldEditorAddOption": "Add option",
+  "@fieldEditorAddOption": {
+    "description": "Button"
+  },
+  "fieldEditorDeletedOptionNote": "Records that already use a deleted option keep it. It shows as “{example} (deleted)” and can't be picked for new records.",
+  "@fieldEditorDeletedOptionNote": {
+    "description": "Note under the options list",
+    "placeholders": {
+      "example": {
+        "type": "String"
+      }
+    }
+  },
+  "fieldEditorFieldIn": "Field in {collection}",
+  "@fieldEditorFieldIn": {
+    "description": "Field screen subtitle",
+    "placeholders": {
+      "collection": {
+        "type": "String"
+      }
+    }
+  },
+  "fieldEditorMore": "More",
+  "@fieldEditorMore": {
+    "description": "Overflow menu tooltip"
+  },
+  "widgetCouldNotRender": "This widget could not be rendered: {error}",
+  "@widgetCouldNotRender": {
+    "description": "Renderer failure",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "widgetNoValue": "No value yet.",
+  "@widgetNoValue": {
+    "description": "Empty state"
+  },
+  "widgetNoData": "No data yet.",
+  "@widgetNoData": {
+    "description": "Empty state"
+  },
+  "widgetNoObservations": "No observations yet.",
+  "@widgetNoObservations": {
+    "description": "Empty state"
+  },
+  "widgetNothingToChart": "Nothing to chart yet.",
+  "@widgetNothingToChart": {
+    "description": "Empty state"
+  },
+  "widgetUntitledWidget": "Untitled widget",
+  "@widgetUntitledWidget": {
+    "description": "Title fallback"
+  },
+  "widgetUnsupported": "Unsupported widget",
+  "@widgetUnsupported": {
+    "description": "Headline"
+  },
+  "widgetConfigKeys": "{count, plural, =0{no configuration keys} =1{1 configuration keys} other{{count} configuration keys}}",
+  "@widgetConfigKeys": {
+    "description": "Unsupported widget key count",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "widgetVersionLine": "Version {version} · {keys}",
+  "@widgetVersionLine": {
+    "description": "Unsupported widget meta line",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      },
+      "keys": {
+        "type": "String"
+      }
+    }
+  },
+  "widgetUnsupportedExplanation": "This widget was created by another device or a newer version. Its configuration is preserved and can be renamed, reordered, or removed.",
+  "@widgetUnsupportedExplanation": {
+    "description": "Unsupported widget explanation"
+  },
+  "widgetHeadlineNewerConfig": "Newer configuration version",
+  "@widgetHeadlineNewerConfig": {
+    "description": "Failure headline"
+  },
+  "widgetHeadlineInvalidConfig": "Invalid configuration",
+  "@widgetHeadlineInvalidConfig": {
+    "description": "Failure headline"
+  },
+  "widgetHeadlineQueryUnavailable": "Query unavailable",
+  "@widgetHeadlineQueryUnavailable": {
+    "description": "Failure headline"
+  },
+  "widgetHeadlineShapeMismatch": "Query result does not fit",
+  "@widgetHeadlineShapeMismatch": {
+    "description": "Failure headline"
+  },
+  "widgetHeadlineOverflow": "Value out of range",
+  "@widgetHeadlineOverflow": {
+    "description": "Failure headline"
+  },
+  "widgetHeadlineQueryFailed": "Query failed",
+  "@widgetHeadlineQueryFailed": {
+    "description": "Failure headline"
+  },
+  "widgetHeadlineRemoved": "Widget removed",
+  "@widgetHeadlineRemoved": {
+    "description": "Failure headline"
+  },
+  "voiceKept": "{count, plural, =1{Your edit to {names} was kept.} other{Your edits to {names} were kept.}}",
+  "@voiceKept": {
+    "description": "Typed edits kept",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "names": {
+        "type": "String"
+      }
+    }
+  },
+  "exprPickFieldIssue": "Pick a field.",
+  "@exprPickFieldIssue": {
+    "description": "Expression leaf issue"
+  },
+  "exprWholeNumberIssue": "Enter a whole number.",
+  "@exprWholeNumberIssue": {
+    "description": "Expression leaf issue"
+  },
+  "exprDecimalsIssue": "Enter a number with at most {scale} decimals.",
+  "@exprDecimalsIssue": {
+    "description": "Expression leaf issue",
+    "placeholders": {
+      "scale": {
+        "type": "int"
+      }
+    }
+  },
+  "exprTypeInteger": "Integer",
+  "@exprTypeInteger": {
+    "description": "Value type"
+  },
+  "exprTypeDecimal": "Decimal, scale {scale}",
+  "@exprTypeDecimal": {
+    "description": "Value type",
+    "placeholders": {
+      "scale": {
+        "type": "int"
+      }
+    }
+  },
+  "exprTypeDuration": "Duration",
+  "@exprTypeDuration": {
+    "description": "Value type"
+  },
+  "exprTypeDate": "Date",
+  "@exprTypeDate": {
+    "description": "Value type"
+  },
+  "exprTypeDateTime": "Date & time",
+  "@exprTypeDateTime": {
+    "description": "Value type"
+  },
+  "exprTypeBoolean": "Boolean",
+  "@exprTypeBoolean": {
+    "description": "Value type"
+  },
+  "exprTypeText": "Text",
+  "@exprTypeText": {
+    "description": "Value type"
+  },
+  "exprTypeChoice": "Choice",
+  "@exprTypeChoice": {
+    "description": "Value type"
+  },
+  "exprTypeEmpty": "Empty",
+  "@exprTypeEmpty": {
+    "description": "Value type"
+  },
+  "exprSlotField": "field?",
+  "@exprSlotField": {
+    "description": "Formula placeholder"
+  },
+  "exprSlotNumber": "number?",
+  "@exprSlotNumber": {
+    "description": "Formula placeholder"
+  },
+  "exprTermsMissing": "{count, plural, =1{1 term still needs a value} other{{count} terms still need a value}}",
+  "@exprTermsMissing": {
+    "description": "Result line",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "exprResultInvalid": "Result: not valid, see the highlighted part",
+  "@exprResultInvalid": {
+    "description": "Result line"
+  },
+  "exprResultChecking": "Result: checking…",
+  "@exprResultChecking": {
+    "description": "Result line"
+  },
+  "exprResultType": "Result: {type}",
+  "@exprResultType": {
+    "description": "Result line",
+    "placeholders": {
+      "type": {
+        "type": "String"
+      }
+    }
+  },
+  "exprResultTypeMaybeEmpty": "Result: {type} · may be empty",
+  "@exprResultTypeMaybeEmpty": {
+    "description": "Result line",
+    "placeholders": {
+      "type": {
+        "type": "String"
+      }
+    }
+  },
+  "exprResultUnknown": "Result: unknown",
+  "@exprResultUnknown": {
+    "description": "Result line"
+  },
+  "exprAbsoluteValue": "Absolute value",
+  "@exprAbsoluteValue": {
+    "description": "Tooltip / chip"
+  },
+  "exprAddOperator": "Add operator",
+  "@exprAddOperator": {
+    "description": "Tooltip"
+  },
+  "exprField": "Field",
+  "@exprField": {
+    "description": "Segment"
+  },
+  "exprNumber": "Number",
+  "@exprNumber": {
+    "description": "Segment / label"
+  },
+  "exprPickField": "Pick a field",
+  "@exprPickField": {
+    "description": "Hint"
+  },
+  "exprWhole": "Whole",
+  "@exprWhole": {
+    "description": "Scale option"
+  },
+  "exprRemoveOperator": "Remove operator (keep the left side)",
+  "@exprRemoveOperator": {
+    "description": "Tooltip"
+  },
+  "exprScale": "Scale",
+  "@exprScale": {
+    "description": "Label"
+  },
+  "exprFewerDecimals": "Fewer decimals",
+  "@exprFewerDecimals": {
+    "description": "Tooltip"
+  },
+  "exprMoreDecimals": "More decimals",
+  "@exprMoreDecimals": {
+    "description": "Tooltip"
+  },
+  "exprRoundHalfEven": "Round half to even",
+  "@exprRoundHalfEven": {
+    "description": "Rounding"
+  },
+  "exprOf": "of",
+  "@exprOf": {
+    "description": "Absolute value of"
+  },
+  "exprRemoveAbsolute": "Remove absolute value",
+  "@exprRemoveAbsolute": {
+    "description": "Tooltip"
+  },
+  "computedNewTitle": "New computed field",
+  "@computedNewTitle": {
+    "description": "Title"
+  },
+  "computedEditTitle": "Edit computed field",
+  "@computedEditTitle": {
+    "description": "Title"
+  },
+  "computedInCollection": "in {collection}",
+  "@computedInCollection": {
+    "description": "Context label",
+    "placeholders": {
+      "collection": {
+        "type": "String"
+      }
+    }
+  },
+  "computedName": "Name",
+  "@computedName": {
+    "description": "Label"
+  },
+  "computedNameHint": "e.g. difference",
+  "@computedNameHint": {
+    "description": "Hint"
+  },
+  "inputDurationHint": "e.g. {first} or {second}",
+  "@inputDurationHint": {
+    "description": "Duration input hint; examples are invariant duration syntax.",
+    "placeholders": {
+      "first": {
+        "type": "String"
+      },
+      "second": {
+        "type": "String"
+      }
+    }
+  },
+  "inputDurationUnparsed": "Use units like {example}",
+  "@inputDurationUnparsed": {
+    "description": "Duration input error; example is invariant duration syntax.",
+    "placeholders": {
+      "example": {
+        "type": "String"
+      }
+    }
+  }
+}

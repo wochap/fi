@@ -1,3 +1,4 @@
+import 'package:fi/l10n/l10n.dart';
 import 'package:fi/controllers.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/theme/form_errors.dart';
@@ -87,9 +88,9 @@ class _ComputedFieldEditorState extends State<ComputedFieldEditor> {
   Widget build(BuildContext context) => FormSurface(
     key: const Key('computed-editor'),
     title: widget.existing == null
-        ? 'New computed field'
-        : 'Edit computed field',
-    contextLabel: 'in ${widget.schema.name}',
+        ? context.l10n.computedNewTitle
+        : context.l10n.computedEditTitle,
+    contextLabel: context.l10n.computedInCollection(widget.schema.name),
     width: 676,
     showRequiredLegend: true,
     body: Column(
@@ -100,10 +101,10 @@ class _ComputedFieldEditorState extends State<ComputedFieldEditor> {
         FiTextInput(
           key: const Key('computed-name'),
           controller: name,
-          label: 'Name',
+          label: context.l10n.computedName,
           required: true,
-          hint: 'e.g. difference',
-          errors: issues.of('name'),
+          hint: context.l10n.computedNameHint,
+          errors: issues.fieldLines(context.l10n, 'name'),
           onChanged: (_) => setState(() => issues = issues.without('name')),
         ),
         ExpressionBuilder(
@@ -117,8 +118,11 @@ class _ComputedFieldEditorState extends State<ComputedFieldEditor> {
     ),
     message: issues.form.isEmpty
         ? null
-        : FormErrorLines(issues.form, key: const Key('computed-editor-error')),
-    primaryLabel: 'Save',
+        : FormErrorLines(
+            issues.formLines(context.l10n),
+            key: const Key('computed-editor-error'),
+          ),
+    primaryLabel: context.l10n.commonSave,
     primaryKey: const Key('save-computed'),
     onPrimary: _canSave ? _save : null,
   );

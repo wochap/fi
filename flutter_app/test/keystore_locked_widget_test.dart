@@ -68,7 +68,7 @@ void main() {
       tester,
       find.byKey(const Key('networking-deferred-banner')),
     );
-    expect(find.textContaining('47380-47389'), findsOneWidget);
+    expect(find.textContaining('47380–47389'), findsOneWidget);
     expect(find.textContaining('keyring'), findsNothing);
     expect(find.byIcon(FiIcons.network), findsOneWidget);
     expect(find.text('Collections'), findsWidgets);

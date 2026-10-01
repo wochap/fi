@@ -1,3 +1,4 @@
+import 'package:fi/l10n/l10n.dart';
 import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/controllers.dart';
 import 'package:fi/help_button.dart';
@@ -24,8 +25,6 @@ class PairingCard extends StatelessWidget {
     fontWeight: FontWeight.w500,
     height: 1.2,
   );
-  static const _idleBody =
-      'Pairing is off. Start it only when both devices are nearby.';
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -45,11 +44,11 @@ class PairingCard extends StatelessWidget {
         child: DefaultTextStyle.merge(
           style: TextStyle(fontSize: 13, color: Nocturne.muted(.8)),
           child: idle
-              ? _idle(compact)
+              ? _idle(context, compact)
               : Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _heading(compact),
+                    _heading(context, compact),
                     const SizedBox(height: 12),
                     ..._content(context),
                   ],
@@ -69,35 +68,36 @@ class PairingCard extends StatelessWidget {
           color: Nocturne.accent,
         );
 
-  Widget _heading(bool compact) => Row(
+  Widget _heading(BuildContext context, bool compact) => Row(
     children: [
       _mark(compact),
       SizedBox(width: compact ? 10 : 16),
-      const Expanded(child: Text('Pair a device', style: _title)),
+      Expanded(child: Text(context.l10n.pairingTitle, style: _title)),
     ],
   );
 
-  Widget _startButton({required bool block}) => FilledButton.icon(
-    key: const Key('start-pairing'),
-    style: block
-        ? FilledButton.styleFrom(minimumSize: const Size(0, 46))
-        : null,
-    onPressed: controller.busy ? null : controller.beginPairing,
-    icon: const Icon(FiIcons.link),
-    label: const Text('Start pairing'),
-  );
+  Widget _startButton(BuildContext context, {required bool block}) =>
+      FilledButton.icon(
+        key: const Key('start-pairing'),
+        style: block
+            ? FilledButton.styleFrom(minimumSize: const Size(0, 46))
+            : null,
+        onPressed: controller.busy ? null : controller.beginPairing,
+        icon: const Icon(FiIcons.link),
+        label: Text(context.l10n.pairingStart),
+      );
 
   /// Shown after the idle copy while Discoverable is off, so the user knows
   /// pairing does not depend on it.
-  static const discoveryOffNote =
-      'Discovery is off, but pairing still works: it uses its own short announcement.';
+  static String discoveryOffNote(AppLocalizations l) =>
+      l.pairingDiscoveryOffNote;
 
-  String get _idleText => controller.preferences.discoverable
-      ? _idleBody
-      : '$_idleBody $discoveryOffNote';
+  String _idleText(AppLocalizations l) => controller.preferences.discoverable
+      ? l.pairingIdleBody
+      : '${l.pairingIdleBody} ${discoveryOffNote(l)}';
 
   /// Idle is the card's resting state (mocks 1b, 2i): a row on a wide screen, a stack on a phone.
-  Widget _idle(bool compact) => compact
+  Widget _idle(BuildContext context, bool compact) => compact
       ? Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -105,14 +105,14 @@ class PairingCard extends StatelessWidget {
               children: [
                 _mark(true),
                 const SizedBox(width: 10),
-                const Expanded(child: Text('Pair a device', style: _title)),
+                Expanded(child: Text(context.l10n.pairingTitle, style: _title)),
                 const HelpButton(HelpId.pairingStartPairing),
               ],
             ),
             const SizedBox(height: 10),
-            Text(_idleText, key: const Key('pairing-idle-body')),
+            Text(_idleText(context.l10n), key: const Key('pairing-idle-body')),
             const SizedBox(height: 10),
-            _startButton(block: true),
+            _startButton(context, block: true),
           ],
         )
       : Row(
@@ -123,158 +123,153 @@ class PairingCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Pair a device', style: _title),
+                  Text(context.l10n.pairingTitle, style: _title),
                   const SizedBox(height: 3),
-                  Text(_idleText, key: const Key('pairing-idle-body')),
+                  Text(
+                    _idleText(context.l10n),
+                    key: const Key('pairing-idle-body'),
+                  ),
                 ],
               ),
             ),
             const HelpButton(HelpId.pairingStartPairing),
             const SizedBox(width: 8),
-            _startButton(block: false),
+            _startButton(context, block: false),
           ],
         );
 
-  List<Widget> _content(
-    BuildContext context,
-  ) => switch (controller.pairing.kind) {
-    // Rendered by [_idle].
-    PairingKindDto.idle => const [],
-    PairingKindDto.discoverable => [
-      Text(
-        'Searching for nearby devices · ${controller.remainingSeconds}s remaining',
-      ),
-      const LinearProgressIndicator(),
-      const SizedBox(height: 8),
-      if (controller.allCandidatesAlreadyPaired)
-        const Text(
-          'The devices found here are already paired with this one.',
-          key: Key('candidates-already-paired'),
-        )
-      else if (controller.candidates.isEmpty)
-        const Text('No nearby pairing candidates yet.')
-      else ...[
-        Row(
-          children: [
-            const Expanded(
-              child: Text(
-                'Tap Connect on one device only; the other device just waits.',
-                key: Key('single-initiator-hint'),
+  List<Widget> _content(BuildContext context) =>
+      switch (controller.pairing.kind) {
+        // Rendered by [_idle].
+        PairingKindDto.idle => const [],
+        PairingKindDto.discoverable => [
+          Text(context.l10n.pairingSearching(controller.remainingSeconds)),
+          const LinearProgressIndicator(),
+          const SizedBox(height: 8),
+          if (controller.allCandidatesAlreadyPaired)
+            Text(
+              context.l10n.pairingAlreadyPaired,
+              key: const Key('candidates-already-paired'),
+            )
+          else if (controller.candidates.isEmpty)
+            Text(context.l10n.pairingNoCandidates)
+          else ...[
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    context.l10n.pairingSingleInitiator,
+                    key: const Key('single-initiator-hint'),
+                  ),
+                ),
+                const HelpButton(HelpId.pairingSingleInitiator),
+              ],
+            ),
+            ...controller.candidates.map(
+              (candidate) => ListTile(
+                key: Key('candidate-${candidate.instanceId}'),
+                leading: const Icon(FiIcons.phone),
+                title: Text(candidate.endpoint),
+                subtitle: Text(context.l10n.pairingNearbyDevice),
+                trailing: Text(context.l10n.pairingConnect),
+                onTap: controller.busy
+                    ? null
+                    : () => controller.selectCandidate(candidate),
               ),
             ),
-            const HelpButton(HelpId.pairingSingleInitiator),
           ],
-        ),
-        ...controller.candidates.map(
-          (candidate) => ListTile(
-            key: Key('candidate-${candidate.instanceId}'),
-            leading: const Icon(FiIcons.phone),
-            title: Text(candidate.endpoint),
-            subtitle: const Text('Nearby device'),
-            trailing: const Text('Connect'),
-            onTap: controller.busy
-                ? null
-                : () => controller.selectCandidate(candidate),
+          OutlinedButton(
+            key: const Key('stop-pairing'),
+            onPressed: controller.busy ? null : controller.stopPairing,
+            child: Text(context.l10n.pairingStop),
           ),
-        ),
-      ],
-      OutlinedButton(
-        key: const Key('stop-pairing'),
-        onPressed: controller.busy ? null : controller.stopPairing,
-        child: const Text('Stop pairing'),
-      ),
-    ],
-    PairingKindDto.connecting => const [
-      LinearProgressIndicator(),
-      SizedBox(height: 8),
-      Text('Connecting securely…'),
-    ],
-    PairingKindDto.awaitingConfirmation => [
-      const Text('Confirm that this code matches on both devices:'),
-      const SizedBox(height: 8),
-      SelectableText(
-        controller.pairing.sas?.padLeft(6, '0') ?? '------',
-        key: const Key('pairing-sas'),
-        textAlign: TextAlign.center,
-        style: const TextStyle(
-          fontFamily: Nocturne.monoFamily,
-          fontSize: 36,
-          letterSpacing: 6,
-          color: Nocturne.accent200,
-        ),
-      ),
-      if (controller.pairing.peerDeviceId case final peerId?) ...[
-        const SizedBox(height: 8),
-        SelectableText.rich(
-          TextSpan(
-            children: [
-              const TextSpan(text: 'Other device: '),
+        ],
+        PairingKindDto.connecting => [
+          const LinearProgressIndicator(),
+          const SizedBox(height: 8),
+          Text(context.l10n.pairingConnecting),
+        ],
+        PairingKindDto.awaitingConfirmation => [
+          Text(context.l10n.pairingConfirmCode),
+          const SizedBox(height: 8),
+          SelectableText(
+            controller.pairing.sas?.padLeft(6, '0') ?? '------',
+            key: const Key('pairing-sas'),
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontFamily: Nocturne.monoFamily,
+              fontSize: 36,
+              letterSpacing: 6,
+              color: Nocturne.accent200,
+            ),
+          ),
+          if (controller.pairing.peerDeviceId case final peerId?) ...[
+            const SizedBox(height: 8),
+            SelectableText.rich(
               TextSpan(
-                text: peerId,
-                style: const TextStyle(fontFamily: Nocturne.monoFamily),
+                children: [
+                  TextSpan(text: context.l10n.pairingOtherDevice),
+                  TextSpan(
+                    text: peerId,
+                    style: const TextStyle(fontFamily: Nocturne.monoFamily),
+                  ),
+                ],
               ),
-            ],
+              key: const Key('pairing-peer-id'),
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 12, color: Nocturne.muted(.6)),
+            ),
+            Text(
+              context.l10n.pairingReferenceOnly,
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 11, color: Nocturne.muted(.45)),
+            ),
+          ],
+          const SizedBox(height: 12),
+          FilledButton(
+            onPressed: controller.busy ? null : controller.confirm,
+            child: Text(context.l10n.pairingCodesMatch),
           ),
-          key: const Key('pairing-peer-id'),
-          textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 12, color: Nocturne.muted(.6)),
-        ),
-        Text(
-          'For reference only; the code above is what must match.',
-          textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 11, color: Nocturne.muted(.45)),
-        ),
-      ],
-      const SizedBox(height: 12),
-      FilledButton(
-        onPressed: controller.busy ? null : controller.confirm,
-        child: const Text('Codes match'),
-      ),
-      TextButton(
-        onPressed: controller.busy ? null : controller.reject,
-        child: const Text('Codes do not match'),
-      ),
-    ],
-    PairingKindDto.committing => const [
-      LinearProgressIndicator(),
-      SizedBox(height: 8),
-      Text('Saving trust and synchronizing the dataset…'),
-    ],
-    PairingKindDto.trusted => [
-      const Icon(FiIcons.verified, color: Nocturne.accent, size: 40),
-      const Text('Device paired successfully.', textAlign: TextAlign.center),
-      TextButton(
-        onPressed: controller.beginPairing,
-        child: const Text('Pair another device'),
-      ),
-    ],
-    PairingKindDto.failed => _failure(context),
-  };
+          TextButton(
+            onPressed: controller.busy ? null : controller.reject,
+            child: Text(context.l10n.pairingCodesDiffer),
+          ),
+        ],
+        PairingKindDto.committing => [
+          const LinearProgressIndicator(),
+          const SizedBox(height: 8),
+          Text(context.l10n.pairingCommitting),
+        ],
+        PairingKindDto.trusted => [
+          const Icon(FiIcons.verified, color: Nocturne.accent, size: 40),
+          Text(context.l10n.pairingSuccess, textAlign: TextAlign.center),
+          TextButton(
+            onPressed: controller.beginPairing,
+            child: Text(context.l10n.pairingAnother),
+          ),
+        ],
+        PairingKindDto.failed => _failure(context),
+      };
 
   List<Widget> _failure(BuildContext context) =>
       switch (controller.pairing.failure) {
         PairingFailureKindDto.bothRootless => [
           const Icon(FiIcons.info, size: 40),
-          const Text(
-            'Neither device has a dataset yet, so there is nothing to join. '
-            'Pair with a device that already has a dataset, or create a new '
-            'dataset on one device first.',
-            key: Key('pairing-both-rootless'),
+          Text(
+            context.l10n.pairingBothRootless,
+            key: const Key('pairing-both-rootless'),
             textAlign: TextAlign.center,
           ),
           TextButton(
             onPressed: controller.beginPairing,
-            child: const Text('Pair again'),
+            child: Text(context.l10n.pairingAgain),
           ),
         ],
         PairingFailureKindDto.rootMismatch => [
           const Icon(FiIcons.blocked, color: Nocturne.error, size: 40),
-          const Text(
-            'These devices hold different datasets, and datasets cannot be '
-            'merged. Pairing them again will not succeed. To use the other '
-            "device's dataset here, this device's local data must be reset "
-            'first.',
-            key: Key('pairing-root-mismatch'),
+          Text(
+            context.l10n.pairingRootMismatch,
+            key: const Key('pairing-root-mismatch'),
             textAlign: TextAlign.center,
           ),
           if (onResetDataset != null)
@@ -282,38 +277,40 @@ class PairingCard extends StatelessWidget {
               key: const Key('reset-dataset'),
               onPressed: controller.busy ? null : () => _confirmReset(context),
               icon: const Icon(FiIcons.reset),
-              label: const Text("Reset this device's data"),
+              label: Text(context.l10n.shellResetData),
             ),
           TextButton(
             onPressed: controller.beginPairing,
-            child: const Text('Pair a different device'),
+            child: Text(context.l10n.pairingDifferentDevice),
           ),
         ],
         PairingFailureKindDto.secureStoreLocked => [
           const Icon(FiIcons.locked, size: 40),
-          const Text(
-            'Your login keyring is locked, so this device could not save the '
-            'pairing. Unlock the keyring, then retry — the other device may '
-            'already show this one as paired.',
-            key: Key('pairing-secure-store-locked'),
+          Text(
+            context.l10n.pairingKeyringLocked,
+            key: const Key('pairing-secure-store-locked'),
             textAlign: TextAlign.center,
           ),
           FilledButton.icon(
             key: const Key('pairing-retry-after-unlock'),
             onPressed: controller.busy ? null : controller.retryAfterUnlock,
             icon: const Icon(FiIcons.refresh),
-            label: const Text('Retry'),
+            label: Text(context.l10n.commonRetry),
           ),
         ],
         PairingFailureKindDto.other || null => [
           const Icon(FiIcons.error, color: Nocturne.error, size: 40),
-          Text(
-            controller.pairing.message ?? 'Pairing did not complete.',
-            textAlign: TextAlign.center,
-          ),
+          Text(context.l10n.pairingDidNotComplete, textAlign: TextAlign.center),
+          if (controller.pairing.message case final detail?)
+            Text(
+              detail,
+              key: const Key('pairing-failure-detail'),
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 12, color: Nocturne.muted(.55)),
+            ),
           TextButton(
             onPressed: controller.beginPairing,
-            child: const Text('Try again'),
+            child: Text(context.l10n.commonTryAgain),
           ),
         ],
       };
@@ -323,9 +320,7 @@ class PairingCard extends StatelessWidget {
     if (action == null) return;
     final confirmed = await ResetDatasetDialog.show(
       context,
-      lead:
-          "To join the other device's dataset, this device's local data must "
-          'be reset first.',
+      lead: context.l10n.pairingResetLead,
       trustedDeviceCount: controller.devices
           .where((device) => !device.revoked)
           .length,

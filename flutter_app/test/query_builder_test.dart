@@ -1,3 +1,5 @@
+import 'package:fi/l10n/l10n.dart';
+import 'package:flutter/widgets.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/widgets/query_builder.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -254,7 +256,7 @@ void main() {
       expect(state.aggregation, AggregationKindDto.sum);
       expect(state.categoryFieldId, 'started');
       expect(state.operandFieldId, 'amount');
-      expect(state.blocker, isNull);
+      expect(state.blocker(lookupAppLocalizations(const Locale('en'))), isNull);
     });
 
     test('Monthly total differs from Daily total only in the period', () {
@@ -268,7 +270,10 @@ void main() {
       expect(state.bucket, BucketPeriodDto.day);
       expect(state.operandFieldId, isNull);
       expect(state.categoryFieldId, isNull);
-      expect(state.blocker, 'Choose the field to aggregate.');
+      expect(
+        state.blocker(lookupAppLocalizations(const Locale('en'))),
+        'Choose the field to aggregate.',
+      );
     });
 
     test('Count per day needs no operand', () {
@@ -276,7 +281,7 @@ void main() {
       expect(state.aggregation, AggregationKindDto.count);
       expect(state.operandFieldId, isNull);
       expect(state.bucket, BucketPeriodDto.day);
-      expect(state.blocker, isNull);
+      expect(state.blocker(lookupAppLocalizations(const Locale('en'))), isNull);
     });
 
     test('Latest values plots records newest first, capped', () {

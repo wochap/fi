@@ -1,3 +1,5 @@
+import 'package:fi/l10n/error_text.dart';
+import 'package:fi/l10n/l10n.dart';
 import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/exact_format.dart';
 import 'package:fi/src/rust/api/models.dart';
@@ -63,10 +65,12 @@ final class WidgetRendererRegistry {
     try {
       return renderer(widget);
     } catch (error) {
-      return WidgetFailureCard(
-        title: widget.definition.title,
-        kind: WidgetErrorKindDto.invalidConfiguration,
-        message: 'This widget could not be rendered: $error',
+      return Builder(
+        builder: (context) => WidgetFailureCard(
+          title: widget.definition.title,
+          kind: WidgetErrorKindDto.invalidConfiguration,
+          message: context.l10n.widgetCouldNotRender('$error'),
+        ),
       );
     }
   }
@@ -127,7 +131,7 @@ Widget renderAggregateNumber(WidgetRenderContext context) {
   if (result?.value == null) {
     return WidgetTile(
       title: title,
-      child: const WidgetEmpty(message: 'No value yet.'),
+      child: const WidgetEmpty(reason: WidgetEmptyReason.noValue),
     );
   }
   final suffix = WidgetConfig(context.configuration).textAt('suffix');
@@ -140,18 +144,26 @@ Widget renderAggregateNumber(WidgetRenderContext context) {
           child: FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
-            child: Text(
-              suffix == null || suffix.isEmpty
-                  ? value.label
-                  : '${value.label} $suffix',
-              maxLines: 1,
-              style: const TextStyle(
-                fontSize: 40,
-                fontWeight: FontWeight.w500,
-                letterSpacing: -.8,
-                height: 1.1,
-                fontFeatures: Nocturne.tabular,
-              ),
+            child: Builder(
+              builder: (context) {
+                final valueLabel = value.label(
+                  context.l10n,
+                  decimalSeparator: decimalSeparatorOf(context),
+                );
+                return Text(
+                  suffix == null || suffix.isEmpty
+                      ? valueLabel
+                      : '$valueLabel $suffix',
+                  maxLines: 1,
+                  style: const TextStyle(
+                    fontSize: 40,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: -.8,
+                    height: 1.1,
+                    fontFeatures: Nocturne.tabular,
+                  ),
+                );
+              },
             ),
           ),
         ),
@@ -183,8 +195,11 @@ final class UnsupportedWidgetPlaceholder extends StatelessWidget {
               .map((entry) => entry.key)
               .toList()
         : const <String>[];
+    final l = context.l10n;
     return WidgetTile(
-      title: definition.title.isEmpty ? 'Untitled widget' : definition.title,
+      title: definition.title.isEmpty
+          ? l.widgetUntitledWidget
+          : definition.title,
       // Long explanations scroll inside the tile rather than overflowing it.
       child: SingleChildScrollView(
         child: Column(
@@ -202,7 +217,7 @@ final class UnsupportedWidgetPlaceholder extends StatelessWidget {
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
-                    'Unsupported widget',
+                    l.widgetUnsupported,
                     style: theme.textTheme.labelLarge?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
@@ -220,15 +235,16 @@ final class UnsupportedWidgetPlaceholder extends StatelessWidget {
               ),
             ),
             Text(
-              'Version ${definition.configuration.version} · '
-              '${unknownKeys.isEmpty ? 'no configuration keys' : '${unknownKeys.length} configuration keys'}',
+              l.widgetVersionLine(
+                '${definition.configuration.version}',
+                l.widgetConfigKeys(unknownKeys.length),
+              ),
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
             Text(
-              'This widget was created by another device or a newer version. '
-              'Its configuration is preserved and can be renamed, reordered, or removed.',
+              l.widgetUnsupportedExplanation,
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -281,9 +297,7 @@ final class WidgetTile extends StatelessWidget {
 }
 
 final class WidgetLoading extends StatelessWidget {
-  const WidgetLoading({super.key, this.message = 'Loading…'});
-
-  final String message;
+  const WidgetLoading({super.key});
 
   @override
   Widget build(BuildContext context) => Center(
@@ -296,21 +310,32 @@ final class WidgetLoading extends StatelessWidget {
           child: CircularProgressIndicator(strokeWidth: 2),
         ),
         const SizedBox(height: 8),
-        Text(message, style: Theme.of(context).textTheme.bodySmall),
+        Text(
+          context.l10n.commonLoading,
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
       ],
     ),
   );
 }
 
-final class WidgetEmpty extends StatelessWidget {
-  const WidgetEmpty({super.key, this.message = 'No data yet.'});
+/// Why a tile has nothing to draw.
+enum WidgetEmptyReason { noData, noValue, noObservations, nothingToChart }
 
-  final String message;
+final class WidgetEmpty extends StatelessWidget {
+  const WidgetEmpty({super.key, this.reason = WidgetEmptyReason.noData});
+
+  final WidgetEmptyReason reason;
 
   @override
   Widget build(BuildContext context) => Center(
     child: Text(
-      message,
+      switch (reason) {
+        WidgetEmptyReason.noData => context.l10n.widgetNoData,
+        WidgetEmptyReason.noValue => context.l10n.widgetNoValue,
+        WidgetEmptyReason.noObservations => context.l10n.widgetNoObservations,
+        WidgetEmptyReason.nothingToChart => context.l10n.widgetNothingToChart,
+      },
       textAlign: TextAlign.center,
       style: Theme.of(context).textTheme.bodySmall?.copyWith(
         color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -327,11 +352,15 @@ final class WidgetFailureCard extends StatelessWidget {
     required this.title,
     required this.kind,
     required this.message,
+    this.detail,
   });
 
   final String title;
   final WidgetErrorKindDto kind;
   final String message;
+
+  /// Rust's technical wording, shown small under [message].
+  final String? detail;
 
   @override
   Widget build(BuildContext context) {
@@ -351,7 +380,7 @@ final class WidgetFailureCard extends StatelessWidget {
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
-                    _headline,
+                    _headline(context.l10n),
                     style: theme.textTheme.labelLarge?.copyWith(
                       color: theme.colorScheme.error,
                     ),
@@ -366,23 +395,30 @@ final class WidgetFailureCard extends StatelessWidget {
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
+            if (detail case final detail? when detail != message) ...[
+              const SizedBox(height: 4),
+              Text(
+                detail,
+                style: TextStyle(fontSize: 12, color: Nocturne.muted(.55)),
+              ),
+            ],
           ],
         ),
       ),
     );
   }
 
-  String get _headline => switch (kind) {
-    WidgetErrorKindDto.unsupportedType => 'Unsupported widget',
+  String _headline(AppLocalizations l) => switch (kind) {
+    WidgetErrorKindDto.unsupportedType => l.widgetUnsupported,
     WidgetErrorKindDto.unsupportedConfigurationVersion =>
-      'Newer configuration version',
-    WidgetErrorKindDto.invalidConfiguration => 'Invalid configuration',
+      l.widgetHeadlineNewerConfig,
+    WidgetErrorKindDto.invalidConfiguration => l.widgetHeadlineInvalidConfig,
     WidgetErrorKindDto.unknownQuery ||
-    WidgetErrorKindDto.invalidQuery => 'Query unavailable',
-    WidgetErrorKindDto.shapeMismatch => 'Query result does not fit',
-    WidgetErrorKindDto.overflow => 'Value out of range',
-    WidgetErrorKindDto.queryFailed => 'Query failed',
-    WidgetErrorKindDto.removed => 'Widget removed',
+    WidgetErrorKindDto.invalidQuery => l.widgetHeadlineQueryUnavailable,
+    WidgetErrorKindDto.shapeMismatch => l.widgetHeadlineShapeMismatch,
+    WidgetErrorKindDto.overflow => l.widgetHeadlineOverflow,
+    WidgetErrorKindDto.queryFailed => l.widgetHeadlineQueryFailed,
+    WidgetErrorKindDto.removed => l.widgetHeadlineRemoved,
   };
 
   IconData get _icon => switch (kind) {
@@ -412,6 +448,10 @@ final class WidgetFailure extends StatelessWidget {
   Widget build(BuildContext context) => WidgetFailureCard(
     title: render.definition.title,
     kind: evaluation.errorKind ?? WidgetErrorKindDto.queryFailed,
-    message: evaluation.message ?? 'This widget could not be evaluated.',
+    message: switch (evaluation.errorKind) {
+      final kind? => widgetErrorText(context.l10n, kind),
+      null => evaluation.message ?? context.l10n.widgetNotEvaluated,
+    },
+    detail: evaluation.errorKind == null ? null : evaluation.message,
   );
 }

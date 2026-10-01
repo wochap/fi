@@ -4,6 +4,7 @@ import 'package:fi/controllers.dart';
 import 'package:fi/device_details.dart';
 import 'package:fi/pairing_card.dart';
 import 'package:fi/src/rust/api/models.dart';
+import 'package:fi/l10n/l10n.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -162,7 +163,14 @@ void main() {
         findsOneWidget,
         reason: 'discovery is off',
       );
-      expect(find.text(PairingCard.discoveryOffNote), findsOneWidget);
+      expect(
+        find.text(
+          PairingCard.discoveryOffNote(
+            lookupAppLocalizations(const Locale('en')),
+          ),
+        ),
+        findsOneWidget,
+      );
       await tester.tap(find.text('Pair device'));
       await tester.pump();
       await tester.pump();

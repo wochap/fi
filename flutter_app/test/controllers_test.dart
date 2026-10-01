@@ -457,7 +457,10 @@ void main() {
       resetResolvable: false,
     );
     await controller.refresh();
-    expect(controller.errorMessage, 'projection is not ready');
+    expect(
+      (controller.failure as BridgeError).message,
+      'projection is not ready',
+    );
     controller.dispose();
   });
 
@@ -496,7 +499,10 @@ void main() {
       resetResolvable: false,
     );
     await controller.refreshWidgets();
-    expect(controller.widgetErrorMessage, 'evaluation unavailable');
+    expect(
+      (controller.widgetFailure as BridgeError).message,
+      'evaluation unavailable',
+    );
     expect(controller.widgetDefinitions, hasLength(1));
     expect(controller.records, hasLength(1));
     controller.dispose();
@@ -514,7 +520,7 @@ void main() {
     final other = DevicesController(failing);
     await other.start();
     expect(other.buildInfo, isNull);
-    expect(other.errorMessage, isNull);
+    expect(other.failure, isNull);
     other.dispose();
   });
 
@@ -533,7 +539,7 @@ void main() {
     expect(bridge.preferenceCalls, ['sync=false']);
     expect(controller.preferences.syncEnabled, isFalse);
     expect(controller.syncStatus, SyncStatusDto.paused);
-    expect(controller.errorMessage, isNull);
+    expect(controller.failure, isNull);
 
     bridge.nextError = const BridgeError(
       kind: BridgeErrorKind.persistence,
@@ -543,7 +549,10 @@ void main() {
     );
     await controller.setDiscoverable(true);
     expect(controller.preferences.discoverable, isFalse);
-    expect(controller.errorMessage, 'Local data could not be saved or loaded.');
+    expect(
+      (controller.failure as BridgeError).kind,
+      BridgeErrorKind.persistence,
+    );
 
     bridge.nextError = const BridgeError(
       kind: BridgeErrorKind.persistence,
@@ -553,7 +562,10 @@ void main() {
     );
     await controller.setSyncEnabled(true);
     expect(controller.preferences.syncEnabled, isFalse);
-    expect(controller.errorMessage, 'Local data could not be saved or loaded.');
+    expect(
+      (controller.failure as BridgeError).kind,
+      BridgeErrorKind.persistence,
+    );
 
     bridge.preferences = const NetworkPreferencesDto(
       discoverable: true,
@@ -662,7 +674,7 @@ void main() {
     await controller.delete(revoked);
     expect(bridge.deletedDevices, ['peer']);
     expect(controller.devices, isEmpty);
-    expect(controller.errorMessage, isNull);
+    expect(controller.failure, isNull);
     controller.dispose();
   });
 
