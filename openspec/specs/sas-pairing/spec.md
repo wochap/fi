@@ -49,15 +49,15 @@ the one that the committing and trusted states later record.
 - **THEN** the awaiting-confirmation state carries the peer DeviceId derived from the authenticated hello key, and the DeviceId recorded on commit for that session is the same value
 
 ### Requirement: Pairing-specific authenticated channel
-Pairing SHALL use QUIC TLS 1.3 with ALPN `fi-pair/1`, require both peers to present structurally valid identity-key certificates, verify handshake signatures and hello/certificate key equality, and MUST NOT register the connection with the Repo transport.
+Pairing SHALL use QUIC TLS 1.3 with ALPN `fi-pair/1`, require both peers to present structurally valid identity-key certificates, verify handshake signatures and hello/certificate key equality, and MUST NOT register the connection with the Repo transport. Outside an active pairing window the device SHALL hold no pairing socket at all, so nothing answers on a pairing port.
 
 #### Scenario: Pairing mode is inactive
-- **WHEN** an unknown peer attempts the pairing ALPN outside an active pairing window
-- **THEN** the connection is rejected before pairing messages are processed
+- **WHEN** an unknown peer attempts the pairing ALPN while no pairing window is open
+- **THEN** no pairing socket is bound on the device, no handshake takes place, and no pairing message is processed
 
 #### Scenario: Hello key mismatches certificate
-- **WHEN** a pairing hello carries a public key different from the TLS certificate key
-- **THEN** the pairing fails without displaying a SAS or creating trust
+- **WHEN** an inbound pairing hello carries a public key different from the TLS certificate key
+- **THEN** that connection is refused without displaying a SAS or creating trust, and the responder's pairing window stays open
 
 ### Requirement: Transcript-bound six-digit SAS
 Both peers SHALL derive an identical six-digit SAS and separate confirmation keys from a canonical transcript containing protocol identifiers, roles, permanent public keys, pairing instance IDs, fresh nonces, root-state declarations, and pairing-specific TLS exporter material; the SAS MUST NOT be transmitted.
@@ -180,16 +180,53 @@ When a pairing session reaches its deadline, the outcome reported to the caller 
 - **THEN** the in-flight operation fails with a transport failure, the pairing state is failed with that transport failure, and no trust is created
 
 ### Requirement: Pairing endpoint binds inside the sync port range
-The pairing-specific QUIC endpoint SHALL keep a socket separate from the sync endpoint. Under the fixed port policy it SHALL bind the lowest free UDP port in the same configured range that is above the port the sync endpoint took, trying ports in ascending order, and SHALL NOT bind an ephemeral port. Pairing advertisements and pairing provisioning SHALL continue to carry the actually bound ports (the pairing port in the advertisement, the sync port in provisioning), so peers learn the real ports whatever the range yields. Under the ephemeral policy the pairing endpoint SHALL bind an operating-system-chosen port as before.
+The pairing-specific QUIC endpoint SHALL keep a socket separate from the sync endpoint and SHALL bind it only when a pairing window opens. Under the fixed port policy it SHALL bind the lowest free UDP port in the configured range other than the device's own sync port, trying ports in ascending order, and SHALL NOT bind an ephemeral port. When no port in the range is free, starting pairing SHALL fail with a typed ports-exhausted error naming the range; the sync endpoint and the rest of networking SHALL keep running. Pairing advertisements and pairing provisioning SHALL carry the actually bound ports (the pairing port in the advertisement, the sync port in provisioning), so peers learn the real ports whatever the range yields. Under the ephemeral policy the pairing endpoint SHALL bind an operating-system-chosen port when the window opens.
 
 #### Scenario: Pairing takes the next port
-- **WHEN** the sync endpoint is bound to UDP `47380` and `47381` is free
-- **THEN** the pairing endpoint is bound to UDP `47381` and a pairing advertisement started afterwards carries port `47381`
+- **WHEN** the sync endpoint is bound to UDP `47380`, `47381` is free, and the user starts pairing
+- **THEN** the pairing endpoint is bound to UDP `47381` and the pairing advertisement carries port `47381`
 
 #### Scenario: Two instances on one host
-- **WHEN** a second application instance opens on the same host while the first holds `47380` and `47381`
-- **THEN** the second instance binds sync to `47382` and pairing to `47383`, and both instances can pair with each other
+- **WHEN** a second application instance opens on the same host while the first holds sync on `47380` and has no pairing window open
+- **THEN** the second instance binds sync to `47381`, and when both start pairing each binds a different free port in the range and they can pair with each other
 
 #### Scenario: Sync port took the last free port
-- **WHEN** the sync endpoint binds the only free port in the range
-- **THEN** the pairing bind reports the range as exhausted and the open degrades as specified for exhausted ports rather than binding an ephemeral port
+- **WHEN** the sync endpoint took the only free port in the range and the user starts pairing
+- **THEN** starting pairing fails with the ports-exhausted error, no advertisement is published, no ephemeral port is bound, and sync networking keeps running
+
+### Requirement: The pairing socket exists only for the pairing window
+The pairing socket SHALL be released when pairing reaches any terminal or idle state: trusted, failed, stopped, rejected, or expired. After release the port SHALL be free for other sockets, and a later pairing window SHALL bind again under the port rules.
+
+#### Scenario: Window expires
+- **WHEN** a pairing window reaches its deadline with no session
+- **THEN** the pairing socket is closed and the port it held can be bound by another socket
+
+#### Scenario: Pairing completes
+- **WHEN** a pairing session commits and the device reaches the trusted state
+- **THEN** the pairing socket is closed after the pairing connection closes, and the embedder reports no pairing port
+
+#### Scenario: Pairing is started again
+- **WHEN** the user starts a new pairing window after an earlier one ended
+- **THEN** a pairing socket is bound again inside the range and advertised with its actual port
+
+### Requirement: Inbound pairing connections from non-LAN addresses are dropped before the handshake
+The pairing endpoint SHALL apply the same source-address admission as the sync endpoint: an inbound connection whose source is not a LAN-routable peer address under the device's address policy SHALL be dropped before the TLS handshake, without any reply and without presenting the certificate, and SHALL NOT affect the pairing state, the window, or the candidate list.
+
+#### Scenario: Public source during a window
+- **WHEN** a pairing window is open and a connection to the pairing port arrives from a public address
+- **THEN** it is dropped without a reply and the device stays discoverable
+
+### Requirement: A failed inbound pairing handshake refuses only that connection
+An inbound pairing connection whose handshake fails before a SAS is displayed SHALL be closed on its own and MUST NOT fail the local pairing attempt. This covers a TLS handshake failure, a missing structurally valid certificate, a missing, malformed, or unsupported-version hello, a hello key that does not match the certificate, and incompatible root declarations. The discoverable window, its deadline, the candidate list, and any in-flight outbound attempt SHALL survive, the local device SHALL be discoverable again if the inbound had moved it out of discoverable, and later inbound connections in the same window SHALL still be processed. An inbound peer that has not delivered its hello within 10 seconds of connecting SHALL be treated as a failed handshake, so a stalled connection cannot hold the accept path for the rest of the window. Failures after the SAS is displayed are unchanged and fail the session.
+
+#### Scenario: Garbage inbound then a valid peer
+- **WHEN** a pairing window is open, an inbound connection sends a malformed hello, and afterwards a legitimate peer dials in within the same window
+- **THEN** the first connection is closed, the device stays discoverable with its deadline unchanged, and the legitimate peer reaches the SAS
+
+#### Scenario: Stalled inbound
+- **WHEN** an inbound pairing connection completes TLS but sends no hello for 10 seconds
+- **THEN** that connection is closed, the device stays discoverable, and a later inbound connection is processed
+
+#### Scenario: TLS failure on inbound
+- **WHEN** an inbound connection to the pairing port fails the TLS handshake
+- **THEN** the failure is logged, the accept path keeps listening, and the device stays discoverable

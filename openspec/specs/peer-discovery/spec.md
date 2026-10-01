@@ -16,7 +16,7 @@ The Rust application SHALL define a `DiscoveryProvider` that advertises and obse
 - **THEN** existing authentication and Repo synchronization can consume them without protocol or Automerge changes
 
 ### Requirement: Explicit expiring pairing discovery
-Generic `_myapp-pair._udp.local` advertising and browsing SHALL run only after explicit `start_pairing`, SHALL stop after explicit cancellation or a bounded timeout, and SHALL invalidate discovered candidates when the window closes.
+Generic pairing advertising and browsing SHALL use the fixed service type `_fi-gremyncn3q._udp.local.`, which has the same shape as group-scoped selectors (`_fi-` followed by ten lowercase base32 characters) and names neither the product's purpose nor the word "pair". It SHALL run only after explicit `start_pairing`, SHALL stop after explicit cancellation or a bounded timeout, and SHALL invalidate discovered candidates when the window closes.
 
 #### Scenario: Pairing is idle
 - **WHEN** the user has not started pairing or the window has expired
@@ -25,6 +25,10 @@ Generic `_myapp-pair._udp.local` advertising and browsing SHALL run only after e
 #### Scenario: Pairing window expires
 - **WHEN** the pairing deadline elapses
 - **THEN** advertising, browsing, candidates, and uncommitted pairing sessions are cleaned up automatically
+
+#### Scenario: Pairing service type is non-descript
+- **WHEN** another LAN host observes a pairing advertisement
+- **THEN** the service type is `_fi-gremyncn3q._udp.local.` and contains no descriptive word such as "pair" or "myapp"
 
 ### Requirement: Minimal pairing advertisement
 Pairing advertisements SHALL contain only a random pairing instance ID, QUIC port, and protocol version under a random service instance name, and MUST NOT contain permanent DeviceId, public key, friendly/user name, root/document ID, or finance data. The addresses a pairing advertisement carries SHALL be limited to those a remote peer on the same local network can reach, and SHALL NOT include loopback addresses or addresses belonging to host-local container, virtualization, or tunnel bridge interfaces.
@@ -133,3 +137,14 @@ holds the same secret.
 #### Scenario: Different secrets
 - **WHEN** two devices advertise with different discovery secrets
 - **THEN** their advertisement events carry different fingerprints
+
+### Requirement: mDNS runs only on interfaces the transport can use
+When the transport is bound to an IPv4 address that is not loopback, the mDNS daemon SHALL NOT use IPv6 interfaces or loopback interfaces for sending, receiving, advertising, or browsing. When the transport is bound to loopback, loopback SHALL remain enabled so single-host tests keep working. Advertised addresses remain governed by discovery address selection.
+
+#### Scenario: IPv4 LAN bind
+- **WHEN** discovery is created for a transport bound to `0.0.0.0`
+- **THEN** the mDNS daemon excludes all IPv6 interfaces and the IPv4 and IPv6 loopback interfaces
+
+#### Scenario: Loopback bind
+- **WHEN** discovery is created for a transport bound to `127.0.0.1`
+- **THEN** the IPv4 loopback interface stays enabled for mDNS

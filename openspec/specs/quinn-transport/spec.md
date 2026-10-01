@@ -5,11 +5,11 @@ Define the bounded Quinn-based QUIC transport, stream framing, session replaceme
 ## Requirements
 
 ### Requirement: QUIC TLS transport
-The application SHALL implement the custom Repo `NetworkTransport` using Quinn over QUIC with TLS 1.3 and ALPN `myapp-sync/1`.
+The application SHALL implement the custom Repo `NetworkTransport` using Quinn over QUIC with TLS 1.3 and ALPN `fi-sync/1`.
 
 #### Scenario: Protocol negotiation succeeds
 - **WHEN** compatible authenticated peers connect
-- **THEN** they negotiate the sync ALPN before any Repo session event is emitted
+- **THEN** they negotiate the sync ALPN `fi-sync/1` before any Repo session event is emitted
 
 #### Scenario: ALPN is incompatible
 - **WHEN** a peer offers no supported sync ALPN
@@ -71,11 +71,15 @@ When the application is opened with a fixed port policy, the sync QUIC endpoint 
 - **THEN** the sync endpoint binds an operating-system-chosen port exactly as before this change
 
 ### Requirement: Bound ports are observable
-The application SHALL expose the sync endpoint's bound UDP port, the pairing endpoint's bound UDP port, and the configured fixed range (or the fact that the ephemeral policy is in effect) to its embedder after a networked open, so a client can display which ports a firewall must allow.
+The application SHALL expose the sync endpoint's bound UDP port, the pairing endpoint's bound UDP port while a pairing window holds it, and the configured fixed range (or the fact that the ephemeral policy is in effect) to its embedder after a networked open, so a client can display which ports a firewall must allow. While no pairing window is open the pairing port SHALL be reported as absent, because no pairing socket exists.
+
+#### Scenario: Embedder reads the ports while idle
+- **WHEN** a networked open has completed under the fixed range, no pairing window is open, and the embedder queries the network ports
+- **THEN** it receives the bound sync port inside the range, no pairing port, and the range bounds
 
 #### Scenario: Embedder reads the ports
-- **WHEN** a networked open has completed under the fixed range and the embedder queries the network ports
-- **THEN** it receives the bound sync port, the bound pairing port, and the range bounds, and both bound ports lie inside the range
+- **WHEN** a pairing window is open under the fixed range and the embedder queries the network ports
+- **THEN** it receives the bound sync port and the bound pairing port, both inside the range and different from each other
 
 ### Requirement: Inbound sync connections are refused while sync is paused
 The sync transport SHALL expose an accepting flag. While accepting is off, every inbound connection SHALL be refused before TLS authentication and MUST NOT register a session or emit a peer event. Outbound dials requested explicitly by the core are not governed by this flag. Turning accepting back on SHALL accept later inbound connections without rebinding the endpoint.
@@ -87,3 +91,29 @@ The sync transport SHALL expose an accepting flag. While accepting is off, every
 #### Scenario: Accepting resumes
 - **WHEN** accepting is turned back on and the same peer connects again
 - **THEN** the connection is authenticated and registered as usual on the same bound port
+
+### Requirement: Inbound sync connections from non-LAN addresses are dropped before the handshake
+The sync endpoint SHALL admit an inbound connection only when its source address is one the device would itself dial as a peer under its address policy: for an IPv4 unspecified or LAN bind, a private (RFC 1918) or link-local IPv4 address; for an IPv6 unspecified bind, additionally a unique-local IPv6 address; for a loopback bind, a loopback address. Any other inbound connection SHALL be dropped before the TLS handshake starts, without sending any reply, without presenting the device certificate, and MUST NOT register a session or emit a peer event. This check SHALL apply before the accepting flag and the connection limit are consulted, and SHALL NOT affect outbound dials.
+
+#### Scenario: Public source address
+- **WHEN** a packet opening a connection to the sync port arrives from a public address such as `8.8.8.8`
+- **THEN** the connection is dropped without a reply and no certificate is sent
+
+#### Scenario: Loopback source on a LAN-bound endpoint
+- **WHEN** the sync endpoint is bound to `0.0.0.0` and a client on the same host dials it from `127.0.0.1`
+- **THEN** the connection is dropped before the handshake and the client observes no handshake
+
+#### Scenario: LAN peer is unaffected
+- **WHEN** a trusted peer at a private LAN address dials the sync port while sync is accepting
+- **THEN** the connection is authenticated and registered as usual
+
+### Requirement: Inbound sync connections are bounded for a personal mesh
+The sync endpoint SHALL hold at most 8 open connections by default. An inbound connection that arrives while the limit is reached SHALL be refused before the TLS handshake and MUST NOT register a session.
+
+#### Scenario: Default limit
+- **WHEN** the transport is configured with defaults
+- **THEN** its connection limit is 8
+
+#### Scenario: Limit reached
+- **WHEN** the endpoint already holds its maximum number of connections and another LAN peer dials in
+- **THEN** that connection is refused before the handshake and the existing sessions are unaffected
