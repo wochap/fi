@@ -38,6 +38,7 @@ use x509_parser::prelude::{FromDer, X509Certificate};
 use crate::{
     adapters::SqliteControlStore,
     control::{PeerTrustRecord, TrustState},
+    discovery::AddressPolicy,
     identity::{DeviceId, DeviceIdentity, PublicDeviceKey},
     routing::{
         ConnectionDirection, ConnectionFailure, NetworkEndpoint, PeerConnector, SessionCandidate,
@@ -45,7 +46,7 @@ use crate::{
     },
 };
 
-pub const SYNC_ALPN: &[u8] = b"myapp-sync/1";
+pub const SYNC_ALPN: &[u8] = b"fi-sync/1";
 const STREAM_PREFACE: &[u8] = b"FISYNC\x01";
 const CONTROL_PREFACE: &[u8] = b"FICTRL\x01";
 const MAX_CONTROL_FRAME: usize = 1024;
@@ -373,7 +374,7 @@ impl Default for QuinnTransportConfig {
         Self {
             event_capacity: 128,
             writer_capacity: 32,
-            max_connections: 64,
+            max_connections: 8,
         }
     }
 }
@@ -436,6 +437,8 @@ pub struct QuinnTransport {
     tls_identity: TlsIdentity,
     trust: Arc<dyn TrustResolver>,
     config: QuinnTransportConfig,
+    /// Inbound sources outside this policy are dropped before the handshake.
+    inbound_policy: AddressPolicy,
     events_tx: mpsc::Sender<NetworkEvent>,
     events_rx: Mutex<Option<mpsc::Receiver<NetworkEvent>>>,
     control_tx: mpsc::Sender<ControlRequest>,
@@ -522,6 +525,7 @@ impl QuinnTransport {
             tls_identity,
             trust,
             config,
+            inbound_policy: AddressPolicy::for_bind(bind.ip()),
             events_tx,
             events_rx: Mutex::new(Some(events_rx)),
             control_tx,
@@ -621,6 +625,18 @@ impl QuinnTransport {
             let Some(incoming) = self.endpoint.accept().await else {
                 break;
             };
+            if !self
+                .inbound_policy
+                .admits_peer_address(incoming.remote_address().ip())
+            {
+                tracing::debug!(
+                    event = "inbound_dropped_non_lan",
+                    endpoint = "sync",
+                    remote = %incoming.remote_address()
+                );
+                incoming.ignore();
+                continue;
+            }
             if (!self.accepting.load(Ordering::Acquire) && !self.admits_any())
                 || self.endpoint.open_connections() >= self.config.max_connections
             {
@@ -1212,6 +1228,52 @@ mod tests {
             .await
             .unwrap()
             .unwrap()
+    }
+
+    #[test]
+    fn sync_alpn_is_fi_sync_v1() {
+        assert_eq!(SYNC_ALPN, b"fi-sync/1");
+    }
+
+    #[test]
+    fn default_connection_limit_is_eight() {
+        assert_eq!(QuinnTransportConfig::default().max_connections, 8);
+    }
+
+    #[tokio::test]
+    async fn lan_bound_endpoint_drops_loopback_inbound_before_the_handshake() {
+        let identity_a = identity(20).await;
+        let identity_b = identity(21).await;
+        let trust_a = Arc::new(MemoryTrustResolver::default());
+        let trust_b = Arc::new(MemoryTrustResolver::default());
+        trust_a.set(trusted(&identity_b, TrustState::Trusted));
+        trust_b.set(trusted(&identity_a, TrustState::Trusted));
+        let listener = QuinnTransport::bind(
+            ([0, 0, 0, 0], 0).into(),
+            identity_a,
+            trust_a,
+            QuinnTransportConfig::default(),
+        )
+        .unwrap();
+        let dialer = QuinnTransport::bind(
+            ([127, 0, 0, 1], 0).into(),
+            identity_b,
+            trust_b,
+            QuinnTransportConfig::default(),
+        )
+        .unwrap();
+        let mut events = NetworkTransport::take_events(listener.as_ref()).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let outcome = tokio::time::timeout(
+            Duration::from_secs(2),
+            dialer.dial(listener.identity.id(), ([127, 0, 0, 1], port).into()),
+        )
+        .await;
+        assert!(
+            matches!(outcome, Err(_) | Ok(Err(_))),
+            "dial must not complete"
+        );
+        assert!(events.try_recv().is_err(), "no event may be emitted");
     }
 
     #[test]

@@ -17,6 +17,7 @@ use rustls::{
 use tokio::io::AsyncReadExt;
 
 use crate::{
+    discovery::AddressPolicy,
     identity::{DeviceIdentity, PublicDeviceKey},
     pairing::{PAIRING_ALPN, PairingError, PairingMessage},
     quinn_transport::{TlsIdentity, extract_public_key, peer_certificate},
@@ -31,6 +32,9 @@ const CLOSE_CODE_DONE: u32 = 0;
 /// Application close code for "I cannot take this connection right now". The
 /// dialer maps it to [`PairingError::PeerBusy`] and keeps its own window.
 const CLOSE_CODE_BUSY: u32 = 1;
+/// Application close code for an inbound handshake the local device rejected
+/// (bad hello, key mismatch, stalled peer). Only that connection is closed.
+pub(crate) const CLOSE_CODE_REJECTED: u32 = 2;
 
 #[derive(Debug)]
 struct StructuralServerVerifier {
@@ -199,6 +203,20 @@ impl PairingConnection {
         self.connection
             .close(CLOSE_CODE_BUSY.into(), b"pairing busy");
     }
+    /// Closes an inbound connection whose pairing handshake failed, without
+    /// affecting the local pairing window.
+    pub fn reject_handshake(&self) {
+        self.connection
+            .close(CLOSE_CODE_REJECTED.into(), b"pairing handshake rejected");
+    }
+    /// The application close code, once the connection was closed with one.
+    #[cfg(test)]
+    pub(crate) fn close_code(&self) -> Option<u64> {
+        match self.connection.close_reason()? {
+            quinn::ConnectionError::ApplicationClosed(close) => Some(close.error_code.into_inner()),
+            _ => None,
+        }
+    }
     /// Returns `PeerBusy` when the peer closed this connection with the busy
     /// code; `None` when it is open or closed for any other reason.
     #[must_use]
@@ -281,6 +299,8 @@ pub struct PairingTransport {
     endpoint: Endpoint,
     server_config: quinn::ServerConfig,
     client_config: quinn::ClientConfig,
+    /// Inbound sources outside this policy are dropped before the handshake.
+    inbound_policy: AddressPolicy,
     connections: Mutex<Vec<Connection>>,
 }
 
@@ -293,7 +313,11 @@ impl fmt::Debug for PairingTransport {
 }
 
 impl PairingTransport {
-    pub fn bind(bind: SocketAddr, identity: &DeviceIdentity) -> Result<Self, PairingError> {
+    pub fn bind(
+        bind: SocketAddr,
+        identity: &DeviceIdentity,
+        inbound_policy: AddressPolicy,
+    ) -> Result<Self, PairingError> {
         let tls_identity = TlsIdentity::generate(identity)
             .map_err(|error| PairingError::Transport(error.to_string()))?;
         let provider = Arc::new(rustls::crypto::ring::default_provider());
@@ -337,6 +361,7 @@ impl PairingTransport {
             endpoint,
             server_config,
             client_config: quinn::ClientConfig::new(Arc::new(client_crypto)),
+            inbound_policy,
             connections: Mutex::new(Vec::new()),
         })
     }
@@ -357,27 +382,62 @@ impl PairingTransport {
             }
         }
     }
-    pub fn deactivate_listener(&self) {
-        self.endpoint.set_server_config(None);
+    /// Closes the socket; the endpoint answers nothing afterwards.
+    pub fn close_endpoint(&self) {
+        self.endpoint
+            .close(CLOSE_CODE_DONE.into(), b"pairing inactive");
     }
+    /// Waits for the next inbound connection that completes the TLS handshake
+    /// with a structurally valid certificate. Non-LAN sources are dropped
+    /// without a reply and failed handshakes are logged; neither ends the wait.
+    /// Returns `Inactive` only once the endpoint is closed.
     pub async fn accept(&self) -> Result<PairingConnection, PairingError> {
-        let incoming = self.endpoint.accept().await.ok_or(PairingError::Inactive)?;
-        let connection = incoming
-            .await
-            .map_err(|error| PairingError::Transport(error.to_string()))?;
-        let peer_public_key = extract_public_key(
-            &peer_certificate(&connection)
-                .map_err(|error| PairingError::Transport(error.to_string()))?,
-        )
-        .map_err(|error| PairingError::Transport(error.to_string()))?;
-        self.connections
-            .lock()
-            .map_err(|_| PairingError::Transport("connection lock poisoned".into()))?
-            .push(connection.clone());
-        Ok(PairingConnection {
-            connection,
-            peer_public_key,
-        })
+        loop {
+            let incoming = self.endpoint.accept().await.ok_or(PairingError::Inactive)?;
+            let remote = incoming.remote_address();
+            if !self.inbound_policy.admits_peer_address(remote.ip()) {
+                tracing::debug!(
+                    event = "inbound_dropped_non_lan",
+                    endpoint = "pairing",
+                    remote = %remote
+                );
+                incoming.ignore();
+                continue;
+            }
+            let connection = match incoming.await {
+                Ok(connection) => connection,
+                Err(error) => {
+                    tracing::info!(
+                        event = "pairing_inbound_rejected",
+                        remote = %remote,
+                        error = %error
+                    );
+                    continue;
+                }
+            };
+            let peer_public_key = match peer_certificate(&connection)
+                .and_then(|certificate| extract_public_key(&certificate))
+            {
+                Ok(key) => key,
+                Err(error) => {
+                    tracing::info!(
+                        event = "pairing_inbound_rejected",
+                        remote = %remote,
+                        error = %error
+                    );
+                    connection.close(CLOSE_CODE_REJECTED.into(), b"pairing handshake rejected");
+                    continue;
+                }
+            };
+            self.connections
+                .lock()
+                .map_err(|_| PairingError::Transport("connection lock poisoned".into()))?
+                .push(connection.clone());
+            return Ok(PairingConnection {
+                connection,
+                peer_public_key,
+            });
+        }
     }
     pub async fn connect(&self, address: SocketAddr) -> Result<PairingConnection, PairingError> {
         let connection = self

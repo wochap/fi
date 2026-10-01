@@ -2,10 +2,11 @@
 
 use std::{
     collections::{BTreeMap, HashMap},
-    net::SocketAddr,
+    net::{IpAddr, SocketAddr},
+    ops::RangeInclusive,
     sync::{
         Arc, Mutex,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
     },
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -45,6 +46,30 @@ use crate::{
     },
     pairing_transport::{PairingConnection, PairingStream, PairingTransport},
 };
+
+/// How long an inbound pairing peer may take to deliver its hello before the
+/// connection is cut off.
+const INBOUND_HELLO_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// Which UDP ports a pairing window may bind.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum PairingPorts {
+    /// An operating-system-chosen port.
+    Ephemeral,
+    /// The lowest free port in `range` other than `exclude` (the device's own
+    /// sync port).
+    Range {
+        range: RangeInclusive<u16>,
+        exclude: u16,
+    },
+}
+
+/// Where a pairing window binds its socket. Nothing is bound until a window opens.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PairingBind {
+    pub ip: IpAddr,
+    pub ports: PairingPorts,
+}
 
 struct ActivePairingSession {
     role: PairingRole,
@@ -100,8 +125,8 @@ struct CandidateAddresses {
 ///
 /// One physical device produces a new instance id every time it re-arms pairing,
 /// while its previous advertisement lingers in browser caches until TTL or
-/// goodbye. Both resolve to the same `ip:port`, because the QUIC socket outlives
-/// the window. The newer instance therefore owns the endpoint and the older one
+/// goodbye. Both resolve to the same `ip:port` when the new window binds the
+/// same free port as the old one. The newer instance therefore owns the endpoint and the older one
 /// loses it, so the device shows as one row.
 #[derive(Debug, Default)]
 struct CandidateTable {
@@ -200,7 +225,10 @@ pub struct PairingManager {
     keys: Arc<dyn SecureKeyStore>,
     control: Arc<SqliteControlStore>,
     discovery: Arc<dyn DiscoveryProvider>,
-    transport: Arc<PairingTransport>,
+    bind: PairingBind,
+    /// Bound only while a pairing window is open.
+    transport: Mutex<Option<Arc<PairingTransport>>>,
+    inbound_hello_timeout_ms: AtomicU64,
     state_tx: watch::Sender<PairingState>,
     candidates_tx: watch::Sender<Vec<PairingCandidate>>,
     events: broadcast::Sender<PairingEvent>,
@@ -239,10 +267,9 @@ impl PairingManager {
         keys: Arc<dyn SecureKeyStore>,
         control: Arc<SqliteControlStore>,
         discovery: Arc<dyn DiscoveryProvider>,
-        bind: SocketAddr,
+        bind: PairingBind,
     ) -> Result<Arc<Self>, PairingError> {
-        let transport = Arc::new(PairingTransport::bind(bind, &identity)?);
-        let address_policy = AddressPolicy::for_bind(bind.ip());
+        let address_policy = AddressPolicy::for_bind(bind.ip);
         let (state_tx, _) = watch::channel(PairingState::Idle);
         let (candidates_tx, _) = watch::channel(Vec::new());
         let (events, _) = broadcast::channel(128);
@@ -346,7 +373,14 @@ impl PairingManager {
             keys,
             control,
             discovery,
-            transport,
+            bind,
+            transport: Mutex::new(None),
+            inbound_hello_timeout_ms: AtomicU64::new(
+                INBOUND_HELLO_TIMEOUT
+                    .as_millis()
+                    .try_into()
+                    .unwrap_or(u64::MAX),
+            ),
             state_tx,
             candidates_tx,
             events,
@@ -424,8 +458,74 @@ impl PairingManager {
     pub const fn address_policy(&self) -> AddressPolicy {
         self.address_policy
     }
+    /// The pairing socket's address; `Inactive` while no pairing window holds one.
     pub fn local_addr(&self) -> Result<std::net::SocketAddr, PairingError> {
-        self.transport.local_addr()
+        self.current_transport()?.local_addr()
+    }
+
+    #[cfg(test)]
+    fn set_inbound_hello_timeout(&self, timeout: Duration) {
+        self.inbound_hello_timeout_ms.store(
+            timeout.as_millis().try_into().unwrap_or(u64::MAX),
+            Ordering::Release,
+        );
+    }
+
+    fn inbound_hello_timeout(&self) -> Duration {
+        Duration::from_millis(self.inbound_hello_timeout_ms.load(Ordering::Acquire))
+    }
+
+    /// Binds a pairing socket under the configured port rules.
+    fn bind_transport(&self) -> Result<Arc<PairingTransport>, PairingError> {
+        let bind = |port: u16| {
+            PairingTransport::bind(
+                SocketAddr::new(self.bind.ip, port),
+                &self.identity,
+                self.address_policy,
+            )
+        };
+        let transport = match &self.bind.ports {
+            PairingPorts::Ephemeral => bind(0)?,
+            PairingPorts::Range { range, exclude } => {
+                let mut bound = None;
+                for port in range.clone().filter(|port| port != exclude) {
+                    match bind(port) {
+                        Ok(transport) => {
+                            bound = Some(transport);
+                            break;
+                        }
+                        Err(PairingError::AddrInUse(_)) => {}
+                        Err(error) => return Err(error),
+                    }
+                }
+                bound.ok_or(PairingError::PortsExhausted {
+                    first: *range.start(),
+                    last: *range.end(),
+                })?
+            }
+        };
+        let port = transport.local_addr()?.port();
+        tracing::info!(event = "sync_port_bound", role = "pairing", port);
+        Ok(Arc::new(transport))
+    }
+
+    fn current_transport(&self) -> Result<Arc<PairingTransport>, PairingError> {
+        self.transport
+            .lock()
+            .map_err(|_| PairingError::Transport("transport lock poisoned".into()))?
+            .clone()
+            .ok_or(PairingError::Inactive)
+    }
+
+    /// Closes the pairing socket, if any, so nothing answers on its port.
+    fn release_transport(&self) {
+        let Some(transport) = self.transport.lock().ok().and_then(|mut slot| slot.take()) else {
+            return;
+        };
+        let port = transport.local_addr().map(|address| address.port()).ok();
+        transport.stop();
+        transport.close_endpoint();
+        tracing::info!(event = "pairing_port_released", port);
     }
 
     pub async fn start(
@@ -450,9 +550,17 @@ impl PairingManager {
         let name = hex::encode(name);
         let deadline_ms =
             now_ms().saturating_add(duration.as_millis().try_into().unwrap_or(u64::MAX));
-        self.transport.start();
-        let port = self.transport.local_addr()?.port();
-        self.discovery
+        self.release_transport();
+        let transport = self.bind_transport()?;
+        let port = transport.local_addr()?.port();
+        transport.start();
+        *self
+            .transport
+            .lock()
+            .map_err(|_| PairingError::Transport("transport lock poisoned".into()))? =
+            Some(transport);
+        if let Err(error) = self
+            .discovery
             .start(DiscoveryAdvertisement::pairing(
                 instance,
                 name,
@@ -460,7 +568,10 @@ impl PairingManager {
                 DEFAULT_RECORD_TTL_MS.min(duration.as_millis().try_into().unwrap_or(u64::MAX)),
             ))
             .await
-            .map_err(|error| PairingError::Transport(error.to_string()))?;
+        {
+            self.release_transport();
+            return Err(PairingError::Transport(error.to_string()));
+        }
         self.apply(PairingInput::Start {
             instance_id: instance,
             deadline_ms,
@@ -493,9 +604,12 @@ impl PairingManager {
     ///
     /// An inbound connection that cannot be taken right now — the device is
     /// already connecting, confirming, or committing — is refused on its own
-    /// connection and the loop keeps listening. The local window, candidate
-    /// list, and any in-flight outbound attempt are untouched. Only a failure
-    /// inside an accepted handshake ends the local attempt.
+    /// connection and the loop keeps listening. An inbound whose handshake
+    /// fails before the SAS (bad hello, key mismatch, incompatible roots, or no
+    /// hello within the inbound timeout) is rejected on its own connection too,
+    /// and the device returns to discoverable with its window unchanged. The
+    /// local window, candidate list, and any in-flight outbound attempt are
+    /// never failed from here.
     async fn accept_loop(self: Arc<Self>, window: Duration, friendly_name: String) {
         let deadline = tokio::time::sleep(window);
         tokio::pin!(deadline);
@@ -503,29 +617,32 @@ impl PairingManager {
             if !self.state_is_active() {
                 return;
             }
+            let Ok(transport) = self.current_transport() else {
+                return;
+            };
             let connection = tokio::select! {
                 () = &mut deadline => return,
-                accepted = self.transport.accept() => match accepted {
+                accepted = transport.accept() => match accepted {
                     Ok(connection) => connection,
-                    Err(error) => {
-                        tracing::warn!(
-                            event = "pairing_accept_error",
-                            error = %error,
-                            "pairing listener failed to accept"
-                        );
-                        return;
-                    }
+                    Err(_) => return,
                 },
             };
+            drop(transport);
             tracing::info!(
                 event = "pairing_accept",
                 remote = %connection.remote_address(),
                 "accepted inbound pairing connection"
             );
-            match self
-                .accept_handshake(connection.clone(), friendly_name.clone())
-                .await
-            {
+            let mut selected = None;
+            let outcome = tokio::time::timeout(
+                self.inbound_hello_timeout(),
+                self.accept_handshake(connection.clone(), friendly_name.clone(), &mut selected),
+            )
+            .await
+            .unwrap_or(Err(PairingError::Transport(
+                "no pairing hello before the inbound timeout".into(),
+            )));
+            match outcome {
                 Ok(_) => {}
                 Err(PairingError::Busy) => {
                     tracing::info!(
@@ -539,11 +656,35 @@ impl PairingManager {
                     connection.close();
                     return;
                 }
-                Err(error) => {
-                    self.fail(error).await;
-                    return;
-                }
+                Err(error) => self.refuse_inbound(&connection, selected, &error),
             }
+        }
+    }
+
+    /// Rejects one inbound connection whose handshake failed and puts the
+    /// device back to discoverable if that inbound had selected a session.
+    fn refuse_inbound(
+        &self,
+        connection: &PairingConnection,
+        session: Option<PairingSessionId>,
+        error: &PairingError,
+    ) {
+        tracing::info!(
+            event = "pairing_inbound_rejected",
+            remote = %connection.remote_address(),
+            error = %error
+        );
+        connection.reject_handshake();
+        let Some(session) = session else {
+            return;
+        };
+        if let Ok(mut sessions) = self.sessions.lock() {
+            sessions.remove(&session);
+        }
+        if let PairingState::Connecting { session_id, .. } = self.state()
+            && session_id == session
+        {
+            let _ = self.apply(PairingInput::Release { session_id });
         }
     }
 
@@ -557,7 +698,7 @@ impl PairingManager {
             task.abort();
         }
         let _ = self.discovery.stop(&DiscoveryScope::Pairing).await;
-        self.transport.stop();
+        self.release_transport();
         self.clear_sessions();
         self.candidates_tx.send_replace(Vec::new());
         self.apply(PairingInput::Stop)?;
@@ -569,7 +710,7 @@ impl PairingManager {
         // sees the connection close can tell it was caused by the deadline.
         let applied = self.apply(PairingInput::Timeout { now_ms: now_ms() });
         let _ = self.discovery.stop(&DiscoveryScope::Pairing).await;
-        self.transport.stop();
+        self.release_transport();
         self.clear_sessions();
         self.candidates_tx.send_replace(Vec::new());
         applied?;
@@ -684,7 +825,10 @@ impl PairingManager {
             endpoint = %candidate.endpoint,
             "dialing pairing candidate"
         );
-        let connection = self.transport.connect(candidate.endpoint).await?;
+        let connection = self
+            .current_transport()?
+            .connect(candidate.endpoint)
+            .await?;
         let hello = make_hello(
             PairingRole::Initiator,
             local_instance,
@@ -798,18 +942,19 @@ impl PairingManager {
             );
             let mut stream = session.stream.lock().await;
             let _ = stream.send(&PairingMessage::Decision(decision)).await;
-            let _ = stream.finish();
+            // The socket is released below; let the decision reach the peer first.
+            let _ = tokio::time::timeout(Duration::from_secs(2), stream.finish_and_flush()).await;
         }
         self.apply(PairingInput::Reject { session_id })?;
         self.cancel_deadline();
         let _ = self.discovery.stop(&DiscoveryScope::Pairing).await;
-        self.transport.deactivate_listener();
         self.candidates_tx.send_replace(Vec::new());
         if let Some(session_id) = session_id
             && let Ok(mut sessions) = self.sessions.lock()
         {
             sessions.remove(&session_id);
         }
+        self.release_transport();
         Ok(())
     }
 
@@ -829,7 +974,7 @@ impl PairingManager {
     async fn stop_transient(&self) {
         self.cancel_deadline();
         let _ = self.discovery.stop(&DiscoveryScope::Pairing).await;
-        self.transport.stop();
+        self.release_transport();
         self.clear_sessions();
         self.candidates_tx.send_replace(Vec::new());
     }
@@ -1477,7 +1622,7 @@ impl PairingManager {
             session.connection.close();
         }
         self.cancel_deadline();
-        self.transport.deactivate_listener();
+        self.release_transport();
         self.candidates_tx.send_replace(Vec::new());
         let discovery = self.discovery.clone();
         tokio::spawn(async move {
@@ -1637,10 +1782,15 @@ impl PairingManager {
     /// awaiting confirmation, or committing) and `Inactive` when no window is
     /// open. Neither is a failure of the local attempt; the caller refuses or
     /// drops the connection and decides whether to keep listening.
+    ///
+    /// `selected` receives the session id once this inbound has moved the state
+    /// with `PairingInput::Select`, so a failure can be undone for this
+    /// connection alone.
     async fn accept_handshake(
         &self,
         connection: PairingConnection,
         friendly_name: String,
+        selected: &mut Option<PairingSessionId>,
     ) -> Result<PairingSessionId, PairingError> {
         let (local_instance, window_deadline) = self.discoverable_window()?;
         let mut stream = connection.accept_stream().await?;
@@ -1665,6 +1815,7 @@ impl PairingManager {
                 .discoverable_window()
                 .map_or_else(|busy| busy, |_| error));
         }
+        *selected = Some(session_id);
         let hello = make_hello(
             PairingRole::Responder,
             local_instance,
@@ -1765,7 +1916,7 @@ impl Drop for PairingManager {
         {
             task.abort();
         }
-        self.transport.stop();
+        self.release_transport();
     }
 }
 
@@ -1962,7 +2113,10 @@ mod tests {
             keys.clone(),
             control,
             discovery,
-            "127.0.0.1:0".parse().unwrap(),
+            PairingBind {
+                ip: "127.0.0.1".parse().unwrap(),
+                ports: PairingPorts::Ephemeral,
+            },
         )
         .unwrap();
 
@@ -2115,7 +2269,7 @@ mod tests {
         let b_instance = b.start(window, "B".into()).await.unwrap();
         let candidate = PairingCandidate {
             instance_id: b_instance,
-            endpoint: b.transport.local_addr().unwrap(),
+            endpoint: b.local_addr().unwrap(),
             expires_at_ms: now_ms() + 5_000,
         };
         let a_session = a.connect(candidate, "A".into(), window).await.unwrap();
@@ -2215,7 +2369,10 @@ mod tests {
             keys,
             control,
             discovery.clone(),
-            "127.0.0.1:0".parse().unwrap(),
+            PairingBind {
+                ip: "127.0.0.1".parse().unwrap(),
+                ports: PairingPorts::Ephemeral,
+            },
         )
         .unwrap();
         (manager, discovery, directory)
@@ -2241,7 +2398,7 @@ mod tests {
         .unwrap();
         let candidate = PairingCandidate {
             instance_id: b_instance,
-            endpoint: b.transport.local_addr().unwrap(),
+            endpoint: b.local_addr().unwrap(),
             expires_at_ms: now_ms() + 5_000,
         };
         let a_session = a.connect(candidate, "A".into(), window).await.unwrap();
@@ -2274,13 +2431,7 @@ mod tests {
     #[tokio::test]
     async fn inactive_listener_rejects_pairing_and_timeout_cleans_advertisement() {
         let (a, discovery, _a_dir) = manager(11).await;
-        let (b, _, _b_dir) = manager(13).await;
-        assert!(
-            a.transport
-                .connect(b.transport.local_addr().unwrap())
-                .await
-                .is_err()
-        );
+        assert_eq!(a.local_addr(), Err(PairingError::Inactive));
         {
             a.set_root_state(RootState::NeedsDecision);
             a.start(Duration::from_millis(20), "A".into())
@@ -2297,6 +2448,122 @@ mod tests {
         );
         assert!(discovery.advertisements().is_empty());
         assert!(a.candidates().is_empty());
+        assert_eq!(a.local_addr(), Err(PairingError::Inactive));
+    }
+
+    fn port_is_free(port: u16) -> bool {
+        std::net::UdpSocket::bind(("127.0.0.1", port)).is_ok()
+    }
+
+    /// A closed QUIC endpoint drops its socket once its driver winds down.
+    async fn port_becomes_free(port: u16) -> bool {
+        for _ in 0..100 {
+            if port_is_free(port) {
+                return true;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        false
+    }
+
+    #[tokio::test]
+    async fn pairing_socket_is_released_when_the_window_ends() {
+        let (a, _, _a_dir) = manager(14).await;
+        a.start(Duration::from_secs(5), "A".into()).await.unwrap();
+        let port = a.local_addr().unwrap().port();
+        a.stop().await.unwrap();
+        assert_eq!(a.local_addr(), Err(PairingError::Inactive));
+        assert!(
+            port_becomes_free(port).await,
+            "stop releases the pairing port"
+        );
+
+        a.start(Duration::from_millis(20), "A".into())
+            .await
+            .unwrap();
+        let port = a.local_addr().unwrap().port();
+        tokio::time::sleep(Duration::from_millis(80)).await;
+        assert_eq!(a.local_addr(), Err(PairingError::Inactive));
+        assert!(
+            port_becomes_free(port).await,
+            "expiry releases the pairing port"
+        );
+
+        let (b, _, _b_dir) = manager(15).await;
+        let root = automerge_repo::DocumentId::new();
+        let window = Duration::from_secs(5);
+        a.set_root_state(RootState::Ready(root));
+        b.set_root_state(RootState::Ready(root));
+        a.start(window, "A".into()).await.unwrap();
+        let b_instance = b.start(window, "B".into()).await.unwrap();
+        let (a_port, b_port) = (
+            a.local_addr().unwrap().port(),
+            b.local_addr().unwrap().port(),
+        );
+        let a_session = a
+            .connect(candidate_for(&b, b_instance), "A".into(), window)
+            .await
+            .unwrap();
+        let b_session = await_sas(&b).await;
+        let (a_plan, b_plan) = tokio::join!(a.confirm(a_session), b.confirm(b_session));
+        a.finish_trust(&a_plan.unwrap(), 10).unwrap();
+        b.finish_trust(&b_plan.unwrap(), 10).unwrap();
+        assert_eq!(a.local_addr(), Err(PairingError::Inactive));
+        assert_eq!(b.local_addr(), Err(PairingError::Inactive));
+        assert!(port_becomes_free(a_port).await && port_becomes_free(b_port).await);
+    }
+
+    /// Three consecutive free loopback UDP ports.
+    fn free_port_triple() -> u16 {
+        loop {
+            let probe = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
+            let first = probe.local_addr().unwrap().port();
+            drop(probe);
+            if first < u16::MAX - 2 && (first..=first + 2).all(port_is_free) {
+                return first;
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn range_skips_the_sync_port_and_reports_exhaustion() {
+        let keys: Arc<dyn SecureKeyStore> = Arc::new(InMemorySecureKeyStore::seeded([16; 32]));
+        let directory = tempfile::tempdir().unwrap();
+        let identity = Arc::new(DeviceIdentity::load_or_create(keys.as_ref()).await.unwrap());
+        let control =
+            Arc::new(SqliteControlStore::open(directory.path().join("control.sqlite")).unwrap());
+        let discovery = Arc::new(FakeDiscoveryProvider::new(Arc::new(ManualClock::new(0))));
+        let first = free_port_triple();
+        let last = first + 2;
+        let _middle = std::net::UdpSocket::bind(("127.0.0.1", first + 1)).unwrap();
+        let manager = PairingManager::new(
+            identity,
+            keys,
+            control,
+            discovery.clone(),
+            PairingBind {
+                ip: "127.0.0.1".parse().unwrap(),
+                ports: PairingPorts::Range {
+                    range: first..=last,
+                    exclude: first,
+                },
+            },
+        )
+        .unwrap();
+        manager
+            .start(Duration::from_secs(5), "A".into())
+            .await
+            .unwrap();
+        assert_eq!(manager.local_addr().unwrap().port(), last);
+        manager.stop().await.unwrap();
+        assert!(port_becomes_free(last).await);
+        let _last = std::net::UdpSocket::bind(("127.0.0.1", last)).unwrap();
+        assert_eq!(
+            manager.start(Duration::from_secs(5), "A".into()).await,
+            Err(PairingError::PortsExhausted { first, last })
+        );
+        assert!(discovery.advertisements().is_empty());
+        assert_eq!(manager.state(), PairingState::Idle);
     }
 
     #[tokio::test]
@@ -2907,7 +3174,7 @@ mod tests {
             .connect(
                 PairingCandidate {
                     instance_id: b_instance,
-                    endpoint: b.transport.local_addr().unwrap(),
+                    endpoint: b.local_addr().unwrap(),
                     expires_at_ms: now_ms() + 5_000,
                 },
                 "A".into(),
@@ -2956,7 +3223,7 @@ mod tests {
             .connect(
                 PairingCandidate {
                     instance_id: next_b,
-                    endpoint: b.transport.local_addr().unwrap(),
+                    endpoint: b.local_addr().unwrap(),
                     expires_at_ms: now_ms() + 5_000,
                 },
                 "A".into(),
@@ -2977,24 +3244,80 @@ mod tests {
         assert_eq!(b.trusted_devices().unwrap().len(), 1);
     }
 
-    #[tokio::test]
-    async fn hello_key_mismatch_never_displays_sas_or_creates_trust() {
-        let (target, _, _target_dir) = manager(41).await;
-        let root = automerge_repo::DocumentId::new();
-        {
-            target.set_root_state(RootState::Ready(root));
-            target.start(Duration::from_secs(5), "target".into())
+    fn loopback_bind() -> PairingBind {
+        PairingBind {
+            ip: "127.0.0.1".parse().unwrap(),
+            ports: PairingPorts::Ephemeral,
         }
-        .await
-        .unwrap();
-        let rogue_keys = InMemorySecureKeyStore::seeded([42; 32]);
-        let rogue_identity = DeviceIdentity::load_or_create(&rogue_keys).await.unwrap();
-        let rogue =
-            PairingTransport::bind("127.0.0.1:0".parse().unwrap(), &rogue_identity).unwrap();
-        let connection = rogue
-            .connect(target.transport.local_addr().unwrap())
+    }
+
+    fn rogue_transport(identity: &DeviceIdentity) -> PairingTransport {
+        PairingTransport::bind(
+            "127.0.0.1:0".parse().unwrap(),
+            identity,
+            AddressPolicy::for_bind("127.0.0.1".parse().unwrap()),
+        )
+        .unwrap()
+    }
+
+    async fn rogue_identity(seed: u8) -> DeviceIdentity {
+        DeviceIdentity::load_or_create(&InMemorySecureKeyStore::seeded([seed; 32]))
+            .await
+            .unwrap()
+    }
+
+    /// Waits until `connection` is closed and returns the application close code.
+    async fn closed_code(connection: &PairingConnection) -> Option<u64> {
+        let _ = tokio::time::timeout(Duration::from_secs(3), connection.accept_stream()).await;
+        connection.close_code()
+    }
+
+    /// The target survived a failed inbound: still discoverable with its
+    /// original deadline, no trust, and a legitimate peer reaches the SAS.
+    async fn assert_window_survives(target: &Arc<PairingManager>, deadline: u64, seed: u8) {
+        let PairingState::Discoverable {
+            instance_id,
+            deadline_ms,
+        } = target.state()
+        else {
+            panic!("target stays discoverable: {:?}", target.state());
+        };
+        assert_eq!(deadline_ms, deadline);
+        assert!(target.trusted_devices().unwrap().is_empty());
+        let (peer, _, _peer_dir) = manager(seed).await;
+        peer.set_root_state(target.root_state());
+        let window = Duration::from_secs(5);
+        peer.start(window, "peer".into()).await.unwrap();
+        let session = peer
+            .connect(candidate_for(target, instance_id), "peer".into(), window)
             .await
             .unwrap();
+        assert_eq!(await_sas(target).await, session);
+        assert!(matches!(
+            peer.state(),
+            PairingState::AwaitingConfirmation { .. }
+        ));
+    }
+
+    async fn discoverable_target(seed: u8) -> (Arc<PairingManager>, u64, tempfile::TempDir) {
+        let (target, _, directory) = manager(seed).await;
+        target.set_root_state(RootState::Ready(automerge_repo::DocumentId::new()));
+        target
+            .start(Duration::from_secs(10), "target".into())
+            .await
+            .unwrap();
+        let PairingState::Discoverable { deadline_ms, .. } = target.state() else {
+            panic!("target is discoverable");
+        };
+        (target, deadline_ms, directory)
+    }
+
+    #[tokio::test]
+    async fn hello_key_mismatch_never_displays_sas_or_creates_trust() {
+        let (target, deadline, _target_dir) = discoverable_target(41).await;
+        let rogue_identity = rogue_identity(42).await;
+        let rogue = rogue_transport(&rogue_identity);
+        let connection = rogue.connect(target.local_addr().unwrap()).await.unwrap();
         let mut stream = connection.open_stream().await.unwrap();
         let mismatched = PrivateDeviceKey::from_seed(&[43; 32]).unwrap().public_key();
         stream
@@ -3003,27 +3326,83 @@ mod tests {
                 PairingInstanceId::from_bytes([1; 16]),
                 mismatched,
                 "rogue".into(),
-                RootState::Ready(root),
+                target.root_state(),
             )))
             .await
             .unwrap();
-        let mut state = target.subscribe_state();
-        tokio::time::timeout(Duration::from_secs(2), async {
-            loop {
-                if matches!(
-                    state.borrow().clone(),
-                    PairingState::Failed {
-                        error: PairingError::CertificateKeyMismatch
-                    }
-                ) {
-                    break;
-                }
-                state.changed().await.unwrap();
-            }
-        })
-        .await
+        assert_eq!(closed_code(&connection).await, Some(2));
+        assert_window_survives(&target, deadline, 44).await;
+    }
+
+    #[tokio::test]
+    async fn malformed_inbound_hello_keeps_the_window_open() {
+        let (target, deadline, _target_dir) = discoverable_target(61).await;
+        let rogue_identity = rogue_identity(62).await;
+        let rogue = rogue_transport(&rogue_identity);
+        let connection = rogue.connect(target.local_addr().unwrap()).await.unwrap();
+        let mut stream = connection.open_stream().await.unwrap();
+        let keys = derive_pairing_keys(b"transcript", &[0; 32]).unwrap();
+        stream
+            .send(&PairingMessage::Decision(sign_decision(
+                &keys,
+                PairingRole::Initiator,
+                PairingSessionId([1; 16]),
+                PairingDecisionKind::Reject,
+            )))
+            .await
+            .unwrap();
+        assert_eq!(closed_code(&connection).await, Some(2));
+        assert_window_survives(&target, deadline, 63).await;
+    }
+
+    #[tokio::test]
+    async fn stalled_inbound_is_cut_off_and_the_window_survives() {
+        let (target, deadline, _target_dir) = discoverable_target(64).await;
+        target.set_inbound_hello_timeout(Duration::from_millis(200));
+        let rogue_identity = rogue_identity(65).await;
+        let rogue = rogue_transport(&rogue_identity);
+        let connection = rogue.connect(target.local_addr().unwrap()).await.unwrap();
+        let _stream = connection.open_stream().await.unwrap();
+        assert_eq!(closed_code(&connection).await, Some(2));
+        assert_window_survives(&target, deadline, 66).await;
+    }
+
+    #[tokio::test]
+    async fn non_lan_inbound_is_dropped_without_affecting_the_window() {
+        let keys: Arc<dyn SecureKeyStore> = Arc::new(InMemorySecureKeyStore::seeded([67; 32]));
+        let directory = tempfile::tempdir().unwrap();
+        let identity = Arc::new(DeviceIdentity::load_or_create(keys.as_ref()).await.unwrap());
+        let control =
+            Arc::new(SqliteControlStore::open(directory.path().join("control.sqlite")).unwrap());
+        let discovery = Arc::new(FakeDiscoveryProvider::new(Arc::new(ManualClock::new(0))));
+        let target = PairingManager::new(
+            identity,
+            keys,
+            control,
+            discovery,
+            PairingBind {
+                ip: "0.0.0.0".parse().unwrap(),
+                ports: PairingPorts::Ephemeral,
+            },
+        )
         .unwrap();
-        assert!(target.trusted_devices().unwrap().is_empty());
+        target
+            .start(Duration::from_secs(10), "target".into())
+            .await
+            .unwrap();
+        let port = target.local_addr().unwrap().port();
+        let rogue_identity = rogue_identity(68).await;
+        let rogue = rogue_transport(&rogue_identity);
+        let outcome = tokio::time::timeout(
+            Duration::from_secs(2),
+            rogue.connect(([127, 0, 0, 1], port).into()),
+        )
+        .await;
+        assert!(
+            matches!(outcome, Err(_) | Ok(Err(_))),
+            "dial must not complete"
+        );
+        assert!(matches!(target.state(), PairingState::Discoverable { .. }));
     }
 
     #[tokio::test]
@@ -3048,7 +3427,7 @@ mod tests {
             .connect(
                 PairingCandidate {
                     instance_id: b_instance,
-                    endpoint: b.transport.local_addr().unwrap(),
+                    endpoint: b.local_addr().unwrap(),
                     expires_at_ms: now_ms() + 5_000,
                 },
                 "A".into(),
@@ -3086,7 +3465,7 @@ mod tests {
             .connect(
                 PairingCandidate {
                     instance_id: b_instance,
-                    endpoint: b.transport.local_addr().unwrap(),
+                    endpoint: b.local_addr().unwrap(),
                     expires_at_ms: now_ms() + 5_000,
                 },
                 "A".into(),
@@ -3140,7 +3519,7 @@ mod tests {
             .connect(
                 PairingCandidate {
                     instance_id: b_instance,
-                    endpoint: b.transport.local_addr().unwrap(),
+                    endpoint: b.local_addr().unwrap(),
                     expires_at_ms: now_ms() + 5_000,
                 },
                 "A".into(),
@@ -3188,7 +3567,7 @@ mod tests {
             keys_a,
             Arc::new(SqliteControlStore::open(directory_a.path().join("control.sqlite")).unwrap()),
             provider.clone(),
-            "127.0.0.1:0".parse().unwrap(),
+            loopback_bind(),
         )
         .unwrap();
         let b = PairingManager::new(
@@ -3196,7 +3575,7 @@ mod tests {
             keys_b,
             Arc::new(SqliteControlStore::open(directory_b.path().join("control.sqlite")).unwrap()),
             provider.clone(),
-            "127.0.0.1:0".parse().unwrap(),
+            loopback_bind(),
         )
         .unwrap();
         a.establish_trust(identity_b.public_key(), "B".into(), 1)
@@ -3245,7 +3624,7 @@ mod tests {
     fn candidate_for(manager: &PairingManager, instance: PairingInstanceId) -> PairingCandidate {
         PairingCandidate {
             instance_id: instance,
-            endpoint: manager.transport.local_addr().unwrap(),
+            endpoint: manager.local_addr().unwrap(),
             expires_at_ms: now_ms() + 5_000,
         }
     }
@@ -3278,7 +3657,8 @@ mod tests {
         let b_instance = b.start(window, "B".into()).await.unwrap();
         // A holds an outbound attempt (selected, not yet dialed) when B's
         // inbound arrives.
-        a.select(candidate_for(&b, b_instance), window).unwrap();
+        a.select(candidate_for(&b, b_instance), Duration::from_secs(4))
+            .unwrap();
         assert_eq!(
             b.connect(candidate_for(&a, a_instance), "B".into(), window)
                 .await,
@@ -3385,18 +3765,17 @@ mod tests {
             ),
             "unexpected outcome: {outcome:?}"
         );
-        let mut state = a.subscribe_state();
+        // The mismatch is an inbound pre-SAS failure: the responder refuses that
+        // connection and stays discoverable.
+        let state = a.subscribe_state();
         tokio::time::timeout(Duration::from_secs(2), async {
             loop {
-                if let PairingState::Failed { error } = state.borrow().clone() {
-                    assert_eq!(
-                        error,
-                        PairingError::RootMismatch,
-                        "the handshake carries the current root, not the captured needs-decision"
-                    );
+                if matches!(state.borrow().clone(), PairingState::Discoverable { .. })
+                    && a.sessions.lock().unwrap().is_empty()
+                {
                     break;
                 }
-                state.changed().await.unwrap();
+                tokio::time::sleep(Duration::from_millis(10)).await;
             }
         })
         .await

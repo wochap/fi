@@ -88,6 +88,13 @@ pub struct VoiceTurnEventDto {
     pub error: Option<VoiceErrorKindDto>,
 }
 
+#[cfg_attr(
+    not(any(
+        feature = "voice-native",
+        all(target_os = "android", target_arch = "aarch64")
+    )),
+    allow(dead_code, reason = "used only by the native voice worker")
+)]
 impl VoiceTurnEventDto {
     pub(crate) fn transcript(text: String) -> Self {
         Self {
@@ -158,6 +165,13 @@ fn request(dto: VoiceFillRequestDto) -> Option<voice_engine::FillRequest> {
     })
 }
 
+#[cfg_attr(
+    not(any(
+        feature = "voice-native",
+        all(target_os = "android", target_arch = "aarch64")
+    )),
+    allow(dead_code, reason = "used only by the native voice worker")
+)]
 fn entry_dto(entry: PatchEntry) -> VoicePatchEntryDto {
     let (kind, integer_value, text_value, boolean_value) = match entry.value {
         TypedValue::Text(text) => (FieldValueKindDto::Text, None, Some(text), None),

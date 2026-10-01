@@ -897,7 +897,9 @@ LogCategory logCategory(LogEventDto event) {
       name.startsWith('discovery_')) {
     return LogCategory.address;
   }
-  if (name.startsWith('peer_') || name.startsWith('sync')) {
+  if (name.startsWith('peer_') ||
+      name.startsWith('sync') ||
+      name.startsWith('inbound_')) {
     return LogCategory.peer;
   }
   return LogCategory.device;

@@ -37,7 +37,7 @@ use crate::{
         PairingCandidate, PairingEvent, PairingSessionId, PairingState, ProvisioningData,
         RootCompatibility, RootState,
     },
-    pairing_manager::PairingManager,
+    pairing_manager::{PairingBind, PairingManager, PairingPorts},
     projection::{ReadModel, project, reconcile},
     query::{
         CollectionQuery, ComputedFieldDefinition, ComputedFieldId, Expression, InferredType,
@@ -105,7 +105,9 @@ pub struct AppCoreConfig {
 }
 
 /// The UDP range the shipped application binds its sync and pairing endpoints
-/// in, so a firewall rule can name it once.
+/// in, so a firewall rule can name it once. Sync holds one port while
+/// networking runs; pairing binds a free port in the range other than sync,
+/// only during a pairing window.
 pub const DEFAULT_SYNC_PORT_RANGE: RangeInclusive<u16> = 47380..=47389;
 
 /// Port selection for the networked QUIC endpoints.
@@ -114,8 +116,9 @@ pub enum PortPolicy {
     /// Use the bind address as given; port 0 lets the OS choose.
     #[default]
     Ephemeral,
-    /// Bind the lowest free port in the range, sync first and pairing above
-    /// it. Never falls back to an ephemeral port.
+    /// Sync binds the lowest free port in the range at open. Pairing binds a
+    /// free port in the range other than sync, only during a pairing window.
+    /// Never falls back to an ephemeral port.
     Range(RangeInclusive<u16>),
 }
 
@@ -186,7 +189,7 @@ pub enum NetworkingDeferredReason {
     SecureStoreLocked,
     SecureStoreUnavailable(String),
     /// Every UDP port in the fixed range was held by another socket when the
-    /// sync or pairing endpoint tried to bind.
+    /// sync endpoint tried to bind.
     PortsExhausted {
         first: u16,
         last: u16,
@@ -429,7 +432,10 @@ impl AppCore {
                     key_store,
                     control_store.clone(),
                     discovery,
-                    (bind.ip(), 0).into(),
+                    PairingBind {
+                        ip: bind.ip(),
+                        ports: PairingPorts::Ephemeral,
+                    },
                 )?;
                 (network, pairing)
             }
@@ -447,41 +453,27 @@ impl AppCore {
                             Err(error) => Err(error.into()),
                         }
                     })?;
-                let pairing = match &bound {
-                    Some((sync_port, _)) if sync_port < range.end() => {
-                        bind_in_range(&(sync_port + 1..=*range.end()), bind.ip(), |address| {
-                            match PairingManager::new(
-                                identity.clone(),
-                                key_store.clone(),
-                                control_store.clone(),
-                                discovery.clone(),
-                                address,
-                            ) {
-                                Ok(pairing) => Ok(Some(pairing)),
-                                Err(crate::pairing::PairingError::AddrInUse(_)) => Ok(None),
-                                Err(error) => Err(error.into()),
-                            }
-                        })?
-                    }
-                    _ => None,
-                };
-                match (bound, pairing) {
-                    (Some((sync_port, network)), Some((pairing_port, pairing))) => {
+                match bound {
+                    Some((sync_port, network)) => {
                         info!(event = "sync_port_bound", role = "sync", port = sync_port);
-                        info!(
-                            event = "sync_port_bound",
-                            role = "pairing",
-                            port = pairing_port
-                        );
+                        let pairing = PairingManager::new(
+                            identity.clone(),
+                            key_store,
+                            control_store.clone(),
+                            discovery,
+                            PairingBind {
+                                ip: bind.ip(),
+                                ports: PairingPorts::Range {
+                                    range: range.clone(),
+                                    exclude: sync_port,
+                                },
+                            },
+                        )?;
                         (network, pairing)
                     }
-                    (bound, _) => {
-                        // No port left for one of the endpoints. Release the
-                        // sync socket too so the core holds no QUIC port and
-                        // the retry reopens and binds both again.
-                        if let Some((_, network)) = bound {
-                            let _ = NetworkTransport::close(network.as_ref()).await;
-                        }
+                    None => {
+                        // No port left for the sync endpoint; the retry
+                        // reopens and binds again.
                         let (first, last) = (*range.start(), *range.end());
                         warn!(
                             event = "networking_deferred",

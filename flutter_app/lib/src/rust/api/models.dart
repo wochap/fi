@@ -968,7 +968,8 @@ class LogEventDto {
 }
 
 /// UDP ports used for peer networking. Bound ports are absent while
-/// networking is deferred; the range is absent under the ephemeral policy.
+/// networking is deferred; `pairing_port` is also absent while no pairing
+/// window is open; the range is absent under the ephemeral policy.
 class NetworkPortsDto {
   final int? syncPort;
   final int? pairingPort;

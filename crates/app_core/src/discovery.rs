@@ -18,7 +18,10 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::{control::TrustState, identity::DeviceId};
 
-pub const PAIRING_SERVICE_TYPE: &str = "_myapp-pair._udp.local.";
+/// Generic pairing service type. The label is `_fi-` followed by the lowercase
+/// unpadded base32 of the first 6 bytes of `SHA-256("fi-mdns-pairing-v1")`, the
+/// same shape as [`group_service_selector`], so it does not name its purpose.
+pub const PAIRING_SERVICE_TYPE: &str = "_fi-gremyncn3q._udp.local.";
 pub const DISCOVERY_PROTOCOL_VERSION: u16 = 1;
 pub const DEFAULT_RECORD_TTL_MS: u64 = 30_000;
 const SERVICE_DOMAIN: &[u8] = b"fi-mdns-service-v1";
@@ -364,6 +367,21 @@ struct MdnsActive {
     task: JoinHandle<()>,
 }
 
+/// Interfaces the mDNS daemon must not use for a transport bound under `policy`:
+/// an IPv4 LAN bind keeps mDNS off IPv6 and loopback; an IPv4 loopback bind keeps
+/// loopback for single-host tests; an IPv6 bind keeps everything.
+fn disabled_mdns_interfaces(policy: AddressPolicy) -> Vec<mdns_sd::IfKind> {
+    match policy.local_bind() {
+        IpAddr::V4(address) if address.is_loopback() => vec![mdns_sd::IfKind::IPv6],
+        IpAddr::V4(_) => vec![
+            mdns_sd::IfKind::IPv6,
+            mdns_sd::IfKind::LoopbackV4,
+            mdns_sd::IfKind::LoopbackV6,
+        ],
+        IpAddr::V6(_) => Vec::new(),
+    }
+}
+
 /// DNS-SD adapter. Dynamic group service types are kept below Android's
 /// 15-byte service-label limit; the provider boundary permits an exact-owner
 /// query implementation if a platform daemon is stricter.
@@ -389,6 +407,12 @@ impl MdnsDiscovery {
     pub fn with_policy(policy: AddressPolicy) -> Result<Self, DiscoveryError> {
         let daemon = mdns_sd::ServiceDaemon::new()
             .map_err(|error| DiscoveryError::Provider(error.to_string()))?;
+        let disabled = disabled_mdns_interfaces(policy);
+        if !disabled.is_empty() {
+            daemon
+                .disable_interface(disabled)
+                .map_err(|error| DiscoveryError::Provider(error.to_string()))?;
+        }
         let (events, _) = broadcast::channel(128);
         Ok(Self {
             daemon,
@@ -980,6 +1004,38 @@ pub fn match_group_endpoint(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pairing_service_type_matches_its_derivation() {
+        use sha2::Digest as _;
+        let digest = Sha256::digest(b"fi-mdns-pairing-v1");
+        let expected = format!(
+            "_fi-{}._udp.local.",
+            BASE32_NOPAD.encode(&digest[..6]).to_ascii_lowercase()
+        );
+        assert_eq!(PAIRING_SERVICE_TYPE, expected);
+        assert!(!PAIRING_SERVICE_TYPE.contains("pair"));
+        assert!(!PAIRING_SERVICE_TYPE.contains("myapp"));
+    }
+
+    #[test]
+    fn disabled_mdns_interfaces_follow_the_bind() {
+        let lan = disabled_mdns_interfaces(AddressPolicy::default());
+        assert!(matches!(
+            lan.as_slice(),
+            [
+                mdns_sd::IfKind::IPv6,
+                mdns_sd::IfKind::LoopbackV4,
+                mdns_sd::IfKind::LoopbackV6
+            ]
+        ));
+        let loopback =
+            disabled_mdns_interfaces(AddressPolicy::for_bind("127.0.0.1".parse().unwrap()));
+        assert!(matches!(loopback.as_slice(), [mdns_sd::IfKind::IPv6]));
+        assert!(
+            disabled_mdns_interfaces(AddressPolicy::for_bind("::".parse().unwrap())).is_empty()
+        );
+    }
 
     #[tokio::test]
     async fn pairing_records_are_minimal_and_expiring() {

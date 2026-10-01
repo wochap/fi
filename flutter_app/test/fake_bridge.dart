@@ -192,7 +192,7 @@ final class FakeCollectionBridge implements CollectionBridge {
   /// Ports the fake core reports as bound.
   NetworkPortsDto ports = const NetworkPortsDto(
     syncPort: 47380,
-    pairingPort: 47381,
+    pairingPort: null,
     rangeFirst: 47380,
     rangeLast: 47389,
     mdnsPort: 5353,

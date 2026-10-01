@@ -52,7 +52,8 @@ when discarding that development dataset is acceptable. Deleting only
 
 ## Pairing and revocation
 
-Pairing mode is explicitly started for a bounded duration. Both devices derive
+Pairing mode is explicitly started for a bounded duration; the pairing socket
+exists only for that window. Both devices derive
 the SAS from the authenticated transcript and TLS exporter; users must confirm
 matching six-digit codes. Rejection and timeout remove transient sessions and do
 not create trust or provisioning state. A joining device remains command-gated
@@ -66,22 +67,25 @@ last-known pinned endpoint until retention expires.
 ## Network ports
 
 Peer networking uses a fixed UDP range, `47380-47389`, so a firewall rule can
-name it once. Each instance holds two sockets from the range: the sync QUIC
-endpoint and the pairing QUIC endpoint (ALPN `fi-pair/1`). Ports are allocated
-in ascending order: sync takes the lowest free port, and pairing takes the next
-free port above it. Ten ports therefore serve five instances on one host.
+name it once. The sync QUIC endpoint (ALPN `fi-sync/1`) takes the lowest free
+port in the range when the core opens and holds it while networking runs. The
+pairing QUIC endpoint (ALPN `fi-pair/1`) binds a free port in the same range
+other than the sync port only while a pairing window is open, and releases it
+when pairing ends (trusted, failed, stopped, rejected, or expired). Outside a
+window no pairing socket exists.
 
 Only "address in use" moves on to the next port. Any other bind failure, such
 as an address not assignable to this host, fails the networked open.
 
-When no port is left for either endpoint, the core opens with peer networking
+When no port is left for the sync endpoint, the core opens with peer networking
 deferred and the ports-exhausted reason naming the range. It holds no QUIC
 socket and never binds an ephemeral port. The banner's retry reopens the core
-and walks the range again.
+and walks the range again. When no port is left for the pairing endpoint,
+`start_pairing` fails with the ports-exhausted error and sync keeps running.
 
-mDNS discovery stays on the standard UDP `5353` multicast group (`224.0.0.251`
-and `ff02::fb`). Firewall recipes for NixOS, ufw, iptables, and OpenSnitch are
-in the README section "Linux firewall and OpenSnitch". Android needs no rule.
+mDNS discovery uses the standard UDP `5353` multicast group (`224.0.0.251`),
+IPv4 only. Firewall recipes are in [docs/security.md](security.md#firewall).
+Android needs no rule.
 
 Tests and other embedders keep the ephemeral policy by default; only the
 Flutter bridge selects the fixed range.

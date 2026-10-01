@@ -87,7 +87,9 @@ pub use pairing::{
     pairing_session_id, protect_provisioning, reduce_pairing, root_compatibility, sign_commit_ack,
     sign_decision, verify_commit_ack, verify_decision,
 };
-pub use pairing_manager::{NormalDiscoveryEvent, PairingCommitPlan, PairingManager};
+pub use pairing_manager::{
+    NormalDiscoveryEvent, PairingBind, PairingCommitPlan, PairingManager, PairingPorts,
+};
 pub use pairing_transport::{PairingConnection, PairingStream, PairingTransport};
 pub use projection::ProjectionCheckpoint;
 pub use query::*;

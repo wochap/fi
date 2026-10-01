@@ -1,12 +1,14 @@
-//! Under the fixed port policy the sync and pairing endpoints bind inside the
-//! configured range, in order, and an exhausted range defers networking
-//! instead of falling back to an ephemeral port.
+//! Under the fixed port policy the sync endpoint binds inside the configured
+//! range at open and the pairing endpoint binds another free port in it only
+//! while a pairing window is open. An exhausted range defers networking (sync)
+//! or fails `start_pairing` (pairing) instead of falling back to an ephemeral
+//! port.
 
 use std::{net::UdpSocket, ops::RangeInclusive, sync::Arc};
 
 use app_core::{
-    AppCore, AppCoreConfig, FakeDiscoveryProvider, InMemorySecureKeyStore, ManualClock,
-    NetworkPorts, NetworkingDeferredReason, PortPolicy, QuinnTransportConfig,
+    AppCore, AppCoreConfig, AppError, FakeDiscoveryProvider, InMemorySecureKeyStore, ManualClock,
+    NetworkPorts, NetworkingDeferredReason, PairingError, PortPolicy, QuinnTransportConfig,
 };
 
 /// Finds `len` contiguous loopback UDP ports that are free right now. The
@@ -69,16 +71,25 @@ async fn two_cores_take_consecutive_ports_in_the_range() {
         a.network_ports(),
         NetworkPorts {
             sync: Some(r),
-            pairing: Some(r + 1),
+            pairing: None,
             policy: PortPolicy::Range(range.clone()),
         }
     );
     assert_eq!(a.network_addr().unwrap().port(), r);
-    assert_eq!(a.pairing_addr().unwrap().port(), r + 1);
-    assert_eq!(b.network_ports().sync, Some(r + 2));
-    assert_eq!(b.network_ports().pairing, Some(r + 3));
-    assert_eq!(b.network_addr().unwrap().port(), r + 2);
-    assert_eq!(b.pairing_addr().unwrap().port(), r + 3);
+    assert_eq!(a.pairing_addr(), None);
+    assert_eq!(b.network_ports().sync, Some(r + 1));
+    assert_eq!(b.network_ports().pairing, None);
+
+    a.start_pairing(5_000).await.unwrap();
+    b.start_pairing(5_000).await.unwrap();
+    let a_pairing = a.network_ports().pairing.unwrap();
+    let b_pairing = b.network_ports().pairing.unwrap();
+    for port in [a_pairing, b_pairing] {
+        assert!(range.contains(&port));
+        assert!(port != r && port != r + 1);
+    }
+    assert_ne!(a_pairing, b_pairing);
+    assert_eq!(a.pairing_addr().unwrap().port(), a_pairing);
 
     a.shutdown().await.unwrap();
     b.shutdown().await.unwrap();
@@ -115,25 +126,27 @@ async fn an_exhausted_range_defers_networking_and_a_reopen_recovers() {
     core.shutdown().await.unwrap();
     drop(core);
 
-    // One free port is not enough: sync takes it and pairing finds nothing
-    // above it, so the whole stack stays deferred.
-    held.pop();
+    // One free port is enough for sync; pairing then finds none and fails to
+    // start while sync keeps running.
+    let freed = held.pop().unwrap().local_addr().unwrap().port();
     let core = open(dir.path(), 43, range.clone()).await;
+    assert_eq!(core.networking_deferred(), None);
+    assert_eq!(core.network_addr().unwrap().port(), freed);
     assert!(matches!(
-        core.networking_deferred(),
-        Some(NetworkingDeferredReason::PortsExhausted { .. })
+        core.start_pairing(5_000).await,
+        Err(AppError::Pairing(PairingError::PortsExhausted { .. }))
     ));
-    assert_eq!(core.network_addr(), None);
     core.shutdown().await.unwrap();
     drop(core);
 
     held.clear();
     let core = open(dir.path(), 43, range.clone()).await;
     assert_eq!(core.networking_deferred(), None);
+    core.start_pairing(5_000).await.unwrap();
     let ports = core.network_ports();
     assert!(range.contains(&ports.sync.unwrap()));
     assert!(range.contains(&ports.pairing.unwrap()));
-    assert!(ports.sync < ports.pairing);
+    assert_ne!(ports.sync, ports.pairing);
     core.shutdown().await.unwrap();
 }
 

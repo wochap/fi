@@ -342,6 +342,10 @@ pub enum PairingError {
     /// The pairing endpoint's UDP port is held by another socket.
     #[error("UDP port {0} is already in use")]
     AddrInUse(u16),
+    /// Every UDP port in the pairing range is taken (the device's own sync
+    /// port excluded), so no pairing window can open.
+    #[error("no free UDP port in {first}-{last} for pairing")]
+    PortsExhausted { first: u16, last: u16 },
     /// The secure key store exists but is locked. Kept distinct from
     /// `SecureStoreUnavailable` all the way to the UI so the user can be told
     /// to unlock the keyring and retry rather than shown a generic failure.
