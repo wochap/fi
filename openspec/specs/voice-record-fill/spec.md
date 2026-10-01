@@ -185,24 +185,19 @@ When the Settings switch "Hands-free spoken feedback" is on, the app SHALL speak
 - **THEN** the phone says "4 fields filled. Tap Save record when ready." and the panel shows the speaking state with mute
 
 ### Requirement: Settings tab with voice input
-Below 720px the bottom navigation SHALL show Collections, Devices and Settings. Settings SHALL show three sections:
-- Voice input, shown only when a voice engine is available. It holds:
-  - The voice models card (mocks 8b, 8d). Its header reads "Voice models", a state tag with an icon and text, and a summary line starting with the speech model's language name. Below it, one row per manifest model shows its role ("Speech recognition" or "Understanding"), its friendly label, and its size or state: the manifest size when waiting or ready, "<stored> of <size>" while partly stored, "Checking" while verifying, and "<size> · damaged" after a checksum failure. The card shows one of these states:
-    - Not downloaded: tag "Not downloaded", summary "<language> · <total> total", "Wi-Fi recommended", "Needs <remaining> · <free> free on this phone", and "Download <remaining>".
-    - Downloading: tag "Downloading", summary "<language> · <done> of <total>", a progress bar with the percent and "about <time> left", Pause and Cancel.
-    - Reconnecting: tag "Reconnecting", "Connection lost — reconnecting…", the progress bar frozen in a neutral color, "The download resumes where it stopped.", "Leaving Fi can pause the network. Keep it open to finish faster.", Pause and Cancel.
-    - Verifying: tag "Verifying", summary "<language> · <total>", "Checking downloaded data…" with the time left when known, a striped bar without a percent, and Cancel.
-    - Paused: tag "Paused", summary "<language> · paused at <done> of <total>", the frozen progress bar with the percent and "resumes from here", Resume and Cancel.
-    - Failed: tag "Failed", a reason title and line, Retry and "Cancel and delete". A network or HTTP failure reads "No connection" / "Couldn't reach the download server. Check your Wi-Fi, then retry. Downloaded data is kept." with summary "<language> · stopped at <done>". A storage failure reads "Not enough storage" / "Free up <needed> on this phone, then retry." with the same summary. A checksum failure reads "Downloaded file is damaged" / "The <role> model failed its check. Retry downloads it again (<size>)." with summary "<language> · check failed".
-    - Ready: tag "Ready", summary "<language> · <total> used on this phone", Re-download and Delete.
-  - The hands-free switch with "Speaks the “still need” question and a short confirmation", shown only when the models are ready.
-  - The privacy line "Audio is processed on this device and never saved. English only for now."
-- Microphone, with the permission state and an "Android settings" link.
-- About, with the build label.
+Settings SHALL include a Voice input section wherever the app-settings capability shows it (a platform with on-device voice and an available voice engine). The Voice input section holds:
+- The voice models card (mocks 8b, 8d). Its header reads "Voice models", a state tag with an icon and text, and a summary line starting with the speech model's language name. Below it, one row per manifest model shows its role ("Speech recognition" or "Understanding"), its friendly label, and its size or state: the manifest size when waiting or ready, "<stored> of <size>" while partly stored, "Checking" while verifying, and "<size> · damaged" after a checksum failure. The card shows one of these states:
+  - Not downloaded: tag "Not downloaded", summary "<language> · <total> total", "Wi-Fi recommended", "Needs <remaining> · <free> free on this phone", and "Download <remaining>".
+  - Downloading: tag "Downloading", summary "<language> · <done> of <total>", a progress bar with the percent and "about <time> left", Pause and Cancel.
+  - Reconnecting: tag "Reconnecting", "Connection lost — reconnecting…", the progress bar frozen in a neutral color, "The download resumes where it stopped.", "Leaving Fi can pause the network. Keep it open to finish faster.", Pause and Cancel.
+  - Verifying: tag "Verifying", summary "<language> · <total>", "Checking downloaded data…" with the time left when known, a striped bar without a percent, and Cancel.
+  - Paused: tag "Paused", summary "<language> · paused at <done> of <total>", the frozen progress bar with the percent and "resumes from here", Resume and Cancel.
+  - Failed: tag "Failed", a reason title and line, Retry and "Cancel and delete". A network or HTTP failure reads "No connection" / "Couldn't reach the download server. Check your Wi-Fi, then retry. Downloaded data is kept." with summary "<language> · stopped at <done>". A storage failure reads "Not enough storage" / "Free up <needed> on this phone, then retry." with the same summary. A checksum failure reads "Downloaded file is damaged" / "The <role> model failed its check. Retry downloads it again (<size>)." with summary "<language> · check failed".
+  - Ready: tag "Ready", summary "<language> · <total> used on this phone", Re-download and Delete.
+- The hands-free switch with "Speaks the “still need” question and a short confirmation", shown only when the models are ready.
+- The privacy line "Audio is processed on this device and never saved. English only for now."
 
 State tags SHALL pair an icon with their text, never color alone. Retry SHALL resume from the stored bytes. Cancel and "Cancel and delete" SHALL ask "Cancel download?" with "Downloaded data (<done>) will be deleted.", "Cancel download" and "Keep downloading", unless nothing is stored. Delete SHALL ask "Delete voice models?" with "Frees <size>. Voice fill won’t work until you download them again.", "Delete" and "Keep models". Re-download SHALL be confirmed first. In each confirm dialog the safe choice SHALL be the primary button on the right and the destructive choice the secondary button on the left. There is no undo.
-
-Desktop navigation SHALL NOT change.
 
 #### Scenario: Ready model in Settings
 - **WHEN** the model set is ready
