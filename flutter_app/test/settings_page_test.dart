@@ -247,7 +247,7 @@ void main() {
       'Version',
       'fi 0.1.21 · a1b2c3d',
       'Network',
-      'Local network only · UDP 47380–47389 · mDNS 5353',
+      'Local network and tailnet · UDP 47380–47389 · mDNS 5353',
     ]) {
       expect(
         find.descendant(of: about, matching: find.text(text)),
@@ -321,11 +321,11 @@ void main() {
       expect(find.text('Address copied'), findsOneWidget);
     });
 
-    testWidgets('reads Not on a local network without addresses', (
+    testWidgets('reads Not on a local network or tailnet without addresses', (
       tester,
     ) async {
       await openDesktop(tester, _ready()..localAddresses = const []);
-      expect(find.text('Not on a local network'), findsOneWidget);
+      expect(find.text('Not on a local network or tailnet'), findsOneWidget);
       expect(find.byTooltip('Copy address'), findsNothing);
     });
 

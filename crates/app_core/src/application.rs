@@ -511,8 +511,9 @@ impl AppCore {
                 }
             }
         };
-        let endpoints = Arc::new(Mutex::new(EndpointRegistry::new(
+        let endpoints = Arc::new(Mutex::new(EndpointRegistry::with_tailnet(
             crate::discovery::AddressPolicy::for_bind(bind.ip()),
+            network.tailnet().clone(),
         )));
         load_remembered_endpoints(&control_store, &endpoints, current_time_ms());
         network.set_accepting(preferences.sync_enabled);
@@ -522,7 +523,12 @@ impl AppCore {
                 .map_err(|message| AppError::Storage(message.into()))?;
         connections.set_paused(!preferences.sync_enabled);
         if let Some(requests) = network.take_control_requests() {
-            spawn_rotation_control(requests, pairing.clone());
+            spawn_control_router(
+                requests,
+                pairing.clone(),
+                endpoints.clone(),
+                control_store.clone(),
+            );
         }
         let mut deferred = None;
         if let Err(error) = pairing
@@ -1074,12 +1080,12 @@ impl AppCore {
         let Ok(address) = parse_manual_address(input) else {
             return Ok(ManualConnectOutcome::InvalidAddress);
         };
-        let policy = self
+        let admitted = self
             .endpoints
             .lock()
             .map_err(|_| AppError::Storage("endpoint registry lock poisoned".into()))?
-            .policy();
-        if !policy.admits_peer_address(address.ip()) {
+            .admits(address.ip());
+        if !admitted {
             return Ok(ManualConnectOutcome::NotLocalNetwork);
         }
         match connections.connect_address(peer, address, now_ms).await {
@@ -1087,6 +1093,29 @@ impl AppCore {
             Err(ConnectionFailure::Paused) => Err(AppError::Connection(ConnectionFailure::Paused)),
             Err(failure) => Ok(ManualConnectOutcome::Failed(failure)),
         }
+    }
+
+    /// Every remembered address of `peer`, most recently successful first.
+    #[must_use]
+    pub fn remembered_endpoints(&self, peer: DeviceId) -> Vec<SocketAddr> {
+        self.control
+            .remembered_endpoints()
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|row| row.device_id == peer)
+            .map(|row| row.address)
+            .collect()
+    }
+
+    /// Sends one raw control frame to a connected peer; for tests.
+    #[doc(hidden)]
+    pub async fn exchange_control_frame(&self, peer: DeviceId, frame: &[u8]) -> Result<Vec<u8>> {
+        self.network
+            .as_ref()
+            .ok_or_else(|| AppError::Storage("networking is not enabled".into()))?
+            .exchange_control(peer, frame)
+            .await
+            .map_err(|error| AppError::Repository(error.to_string()))
     }
 
     /// Most recently successful remembered address per device.
@@ -1099,17 +1128,20 @@ impl AppCore {
         known
     }
 
-    /// Addresses at which a LAN peer can dial this device: every advertisable
-    /// interface address with the bound sync port.
+    /// Addresses at which a peer can dial this device: every advertisable
+    /// interface address, then every tailnet address, with the bound sync port.
     #[must_use]
     pub fn local_sync_addresses(&self) -> Vec<SocketAddr> {
-        let Some(bound) = self.network_addr() else {
+        let (Some(bound), Some(network)) = (self.network_addr(), self.network.as_ref()) else {
             return Vec::new();
         };
-        order_sync_addresses(
-            AddressPolicy::for_bind(bound.ip()).local_advertisable_addresses(),
-            bound.port(),
-        )
+        let policy = AddressPolicy::for_bind(bound.ip());
+        let tailnet = if bound.is_ipv4() && !bound.ip().is_loopback() {
+            network.tailnet().addresses()
+        } else {
+            Vec::new()
+        };
+        order_sync_addresses(policy.local_advertisable_addresses(), tailnet, bound.port())
     }
 
     pub async fn disconnect_peer(&self, peer: DeviceId) -> Result<()> {
@@ -1500,7 +1532,8 @@ impl AppCore {
             .rotate_discovery_secret(port, now_ms, 7 * 24 * 60 * 60 * 1_000)
             .await?;
         if let Some(network) = self.network.as_ref() {
-            for (recipient, frame) in pairing.rotation_update_frames()? {
+            for (recipient, update) in pairing.rotation_update_frames()? {
+                let frame = crate::control_message::rotation_frame(&update);
                 match network.exchange_control(recipient, &frame).await {
                     Ok(response) => {
                         let _ = pairing.validate_rotation_ack(&response).await;
@@ -2690,8 +2723,9 @@ fn spawn_discovery_bridge(
             // on a pending rotation, which left reconnected devices offline.
             connections.request_connect(peer, now);
             if let Ok(frames) = pairing.rotation_update_frames()
-                && let Some((_, frame)) = frames.into_iter().find(|(device, _)| *device == peer)
+                && let Some((_, update)) = frames.into_iter().find(|(device, _)| *device == peer)
             {
+                let frame = crate::control_message::rotation_frame(&update);
                 let (pairing, connections, network) =
                     (pairing.clone(), connections.clone(), network.clone());
                 tokio::spawn(async move {
@@ -2739,13 +2773,25 @@ async fn wait_for_session(
 
 /// Records the address each authenticated session was actually reached on, so the
 /// demonstrated-reachable address ranks ahead of whatever was advertised.
-/// Private IPv4 first (by [`AddressPolicy::rank`]), then ascending.
-fn order_sync_addresses(ips: Vec<std::net::IpAddr>, port: u16) -> Vec<SocketAddr> {
+/// Private IPv4 first (by [`AddressPolicy::rank`]), then ascending, then the
+/// tailnet addresses ascending.
+fn order_sync_addresses(
+    ips: Vec<std::net::IpAddr>,
+    tailnet: Vec<std::net::Ipv4Addr>,
+    port: u16,
+) -> Vec<SocketAddr> {
     let mut addresses: Vec<SocketAddr> = ips
         .into_iter()
         .map(|ip| SocketAddr::new(ip, port))
         .collect();
     addresses.sort_by_key(|address| (AddressPolicy::rank(address.ip()), *address));
+    let mut tailnet: Vec<SocketAddr> = tailnet
+        .into_iter()
+        .map(|ip| SocketAddr::new(ip.into(), port))
+        .filter(|address| !addresses.contains(address))
+        .collect();
+    tailnet.sort_unstable();
+    addresses.extend(tailnet);
     addresses.dedup();
     addresses
 }
@@ -2785,7 +2831,7 @@ fn load_remembered_endpoints(
             row.device_id,
             NetworkEndpoint {
                 address: row.address,
-                source: EndpointSource::Remembered,
+                source: EndpointSource::remembered(row.address),
                 observed_at_ms: row.last_success_ms,
                 expires_at_ms: row
                     .last_success_ms
@@ -2831,13 +2877,17 @@ fn spawn_observed_address_bridge(
                 direction = ?event.direction,
                 "recorded observed peer address"
             );
+            {
+                let (network, peer) = (network.clone(), event.device);
+                tokio::spawn(async move { send_tailnet_hint(&network, peer).await });
+            }
             let mut admitted = false;
             if let Ok(mut endpoints) = endpoints.lock() {
                 endpoints.upsert(
                     event.device,
                     NetworkEndpoint {
                         address: event.address,
-                        source: EndpointSource::Lan,
+                        source: EndpointSource::observed(event.address),
                         observed_at_ms: now,
                         expires_at_ms: now.saturating_add(OBSERVED_ADDRESS_TTL_MS),
                         interface_scope: None,
@@ -2846,7 +2896,7 @@ fn spawn_observed_address_bridge(
                         retry_after_ms: None,
                     },
                 );
-                admitted = endpoints.policy().admits_peer_address(event.address.ip());
+                admitted = endpoints.admits(event.address.ip());
             }
             let trusted = matches!(
                 control.trusted_device(event.device),
@@ -2860,7 +2910,7 @@ fn spawn_observed_address_bridge(
                     event.device,
                     NetworkEndpoint {
                         address: event.address,
-                        source: EndpointSource::Remembered,
+                        source: EndpointSource::remembered(event.address),
                         observed_at_ms: now,
                         expires_at_ms: now.saturating_add(REMEMBERED_ENDPOINT_TTL_MS),
                         interface_scope: None,
@@ -2889,23 +2939,121 @@ fn spawn_observed_address_bridge(
     });
 }
 
-fn spawn_rotation_control(
+/// Dispatches inbound control frames by type: rotation updates to pairing,
+/// tailnet hints to endpoint memory. Unknown types are rejected, which closes
+/// the session as before.
+fn spawn_control_router(
     mut requests: tokio::sync::mpsc::Receiver<crate::quinn_transport::ControlRequest>,
     pairing: Arc<PairingManager>,
+    endpoints: Arc<Mutex<EndpointRegistry>>,
+    control: Arc<SqliteControlStore>,
 ) {
+    use crate::control_message::{ControlMessage, TAILNET_HINT_ACK, parse_control};
     tokio::spawn(async move {
         while let Some(request) = requests.recv().await {
-            let response = pairing
-                .accept_rotation_update(request.peer, &request.frame)
-                .await
-                .map_err(|_| {
-                    crate::quinn_transport::QuinnTransportError::Protocol(
-                        "discovery control request rejected",
-                    )
-                });
+            let response = match parse_control(&request.frame) {
+                ControlMessage::Rotation(update) => pairing
+                    .accept_rotation_update(request.peer, update)
+                    .await
+                    .map_err(|_| {
+                        crate::quinn_transport::QuinnTransportError::Protocol(
+                            "discovery control request rejected",
+                        )
+                    }),
+                ControlMessage::TailnetHint(payload) => {
+                    accept_tailnet_hint(&endpoints, &control, request.peer, payload);
+                    Ok(TAILNET_HINT_ACK.to_vec())
+                }
+                ControlMessage::Unknown => {
+                    Err(crate::quinn_transport::QuinnTransportError::Protocol(
+                        "unknown control request",
+                    ))
+                }
+            };
             let _ = request.response.send(response);
         }
     });
+}
+
+/// Remembers the tailnet addresses a trusted peer reported for itself. A
+/// malformed hint is ignored.
+fn accept_tailnet_hint(
+    endpoints: &Mutex<EndpointRegistry>,
+    control: &SqliteControlStore,
+    peer: DeviceId,
+    payload: &[u8],
+) {
+    let addresses = match crate::control_message::decode_tailnet_hint(payload) {
+        Ok(addresses) => addresses,
+        Err(error) => {
+            tracing::debug!(event = "tailnet_hint_ignored", device_id = %peer, error = %error);
+            return;
+        }
+    };
+    let trusted = matches!(
+        control.trusted_device(peer),
+        Ok(Some(record)) if record.state == TrustState::Trusted
+    );
+    if !trusted {
+        return;
+    }
+    let now = current_time_ms();
+    for address in addresses {
+        let address = SocketAddr::V4(address);
+        if let Ok(mut endpoints) = endpoints.lock() {
+            endpoints.upsert(
+                peer,
+                NetworkEndpoint {
+                    address,
+                    source: EndpointSource::Tailscale,
+                    observed_at_ms: now,
+                    expires_at_ms: now.saturating_add(REMEMBERED_ENDPOINT_TTL_MS),
+                    interface_scope: None,
+                    last_success_ms: Some(now),
+                    failures: 0,
+                    retry_after_ms: None,
+                },
+            );
+        }
+        match control.remember_peer_endpoint(peer, address, now) {
+            Ok(true) => info!(
+                event = "peer_endpoint_remembered",
+                device_id = %peer,
+                address = %address,
+                "remembered peer tailnet endpoint"
+            ),
+            Ok(false) => {}
+            Err(error) => warn!(
+                event = "remember_endpoint_failed",
+                device_id = %peer,
+                error = %error,
+                "could not remember peer tailnet endpoint"
+            ),
+        }
+    }
+}
+
+/// Tells `peer` this device's tailnet sync addresses, if it is on a tailnet.
+async fn send_tailnet_hint(network: &QuinnTransport, peer: DeviceId) {
+    let Ok(bound) = network.local_addr() else {
+        return;
+    };
+    if !bound.is_ipv4() {
+        return;
+    }
+    let addresses: Vec<std::net::SocketAddrV4> = network
+        .tailnet()
+        .addresses()
+        .into_iter()
+        .map(|ip| std::net::SocketAddrV4::new(ip, bound.port()))
+        .collect();
+    if addresses.is_empty() {
+        return;
+    }
+    let frame = crate::control_message::tailnet_hint_frame(&addresses);
+    if let Err(error) = network.exchange_control(peer, &frame).await {
+        tracing::debug!(event = "tailnet_hint_failed", device_id = %peer, error = %error);
+    }
 }
 
 fn ensure_query_ready(state: ApplicationState) -> Result<()> {
@@ -3438,6 +3586,105 @@ mod tests {
         DeviceId::from_public_key(&[seed; 32])
     }
 
+    fn control_with_trusted(seed: u8) -> (tempfile::TempDir, SqliteControlStore, DeviceId) {
+        let directory = tempfile::tempdir().unwrap();
+        let store = SqliteControlStore::open(directory.path().join("control.sqlite")).unwrap();
+        let key = crate::PrivateDeviceKey::from_seed(&[seed; 32])
+            .unwrap()
+            .public_key();
+        let device_id = DeviceId::from_public_key(key.as_bytes());
+        store
+            .upsert_trusted_device(&crate::control::TrustedDeviceRecord {
+                device_id,
+                public_key: key,
+                friendly_name: format!("Device {seed}"),
+                paired_at_ms: 1,
+                last_seen_ms: None,
+                last_sync_ms: None,
+                state: TrustState::Trusted,
+            })
+            .unwrap();
+        (directory, store, device_id)
+    }
+
+    fn sources(
+        registry: &Mutex<EndpointRegistry>,
+        peer: DeviceId,
+        now: u64,
+    ) -> Vec<(SocketAddr, EndpointSource)> {
+        registry
+            .lock()
+            .unwrap()
+            .ranked(peer, now)
+            .into_iter()
+            .map(|endpoint| (endpoint.address, endpoint.source))
+            .collect()
+    }
+
+    #[test]
+    fn remembered_tailnet_row_loads_as_tailscale_endpoint() {
+        let (_directory, store, peer) = control_with_trusted(60);
+        let now = current_time_ms();
+        let lan: SocketAddr = "192.168.0.165:47380".parse().unwrap();
+        let tailnet: SocketAddr = "100.88.10.4:47380".parse().unwrap();
+        store
+            .remember_peer_endpoint(peer, lan, now - 1_000)
+            .unwrap();
+        store
+            .remember_peer_endpoint(peer, tailnet, now - 2_000)
+            .unwrap();
+        let registry = Mutex::new(EndpointRegistry::with_tailnet(
+            AddressPolicy::default(),
+            crate::discovery::TailnetProbe::fixed(["100.71.3.9".parse().unwrap()]),
+        ));
+        load_remembered_endpoints(&store, &registry, now);
+        assert_eq!(
+            sources(&registry, peer, now),
+            vec![
+                (tailnet, EndpointSource::Tailscale),
+                (lan, EndpointSource::Remembered),
+            ]
+        );
+    }
+
+    #[test]
+    fn tailnet_hints_are_remembered_and_malformed_ones_ignored() {
+        let (_directory, store, peer) = control_with_trusted(61);
+        let registry = Mutex::new(EndpointRegistry::with_tailnet(
+            AddressPolicy::default(),
+            crate::discovery::TailnetProbe::fixed([]),
+        ));
+        accept_tailnet_hint(&registry, &store, peer, &[3, 1, 2]);
+        assert!(store.remembered_endpoints().unwrap().is_empty());
+        let frame = crate::control_message::tailnet_hint_frame(&[
+            "100.88.10.4:47380".parse().unwrap(),
+            "8.8.8.8:47380".parse().unwrap(),
+        ]);
+        accept_tailnet_hint(&registry, &store, peer, &frame[1..]);
+        let remembered: Vec<SocketAddr> = store
+            .remembered_endpoints()
+            .unwrap()
+            .into_iter()
+            .map(|row| row.address)
+            .collect();
+        assert_eq!(
+            remembered,
+            vec!["100.88.10.4:47380".parse::<SocketAddr>().unwrap()]
+        );
+        // Recorded even while this device is off the tailnet; ranked once it joins.
+        assert!(sources(&registry, peer, current_time_ms()).is_empty());
+        let stranger = device(62);
+        accept_tailnet_hint(&registry, &store, stranger, &frame[1..]);
+        assert!(
+            store
+                .remembered_endpoints()
+                .unwrap()
+                .iter()
+                .all(|row| row.device_id == peer),
+            "untrusted senders are not remembered"
+        );
+    }
+
     #[test]
     fn order_sync_addresses_puts_private_first_then_ascending() {
         let ordered = order_sync_addresses(
@@ -3446,6 +3693,7 @@ mod tests {
                 [10, 0, 0, 2].into(),
                 [169, 254, 1, 1].into(),
             ],
+            Vec::new(),
             47380,
         );
         assert_eq!(
@@ -3455,6 +3703,40 @@ mod tests {
                 "192.168.0.165:47380".parse().unwrap(),
                 "169.254.1.1:47380".parse().unwrap(),
             ]
+        );
+    }
+
+    #[test]
+    fn sync_addresses_list_lan_then_tailnet() {
+        let addresses = |names: &[(&str, &str)]| {
+            let interfaces: Vec<(String, std::net::IpAddr, bool)> = names
+                .iter()
+                .map(|(name, ip)| ((*name).to_owned(), ip.parse().unwrap(), false))
+                .collect();
+            order_sync_addresses(
+                AddressPolicy::default().advertisable_addresses(interfaces.clone()),
+                crate::discovery::tailnet_addresses(interfaces),
+                47380,
+            )
+        };
+        assert_eq!(
+            addresses(&[
+                ("lo", "127.0.0.1"),
+                ("tailscale0", "100.71.3.9"),
+                ("wlan0", "192.168.0.165"),
+            ]),
+            vec![
+                "192.168.0.165:47380".parse::<SocketAddr>().unwrap(),
+                "100.71.3.9:47380".parse().unwrap(),
+            ]
+        );
+        assert_eq!(
+            addresses(&[("lo", "127.0.0.1"), ("tun0", "100.71.3.9")]),
+            vec!["100.71.3.9:47380".parse::<SocketAddr>().unwrap()]
+        );
+        assert_eq!(
+            addresses(&[("rmnet_data0", "100.100.5.6")]),
+            Vec::<SocketAddr>::new()
         );
     }
 

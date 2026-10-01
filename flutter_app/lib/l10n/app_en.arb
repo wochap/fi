@@ -3203,7 +3203,7 @@
   "@settingsNetwork": {
     "description": "About row"
   },
-  "settingsNetworkSummary": "Local network only · UDP {first}–{last} · mDNS {mdns}",
+  "settingsNetworkSummary": "Local network and tailnet · UDP {first}–{last} · mDNS {mdns}",
   "@settingsNetworkSummary": {
     "description": "Network summary; numbers are ports",
     "placeholders": {
@@ -4139,9 +4139,9 @@
   "@connectAddressInvalid": {
     "description": "Field error for an address that does not parse."
   },
-  "connectAddressNotLocal": "Use an address on your local network, like 192.168.x.x.",
+  "connectAddressNotLocal": "Use an address on your local network or tailnet, like 192.168.x.x or 100.x.x.x.",
   "@connectAddressNotLocal": {
-    "description": "Field error for an address outside the local network."
+    "description": "Field error for an address outside the local network and tailnet."
   },
   "connectAddressNoAnswer": "No answer at {address}. Check the address and that Fi is open on the other device.",
   "@connectAddressNoAnswer": {
@@ -4172,9 +4172,9 @@
   "@aboutThisDevice": {
     "description": "About row listing this device's sync addresses."
   },
-  "aboutNotOnLocalNetwork": "Not on a local network",
+  "aboutNotOnLocalNetwork": "Not on a local network or tailnet",
   "@aboutNotOnLocalNetwork": {
-    "description": "About row value when this device has no local-network address."
+    "description": "About row value when this device has neither a local-network nor a tailnet address."
   },
   "aboutAddressCopied": "Address copied",
   "@aboutAddressCopied": {

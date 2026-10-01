@@ -909,6 +909,7 @@ LogCategory logCategory(LogEventDto event) {
       name == 'peer_endpoint_discovered' ||
       name == 'peer_endpoint_remembered' ||
       name.startsWith('remember') ||
+      name.startsWith('tailnet_') ||
       name.startsWith('discovery_')) {
     return LogCategory.address;
   }

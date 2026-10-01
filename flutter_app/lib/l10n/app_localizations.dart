@@ -3923,7 +3923,7 @@ abstract class AppLocalizations {
   /// Network summary; numbers are ports
   ///
   /// In en, this message translates to:
-  /// **'Local network only · UDP {first}–{last} · mDNS {mdns}'**
+  /// **'Local network and tailnet · UDP {first}–{last} · mDNS {mdns}'**
   String settingsNetworkSummary(int first, int last, int mdns);
 
   /// Microphone row
@@ -4904,10 +4904,10 @@ abstract class AppLocalizations {
   /// **'Enter an IPv4 address like 192.168.0.165, optionally followed by :port.'**
   String get connectAddressInvalid;
 
-  /// Field error for an address outside the local network.
+  /// Field error for an address outside the local network and tailnet.
   ///
   /// In en, this message translates to:
-  /// **'Use an address on your local network, like 192.168.x.x.'**
+  /// **'Use an address on your local network or tailnet, like 192.168.x.x or 100.x.x.x.'**
   String get connectAddressNotLocal;
 
   /// Error when nothing answered at the typed address.
@@ -4934,10 +4934,10 @@ abstract class AppLocalizations {
   /// **'This device'**
   String get aboutThisDevice;
 
-  /// About row value when this device has no local-network address.
+  /// About row value when this device has neither a local-network nor a tailnet address.
   ///
   /// In en, this message translates to:
-  /// **'Not on a local network'**
+  /// **'Not on a local network or tailnet'**
   String get aboutNotOnLocalNetwork;
 
   /// Confirmation after copying an address.

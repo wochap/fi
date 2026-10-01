@@ -15,18 +15,42 @@ use async_trait::async_trait;
 use tokio::sync::{Notify, Semaphore, watch};
 
 use crate::{
-    discovery::{AddressPolicy, Clock},
+    discovery::{AddressPolicy, Clock, TailnetProbe, is_tailnet_ip},
     endpoint_memory::REMEMBERED_ENDPOINT_TTL_MS,
     identity::DeviceId,
 };
 
-/// Where an endpoint was learned. Declaration order is rank order:
-/// remembered addresses rank below anything fresh.
+/// Where an endpoint was learned. Declaration order is rank order: LAN,
+/// then any tailnet address, then other remembered addresses.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum EndpointSource {
     Lan,
-    Remembered,
     Tailscale,
+    Remembered,
+}
+
+impl EndpointSource {
+    /// Source of an address learned from a live session: Tailscale for a
+    /// tailnet address, LAN otherwise.
+    #[must_use]
+    pub const fn observed(address: SocketAddr) -> Self {
+        if is_tailnet_ip(address.ip()) {
+            Self::Tailscale
+        } else {
+            Self::Lan
+        }
+    }
+
+    /// Source of an address from memory, a hint or manual entry: Tailscale for
+    /// a tailnet address, remembered otherwise.
+    #[must_use]
+    pub const fn remembered(address: SocketAddr) -> Self {
+        if is_tailnet_ip(address.ip()) {
+            Self::Tailscale
+        } else {
+            Self::Remembered
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -65,16 +89,28 @@ impl NetworkEndpoint {
 #[derive(Debug, Default)]
 pub struct EndpointRegistry {
     policy: AddressPolicy,
+    tailnet: TailnetProbe,
     endpoints: BTreeMap<DeviceId, Vec<NetworkEndpoint>>,
 }
 
 impl EndpointRegistry {
     #[must_use]
     pub fn new(policy: AddressPolicy) -> Self {
+        Self::with_tailnet(policy, TailnetProbe::system())
+    }
+    #[must_use]
+    pub fn with_tailnet(policy: AddressPolicy, tailnet: TailnetProbe) -> Self {
         Self {
             policy,
+            tailnet,
             endpoints: BTreeMap::new(),
         }
+    }
+    /// Whether `address` may be dialed for sync right now.
+    #[must_use]
+    pub fn admits(&self, address: std::net::IpAddr) -> bool {
+        self.policy
+            .admits_sync_peer_address(address, self.tailnet.on_tailnet())
     }
     #[must_use]
     pub const fn policy(&self) -> AddressPolicy {
@@ -127,6 +163,7 @@ impl EndpointRegistry {
                 .map(Vec::as_slice)
                 .unwrap_or_default(),
             &self.policy,
+            self.tailnet.on_tailnet(),
             now_ms,
         )
     }
@@ -143,10 +180,14 @@ impl EndpointRegistry {
     /// fresh discovery can make the device dialable again.
     #[must_use]
     pub fn next_eligible_ms(&self, device: DeviceId, not_before_ms: u64) -> Option<u64> {
+        let on_tailnet = self.tailnet.on_tailnet();
         self.endpoints
             .get(&device)?
             .iter()
-            .filter(|endpoint| self.policy.admits_peer_address(endpoint.address.ip()))
+            .filter(|endpoint| {
+                self.policy
+                    .admits_sync_peer_address(endpoint.address.ip(), on_tailnet)
+            })
             .filter_map(|endpoint| {
                 let at = not_before_ms.max(endpoint.retry_after_ms.unwrap_or(0));
                 (at < endpoint.expires_at_ms).then_some(at)
@@ -193,22 +234,25 @@ impl EndpointRegistry {
 /// Ranks with the default policy (transport bound to `0.0.0.0`).
 #[must_use]
 pub fn rank_endpoints(endpoints: &[NetworkEndpoint], now_ms: u64) -> Vec<NetworkEndpoint> {
-    rank_endpoints_with_policy(endpoints, &AddressPolicy::default(), now_ms)
+    rank_endpoints_with_policy(endpoints, &AddressPolicy::default(), false, now_ms)
 }
 
 /// Deterministic, side-effect-free ranking. An address the local socket cannot
 /// reach is never returned, so it can never outrank a reachable one and an
-/// all-unreachable set yields no endpoint.
+/// all-unreachable set yields no endpoint. Tailnet addresses are reachable
+/// only while `on_tailnet`.
 #[must_use]
 pub fn rank_endpoints_with_policy(
     endpoints: &[NetworkEndpoint],
     policy: &AddressPolicy,
+    on_tailnet: bool,
     now_ms: u64,
 ) -> Vec<NetworkEndpoint> {
     let mut ranked: Vec<_> = endpoints
         .iter()
         .filter(|endpoint| {
-            endpoint.is_eligible(now_ms) && policy.admits_peer_address(endpoint.address.ip())
+            endpoint.is_eligible(now_ms)
+                && policy.admits_sync_peer_address(endpoint.address.ip(), on_tailnet)
         })
         .cloned()
         .collect();
@@ -728,7 +772,7 @@ impl ConnectionManager {
         );
         let endpoint = NetworkEndpoint {
             address,
-            source: EndpointSource::Remembered,
+            source: EndpointSource::remembered(address),
             observed_at_ms: now_ms,
             expires_at_ms: now_ms.saturating_add(REMEMBERED_ENDPOINT_TTL_MS),
             interface_scope: None,
@@ -1108,7 +1152,7 @@ mod tests {
         // The same loopback endpoint is reachable when the local socket is on loopback.
         let policy = AddressPolicy::for_bind([127, 0, 0, 1].into());
         assert_eq!(
-            rank_endpoints_with_policy(&[loopback], &policy, 10).len(),
+            rank_endpoints_with_policy(&[loopback], &policy, false, 10).len(),
             1
         );
     }
@@ -1165,6 +1209,46 @@ mod tests {
         assert_eq!(
             ranked.iter().map(|item| item.source).collect::<Vec<_>>(),
             vec![EndpointSource::Lan, EndpointSource::Remembered]
+        );
+    }
+
+    #[test]
+    fn tailscale_ranks_between_lan_and_remembered_and_needs_the_tailnet() {
+        let device = DeviceId::from_public_key(&[5; 32]);
+        let mut remembered = endpoint(EndpointSource::Remembered, 47380);
+        remembered.address = "192.168.0.165:47380".parse().unwrap();
+        remembered.last_success_ms = Some(50);
+        let mut tailscale = endpoint(EndpointSource::Tailscale, 47380);
+        tailscale.address = "100.88.10.4:47380".parse().unwrap();
+        let probe = TailnetProbe::fixed(["100.71.3.9".parse().unwrap()]);
+        let mut registry = EndpointRegistry::with_tailnet(AddressPolicy::default(), probe.clone());
+        registry.upsert(device, remembered.clone());
+        registry.upsert(device, tailscale.clone());
+        let addresses = |registry: &EndpointRegistry| {
+            registry
+                .ranked(device, 10)
+                .iter()
+                .map(|item| item.address)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            addresses(&registry),
+            vec![tailscale.address, remembered.address]
+        );
+        let mut lan = endpoint(EndpointSource::Lan, 47380);
+        lan.address = "192.168.0.170:47380".parse().unwrap();
+        registry.upsert(device, lan.clone());
+        assert_eq!(addresses(&registry)[0], lan.address);
+
+        probe.set_addresses([]);
+        let mut only_tailnet =
+            EndpointRegistry::with_tailnet(AddressPolicy::default(), probe.clone());
+        only_tailnet.upsert(device, tailscale.clone());
+        assert!(only_tailnet.ranked(device, 10).is_empty());
+        assert_eq!(only_tailnet.next_eligible_ms(device, 10), None);
+        assert!(
+            rank_endpoints_with_policy(&[tailscale], &AddressPolicy::default(), false, 10)
+                .is_empty()
         );
     }
 

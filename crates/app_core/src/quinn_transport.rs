@@ -38,7 +38,7 @@ use x509_parser::prelude::{FromDer, X509Certificate};
 use crate::{
     adapters::SqliteControlStore,
     control::{PeerTrustRecord, TrustState},
-    discovery::AddressPolicy,
+    discovery::{AddressPolicy, TailnetProbe},
     identity::{DeviceId, DeviceIdentity, PublicDeviceKey},
     routing::{
         ConnectionDirection, ConnectionFailure, NetworkEndpoint, PeerConnector, SessionCandidate,
@@ -48,7 +48,7 @@ use crate::{
 
 pub const SYNC_ALPN: &[u8] = b"fi-sync/1";
 const STREAM_PREFACE: &[u8] = b"FISYNC\x01";
-const CONTROL_PREFACE: &[u8] = b"FICTRL\x01";
+const CONTROL_PREFACE: &[u8] = b"FICTRL\x02";
 const MAX_CONTROL_FRAME: usize = 1024;
 const FRAME_PREFIX_LEN: usize = 4;
 const FRAME_BODY_HEADER_LEN: usize = 8;
@@ -371,6 +371,8 @@ pub struct QuinnTransportConfig {
     pub event_capacity: usize,
     pub writer_capacity: usize,
     pub max_connections: usize,
+    /// Decides whether tailnet sources are admitted; the system probe by default.
+    pub tailnet: TailnetProbe,
 }
 
 impl Default for QuinnTransportConfig {
@@ -379,6 +381,7 @@ impl Default for QuinnTransportConfig {
             event_capacity: 128,
             writer_capacity: 32,
             max_connections: 8,
+            tailnet: TailnetProbe::system(),
         }
     }
 }
@@ -554,6 +557,20 @@ impl QuinnTransport {
             .map_err(|error| QuinnTransportError::Configuration(error.to_string()))
     }
 
+    /// Whether an inbound connection from `remote` may start a handshake: a
+    /// LAN source, or a tailnet source while this device is on a tailnet.
+    #[must_use]
+    pub fn admits_inbound(&self, remote: std::net::IpAddr) -> bool {
+        self.inbound_policy
+            .admits_sync_peer_address(remote, self.config.tailnet.on_tailnet())
+    }
+
+    /// The tailnet probe sync admission reads.
+    #[must_use]
+    pub fn tailnet(&self) -> &TailnetProbe {
+        &self.config.tailnet
+    }
+
     pub(crate) fn take_control_requests(&self) -> Option<mpsc::Receiver<ControlRequest>> {
         self.control_rx.lock().ok()?.take()
     }
@@ -629,10 +646,7 @@ impl QuinnTransport {
             let Some(incoming) = self.endpoint.accept().await else {
                 break;
             };
-            if !self
-                .inbound_policy
-                .admits_peer_address(incoming.remote_address().ip())
-            {
+            if !self.admits_inbound(incoming.remote_address().ip()) {
                 tracing::debug!(
                     event = "inbound_dropped_non_lan",
                     endpoint = "sync",
@@ -1256,6 +1270,38 @@ mod tests {
     #[test]
     fn default_connection_limit_is_eight() {
         assert_eq!(QuinnTransportConfig::default().max_connections, 8);
+    }
+
+    #[tokio::test]
+    async fn inbound_tailnet_source_needs_the_device_on_a_tailnet() {
+        let probe = TailnetProbe::fixed(["100.71.3.9".parse().unwrap()]);
+        let listener = QuinnTransport::bind(
+            ([0, 0, 0, 0], 0).into(),
+            identity(22).await,
+            Arc::new(MemoryTrustResolver::default()),
+            QuinnTransportConfig {
+                tailnet: probe.clone(),
+                ..QuinnTransportConfig::default()
+            },
+        )
+        .unwrap();
+        let tailnet_peer = "100.88.10.4".parse().unwrap();
+        assert!(listener.admits_inbound(tailnet_peer));
+        assert!(listener.admits_inbound("192.168.0.40".parse().unwrap()));
+        assert!(!listener.admits_inbound("8.8.8.8".parse().unwrap()));
+        // Pairing stays LAN-only while the device is on the tailnet.
+        probe.set_addresses(["100.71.3.9".parse().unwrap()]);
+        let pairing = crate::pairing_transport::PairingTransport::bind(
+            ([0, 0, 0, 0], 0).into(),
+            identity(23).await.as_ref(),
+            AddressPolicy::default(),
+        )
+        .unwrap();
+        assert!(!pairing.admits_inbound(tailnet_peer));
+        assert!(pairing.admits_inbound("192.168.0.40".parse().unwrap()));
+        probe.set_addresses([]);
+        assert!(!listener.admits_inbound(tailnet_peer));
+        assert!(listener.admits_inbound("192.168.0.40".parse().unwrap()));
     }
 
     #[tokio::test]

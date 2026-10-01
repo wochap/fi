@@ -3,6 +3,7 @@
 pub mod adapters;
 pub mod application;
 pub mod control;
+pub mod control_message;
 pub mod diagnostics;
 pub mod discovery;
 pub mod discovery_control;
@@ -48,9 +49,9 @@ pub use control::{
 pub use discovery::{
     Clock, DiscoveredEndpoint, DiscoveryAdvertisement, DiscoveryError, DiscoveryEvent,
     DiscoveryGroupSecret, DiscoveryProvider, DiscoveryScope, FakeDiscoveryProvider, GroupRejection,
-    ManualClock, MdnsDiscovery, PairingInstanceId, classify_group_endpoint,
-    discovery_secret_fingerprint, group_routing_token, group_service_selector,
-    match_group_endpoint,
+    ManualClock, MdnsDiscovery, PairingInstanceId, TailnetProbe, classify_group_endpoint,
+    discovery_secret_fingerprint, group_routing_token, group_service_selector, is_tailnet_address,
+    match_group_endpoint, tailnet_addresses,
 };
 pub use discovery_control::{
     DISCOVERY_ACK_SIZE, DISCOVERY_CONTROL_VERSION, DISCOVERY_UPDATE_SIZE, DiscoveryControlError,

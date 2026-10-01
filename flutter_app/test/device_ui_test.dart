@@ -78,6 +78,8 @@ void main() {
       'remembered_endpoints_loaded': LogCategory.address,
       'remembered_endpoints_prune_failed': LogCategory.address,
       'sync_port_bound': LogCategory.peer,
+      'tailnet_hint_failed': LogCategory.address,
+      'tailnet_hint_ignored': LogCategory.address,
       'tick': LogCategory.device,
       'trusted_device_activity_failed': LogCategory.device,
     };

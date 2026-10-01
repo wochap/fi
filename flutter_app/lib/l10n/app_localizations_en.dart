@@ -2400,7 +2400,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String settingsNetworkSummary(int first, int last, int mdns) {
-    return 'Local network only · UDP $first–$last · mDNS $mdns';
+    return 'Local network and tailnet · UDP $first–$last · mDNS $mdns';
   }
 
   @override
@@ -3068,7 +3068,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get connectAddressNotLocal =>
-      'Use an address on your local network, like 192.168.x.x.';
+      'Use an address on your local network or tailnet, like 192.168.x.x or 100.x.x.x.';
 
   @override
   String connectAddressNoAnswer(String address) {
@@ -3088,7 +3088,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aboutThisDevice => 'This device';
 
   @override
-  String get aboutNotOnLocalNetwork => 'Not on a local network';
+  String get aboutNotOnLocalNetwork => 'Not on a local network or tailnet';
 
   @override
   String get aboutAddressCopied => 'Address copied';

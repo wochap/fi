@@ -5,7 +5,7 @@ use std::{
     fmt,
     net::{IpAddr, Ipv4Addr, SocketAddr},
     sync::{Arc, Mutex},
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use async_trait::async_trait;
@@ -206,6 +206,140 @@ pub fn is_host_local_interface(name: &str) -> bool {
             .any(|marker| lowered.starts_with(marker))
 }
 
+/// Interface-name prefixes of the tunnels a tailnet address may live on:
+/// `tailscale0` on desktop, `tun0` for the Android VPN service.
+const TAILNET_INTERFACE_PREFIXES: &[&str] = &["tailscale", "tun"];
+
+/// How long a [`TailnetProbe`] reuses one interface scan.
+const TAILNET_PROBE_CACHE: Duration = Duration::from_secs(2);
+
+/// Whether `address` is in the tailnet range `100.64.0.0/10`.
+#[must_use]
+pub const fn is_tailnet_address(address: Ipv4Addr) -> bool {
+    let octets = address.octets();
+    octets[0] == 100 && octets[1] & 0b1100_0000 == 64
+}
+
+/// Whether `address` is an IPv4 tailnet address.
+#[must_use]
+pub const fn is_tailnet_ip(address: IpAddr) -> bool {
+    match address {
+        IpAddr::V4(value) => is_tailnet_address(value),
+        IpAddr::V6(_) => false,
+    }
+}
+
+/// Tailnet addresses held by tunnel interfaces among `(name, address, point_to_point)`,
+/// ascending and deduplicated. A `100.64.0.0/10` address on any other interface,
+/// such as a carrier-grade NAT address on mobile data, does not count.
+#[must_use]
+pub fn tailnet_addresses(
+    interfaces: impl IntoIterator<Item = (String, IpAddr, bool)>,
+) -> Vec<Ipv4Addr> {
+    let mut addresses: Vec<_> = interfaces
+        .into_iter()
+        .filter(|(name, _, _)| {
+            let lowered = name.to_ascii_lowercase();
+            TAILNET_INTERFACE_PREFIXES
+                .iter()
+                .any(|prefix| lowered.starts_with(prefix))
+        })
+        .filter_map(|(_, address, _)| match address {
+            IpAddr::V4(value) if is_tailnet_address(value) => Some(value),
+            _ => None,
+        })
+        .collect();
+    addresses.sort_unstable();
+    addresses.dedup();
+    addresses
+}
+
+/// Whether this device is on a tailnet and at which addresses, read from the
+/// current interfaces and cached briefly so hot paths do not rescan them.
+#[derive(Clone, Default)]
+pub struct TailnetProbe(Arc<TailnetSource>);
+
+#[derive(Default)]
+enum TailnetSource {
+    #[default]
+    System,
+    Fixed(Mutex<Vec<Ipv4Addr>>),
+}
+
+static SYSTEM_TAILNET: Mutex<Option<(Instant, Vec<Ipv4Addr>)>> = Mutex::new(None);
+
+impl fmt::Debug for TailnetProbe {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_tuple("TailnetProbe")
+            .field(&self.addresses())
+            .finish()
+    }
+}
+
+impl TailnetProbe {
+    /// Reads the host's interfaces.
+    #[must_use]
+    pub fn system() -> Self {
+        Self::default()
+    }
+
+    /// Reports `addresses` until changed with [`Self::set_addresses`]; for tests.
+    #[must_use]
+    pub fn fixed(addresses: impl IntoIterator<Item = Ipv4Addr>) -> Self {
+        Self(Arc::new(TailnetSource::Fixed(Mutex::new(
+            addresses.into_iter().collect(),
+        ))))
+    }
+
+    /// Replaces the addresses of a fixed probe; a system probe ignores it.
+    pub fn set_addresses(&self, addresses: impl IntoIterator<Item = Ipv4Addr>) {
+        if let TailnetSource::Fixed(current) = self.0.as_ref()
+            && let Ok(mut current) = current.lock()
+        {
+            *current = addresses.into_iter().collect();
+        }
+    }
+
+    /// This device's tailnet addresses, ascending.
+    #[must_use]
+    pub fn addresses(&self) -> Vec<Ipv4Addr> {
+        match self.0.as_ref() {
+            TailnetSource::System => {
+                let Ok(mut cache) = SYSTEM_TAILNET.lock() else {
+                    return Vec::new();
+                };
+                if let Some((at, addresses)) = cache.as_ref()
+                    && at.elapsed() < TAILNET_PROBE_CACHE
+                {
+                    return addresses.clone();
+                }
+                let addresses = tailnet_addresses(
+                    if_addrs::get_if_addrs()
+                        .unwrap_or_default()
+                        .into_iter()
+                        .map(|interface| {
+                            let address = interface.ip();
+                            (interface.name, address, interface.is_p2p)
+                        }),
+                );
+                *cache = Some((Instant::now(), addresses.clone()));
+                addresses
+            }
+            TailnetSource::Fixed(addresses) => addresses
+                .lock()
+                .map(|addresses| addresses.clone())
+                .unwrap_or_default(),
+        }
+    }
+
+    /// Whether a tunnel interface currently holds a tailnet address.
+    #[must_use]
+    pub fn on_tailnet(&self) -> bool {
+        !self.addresses().is_empty()
+    }
+}
+
 /// Decides which addresses are worth advertising and which peer addresses are
 /// worth dialing, given where the local transport is bound.
 ///
@@ -260,6 +394,17 @@ impl AddressPolicy {
                     && value.is_unique_local()
             }
         }
+    }
+
+    /// Sync side: the LAN rule, plus tailnet peers while this device is on a
+    /// tailnet and bound to IPv4. Pairing and discovery keep the LAN rule.
+    #[must_use]
+    pub fn admits_sync_peer_address(&self, address: IpAddr, on_tailnet: bool) -> bool {
+        self.admits_peer_address(address)
+            || (on_tailnet
+                && self.local_bind.is_ipv4()
+                && !self.local_bind.is_loopback()
+                && is_tailnet_ip(address))
     }
 
     /// Advertise side: should `address` on interface `name` be published?
@@ -1208,6 +1353,104 @@ mod tests {
                 .advertisable_addresses(host(&[("lo", "127.0.0.1"), ("podman0", "10.88.0.1")]))
                 .is_empty()
         );
+    }
+
+    fn interfaces(names: &[(&str, &str)]) -> Vec<(String, IpAddr, bool)> {
+        names
+            .iter()
+            .map(|(name, ip)| ((*name).to_owned(), ip.parse::<IpAddr>().unwrap(), false))
+            .collect()
+    }
+
+    #[test]
+    fn tailnet_addresses_need_a_tunnel_interface() {
+        let tailnet: Ipv4Addr = "100.71.3.9".parse().unwrap();
+        assert!(is_tailnet_address(tailnet));
+        assert!(is_tailnet_address("100.64.0.0".parse().unwrap()));
+        assert!(is_tailnet_address("100.127.255.255".parse().unwrap()));
+        assert!(!is_tailnet_address("100.128.0.1".parse().unwrap()));
+        assert!(!is_tailnet_address("100.63.255.255".parse().unwrap()));
+        assert_eq!(
+            tailnet_addresses(interfaces(&[("tailscale0", "100.71.3.9")])),
+            vec![tailnet]
+        );
+        assert_eq!(
+            tailnet_addresses(interfaces(&[("tun0", "100.71.3.9")])),
+            vec![tailnet]
+        );
+        assert_eq!(
+            tailnet_addresses(interfaces(&[("Tailscale", "100.71.3.9")])),
+            vec![tailnet]
+        );
+        assert!(tailnet_addresses(interfaces(&[("rmnet_data0", "100.100.5.6")])).is_empty());
+        assert!(tailnet_addresses(interfaces(&[("tun0", "192.168.0.5")])).is_empty());
+        assert!(tailnet_addresses(interfaces(&[("tun0", "fd7a:115c:a1e0::1")])).is_empty());
+        assert_eq!(
+            tailnet_addresses(interfaces(&[
+                ("wlan0", "192.168.0.165"),
+                ("tun0", "100.99.0.1"),
+                ("tailscale0", "100.71.3.9"),
+                ("tailscale0", "100.71.3.9"),
+            ])),
+            vec![tailnet, "100.99.0.1".parse().unwrap()]
+        );
+    }
+
+    #[test]
+    fn tailnet_probe_reports_injected_addresses() {
+        let probe = TailnetProbe::fixed(tailnet_addresses(interfaces(&[
+            ("wlan0", "192.168.0.165"),
+            ("tun0", "100.71.3.9"),
+        ])));
+        assert!(probe.on_tailnet());
+        assert_eq!(
+            probe.addresses(),
+            vec!["100.71.3.9".parse::<Ipv4Addr>().unwrap()]
+        );
+        probe.set_addresses(tailnet_addresses(interfaces(&[(
+            "rmnet_data0",
+            "100.100.5.6",
+        )])));
+        assert!(!probe.on_tailnet());
+        // The system probe scans real interfaces; it must not panic.
+        let _ = TailnetProbe::system().on_tailnet();
+    }
+
+    #[test]
+    fn sync_admission_adds_tailnet_peers_only_on_a_tailnet() {
+        let peer: IpAddr = "100.88.10.4".parse().unwrap();
+        let policy = AddressPolicy::default();
+        assert!(policy.admits_sync_peer_address(peer, true));
+        assert!(!policy.admits_sync_peer_address(peer, false));
+        assert!(
+            !policy.admits_peer_address(peer),
+            "pairing keeps the LAN rule"
+        );
+        assert!(policy.admits_sync_peer_address("192.168.0.165".parse().unwrap(), false));
+        assert!(!policy.admits_sync_peer_address("8.8.8.8".parse().unwrap(), true));
+        assert!(!policy.admits_sync_peer_address("100.128.0.1".parse().unwrap(), true));
+        assert!(!policy.admits_sync_peer_address("127.0.0.1".parse().unwrap(), true));
+        let lan = AddressPolicy::for_bind("192.168.0.165".parse().unwrap());
+        assert!(lan.admits_sync_peer_address(peer, true));
+        let ipv6 = AddressPolicy::for_bind("::".parse().unwrap());
+        assert!(!ipv6.admits_sync_peer_address(peer, true));
+        let loopback = AddressPolicy::for_bind("127.0.0.1".parse().unwrap());
+        assert!(!loopback.admits_sync_peer_address(peer, true));
+        assert!(loopback.admits_sync_peer_address("127.0.0.1".parse().unwrap(), true));
+    }
+
+    #[test]
+    fn tailnet_addresses_are_never_advertised() {
+        let policy = AddressPolicy::default();
+        for tunnel in ["tailscale0", "tun0"] {
+            assert_eq!(
+                policy.advertisable_addresses(interfaces(&[
+                    ("wlan0", "192.168.0.165"),
+                    (tunnel, "100.71.3.9"),
+                ])),
+                vec!["192.168.0.165".parse::<IpAddr>().unwrap()]
+            );
+        }
     }
 
     #[test]

@@ -10,7 +10,8 @@ use std::{
 use app_core::{
     AppCore, AppCoreConfig, DeviceId, DiscoveryScope, EndpointSource, FakeDiscoveryProvider,
     InMemorySecureKeyStore, LifecyclePolicy, ManualClock, NetworkPreferences, PairingCandidate,
-    PairingState, PeerConnectionState, QuinnTransportConfig, SyncStatus, reset_dataset,
+    PairingState, PeerConnectionState, QuinnTransportConfig, SyncStatus, TailnetProbe,
+    reset_dataset,
 };
 
 fn now_ms() -> u64 {
@@ -62,6 +63,15 @@ async fn open_with_keys(
     keys: Arc<InMemorySecureKeyStore>,
     policy: LifecyclePolicy,
 ) -> (AppCore, Arc<FakeDiscoveryProvider>) {
+    open_with_network(directory, keys, policy, QuinnTransportConfig::default()).await
+}
+
+async fn open_with_network(
+    directory: &std::path::Path,
+    keys: Arc<InMemorySecureKeyStore>,
+    policy: LifecyclePolicy,
+    network_config: QuinnTransportConfig,
+) -> (AppCore, Arc<FakeDiscoveryProvider>) {
     // Wall-clock based so advertised expiries line up with the endpoint
     // registry's timeline.
     let discovery = Arc::new(FakeDiscoveryProvider::new(Arc::new(ManualClock::new(
@@ -75,7 +85,7 @@ async fn open_with_keys(
             lifecycle_policy: policy,
             ..AppCoreConfig::default()
         },
-        QuinnTransportConfig::default(),
+        network_config,
         discovery.clone(),
     )
     .await
@@ -807,4 +817,68 @@ async fn dataset_reset_clears_remembered_endpoints() {
     .await;
     assert!(existing.last_known_endpoints().is_empty());
     existing.shutdown().await.unwrap();
+}
+
+// Pins tailnet hints: after a session, a sender on the tailnet has its tailnet
+// sync address remembered by the peer; a sender off the tailnet sends nothing;
+// a malformed hint is acknowledged and leaves the session up.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn tailnet_address_is_shared_after_a_session() {
+    let policy = LifecyclePolicy::KeepNetworkingInBackground;
+    let on_tailnet = |addresses: &[&str]| QuinnTransportConfig {
+        tailnet: TailnetProbe::fixed(addresses.iter().map(|ip| ip.parse().unwrap())),
+        ..QuinnTransportConfig::default()
+    };
+    let existing_dir = tempfile::tempdir().unwrap();
+    let joining_dir = tempfile::tempdir().unwrap();
+    let (existing, _) = open_with_network(
+        existing_dir.path(),
+        Arc::new(InMemorySecureKeyStore::seeded([91; 32])),
+        policy,
+        on_tailnet(&["100.88.10.4"]),
+    )
+    .await;
+    let (joining, _) = open_with_network(
+        joining_dir.path(),
+        Arc::new(InMemorySecureKeyStore::seeded([92; 32])),
+        policy,
+        on_tailnet(&[]),
+    )
+    .await;
+    pair_cores(&existing, &joining).await;
+    let (existing_id, joining_id) = (existing.device_id().unwrap(), joining.device_id().unwrap());
+    wait_established(&existing, joining_id).await;
+    wait_established(&joining, existing_id).await;
+
+    let hinted = std::net::SocketAddr::new(
+        "100.88.10.4".parse().unwrap(),
+        existing.network_addr().unwrap().port(),
+    );
+    tokio::time::timeout(Duration::from_secs(10), async {
+        while !joining.remembered_endpoints(existing_id).contains(&hinted) {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .unwrap_or_else(|_| panic!("{:?}", joining.remembered_endpoints(existing_id)));
+    assert!(
+        !existing
+            .remembered_endpoints(joining_id)
+            .iter()
+            .any(|address| address.ip().to_string().starts_with("100.")),
+        "a sender off the tailnet sends no hint"
+    );
+
+    assert_eq!(
+        existing
+            .exchange_control_frame(joining_id, &[0x02, 9, 1])
+            .await
+            .unwrap(),
+        vec![0x02]
+    );
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert!(established(existing.connection_states().get(&joining_id)));
+    assert!(established(joining.connection_states().get(&existing_id)));
+    existing.shutdown().await.unwrap();
+    joining.shutdown().await.unwrap();
 }

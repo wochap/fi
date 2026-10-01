@@ -113,7 +113,7 @@ void main() {
     await submit(tester, text: '8.8.8.8');
     expect(
       errorText(tester),
-      'Use an address on your local network, like 192.168.x.x.',
+      'Use an address on your local network or tailnet, like 192.168.x.x or 100.x.x.x.',
     );
     bridge.connectOutcome = const ManualConnectOutcomeDto(
       kind: ManualConnectKindDto.failed,

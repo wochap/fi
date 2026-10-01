@@ -387,6 +387,13 @@ impl PairingTransport {
         self.endpoint
             .close(CLOSE_CODE_DONE.into(), b"pairing inactive");
     }
+    /// Whether an inbound pairing connection from `remote` may start a
+    /// handshake. LAN only: tailnet sources are never admitted for pairing.
+    #[must_use]
+    pub fn admits_inbound(&self, remote: std::net::IpAddr) -> bool {
+        self.inbound_policy.admits_peer_address(remote)
+    }
+
     /// Waits for the next inbound connection that completes the TLS handshake
     /// with a structurally valid certificate. Non-LAN sources are dropped
     /// without a reply and failed handshakes are logged; neither ends the wait.
@@ -395,7 +402,7 @@ impl PairingTransport {
         loop {
             let incoming = self.endpoint.accept().await.ok_or(PairingError::Inactive)?;
             let remote = incoming.remote_address();
-            if !self.inbound_policy.admits_peer_address(remote.ip()) {
+            if !self.admits_inbound(remote.ip()) {
                 tracing::debug!(
                     event = "inbound_dropped_non_lan",
                     endpoint = "pairing",
