@@ -46,8 +46,9 @@ pub use control::{
 };
 pub use discovery::{
     Clock, DiscoveredEndpoint, DiscoveryAdvertisement, DiscoveryError, DiscoveryEvent,
-    DiscoveryGroupSecret, DiscoveryProvider, DiscoveryScope, FakeDiscoveryProvider, ManualClock,
-    MdnsDiscovery, PairingInstanceId, group_routing_token, group_service_selector,
+    DiscoveryGroupSecret, DiscoveryProvider, DiscoveryScope, FakeDiscoveryProvider, GroupRejection,
+    ManualClock, MdnsDiscovery, PairingInstanceId, classify_group_endpoint,
+    discovery_secret_fingerprint, group_routing_token, group_service_selector,
     match_group_endpoint,
 };
 pub use discovery_control::{
@@ -70,8 +71,9 @@ pub use generic::{
 pub use hlc::{HlcError, HlcNodeId, HlcStamp, HybridLogicalClock, SystemWallTime, WallTime};
 pub use identity::{
     DeviceId, DeviceIdentity, IdentityError, InMemorySecureKeyStore, LinuxSecretServiceKeyStore,
-    LockableSecureKeyStore, PrivateDeviceKey, PublicDeviceKey, SecureKeyStore, SecureStoreError,
-    UnavailableSecureKeyStore,
+    LockableSecureKeyStore, PlatformSecretPersistence, PlatformSecretWrite, PrivateDeviceKey,
+    PublicDeviceKey, SecureKeyStore, SecureStoreError, UnavailableSecureKeyStore,
+    WriteThroughSecureKeyStore,
 };
 pub use import_export::{
     ENVELOPE_FORMAT, ENVELOPE_VERSION, Envelope, ExportedCollection, ExportedRecord, ImportAbort,

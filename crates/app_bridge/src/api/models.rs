@@ -5,6 +5,57 @@ use app_core::{
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PlatformSecretSlotDto {
+    Current,
+    Previous,
+}
+
+/// One discovery-secret write the core asks Android secure storage to make
+/// durable. `secret: None` removes the slot.
+pub struct PlatformSecretWriteDto {
+    pub slot: PlatformSecretSlotDto,
+    pub epoch: Option<i64>,
+    pub secret: Option<Vec<u8>>,
+}
+
+impl std::fmt::Debug for PlatformSecretWriteDto {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("PlatformSecretWriteDto")
+            .field("slot", &self.slot)
+            .field("epoch", &self.epoch)
+            .field(
+                "secret",
+                &format_args!(
+                    "{}",
+                    if self.secret.is_some() {
+                        "<redacted>"
+                    } else {
+                        "<none>"
+                    }
+                ),
+            )
+            .finish()
+    }
+}
+
+/// Previous-epoch discovery secret loaded from Android secure storage.
+pub struct PreviousDiscoverySecretDto {
+    pub epoch: i64,
+    pub secret: Vec<u8>,
+}
+
+impl std::fmt::Debug for PreviousDiscoverySecretDto {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("PreviousDiscoverySecretDto")
+            .field("epoch", &self.epoch)
+            .field("secret", &format_args!("<redacted>"))
+            .finish()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BootstrapKindDto {
     NeedsDecision,
     Creating,

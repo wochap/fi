@@ -4,9 +4,11 @@ use std::{
 };
 
 use app_core::{
-    DiscoveryGroupSecret, DiscoverySecretUpdate, PairingSessionId, PrivateDeviceKey,
-    ProvisioningEnvelope, SasCode,
+    DiscoveryGroupSecret, DiscoverySecretUpdate, InMemorySecureKeyStore, PairingSessionId,
+    PlatformSecretPersistence, PlatformSecretWrite, PrivateDeviceKey, ProvisioningEnvelope,
+    SasCode, SecureKeyStore, SecureStoreError, WriteThroughSecureKeyStore,
     diagnostics::{DiagnosticInputs, RecentEvents, RecentEventsLayer, diagnostic_block},
+    discovery_secret_fingerprint,
 };
 use tracing_subscriber::layer::SubscriberExt;
 
@@ -78,6 +80,77 @@ fn captured_all_level_traces_do_not_expose_sentinel_secrets() {
     assert!(block.contains("provisioning operation"));
     for (name, text) in [("sink", &captured), ("buffer", &buffer), ("block", &block)] {
         assert_secret_free(name, text);
+    }
+}
+
+struct AcceptingPlatform;
+
+#[async_trait::async_trait]
+impl PlatformSecretPersistence for AcceptingPlatform {
+    async fn persist(&self, _write: PlatformSecretWrite<'_>) -> Result<(), SecureStoreError> {
+        Ok(())
+    }
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn fingerprint_and_persistence_events_do_not_expose_the_secret() {
+    let output = Arc::new(Mutex::new(Vec::new()));
+    let retained = Arc::new(RecentEvents::new(1000));
+    let subscriber = tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::fmt::layer()
+                .without_time()
+                .with_writer({
+                    let output = output.clone();
+                    move || Captured(output.clone())
+                }),
+        )
+        .with(RecentEventsLayer::with_buffer(retained.clone()));
+    let _guard = tracing::subscriber::set_default(subscriber);
+
+    let sentinel = DiscoveryGroupSecret::from_bytes([0xab; 32]);
+    let fingerprint = discovery_secret_fingerprint(&sentinel);
+    tracing::info!(
+        event = "discovery_advertise",
+        scope = "Group",
+        port = 41000,
+        fingerprint = Some(fingerprint.as_str()),
+        device_id = %"peer",
+        "advertising peer-routable addresses"
+    );
+    let store = WriteThroughSecureKeyStore::new(
+        InMemorySecureKeyStore::empty(),
+        Arc::new(AcceptingPlatform),
+    );
+    store.store_discovery_group_secret(&sentinel).await.unwrap();
+    store
+        .store_previous_discovery_group_secret(1, &sentinel)
+        .await
+        .unwrap();
+
+    let captured = String::from_utf8(output.lock().unwrap().clone()).unwrap();
+    let buffer = retained
+        .all()
+        .iter()
+        .map(|event| format!("{event:?}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let block = diagnostic_block(&DiagnosticInputs {
+        peer_device_id: "peer".into(),
+        peer_events: retained.for_device("peer", 1000),
+        local_events: retained.local(1000),
+        ..DiagnosticInputs::default()
+    });
+    assert!(buffer.contains("platform_secret_persisted"));
+    for (name, text) in [("sink", &captured), ("buffer", &buffer), ("block", &block)] {
+        assert!(text.contains(&fingerprint), "{name} lacks the fingerprint");
+        assert_secret_free(name, text);
+        assert!(!text.contains("[171"), "{name} leaked a byte rendering");
+        let base32 = data_encoding::BASE32_NOPAD.encode(sentinel.expose());
+        assert!(
+            !text.contains(&base32) && !text.contains(&base32.to_ascii_lowercase()),
+            "{name} leaked base32"
+        );
     }
 }
 

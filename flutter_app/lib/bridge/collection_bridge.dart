@@ -1,3 +1,4 @@
+import 'package:fi/bridge/android_secret_persistence.dart';
 import 'package:fi/src/rust/api/collections.dart' as collections;
 import 'package:fi/src/rust/api/diagnostics.dart' as diagnostics;
 import 'package:fi/src/rust/api/lifecycle.dart' as lifecycle;
@@ -200,6 +201,7 @@ abstract interface class CollectionBridge {
 
 final class RustCollectionBridge implements CollectionBridge {
   static const _platform = MethodChannel('fi/platform');
+  final _secretPersistence = AndroidSecretPersistence(_platform);
   @override
   Future<BootstrapDto> initialize(String dataDir) async {
     if (defaultTargetPlatform == TargetPlatform.android) {
@@ -216,6 +218,8 @@ final class RustCollectionBridge implements CollectionBridge {
         dataDir: dataDir,
         deviceSeed: seed,
         discoverySecret: secret,
+        previousDiscoverySecret: await _secretPersistence.loadPrevious(),
+        persistSecret: _secretPersistence.persist,
       );
     }
     if (defaultTargetPlatform == TargetPlatform.linux) {
@@ -227,16 +231,7 @@ final class RustCollectionBridge implements CollectionBridge {
   @override
   Future<BootstrapDto> createNewDataset() => collections.createNewDataset();
   @override
-  Future<BootstrapDto> resetDataset() async {
-    final state = await lifecycle.resetDataset();
-    // Rust cleared its (in-memory, on Android) key store; the platform copy
-    // that seeds it on the next launch must go too, or the abandoned group's
-    // secret would be re-injected.
-    if (defaultTargetPlatform == TargetPlatform.android) {
-      await _platform.invokeMethod<void>('secureRemoveDiscoverySecret');
-    }
-    return state;
-  }
+  Future<BootstrapDto> resetDataset() => lifecycle.resetDataset();
 
   @override
   Future<BootstrapDto> bootstrapState() => lifecycle.bootstrapState();
@@ -295,10 +290,8 @@ final class RustCollectionBridge implements CollectionBridge {
         timeoutMs: 120000,
       );
   @override
-  Future<void> confirmPairing(String sessionId) async {
-    await pairing.confirmPairing(sessionId: sessionId);
-    await _persistAndroidSecret();
-  }
+  Future<void> confirmPairing(String sessionId) =>
+      pairing.confirmPairing(sessionId: sessionId);
 
   @override
   Future<void> rejectPairing(String? sessionId) =>
@@ -312,33 +305,15 @@ final class RustCollectionBridge implements CollectionBridge {
   Future<RevocationOutcomeDto> revokeTrustedDevice(
     String deviceId,
     int nowMs,
-  ) async {
-    final outcome = await pairing.revokeTrustedDevice(
-      deviceId: deviceId,
-      nowMs: nowMs,
-    );
-    if (outcome.rotationError == null) await _persistAndroidSecret();
-    return outcome;
-  }
+  ) => pairing.revokeTrustedDevice(deviceId: deviceId, nowMs: nowMs);
 
   @override
   Future<bool> deleteRevokedDevice(String deviceId) =>
       pairing.deleteRevokedDevice(deviceId: deviceId);
 
   @override
-  Future<int> rotateDiscoverySecret(int nowMs) async {
-    final epoch = await pairing.rotateDiscoverySecret(nowMs: nowMs);
-    await _persistAndroidSecret();
-    return epoch;
-  }
-
-  Future<void> _persistAndroidSecret() async {
-    if (defaultTargetPlatform != TargetPlatform.android) return;
-    final secret = await pairing.discoverySecretForPlatform();
-    if (secret != null) {
-      await _platform.invokeMethod<void>('secureStoreDiscoverySecret', secret);
-    }
-  }
+  Future<int> rotateDiscoverySecret(int nowMs) =>
+      pairing.rotateDiscoverySecret(nowMs: nowMs);
 
   @override
   Future<SyncStatusDto> syncStatus() => pairing.syncStatus();

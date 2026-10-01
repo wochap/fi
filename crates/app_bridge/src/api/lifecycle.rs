@@ -2,16 +2,18 @@ use std::{net::SocketAddr, path::PathBuf, sync::Arc, sync::OnceLock};
 
 use app_core::{
     AppCore, AppCoreConfig, ApplicationState, DEFAULT_SYNC_PORT_RANGE, DiscoveryGroupSecret,
-    DomainKind, InMemorySecureKeyStore, LinuxSecretServiceKeyStore, PortPolicy,
-    QuinnTransportConfig, RecoveryRecord, SecureKeyStore,
+    DomainKind, InMemorySecureKeyStore, LinuxSecretServiceKeyStore, PlatformSecretPersistence,
+    PlatformSecretWrite, PortPolicy, QuinnTransportConfig, RecoveryRecord, SecureKeyStore,
+    SecureStoreError, WriteThroughSecureKeyStore,
 };
-use flutter_rust_bridge::frb;
+use flutter_rust_bridge::{DartFnFuture, frb};
 use tokio::sync::{RwLock, watch};
 
 use crate::{
     api::models::{
         BootstrapDto, BridgeError, BridgeErrorEventDto, BuildInfoDto, DataChangedDto,
-        DomainKindDto, NetworkPortsDto, NetworkingDeferredDto, ProjectionDto,
+        DomainKindDto, NetworkPortsDto, NetworkingDeferredDto, PlatformSecretSlotDto,
+        PlatformSecretWriteDto, PreviousDiscoverySecretDto, ProjectionDto,
     },
     frb_generated::StreamSink,
 };
@@ -139,15 +141,62 @@ pub async fn initialize_desktop_networked(data_dir: String) -> Result<BootstrapD
     .await
 }
 
+/// Forwards key-store writes to Android secure storage through a Dart callback.
+#[frb(ignore)]
+struct DartSecretPersistence {
+    persist: Arc<dyn Fn(PlatformSecretWriteDto) -> DartFnFuture<bool> + Send + Sync>,
+}
+
+#[frb(ignore)]
+#[async_trait::async_trait]
+impl PlatformSecretPersistence for DartSecretPersistence {
+    async fn persist(&self, write: PlatformSecretWrite<'_>) -> Result<(), SecureStoreError> {
+        let dto = match write {
+            PlatformSecretWrite::StoreCurrent(secret) => PlatformSecretWriteDto {
+                slot: PlatformSecretSlotDto::Current,
+                epoch: None,
+                secret: Some(secret.expose().to_vec()),
+            },
+            PlatformSecretWrite::RemoveCurrent => PlatformSecretWriteDto {
+                slot: PlatformSecretSlotDto::Current,
+                epoch: None,
+                secret: None,
+            },
+            PlatformSecretWrite::StorePrevious { epoch, secret } => PlatformSecretWriteDto {
+                slot: PlatformSecretSlotDto::Previous,
+                epoch: Some(i64::try_from(epoch).map_err(|_| {
+                    SecureStoreError::Operation("discovery epoch exceeds platform range".into())
+                })?),
+                secret: Some(secret.expose().to_vec()),
+            },
+            PlatformSecretWrite::RemovePrevious => PlatformSecretWriteDto {
+                slot: PlatformSecretSlotDto::Previous,
+                epoch: None,
+                secret: None,
+            },
+        };
+        if (self.persist)(dto).await {
+            Ok(())
+        } else {
+            Err(SecureStoreError::Unavailable(
+                "android secure storage rejected the write".into(),
+            ))
+        }
+    }
+}
+
 pub async fn initialize_android_networked(
     data_dir: String,
     device_seed: Vec<u8>,
     discovery_secret: Option<Vec<u8>>,
+    previous_discovery_secret: Option<PreviousDiscoverySecretDto>,
+    persist_secret: impl Fn(PlatformSecretWriteDto) -> DartFnFuture<bool> + Send + Sync + 'static,
 ) -> Result<BootstrapDto, BridgeError> {
     let seed: [u8; 32] = device_seed
         .try_into()
         .map_err(|_| BridgeError::initialization("Android returned an invalid device key."))?;
-    let store = Arc::new(InMemorySecureKeyStore::seeded(seed));
+    let store = InMemorySecureKeyStore::seeded(seed);
+    let unavailable = |_| BridgeError::initialization("Android secure storage is unavailable.");
     if let Some(secret) = discovery_secret {
         let secret: [u8; 32] = secret.try_into().map_err(|_| {
             BridgeError::initialization("Android returned an invalid discovery secret.")
@@ -155,8 +204,28 @@ pub async fn initialize_android_networked(
         store
             .store_discovery_group_secret(&DiscoveryGroupSecret::from_bytes(secret))
             .await
-            .map_err(|_| BridgeError::initialization("Android secure storage is unavailable."))?;
+            .map_err(unavailable)?;
     }
+    if let Some(previous) = previous_discovery_secret {
+        let invalid = || {
+            BridgeError::initialization("Android returned an invalid previous discovery secret.")
+        };
+        let epoch = u64::try_from(previous.epoch)
+            .ok()
+            .filter(|epoch| *epoch >= 1)
+            .ok_or_else(invalid)?;
+        let secret: [u8; 32] = previous.secret.try_into().map_err(|_| invalid())?;
+        store
+            .store_previous_discovery_group_secret(epoch, &DiscoveryGroupSecret::from_bytes(secret))
+            .await
+            .map_err(unavailable)?;
+    }
+    let store = Arc::new(WriteThroughSecureKeyStore::new(
+        store,
+        Arc::new(DartSecretPersistence {
+            persist: Arc::new(persist_secret),
+        }),
+    ));
     initialize_with(data_dir, OpenMode::Networked(store)).await
 }
 

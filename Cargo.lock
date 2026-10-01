@@ -127,6 +127,7 @@ version = "0.1.0"
 dependencies = [
  "android_log-sys",
  "app-core",
+ "async-trait",
  "automerge-repo",
  "chrono",
  "flutter_rust_bridge",

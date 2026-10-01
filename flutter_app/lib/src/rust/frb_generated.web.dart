@@ -39,6 +39,15 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   int dco_decode_CastedPrimitive_u_64(dynamic raw);
 
   @protected
+  FutureOr<bool> Function(PlatformSecretWriteDto)
+  dco_decode_DartFn_Inputs_platform_secret_write_dto_Output_bool_AnyhowException(
+    dynamic raw,
+  );
+
+  @protected
+  Object dco_decode_DartOpaque(dynamic raw);
+
+  @protected
   RustStreamSink<BootstrapDto> dco_decode_StreamSink_bootstrap_dto_Sse(
     dynamic raw,
   );
@@ -176,6 +185,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   PairingFailureKindDto dco_decode_box_autoadd_pairing_failure_kind_dto(
     dynamic raw,
   );
+
+  @protected
+  PreviousDiscoverySecretDto
+  dco_decode_box_autoadd_previous_discovery_secret_dto(dynamic raw);
 
   @protected
   QueryDefinitionDto dco_decode_box_autoadd_query_definition_dto(dynamic raw);
@@ -344,6 +357,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   InferredTypeDto dco_decode_inferred_type_dto(dynamic raw);
+
+  @protected
+  PlatformInt64 dco_decode_isize(dynamic raw);
 
   @protected
   List<String> dco_decode_list_String(dynamic raw);
@@ -574,6 +590,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  PreviousDiscoverySecretDto?
+  dco_decode_opt_box_autoadd_previous_discovery_secret_dto(dynamic raw);
+
+  @protected
   QueryResultDto? dco_decode_opt_box_autoadd_query_result_dto(dynamic raw);
 
   @protected
@@ -647,6 +667,17 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   PeerConnectionKindDto dco_decode_peer_connection_kind_dto(dynamic raw);
+
+  @protected
+  PlatformSecretSlotDto dco_decode_platform_secret_slot_dto(dynamic raw);
+
+  @protected
+  PlatformSecretWriteDto dco_decode_platform_secret_write_dto(dynamic raw);
+
+  @protected
+  PreviousDiscoverySecretDto dco_decode_previous_discovery_secret_dto(
+    dynamic raw,
+  );
 
   @protected
   ProjectionDto dco_decode_projection_dto(dynamic raw);
@@ -745,6 +776,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void dco_decode_unit(dynamic raw);
 
   @protected
+  BigInt dco_decode_usize(dynamic raw);
+
+  @protected
   ValidationMetadataDto dco_decode_validation_metadata_dto(dynamic raw);
 
   @protected
@@ -809,6 +843,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   int sse_decode_CastedPrimitive_u_64(SseDeserializer deserializer);
+
+  @protected
+  Object sse_decode_DartOpaque(SseDeserializer deserializer);
 
   @protected
   RustStreamSink<BootstrapDto> sse_decode_StreamSink_bootstrap_dto_Sse(
@@ -984,6 +1021,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   PairingFailureKindDto sse_decode_box_autoadd_pairing_failure_kind_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  PreviousDiscoverySecretDto
+  sse_decode_box_autoadd_previous_discovery_secret_dto(
     SseDeserializer deserializer,
   );
 
@@ -1204,6 +1247,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   InferredTypeDto sse_decode_inferred_type_dto(SseDeserializer deserializer);
+
+  @protected
+  PlatformInt64 sse_decode_isize(SseDeserializer deserializer);
 
   @protected
   List<String> sse_decode_list_String(SseDeserializer deserializer);
@@ -1504,6 +1550,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  PreviousDiscoverySecretDto?
+  sse_decode_opt_box_autoadd_previous_discovery_secret_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   QueryResultDto? sse_decode_opt_box_autoadd_query_result_dto(
     SseDeserializer deserializer,
   );
@@ -1593,6 +1645,21 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   PeerConnectionKindDto sse_decode_peer_connection_kind_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  PlatformSecretSlotDto sse_decode_platform_secret_slot_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  PlatformSecretWriteDto sse_decode_platform_secret_write_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  PreviousDiscoverySecretDto sse_decode_previous_discovery_secret_dto(
     SseDeserializer deserializer,
   );
 
@@ -1721,6 +1788,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_decode_unit(SseDeserializer deserializer);
 
   @protected
+  BigInt sse_decode_usize(SseDeserializer deserializer);
+
+  @protected
   ValidationMetadataDto sse_decode_validation_metadata_dto(
     SseDeserializer deserializer,
   );
@@ -1810,6 +1880,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_CastedPrimitive_u_64(int self, SseSerializer serializer);
+
+  @protected
+  void
+  sse_encode_DartFn_Inputs_platform_secret_write_dto_Output_bool_AnyhowException(
+    FutureOr<bool> Function(PlatformSecretWriteDto) self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_DartOpaque(Object self, SseSerializer serializer);
 
   @protected
   void sse_encode_StreamSink_bootstrap_dto_Sse(
@@ -2021,6 +2101,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_box_autoadd_pairing_failure_kind_dto(
     PairingFailureKindDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_previous_discovery_secret_dto(
+    PreviousDiscoverySecretDto self,
     SseSerializer serializer,
   );
 
@@ -2299,6 +2385,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
     InferredTypeDto self,
     SseSerializer serializer,
   );
+
+  @protected
+  void sse_encode_isize(PlatformInt64 self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_String(List<String> self, SseSerializer serializer);
@@ -2673,6 +2762,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_opt_box_autoadd_previous_discovery_secret_dto(
+    PreviousDiscoverySecretDto? self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_opt_box_autoadd_query_result_dto(
     QueryResultDto? self,
     SseSerializer serializer,
@@ -2786,6 +2881,24 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_peer_connection_kind_dto(
     PeerConnectionKindDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_platform_secret_slot_dto(
+    PlatformSecretSlotDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_platform_secret_write_dto(
+    PlatformSecretWriteDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_previous_discovery_secret_dto(
+    PreviousDiscoverySecretDto self,
     SseSerializer serializer,
   );
 
@@ -2944,6 +3057,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_unit(void self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_usize(BigInt self, SseSerializer serializer);
 
   @protected
   void sse_encode_validation_metadata_dto(

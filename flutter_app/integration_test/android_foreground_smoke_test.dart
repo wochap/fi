@@ -45,6 +45,13 @@ void main() {
     await bridge.setForeground(true);
     expect(await bridge.syncStatus(), SyncStatusDto.searching);
 
+    await bridge.rotateDiscoverySecret(DateTime.now().millisecondsSinceEpoch);
+    // The Rust key store wrote through on its own; Dart persisted nothing.
+    expect(
+      await platform.invokeMethod<Uint8List>('secureLoadDiscoverySecret'),
+      isNotNull,
+    );
+
     await bridge.startPairing(30 * 1000);
     final pairingState = await pairing.pairingState();
     expect(pairingState.kind, PairingKindDto.discoverable);
@@ -66,6 +73,16 @@ void main() {
     await bridge.setForeground(true);
     await platform.invokeMethod<void>('setForeground', true);
     expect(await bridge.syncStatus(), SyncStatusDto.searching);
+
+    await bridge.resetDataset();
+    expect(
+      await platform.invokeMethod<Uint8List>('secureLoadDiscoverySecret'),
+      isNull,
+    );
+    expect(
+      await platform.invokeMethod<Object?>('secureLoadPreviousDiscoverySecret'),
+      isNull,
+    );
 
     await bridge.setForeground(false);
     await platform.invokeMethod<void>('setForeground', false);

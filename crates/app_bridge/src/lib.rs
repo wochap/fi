@@ -4,6 +4,10 @@ mod log_sink;
 mod voice_worker;
 
 #[cfg(test)]
+#[path = "../build_support/git_identity.rs"]
+mod git_identity;
+
+#[cfg(test)]
 mod tests {
     #[test]
     fn public_api_contains_no_infrastructure_types() {

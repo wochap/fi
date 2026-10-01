@@ -25,9 +25,10 @@ use crate::{
         TrustedDeviceRecord,
     },
     discovery::{
-        AddressPolicy, DEFAULT_RECORD_TTL_MS, DiscoveryAdvertisement, DiscoveryEvent,
-        DiscoveryGroupSecret, DiscoveryProvider, DiscoveryScope, PairingInstanceId,
-        group_routing_token, group_service_selector, match_group_endpoint,
+        AddressPolicy, DEFAULT_RECORD_TTL_MS, DiscoveredEndpoint, DiscoveryAdvertisement,
+        DiscoveryEvent, DiscoveryGroupSecret, DiscoveryProvider, DiscoveryScope, GroupRejection,
+        PairingInstanceId, classify_group_endpoint, discovery_secret_fingerprint,
+        group_routing_token, group_service_selector,
     },
     discovery_control::{
         DISCOVERY_UPDATE_SIZE, DiscoverySecretAck, DiscoverySecretUpdate, authorize_peer,
@@ -252,6 +253,7 @@ impl PairingManager {
         let candidates = candidates_tx.clone();
         let control_for_discovery = control.clone();
         let normal_events_for_discovery = normal_events.clone();
+        let local_id = identity.id();
         let discovery_task = tokio::spawn(async move {
             let mut table = CandidateTable::new(address_policy);
             while let Ok(event) = discovered.recv().await {
@@ -297,36 +299,40 @@ impl PairingManager {
                         let Some(group) = group_rx.borrow().clone() else {
                             continue;
                         };
-                        let trusted = control_for_discovery
+                        let known: Vec<_> = control_for_discovery
                             .trusted_devices()
                             .unwrap_or_default()
                             .into_iter()
-                            .filter(|record| record.state == TrustState::Trusted)
-                            .map(|record| record.device_id);
-                        let trusted: Vec<_> = trusted.collect();
-                        let matched = match_group_endpoint(
-                            &endpoint,
-                            &group.active,
-                            &address_policy,
-                            trusted.iter().copied(),
-                        )
-                        .or_else(|| {
-                            group.previous.as_ref().and_then(|(secret, _)| {
-                                match_group_endpoint(
-                                    &endpoint,
-                                    secret,
-                                    &address_policy,
-                                    trusted.iter().copied(),
-                                )
-                            })
-                        });
-                        if let Some((peer, address, expires_at_ms)) = matched {
-                            let _ =
-                                normal_events_for_discovery.send(NormalDiscoveryEvent::Upsert {
-                                    peer,
-                                    address,
-                                    expires_at_ms,
-                                });
+                            .map(|record| (record.device_id, record.state))
+                            .collect();
+                        let classify = |secret| {
+                            classify_group_endpoint(
+                                &endpoint,
+                                secret,
+                                &address_policy,
+                                local_id,
+                                &known,
+                            )
+                        };
+                        let active = classify(&group.active);
+                        let previous = group.previous.as_ref().map(|(secret, _)| classify(secret));
+                        match (active, previous) {
+                            (Ok((peer, address, expires_at_ms)), _)
+                            | (Err(_), Some(Ok((peer, address, expires_at_ms)))) => {
+                                let _ = normal_events_for_discovery.send(
+                                    NormalDiscoveryEvent::Upsert {
+                                        peer,
+                                        address,
+                                        expires_at_ms,
+                                    },
+                                );
+                            }
+                            // The previous secret got past the selector, so its
+                            // reason is the informative one.
+                            (Err(GroupRejection::Selector), Some(Err(previous))) => {
+                                log_group_rejection(&endpoint, previous);
+                            }
+                            (Err(active), _) => log_group_rejection(&endpoint, active),
                         }
                     }
                     _ => {}
@@ -1036,6 +1042,7 @@ impl PairingManager {
                 selector,
                 metadata.epoch,
                 route,
+                discovery_secret_fingerprint(&secret),
                 hex::encode(name),
                 port,
                 DEFAULT_RECORD_TTL_MS,
@@ -1806,12 +1813,44 @@ fn now_ms() -> u64 {
         .unwrap_or(u64::MAX)
 }
 
+fn log_group_rejection(endpoint: &DiscoveredEndpoint, rejection: GroupRejection) {
+    match rejection {
+        GroupRejection::Own => tracing::debug!(
+            event = "discovery_group_record_rejected",
+            scope = ?endpoint.scope,
+            instance = %endpoint.instance_name,
+            address = %endpoint.address,
+            reason = rejection.reason()
+        ),
+        GroupRejection::Untrusted(device_id) => tracing::info!(
+            event = "discovery_group_record_rejected",
+            scope = ?endpoint.scope,
+            instance = %endpoint.instance_name,
+            address = %endpoint.address,
+            reason = rejection.reason(),
+            device_id = %device_id
+        ),
+        GroupRejection::Address | GroupRejection::Selector | GroupRejection::Token => {
+            tracing::info!(
+                event = "discovery_group_record_rejected",
+                scope = ?endpoint.scope,
+                instance = %endpoint.instance_name,
+                address = %endpoint.address,
+                reason = rejection.reason()
+            );
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::{
         discovery::{FakeDiscoveryProvider, ManualClock},
-        identity::{InMemorySecureKeyStore, PrivateDeviceKey},
+        identity::{
+            InMemorySecureKeyStore, PlatformSecretPersistence, PlatformSecretWrite,
+            PrivateDeviceKey, SecureStoreError, WriteThroughSecureKeyStore,
+        },
     };
 
     fn instance(byte: u8) -> PairingInstanceId {
@@ -2156,8 +2195,17 @@ mod tests {
         Arc<FakeDiscoveryProvider>,
         tempfile::TempDir,
     ) {
+        manager_with_keys(Arc::new(InMemorySecureKeyStore::seeded([seed; 32]))).await
+    }
+
+    async fn manager_with_keys(
+        keys: Arc<dyn SecureKeyStore>,
+    ) -> (
+        Arc<PairingManager>,
+        Arc<FakeDiscoveryProvider>,
+        tempfile::TempDir,
+    ) {
         let directory = tempfile::tempdir().unwrap();
-        let keys = Arc::new(InMemorySecureKeyStore::seeded([seed; 32]));
         let identity = Arc::new(DeviceIdentity::load_or_create(keys.as_ref()).await.unwrap());
         let control =
             Arc::new(SqliteControlStore::open(directory.path().join("control.sqlite")).unwrap());
@@ -2476,6 +2524,329 @@ mod tests {
                 .accept_rotation_update(revoked.identity.id(), &online_frame)
                 .await,
             Err(PairingError::Authentication)
+        );
+    }
+
+    /// Platform store double that keeps the latest durable value of each slot.
+    #[derive(Default)]
+    struct RecordingPlatform {
+        writes: std::sync::Mutex<Vec<String>>,
+        current: std::sync::Mutex<Option<[u8; 32]>>,
+        previous: std::sync::Mutex<Option<(u64, [u8; 32])>>,
+        fail: std::sync::atomic::AtomicBool,
+    }
+
+    #[async_trait::async_trait]
+    impl PlatformSecretPersistence for RecordingPlatform {
+        async fn persist(&self, write: PlatformSecretWrite<'_>) -> Result<(), SecureStoreError> {
+            if self.fail.load(std::sync::atomic::Ordering::SeqCst) {
+                return Err(SecureStoreError::Unavailable("platform refused".into()));
+            }
+            self.writes.lock().unwrap().push(format!("{write:?}"));
+            match write {
+                PlatformSecretWrite::StoreCurrent(secret) => {
+                    *self.current.lock().unwrap() = Some(*secret.expose());
+                }
+                PlatformSecretWrite::RemoveCurrent => *self.current.lock().unwrap() = None,
+                PlatformSecretWrite::StorePrevious { epoch, secret } => {
+                    *self.previous.lock().unwrap() = Some((epoch, *secret.expose()));
+                }
+                PlatformSecretWrite::RemovePrevious => *self.previous.lock().unwrap() = None,
+            }
+            Ok(())
+        }
+    }
+
+    async fn rotation_pair(
+        recipient_seed: u8,
+    ) -> (
+        Arc<PairingManager>,
+        Arc<PairingManager>,
+        Arc<RecordingPlatform>,
+        DiscoveryGroupSecret,
+        [tempfile::TempDir; 2],
+    ) {
+        let (sender, _, sender_directory) = manager(recipient_seed + 1).await;
+        let platform = Arc::new(RecordingPlatform::default());
+        let (recipient, _, recipient_directory) =
+            manager_with_keys(Arc::new(WriteThroughSecureKeyStore::new(
+                InMemorySecureKeyStore::seeded([recipient_seed; 32]),
+                platform.clone(),
+            )))
+            .await;
+        let shared = DiscoveryGroupSecret::from_bytes([93; 32]);
+        let metadata = DiscoveryGroupMetadata {
+            epoch: 1,
+            updated_at_ms: 1,
+        };
+        for (port, manager) in [(41030, &sender), (41031, &recipient)] {
+            manager
+                .keys
+                .store_discovery_group_secret(&shared)
+                .await
+                .unwrap();
+            manager.control.store_discovery_metadata(metadata).unwrap();
+            manager.start_normal_discovery(port).await.unwrap();
+        }
+        for (local, peer) in [(&sender, &recipient), (&recipient, &sender)] {
+            local
+                .control
+                .upsert_peer_trust(&PeerTrustRecord {
+                    device_id: peer.identity.id(),
+                    public_key: peer.identity.public_key(),
+                    state: TrustState::Trusted,
+                    updated_at_ms: 1,
+                    last_seen_ms: None,
+                })
+                .unwrap();
+            local
+                .control
+                .upsert_trusted_device(&TrustedDeviceRecord {
+                    device_id: peer.identity.id(),
+                    public_key: peer.identity.public_key(),
+                    friendly_name: "peer".into(),
+                    paired_at_ms: 1,
+                    last_seen_ms: None,
+                    last_sync_ms: None,
+                    state: TrustState::Trusted,
+                })
+                .unwrap();
+        }
+        platform.writes.lock().unwrap().clear();
+        (
+            sender,
+            recipient,
+            platform,
+            shared,
+            [sender_directory, recipient_directory],
+        )
+    }
+
+    #[tokio::test]
+    async fn inbound_rotation_is_persisted_before_ack() {
+        let (sender, recipient, platform, shared, _directories) = rotation_pair(44).await;
+        sender
+            .rotate_discovery_secret(41030, now_ms(), 60_000)
+            .await
+            .unwrap();
+        let (_, frame) = sender.rotation_update_frames().unwrap()[0];
+        let ack = recipient
+            .accept_rotation_update(sender.identity.id(), &frame)
+            .await
+            .unwrap();
+        assert_eq!(sender.validate_rotation_ack(&ack).await.unwrap(), 2);
+
+        assert_eq!(
+            *platform.writes.lock().unwrap(),
+            ["StorePrevious { epoch: 1, .. }", "StoreCurrent"]
+        );
+        assert_eq!(
+            *platform.previous.lock().unwrap(),
+            Some((1, *shared.expose()))
+        );
+        let sender_secret = sender.discovery_secret().await.unwrap().unwrap();
+        let durable = platform.current.lock().unwrap().unwrap();
+        assert_eq!(&durable, sender_secret.expose());
+
+        // A restart seeds a fresh store from the platform values only.
+        let restarted = InMemorySecureKeyStore::seeded([44; 32]);
+        restarted
+            .store_discovery_group_secret(&DiscoveryGroupSecret::from_bytes(durable))
+            .await
+            .unwrap();
+        let reloaded = restarted
+            .load_discovery_group_secret()
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            crate::discovery::group_service_selector(&reloaded, 2),
+            crate::discovery::group_service_selector(&sender_secret, 2)
+        );
+    }
+
+    #[tokio::test]
+    async fn inbound_rotation_not_acknowledged_when_persist_fails() {
+        let (sender, recipient, platform, _shared, _directories) = rotation_pair(46).await;
+        sender
+            .rotate_discovery_secret(41030, now_ms(), 60_000)
+            .await
+            .unwrap();
+        let (_, frame) = sender.rotation_update_frames().unwrap()[0];
+        platform
+            .fail
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        assert!(
+            recipient
+                .accept_rotation_update(sender.identity.id(), &frame)
+                .await
+                .is_err()
+        );
+        assert_eq!(
+            recipient
+                .control
+                .discovery_metadata()
+                .unwrap()
+                .unwrap()
+                .epoch,
+            1
+        );
+
+        platform
+            .fail
+            .store(false, std::sync::atomic::Ordering::SeqCst);
+        let ack = recipient
+            .accept_rotation_update(sender.identity.id(), &frame)
+            .await
+            .unwrap();
+        assert_eq!(sender.validate_rotation_ack(&ack).await.unwrap(), 2);
+        assert_eq!(
+            recipient
+                .control
+                .discovery_metadata()
+                .unwrap()
+                .unwrap()
+                .epoch,
+            2
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn group_record_rejections_are_logged() {
+        use crate::diagnostics::{RecentEvents, RecentEventsLayer};
+        use tracing_subscriber::layer::SubscriberExt;
+
+        let retained = Arc::new(RecentEvents::new(1000));
+        let _guard = tracing::subscriber::set_default(
+            tracing_subscriber::registry().with(RecentEventsLayer::with_buffer(retained.clone())),
+        );
+        let (revoked, _, _revoked_directory) = manager(51).await;
+        let (stranger, _, _stranger_directory) = manager(52).await;
+        let (manager, discovery, _directory) = manager(50).await;
+        let secret = DiscoveryGroupSecret::from_bytes([94; 32]);
+        manager
+            .keys
+            .store_discovery_group_secret(&secret)
+            .await
+            .unwrap();
+        manager
+            .control
+            .store_discovery_metadata(DiscoveryGroupMetadata {
+                epoch: 1,
+                updated_at_ms: 1,
+            })
+            .unwrap();
+        manager
+            .control
+            .upsert_trusted_device(&TrustedDeviceRecord {
+                device_id: revoked.identity.id(),
+                public_key: revoked.identity.public_key(),
+                friendly_name: "revoked".into(),
+                paired_at_ms: 1,
+                last_seen_ms: None,
+                last_sync_ms: None,
+                state: TrustState::Revoked,
+            })
+            .unwrap();
+        manager.start_normal_discovery(41040).await.unwrap();
+
+        let foreign = DiscoveryGroupSecret::from_bytes([95; 32]);
+        let record = |secret: &DiscoveryGroupSecret, device: DeviceId, name: &str| {
+            DiscoveryAdvertisement::group(
+                group_service_selector(secret, 1),
+                1,
+                group_routing_token(secret, 1, device),
+                discovery_secret_fingerprint(secret),
+                name.into(),
+                41041,
+                60_000,
+            )
+        };
+        let loopback: std::net::IpAddr = "127.0.0.1".parse().unwrap();
+        // The manager binds loopback, so only loopback peers are dialable.
+        let lan: std::net::IpAddr = "192.168.1.30".parse().unwrap();
+        let cases = [
+            (record(&secret, revoked.identity.id(), "revoked"), loopback),
+            (
+                record(&secret, stranger.identity.id(), "stranger"),
+                loopback,
+            ),
+            (record(&foreign, revoked.identity.id(), "foreign"), loopback),
+            (record(&secret, revoked.identity.id(), "far"), lan),
+            (record(&secret, manager.identity.id(), "own"), loopback),
+        ];
+        let field = |event: &crate::diagnostics::LogEvent, name: &str| {
+            event
+                .fields
+                .iter()
+                .find(|(key, _)| key == name)
+                .map(|(_, value)| value.clone())
+                .unwrap_or_default()
+        };
+        let rejections = || {
+            retained
+                .all()
+                .into_iter()
+                .filter(|event| event.event.as_deref() == Some("discovery_group_record_rejected"))
+                .collect::<Vec<_>>()
+        };
+        let logged = |instance: &str| {
+            rejections()
+                .iter()
+                .find(|event| field(event, "instance") == instance)
+                .cloned()
+        };
+        // Parallel tests without a subscriber can race this test's callsite
+        // registration and leave an event disabled; re-resolve until each
+        // record has been logged once.
+        for _ in 0..200 {
+            let missing: Vec<_> = cases
+                .iter()
+                .filter(|(advertisement, _)| logged(&advertisement.instance_name).is_none())
+                .collect();
+            if missing.is_empty() {
+                break;
+            }
+            tracing::callsite::rebuild_interest_cache();
+            for (advertisement, address) in missing {
+                discovery.resolve(advertisement, *address).unwrap();
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+        let observed: Vec<_> = cases
+            .iter()
+            .filter_map(|(advertisement, _)| logged(&advertisement.instance_name))
+            .map(|event| {
+                (
+                    field(&event, "instance"),
+                    field(&event, "reason"),
+                    event.level.clone(),
+                    event.device_id.clone(),
+                )
+            })
+            .collect();
+        let info = |instance: &str, reason: &str, device: Option<String>| {
+            (
+                instance.to_owned(),
+                reason.to_owned(),
+                "INFO".to_owned(),
+                device,
+            )
+        };
+        assert_eq!(
+            observed,
+            [
+                info(
+                    "revoked",
+                    "untrusted",
+                    Some(revoked.identity.id().to_string())
+                ),
+                info("stranger", "token", None),
+                info("foreign", "selector", None),
+                info("far", "address", None),
+                // Own records stay below info.
+                ("own".into(), "own".into(), "DEBUG".into(), None),
+            ]
         );
     }
 

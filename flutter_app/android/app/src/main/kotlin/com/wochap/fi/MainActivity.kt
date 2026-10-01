@@ -67,6 +67,21 @@ class MainActivity : FlutterActivity() {
                     removeSecret("discovery-secret")
                     result.success(null)
                 }
+                "secureStorePreviousDiscoverySecret" -> {
+                    val epoch = call.argument<Number>("epoch")?.toLong()
+                        ?: throw IllegalArgumentException("previous epoch must be a number")
+                    require(epoch >= 1) { "previous epoch must be positive" }
+                    val secret = call.argument<ByteArray>("secret")
+                        ?: throw IllegalArgumentException("previous discovery secret must be bytes")
+                    require(secret.size == SECRET_SIZE) { "previous discovery secret has invalid size" }
+                    storePreviousSecret(epoch, secret)
+                    result.success(null)
+                }
+                "secureLoadPreviousDiscoverySecret" -> result.success(loadPreviousSecret())
+                "secureRemovePreviousDiscoverySecret" -> {
+                    removeSecret(PREVIOUS_SECRET, PREVIOUS_EPOCH)
+                    result.success(null)
+                }
                 "saveDocument" -> saveDocument(call, result)
                 else -> result.notImplemented()
             }
@@ -149,7 +164,7 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun loadSecret(kind: String): ByteArray? {
+    private fun loadSecret(kind: String, aadSuffix: String = ""): ByteArray? {
         val encoded = getSharedPreferences(SECRET_PREFERENCES, Context.MODE_PRIVATE)
             .getString(kind, null) ?: return null
         val sealed = Base64.decode(encoded, Base64.NO_WRAP)
@@ -160,35 +175,56 @@ class MainActivity : FlutterActivity() {
             wrappingKey(),
             GCMParameterSpec(GCM_TAG_BITS, sealed.copyOfRange(0, NONCE_SIZE)),
         )
-        cipher.updateAAD(aad(kind))
+        cipher.updateAAD(aad(kind, aadSuffix))
         return cipher.doFinal(sealed.copyOfRange(NONCE_SIZE, sealed.size)).also {
             require(it.size == SECRET_SIZE) { "secret_size_invalid" }
         }
     }
 
-    private fun storeSecret(kind: String, plaintext: ByteArray) {
+    private fun storeSecret(kind: String, plaintext: ByteArray, aadSuffix: String = "") {
+        check(
+            getSharedPreferences(SECRET_PREFERENCES, Context.MODE_PRIVATE)
+                .edit()
+                .putString(kind, sealSecret(kind, plaintext, aadSuffix))
+                .commit(),
+        ) { "secret_persistence_failed" }
+    }
+
+    private fun sealSecret(kind: String, plaintext: ByteArray, aadSuffix: String): String {
         require(plaintext.size == SECRET_SIZE) { "secret_size_invalid" }
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.ENCRYPT_MODE, wrappingKey())
-        cipher.updateAAD(aad(kind))
+        cipher.updateAAD(aad(kind, aadSuffix))
         val sealed = cipher.iv + cipher.doFinal(plaintext)
+        return Base64.encodeToString(sealed, Base64.NO_WRAP).also { sealed.fill(0) }
+    }
+
+    /** The epoch is bound into the AAD, so an altered stored epoch fails authentication. */
+    private fun storePreviousSecret(epoch: Long, plaintext: ByteArray) {
         check(
             getSharedPreferences(SECRET_PREFERENCES, Context.MODE_PRIVATE)
                 .edit()
-                .putString(kind, Base64.encodeToString(sealed, Base64.NO_WRAP))
+                .putString(PREVIOUS_SECRET, sealSecret(PREVIOUS_SECRET, plaintext, ":$epoch"))
+                .putLong(PREVIOUS_EPOCH, epoch)
                 .commit(),
         ) { "secret_persistence_failed" }
-        sealed.fill(0)
+    }
+
+    private fun loadPreviousSecret(): Map<String, Any>? {
+        val preferences = getSharedPreferences(SECRET_PREFERENCES, Context.MODE_PRIVATE)
+        if (!preferences.contains(PREVIOUS_SECRET) || !preferences.contains(PREVIOUS_EPOCH)) {
+            return null
+        }
+        val epoch = preferences.getLong(PREVIOUS_EPOCH, 0)
+        val secret = loadSecret(PREVIOUS_SECRET, ":$epoch") ?: return null
+        return mapOf("epoch" to epoch, "secret" to secret)
     }
 
     // Absent entry is success: reset must be idempotent.
-    private fun removeSecret(kind: String) {
-        check(
-            getSharedPreferences(SECRET_PREFERENCES, Context.MODE_PRIVATE)
-                .edit()
-                .remove(kind)
-                .commit(),
-        ) { "secret_persistence_failed" }
+    private fun removeSecret(vararg keys: String) {
+        val editor = getSharedPreferences(SECRET_PREFERENCES, Context.MODE_PRIVATE).edit()
+        keys.forEach { editor.remove(it) }
+        check(editor.commit()) { "secret_persistence_failed" }
     }
 
     private fun wrappingKey(): SecretKey {
@@ -208,7 +244,7 @@ class MainActivity : FlutterActivity() {
         return generator.generateKey()
     }
 
-    private fun aad(kind: String) = "fi:$kind:v1".encodeToByteArray()
+    private fun aad(kind: String, suffix: String) = "fi:$kind:v1$suffix".encodeToByteArray()
 
     private fun safeCategory(failure: Exception): String = when (failure) {
         is SecurityException -> "permission_denied"
@@ -223,6 +259,8 @@ class MainActivity : FlutterActivity() {
         private const val ANDROID_KEY_STORE = "AndroidKeyStore"
         private const val KEY_ALIAS = "fi.secure-store.wrap.v1"
         private const val SECRET_PREFERENCES = "fi-secure-wrapped-v1"
+        private const val PREVIOUS_SECRET = "discovery-secret-previous"
+        private const val PREVIOUS_EPOCH = "discovery-secret-previous-epoch"
         private const val TRANSFORMATION = "AES/GCM/NoPadding"
         private const val SECRET_SIZE = 32
         private const val NONCE_SIZE = 12

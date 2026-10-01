@@ -16,7 +16,7 @@ use tokio::sync::broadcast;
 use tokio::task::JoinHandle;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
-use crate::identity::DeviceId;
+use crate::{control::TrustState, identity::DeviceId};
 
 pub const PAIRING_SERVICE_TYPE: &str = "_myapp-pair._udp.local.";
 pub const DISCOVERY_PROTOCOL_VERSION: u16 = 1;
@@ -83,6 +83,8 @@ pub struct DiscoveryAdvertisement {
     pub port: u16,
     pub properties: BTreeMap<String, String>,
     pub ttl_ms: u64,
+    /// Log-only group fingerprint; never published in mDNS properties.
+    pub secret_fingerprint: Option<String>,
 }
 
 impl DiscoveryAdvertisement {
@@ -102,6 +104,7 @@ impl DiscoveryAdvertisement {
                 ("i".into(), instance.to_string()),
             ]),
             ttl_ms,
+            secret_fingerprint: None,
         }
     }
 
@@ -110,6 +113,7 @@ impl DiscoveryAdvertisement {
         selector: String,
         epoch: u64,
         route_token: String,
+        fingerprint: String,
         random_name: String,
         port: u16,
         ttl_ms: u64,
@@ -124,6 +128,7 @@ impl DiscoveryAdvertisement {
                 ("r".into(), route_token),
             ]),
             ttl_ms,
+            secret_fingerprint: Some(fingerprint),
         }
     }
 }
@@ -461,10 +466,16 @@ impl DiscoveryProvider for MdnsDiscovery {
                 scope = ?advertisement.scope,
                 addresses = ?advertisable,
                 port = advertisement.port,
+                fingerprint = advertisement.secret_fingerprint.as_deref(),
                 "advertising peer-routable addresses"
             );
         }
         let fullname = info.get_fullname().to_owned();
+        tracing::info!(
+            event = "discovery_browse_start",
+            scope = ?advertisement.scope,
+            service_type = %service_type
+        );
         let receiver = self
             .daemon
             .browse(&service_type)
@@ -488,14 +499,22 @@ impl DiscoveryProvider for MdnsDiscovery {
                             })
                             .collect();
                         let expires_at_ms = system_now_ms().saturating_add(ttl_ms);
+                        let instance_name = info
+                            .get_fullname()
+                            .strip_suffix(&service_suffix)
+                            .unwrap_or(info.get_fullname())
+                            .to_owned();
+                        tracing::info!(
+                            event = "discovery_service_resolved",
+                            scope = ?scope,
+                            instance = %instance_name,
+                            addresses = ?info.get_addresses(),
+                            port = info.get_port()
+                        );
                         for address in info.get_addresses() {
                             let _ = events.send(DiscoveryEvent::Upsert(DiscoveredEndpoint {
                                 scope: scope.clone(),
-                                instance_name: info
-                                    .get_fullname()
-                                    .strip_suffix(&service_suffix)
-                                    .unwrap_or(info.get_fullname())
-                                    .to_owned(),
+                                instance_name: instance_name.clone(),
                                 address: SocketAddr::new(address.to_ip_addr(), info.get_port()),
                                 properties: properties.clone(),
                                 expires_at_ms,
@@ -539,6 +558,11 @@ impl DiscoveryProvider for MdnsDiscovery {
             return Err(DiscoveryError::AlreadyActive);
         }
         let service_type = Self::service_type(&scope).to_owned();
+        tracing::info!(
+            event = "discovery_browse_start",
+            scope = ?scope,
+            service_type = %service_type
+        );
         let receiver = self
             .daemon
             .browse(&service_type)
@@ -557,14 +581,22 @@ impl DiscoveryProvider for MdnsDiscovery {
                                 (property.key().to_owned(), property.val_str().to_owned())
                             })
                             .collect();
+                        let instance_name = info
+                            .get_fullname()
+                            .strip_suffix(&service_suffix)
+                            .unwrap_or(info.get_fullname())
+                            .to_owned();
+                        tracing::info!(
+                            event = "discovery_service_resolved",
+                            scope = ?event_scope,
+                            instance = %instance_name,
+                            addresses = ?info.get_addresses(),
+                            port = info.get_port()
+                        );
                         for address in info.get_addresses() {
                             let _ = events.send(DiscoveryEvent::Upsert(DiscoveredEndpoint {
                                 scope: event_scope.clone(),
-                                instance_name: info
-                                    .get_fullname()
-                                    .strip_suffix(&service_suffix)
-                                    .unwrap_or(info.get_fullname())
-                                    .to_owned(),
+                                instance_name: instance_name.clone(),
                                 address: SocketAddr::new(address.to_ip_addr(), info.get_port()),
                                 properties: properties.clone(),
                                 expires_at_ms: system_now_ms()
@@ -858,6 +890,77 @@ pub fn group_routing_token(secret: &DiscoveryGroupSecret, epoch: u64, device: De
     token(secret, ROUTE_DOMAIN, epoch, device.as_bytes(), 16)
 }
 
+/// Short, non-reversible group fingerprint for comparing devices' logs.
+#[must_use]
+pub fn discovery_secret_fingerprint(secret: &DiscoveryGroupSecret) -> String {
+    let mut mac = HmacSha256::new_from_slice(secret.expose()).expect("HMAC accepts any key length");
+    mac.update(b"fp");
+    let output = mac.finalize().into_bytes();
+    output[..4]
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
+/// Why a group-scoped record did not match this device's group.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum GroupRejection {
+    Address,
+    Selector,
+    Token,
+    Untrusted(DeviceId),
+    Own,
+}
+
+impl GroupRejection {
+    #[must_use]
+    pub const fn reason(&self) -> &'static str {
+        match self {
+            Self::Address => "address",
+            Self::Selector => "selector",
+            Self::Token => "token",
+            Self::Untrusted(_) => "untrusted",
+            Self::Own => "own",
+        }
+    }
+}
+
+pub fn classify_group_endpoint(
+    endpoint: &DiscoveredEndpoint,
+    secret: &DiscoveryGroupSecret,
+    policy: &AddressPolicy,
+    local: DeviceId,
+    known: &[(DeviceId, TrustState)],
+) -> Result<(DeviceId, SocketAddr, u64), GroupRejection> {
+    if !policy.admits_peer_address(endpoint.address.ip()) || endpoint.expires_at_ms == 0 {
+        return Err(GroupRejection::Address);
+    }
+    let DiscoveryScope::Group { epoch, selector } = &endpoint.scope else {
+        return Err(GroupRejection::Selector);
+    };
+    if *selector != group_service_selector(secret, *epoch) {
+        return Err(GroupRejection::Selector);
+    }
+    let advertised = endpoint.properties.get("r").ok_or(GroupRejection::Token)?;
+    let routes = |device| group_routing_token(secret, *epoch, device) == *advertised;
+    if routes(local) {
+        return Err(GroupRejection::Own);
+    }
+    if let Some((device, _)) = known
+        .iter()
+        .find(|(device, state)| *state == TrustState::Trusted && routes(*device))
+    {
+        return Ok((*device, endpoint.address, endpoint.expires_at_ms));
+    }
+    match known
+        .iter()
+        .find(|(device, state)| *state != TrustState::Trusted && routes(*device))
+    {
+        Some((device, _)) => Err(GroupRejection::Untrusted(*device)),
+        None => Err(GroupRejection::Token),
+    }
+}
+
 #[must_use]
 pub fn match_group_endpoint(
     endpoint: &DiscoveredEndpoint,
@@ -865,23 +968,13 @@ pub fn match_group_endpoint(
     policy: &AddressPolicy,
     trusted: impl IntoIterator<Item = DeviceId>,
 ) -> Option<(DeviceId, SocketAddr, u64)> {
-    if !policy.admits_peer_address(endpoint.address.ip()) || endpoint.expires_at_ms == 0 {
-        return None;
-    }
-    let DiscoveryScope::Group { epoch, selector } = &endpoint.scope else {
-        return None;
-    };
-    if *selector != group_service_selector(secret, *epoch) {
-        return None;
-    }
-    let advertised = endpoint.properties.get("r")?;
-    trusted.into_iter().find_map(|device| {
-        (group_routing_token(secret, *epoch, device) == *advertised).then_some((
-            device,
-            endpoint.address,
-            endpoint.expires_at_ms,
-        ))
-    })
+    let known: Vec<_> = trusted
+        .into_iter()
+        .map(|device| (device, TrustState::Trusted))
+        .collect();
+    // A local id derived from no real key never matches, so nothing is "own".
+    let nobody = DeviceId::from_public_key(&[0; 32]);
+    classify_group_endpoint(endpoint, secret, policy, nobody, &known).ok()
 }
 
 #[cfg(test)]
@@ -1079,6 +1172,113 @@ mod tests {
         assert_eq!(AddressPolicy::select([ula, b]), Some(b));
     }
 
+    #[test]
+    fn secret_fingerprint_is_stable_short_and_not_the_secret_prefix() {
+        let a = DiscoveryGroupSecret::from_bytes([1; 32]);
+        let b = DiscoveryGroupSecret::from_bytes([2; 32]);
+        let fingerprint = discovery_secret_fingerprint(&a);
+        assert_eq!(fingerprint.len(), 8);
+        // Independent of epoch: the same secret stays recognisable across epochs 1 and 2.
+        assert_eq!(fingerprint, discovery_secret_fingerprint(&a));
+        assert_ne!(fingerprint, discovery_secret_fingerprint(&b));
+        assert_ne!(fingerprint, hex::encode(&a.expose()[..4]));
+        let advertisement = DiscoveryAdvertisement::group(
+            group_service_selector(&a, 2),
+            2,
+            "route".into(),
+            fingerprint.clone(),
+            "name".into(),
+            1,
+            1,
+        );
+        assert_eq!(
+            advertisement.secret_fingerprint.as_deref(),
+            Some(&*fingerprint)
+        );
+        assert!(!advertisement.properties.values().any(|v| *v == fingerprint));
+    }
+
+    #[test]
+    fn group_records_are_classified_with_a_typed_reason() {
+        let secret = DiscoveryGroupSecret::from_bytes([1; 32]);
+        let other = DiscoveryGroupSecret::from_bytes([2; 32]);
+        let device = |seed| {
+            let key = crate::identity::PrivateDeviceKey::from_seed(&[seed; 32])
+                .unwrap()
+                .public_key();
+            DeviceId::from_public_key(key.as_bytes())
+        };
+        let (local, trusted, revoked, stranger) = (device(1), device(2), device(3), device(4));
+        let known = [
+            (trusted, TrustState::Trusted),
+            (revoked, TrustState::Revoked),
+        ];
+        let policy = AddressPolicy::default();
+        let record = |route: Option<DeviceId>| DiscoveredEndpoint {
+            scope: DiscoveryScope::Group {
+                epoch: 1,
+                selector: group_service_selector(&secret, 1),
+            },
+            instance_name: "opaque".into(),
+            address: "192.168.1.20:42".parse().unwrap(),
+            properties: route
+                .map(|id| ("r".to_owned(), group_routing_token(&secret, 1, id)))
+                .into_iter()
+                .collect(),
+            expires_at_ms: 10,
+        };
+        let classify = |endpoint: &DiscoveredEndpoint, secret| {
+            classify_group_endpoint(endpoint, secret, &policy, local, &known)
+        };
+        assert_eq!(
+            classify(&record(Some(trusted)), &secret).unwrap().0,
+            trusted
+        );
+        assert_eq!(
+            classify(&record(Some(revoked)), &secret),
+            Err(GroupRejection::Untrusted(revoked))
+        );
+        assert_eq!(
+            classify(&record(Some(stranger)), &secret),
+            Err(GroupRejection::Token)
+        );
+        assert_eq!(classify(&record(None), &secret), Err(GroupRejection::Token));
+        assert_eq!(
+            classify(&record(Some(local)), &secret),
+            Err(GroupRejection::Own)
+        );
+        assert_eq!(
+            classify(&record(Some(trusted)), &other),
+            Err(GroupRejection::Selector)
+        );
+        let pairing = DiscoveredEndpoint {
+            scope: DiscoveryScope::Pairing,
+            ..record(Some(trusted))
+        };
+        assert_eq!(classify(&pairing, &secret), Err(GroupRejection::Selector));
+        let loopback = DiscoveredEndpoint {
+            address: "127.0.0.1:42".parse().unwrap(),
+            ..record(Some(trusted))
+        };
+        assert_eq!(classify(&loopback, &secret), Err(GroupRejection::Address));
+        let expired = DiscoveredEndpoint {
+            expires_at_ms: 0,
+            ..record(Some(trusted))
+        };
+        assert_eq!(classify(&expired, &secret), Err(GroupRejection::Address));
+        assert_eq!(
+            [
+                GroupRejection::Address,
+                GroupRejection::Selector,
+                GroupRejection::Token,
+                GroupRejection::Untrusted(revoked),
+                GroupRejection::Own,
+            ]
+            .map(|rejection| rejection.reason()),
+            ["address", "selector", "token", "untrusted", "own"]
+        );
+    }
+
     #[tokio::test]
     async fn mdns_linux_accepts_dynamic_group_service_lifecycle() {
         let secret = DiscoveryGroupSecret::from_bytes([71; 32]);
@@ -1097,6 +1297,7 @@ mod tests {
                 selector,
                 1,
                 group_routing_token(&secret, 1, device),
+                discovery_secret_fingerprint(&secret),
                 "compatibility-spike".into(),
                 44222,
                 1_000,

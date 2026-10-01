@@ -5,7 +5,12 @@
   };
 
   outputs =
-    { nixpkgs, flake-utils, ... }:
+    {
+      self,
+      nixpkgs,
+      flake-utils,
+      ...
+    }:
     flake-utils.lib.eachDefaultSystem (
       system:
       let
@@ -61,6 +66,10 @@
             "app_bridge"
           ];
           doCheck = false;
+
+          # The source set has no .git; build identity comes from the flake revision.
+          FI_GIT_HASH = self.shortRev or (pkgs.lib.removeSuffix "-dirty" (self.dirtyShortRev or "unknown"));
+          FI_GIT_DIRTY = if self ? dirtyShortRev then "1" else "0";
 
           # Only the cdylib is needed by the Flutter bundle.
           installPhase = ''

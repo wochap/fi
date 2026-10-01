@@ -8,8 +8,9 @@ import 'models.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `core`, `initialize_with`, `networked_config`, `open_core`, `process_slot`
-// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `OpenMode`, `OpenTarget`, `ProcessSlot`
+// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `DartSecretPersistence`, `OpenMode`, `OpenTarget`, `ProcessSlot`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`
+// These functions are ignored (category: IgnoreBecauseExplicitAttribute): `persist`
 // These functions are ignored (category: IgnoreBecauseOwnerTyShouldIgnore): `default`
 
 Future<BootstrapDto> initialize({required String dataDir}) =>
@@ -24,10 +25,14 @@ Future<BootstrapDto> initializeAndroidNetworked({
   required String dataDir,
   required List<int> deviceSeed,
   Uint8List? discoverySecret,
+  PreviousDiscoverySecretDto? previousDiscoverySecret,
+  required FutureOr<bool> Function(PlatformSecretWriteDto) persistSecret,
 }) => RustLib.instance.api.crateApiLifecycleInitializeAndroidNetworked(
   dataDir: dataDir,
   deviceSeed: deviceSeed,
   discoverySecret: discoverySecret,
+  previousDiscoverySecret: previousDiscoverySecret,
+  persistSecret: persistSecret,
 );
 
 /// Deliberately abandons this device's local dataset and reopens the core in

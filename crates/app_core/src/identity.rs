@@ -4,7 +4,7 @@ use std::{
     fmt,
     str::FromStr,
     sync::{
-        Mutex,
+        Arc, Mutex,
         atomic::{AtomicBool, Ordering},
     },
 };
@@ -635,6 +635,146 @@ impl SecureKeyStore for InMemorySecureKeyStore {
     }
 }
 
+/// One write the core asks a platform secure store to make durable.
+pub enum PlatformSecretWrite<'a> {
+    StoreCurrent(&'a DiscoveryGroupSecret),
+    RemoveCurrent,
+    StorePrevious {
+        epoch: u64,
+        secret: &'a DiscoveryGroupSecret,
+    },
+    RemovePrevious,
+}
+
+impl PlatformSecretWrite<'_> {
+    const fn slot(&self) -> &'static str {
+        match self {
+            Self::StoreCurrent(_) | Self::RemoveCurrent => "current",
+            Self::StorePrevious { .. } | Self::RemovePrevious => "previous",
+        }
+    }
+
+    const fn op(&self) -> &'static str {
+        match self {
+            Self::StoreCurrent(_) | Self::StorePrevious { .. } => "store",
+            Self::RemoveCurrent | Self::RemovePrevious => "remove",
+        }
+    }
+}
+
+impl fmt::Debug for PlatformSecretWrite<'_> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::StoreCurrent(_) => formatter.write_str("StoreCurrent"),
+            Self::RemoveCurrent => formatter.write_str("RemoveCurrent"),
+            Self::StorePrevious { epoch, .. } => formatter
+                .debug_struct("StorePrevious")
+                .field("epoch", epoch)
+                .finish_non_exhaustive(),
+            Self::RemovePrevious => formatter.write_str("RemovePrevious"),
+        }
+    }
+}
+
+/// Platform secure storage that must hold a secret before the core adopts it.
+#[async_trait]
+pub trait PlatformSecretPersistence: Send + Sync + 'static {
+    async fn persist(&self, write: PlatformSecretWrite<'_>) -> Result<(), SecureStoreError>;
+}
+
+/// In-memory key store that makes every discovery-secret write durable on the
+/// platform first. A failed platform write leaves memory untouched, so the
+/// core never adopts a secret that a restart would lose.
+pub struct WriteThroughSecureKeyStore {
+    inner: InMemorySecureKeyStore,
+    persistence: Arc<dyn PlatformSecretPersistence>,
+    writes: tokio::sync::Mutex<()>,
+}
+
+impl WriteThroughSecureKeyStore {
+    #[must_use]
+    pub fn new(
+        inner: InMemorySecureKeyStore,
+        persistence: Arc<dyn PlatformSecretPersistence>,
+    ) -> Self {
+        Self {
+            inner,
+            persistence,
+            writes: tokio::sync::Mutex::new(()),
+        }
+    }
+
+    async fn persist(&self, write: PlatformSecretWrite<'_>) -> Result<(), SecureStoreError> {
+        let (slot, op) = (write.slot(), write.op());
+        match self.persistence.persist(write).await {
+            Ok(()) => {
+                tracing::info!(event = "platform_secret_persisted", slot, op);
+                Ok(())
+            }
+            Err(error) => {
+                tracing::warn!(event = "platform_secret_persist_failed", slot, op, error = %error);
+                Err(error)
+            }
+        }
+    }
+}
+
+impl fmt::Debug for WriteThroughSecureKeyStore {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("WriteThroughSecureKeyStore")
+            .finish_non_exhaustive()
+    }
+}
+
+#[async_trait]
+impl SecureKeyStore for WriteThroughSecureKeyStore {
+    async fn load_or_create_device_key(&self) -> Result<PrivateDeviceKey, SecureStoreError> {
+        self.inner.load_or_create_device_key().await
+    }
+    async fn load_discovery_group_secret(
+        &self,
+    ) -> Result<Option<DiscoveryGroupSecret>, SecureStoreError> {
+        self.inner.load_discovery_group_secret().await
+    }
+    async fn store_discovery_group_secret(
+        &self,
+        secret: &DiscoveryGroupSecret,
+    ) -> Result<(), SecureStoreError> {
+        let _writes = self.writes.lock().await;
+        self.persist(PlatformSecretWrite::StoreCurrent(secret))
+            .await?;
+        self.inner.store_discovery_group_secret(secret).await
+    }
+    async fn remove_discovery_group_secret(&self) -> Result<(), SecureStoreError> {
+        let _writes = self.writes.lock().await;
+        self.persist(PlatformSecretWrite::RemoveCurrent).await?;
+        self.inner.remove_discovery_group_secret().await
+    }
+    async fn load_previous_discovery_group_secret(
+        &self,
+    ) -> Result<Option<(u64, DiscoveryGroupSecret)>, SecureStoreError> {
+        self.inner.load_previous_discovery_group_secret().await
+    }
+    async fn store_previous_discovery_group_secret(
+        &self,
+        epoch: u64,
+        secret: &DiscoveryGroupSecret,
+    ) -> Result<(), SecureStoreError> {
+        let _writes = self.writes.lock().await;
+        self.persist(PlatformSecretWrite::StorePrevious { epoch, secret })
+            .await?;
+        self.inner
+            .store_previous_discovery_group_secret(epoch, secret)
+            .await
+    }
+    async fn remove_previous_discovery_group_secret(&self) -> Result<(), SecureStoreError> {
+        let _writes = self.writes.lock().await;
+        self.persist(PlatformSecretWrite::RemovePrevious).await?;
+        self.inner.remove_previous_discovery_group_secret().await
+    }
+}
+
 /// Test adapter whose lock state can be flipped at runtime, so a test can open
 /// against a locked store and then "unlock the keyring" before retrying.
 #[derive(Debug)]
@@ -802,6 +942,128 @@ mod tests {
         store.remove_discovery_group_secret().await.unwrap();
         let reloaded = DeviceIdentity::load_or_create(&store).await.unwrap();
         assert_eq!(reloaded.id(), identity.id());
+    }
+
+    #[derive(Default)]
+    struct RecordingPersistence {
+        log: Mutex<Vec<String>>,
+        fail: AtomicBool,
+    }
+
+    #[async_trait]
+    impl PlatformSecretPersistence for RecordingPersistence {
+        async fn persist(&self, write: PlatformSecretWrite<'_>) -> Result<(), SecureStoreError> {
+            self.log.lock().unwrap().push(format!("{write:?}"));
+            if self.fail.load(Ordering::SeqCst) {
+                Err(SecureStoreError::Unavailable("platform refused".into()))
+            } else {
+                Ok(())
+            }
+        }
+    }
+
+    fn write_through(
+        inner: InMemorySecureKeyStore,
+    ) -> (Arc<RecordingPersistence>, WriteThroughSecureKeyStore) {
+        let persistence = Arc::new(RecordingPersistence::default());
+        let store = WriteThroughSecureKeyStore::new(inner, persistence.clone());
+        (persistence, store)
+    }
+
+    #[tokio::test]
+    async fn write_through_persists_each_write_before_memory() {
+        let (persistence, store) = write_through(InMemorySecureKeyStore::seeded([1; 32]));
+        let current = DiscoveryGroupSecret::from_bytes([2; 32]);
+        let previous = DiscoveryGroupSecret::from_bytes([3; 32]);
+        store.store_discovery_group_secret(&current).await.unwrap();
+        assert_eq!(
+            store.load_discovery_group_secret().await.unwrap(),
+            Some(current)
+        );
+        store
+            .store_previous_discovery_group_secret(4, &previous)
+            .await
+            .unwrap();
+        assert_eq!(
+            store.load_previous_discovery_group_secret().await.unwrap(),
+            Some((4, previous))
+        );
+        store.remove_discovery_group_secret().await.unwrap();
+        assert_eq!(store.load_discovery_group_secret().await.unwrap(), None);
+        store
+            .remove_previous_discovery_group_secret()
+            .await
+            .unwrap();
+        assert_eq!(
+            store.load_previous_discovery_group_secret().await.unwrap(),
+            None
+        );
+        assert_eq!(
+            *persistence.log.lock().unwrap(),
+            [
+                "StoreCurrent",
+                "StorePrevious { epoch: 4, .. }",
+                "RemoveCurrent",
+                "RemovePrevious",
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn write_through_failure_leaves_memory_untouched() {
+        let inner = InMemorySecureKeyStore::seeded([1; 32]);
+        let current = DiscoveryGroupSecret::from_bytes([2; 32]);
+        let previous = DiscoveryGroupSecret::from_bytes([3; 32]);
+        inner.store_discovery_group_secret(&current).await.unwrap();
+        inner
+            .store_previous_discovery_group_secret(1, &previous)
+            .await
+            .unwrap();
+        let (persistence, store) = write_through(inner);
+        persistence.fail.store(true, Ordering::SeqCst);
+        let replacement = DiscoveryGroupSecret::from_bytes([5; 32]);
+        let unavailable = |result: Result<(), SecureStoreError>| {
+            assert!(matches!(result, Err(SecureStoreError::Unavailable(_))));
+        };
+        unavailable(store.store_discovery_group_secret(&replacement).await);
+        unavailable(store.remove_discovery_group_secret().await);
+        unavailable(
+            store
+                .store_previous_discovery_group_secret(2, &replacement)
+                .await,
+        );
+        unavailable(store.remove_previous_discovery_group_secret().await);
+        assert_eq!(
+            store.load_discovery_group_secret().await.unwrap(),
+            Some(current)
+        );
+        assert_eq!(
+            store.load_previous_discovery_group_secret().await.unwrap(),
+            Some((1, previous))
+        );
+    }
+
+    #[tokio::test]
+    async fn write_through_seeded_values_load_without_persisting() {
+        let inner = InMemorySecureKeyStore::seeded([1; 32]);
+        let current = DiscoveryGroupSecret::from_bytes([2; 32]);
+        let previous = DiscoveryGroupSecret::from_bytes([3; 32]);
+        inner.store_discovery_group_secret(&current).await.unwrap();
+        inner
+            .store_previous_discovery_group_secret(7, &previous)
+            .await
+            .unwrap();
+        let (persistence, store) = write_through(inner);
+        assert_eq!(
+            store.load_discovery_group_secret().await.unwrap(),
+            Some(current)
+        );
+        assert_eq!(
+            store.load_previous_discovery_group_secret().await.unwrap(),
+            Some((7, previous))
+        );
+        DeviceIdentity::load_or_create(&store).await.unwrap();
+        assert!(persistence.log.lock().unwrap().is_empty());
     }
 
     #[test]

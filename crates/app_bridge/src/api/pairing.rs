@@ -185,15 +185,6 @@ pub async fn sync_status() -> Result<SyncStatusDto, BridgeError> {
     Ok(core().await?.sync_status().into())
 }
 
-pub async fn discovery_secret_for_platform() -> Result<Option<Vec<u8>>, BridgeError> {
-    Ok(core()
-        .await?
-        .discovery_secret_for_platform()
-        .await
-        .map_err(BridgeError::from)?
-        .map(|secret| secret.expose().to_vec()))
-}
-
 pub async fn connection_state_stream(
     sink: StreamSink<Vec<TrustedDeviceDto>>,
 ) -> Result<(), BridgeError> {

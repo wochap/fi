@@ -71,9 +71,6 @@ Future<NetworkPreferencesDto> setSyncEnabled({required bool syncEnabled}) =>
 Future<SyncStatusDto> syncStatus() =>
     RustLib.instance.api.crateApiPairingSyncStatus();
 
-Future<Uint8List?> discoverySecretForPlatform() =>
-    RustLib.instance.api.crateApiPairingDiscoverySecretForPlatform();
-
 Stream<List<TrustedDeviceDto>> connectionStateStream() =>
     RustLib.instance.api.crateApiPairingConnectionStateStream();
 
