@@ -21,12 +21,31 @@ On Android, the engine SHALL capture microphone audio only between the start and
 - **WHEN** a phone call takes audio focus while the engine is listening
 - **THEN** capture stops, the audio is discarded, and the turn fails with `interruptedCall`
 
+### Requirement: Voice language of a turn
+Every turn SHALL carry a voice language, English (`en`) or Spanish (`es`). The voice language SHALL select the speech model and the language Whisper transcribes, the normalization rules, and the language line of the prompt. A turn whose language code is neither `en` nor `es` SHALL be handled as English. The instruction model and the grammar SHALL be the same for both languages.
+
+#### Scenario: Spanish turn
+- **WHEN** a turn with voice language `es` is filled
+- **THEN** it is transcribed with the Spanish speech model in Spanish and its spans are normalized with the Spanish rules
+
+#### Scenario: Unknown language code
+- **WHEN** a turn arrives with language code `fr`
+- **THEN** it is transcribed and normalized as English
+
 ### Requirement: On-device transcription
-The engine SHALL transcribe a turn's audio with the provisioned English Whisper model on the device, with no network use. It SHALL trim leading and trailing silence and return the text with Whisper's non-speech tokens removed. A turn whose audio holds no speech (energy below the silence threshold for the whole turn) or whose transcript is empty after cleaning SHALL fail with `noSpeech`. The Whisper model SHALL be loaded for the transcription and released afterwards.
+The engine SHALL transcribe a turn's audio on the device, with no network use, using the provisioned speech model of the turn's voice language: `ggml-base.en.bin` for English and the multilingual `ggml-base.bin` for Spanish. Whisper SHALL be told the turn's language (`en` or `es`) rather than detecting it. The engine SHALL find the file name of the speech model from the model manifest by role and language, not from a fixed name. It SHALL trim leading and trailing silence and return the text with Whisper's non-speech tokens removed. A turn whose audio holds no speech (energy below the silence threshold for the whole turn) or whose transcript is empty after cleaning SHALL fail with `noSpeech`. A missing speech model for the turn's language SHALL fail the turn with `modelLoadFailed`. The Whisper model SHALL be loaded for the transcription and released afterwards.
 
 #### Scenario: Transcribe a short turn
-- **WHEN** the user says “Lunch at Nando's, twelve fifty, food, yesterday”
+- **WHEN** the user says “Lunch at Nando's, twelve fifty, food, yesterday” in an English turn
 - **THEN** the transcript contains those words in order, apart from casing and punctuation
+
+#### Scenario: Spanish transcription
+- **WHEN** a Spanish turn is transcribed
+- **THEN** the engine loads `ggml-base.bin` and runs Whisper with the language `es`
+
+#### Scenario: Speech model of the language missing
+- **WHEN** a Spanish turn runs and `ggml-base.bin` is not on the device
+- **THEN** the turn fails with `modelLoadFailed`
 
 #### Scenario: Silence
 - **WHEN** the turn holds only silence
@@ -38,9 +57,9 @@ The engine SHALL build, for each collection schema, a grammar that only allows a
 - `value`: a string span, `true`, `false` or `null`;
 - `evidence`: a string.
 
-No field SHALL appear twice, and there SHALL be at most one entry per field. For each Choice field the value SHALL be constrained to its active option labels or `null`. The grammar SHALL be compiled once per schema version and reused.
+No field SHALL appear twice, and there SHALL be at most one entry per field. For each Choice field the value SHALL be constrained to its active option labels or `null`. The grammar SHALL be compiled once per schema version and reused, whatever the turn's language.
 
-The prompt SHALL list the fields compactly with type, required flag, options and the values already in the draft, SHALL include today's local date and weekday, and SHALL instruct the model to use `null` for anything not said and to copy evidence words from the transcript. Generation SHALL use greedy sampling, the model's thinking or reasoning mode SHALL be off, and output SHALL be capped at 256 tokens.
+The prompt SHALL list the fields compactly with type, required flag, options and the values already in the draft, SHALL include today's local date and weekday, and SHALL instruct the model to use `null` for anything not said and to copy evidence words from the transcript. For a Spanish turn the prompt SHALL also state that the transcript is in Spanish and that values and evidence must be copied in Spanish exactly as spoken, without translating. Generation SHALL use greedy sampling, the model's thinking or reasoning mode SHALL be off, and output SHALL be capped at 256 tokens.
 
 #### Scenario: Output always parses
 - **WHEN** the engine fills any transcript against a schema with Text, Decimal, Choice and Date fields
@@ -50,12 +69,16 @@ The prompt SHALL list the fields compactly with type, required flag, options and
 - **WHEN** two turns fill the same collection without a schema change between them
 - **THEN** the grammar is compiled once
 
-### Requirement: Deterministic value normalization
-The engine SHALL convert each entry's value span into the field's typed value with deterministic rules, not with the model:
+#### Scenario: Spanish prompt
+- **WHEN** a Spanish turn is filled
+- **THEN** the prompt states that the transcript is Spanish and asks for values and evidence copied without translation, and an English turn's prompt has no such line
 
+### Requirement: Deterministic value normalization
+The engine SHALL convert each entry's value span into the field's typed value with deterministic rules of the turn's language, not with the model.
+
+English rules:
 - **Integer** and **Decimal**: digits or English number words (“twelve fifty” → 12.50, “twenty two forty” → 22.40, “three” → 3). Decimals round half-even to the field scale; integers must be whole.
 - **Boolean**: yes/no/true/false/on/off.
-- **Choice**: case-insensitive exact label, then the closest label within an edit distance of 2 and 30% of the label length. An ambiguous match is dropped.
 - **Date**, relative to the device's local date:
   - today, tomorrow and yesterday;
   - weekday names (the most recent past occurrence, or today);
@@ -64,36 +87,91 @@ The engine SHALL convert each entry's value span into the field's typed value wi
   - ISO dates.
 - **Date & time**: a date phrase plus an optional time (“3pm”, “15:30”, “at noon”), in local time; “now” is the current minute.
 - **Duration**: the core duration grammar, plus spoken forms (“45 minutes”, “an hour and a half”, “ninety seconds”).
+
+Spanish rules (accents are optional in every word, so “miercoles” reads as “miércoles”):
+- **Integer** and **Decimal**: digits or Spanish number words, including “y” between tens and units (“treinta y dos” → 32), the one-word forms 16–29 (“dieciséis”, “veintidós”), hundreds (“cien”, “ciento”, “doscientos” … “novecientos”), “mil” and “millón”/“millones” (“mil doscientos” → 1200, “dos mil trescientos cuarenta” → 2340). Two whole amounts joined by “con” or said one after the other are a money pair for a scale-2 field (“doce con cincuenta” → 12.50, “doce cincuenta” → 12.50, “doce euros con cincuenta” → 12.50). “coma” or “punto” starts the decimal part, read as a number (“doce coma cinco” → 12.5, “doce coma cincuenta” → 12.50). In digits a comma is the decimal separator (“12,50” → 12.50), a period followed by exactly three digits groups thousands (“1.200” → 1200), and another period is a decimal point (“12.50” → 12.50). “menos” makes the amount negative. Currency words (euros, pesos, dólares, céntimos, centavos) and one trailing measure word (kilómetros, km, kilos, páginas, …) are ignored. Decimals round half-even to the field scale; integers must be whole.
+- **Boolean**: sí/si/verdadero/activado/encendido for true, no/falso/desactivado/apagado for false.
+- **Date**, relative to the device's local date:
+  - hoy, mañana, ayer, anteayer (also “antes de ayer”) and “pasado mañana”;
+  - weekday names with or without “el” (the most recent past occurrence, or today);
+  - “el <weekday> pasado” or “el pasado <weekday>”, meaning the same as English “last <weekday>”, and “el próximo <weekday>” or “el <weekday> que viene”, meaning the same as “next <weekday>”;
+  - “<day> de <month>”, with an optional leading “el” and an optional “de <year>”, the day in digits or words (“12 de marzo”, “doce de marzo”, “primero de marzo”), taking the nearest past date when the year is missing;
+  - ISO dates.
+- **Date & time**: a date phrase plus an optional time introduced by “a las”/“a la” (“a las tres”, “a las 15:30”, “a las tres y media”, “a las nueve y cuarto”, “a las ocho menos cuarto”), “al mediodía” or “a medianoche”, with an optional “de la mañana”/“de la madrugada” (before noon) or “de la tarde”/“de la noche” (after noon), in local time; “ahora” and “ahora mismo” are the current minute.
+- **Duration**: the core duration grammar, plus spoken forms with horas, minutos and segundos (“45 minutos”, “una hora y media”, “media hora”, “una hora y cuarto”, “noventa segundos”, “dos horas y quince minutos”).
+
+Rules for both languages:
+- **Choice**: case-insensitive exact label, then the closest label within an edit distance of 2 and 30% of the label length. Accents are ignored when comparing. An ambiguous match is dropped.
 - **Text**: the span as spoken, trimmed. It is dropped when longer than the field's maximum length.
 
-An entry whose span cannot be converted SHALL be dropped, not guessed. A `null` value SHALL mean "not said" and produce no entry.
+A turn SHALL use only its own language's words: an English word in a Spanish turn, or a Spanish word in an English turn, does not convert. An entry whose span cannot be converted SHALL be dropped, not guessed. A `null` value SHALL mean "not said" and produce no entry.
 
 #### Scenario: Spoken amount
-- **WHEN** an entry for a Decimal field with scale 2 has the span “twelve fifty”
+- **WHEN** an entry for a Decimal field with scale 2 has the span “twelve fifty” in an English turn
+- **THEN** the typed value is 12.50
+
+#### Scenario: Spanish money pair
+- **WHEN** an entry for a Decimal field with scale 2 has the span “doce con cincuenta” in a Spanish turn
+- **THEN** the typed value is 12.50
+
+#### Scenario: Spanish thousands
+- **WHEN** an entry for an Integer field has the span “mil doscientos” in a Spanish turn
+- **THEN** the typed value is 1200
+
+#### Scenario: Spanish decimal comma
+- **WHEN** an entry for a Decimal field with scale 2 has the span “12,50” or “doce coma cincuenta” in a Spanish turn
 - **THEN** the typed value is 12.50
 
 #### Scenario: Relative date
-- **WHEN** the local date is Monday 2026-09-28 and an entry for a Date field has the span “yesterday”
+- **WHEN** the local date is Monday 2026-09-28 and an entry for a Date field has the span “yesterday” in an English turn
 - **THEN** the typed value is 2026-09-27
 
 #### Scenario: Last weekday
-- **WHEN** the local date is Monday 2026-09-28 and the span is “last Tuesday”
+- **WHEN** the local date is Monday 2026-09-28 and the span is “last Tuesday” in an English turn
 - **THEN** the typed value is 2026-09-22
+
+#### Scenario: Spanish relative dates
+- **WHEN** the local date is Monday 2026-09-28 and a Spanish turn has the Date spans “ayer”, “mañana”, “el martes pasado” and “12 de marzo”
+- **THEN** the typed values are 2026-09-27, 2026-09-29, 2026-09-22 and 2026-03-12
+
+#### Scenario: Spanish date and time
+- **WHEN** the local date is Monday 2026-09-28 and a Spanish turn has the Date & time span “ayer a las tres de la tarde”
+- **THEN** the typed value is 2026-09-27 15:00 local time
+
+#### Scenario: Spanish duration
+- **WHEN** a Spanish turn has the Duration span “una hora y media”
+- **THEN** the typed value is 1 hour 30 minutes
+
+#### Scenario: Spanish boolean
+- **WHEN** a Spanish turn has the Boolean spans “sí” and “no”
+- **THEN** the typed values are true and false
+
+#### Scenario: Other language's words do not convert
+- **WHEN** a Spanish turn has the Date span “yesterday”
+- **THEN** no entry for that field is returned
 
 #### Scenario: Fuzzy choice
 - **WHEN** a Choice field has options food, transport, home, other and the span is “Food”
 - **THEN** the value is the option food
 
+#### Scenario: Choice ignores accents
+- **WHEN** a Choice field has the option “Café” and a Spanish turn has the span “cafe”
+- **THEN** the value is the option Café
+
 #### Scenario: Unconvertible span dropped
-- **WHEN** an entry for a Decimal field has the span “a lot”
+- **WHEN** an entry for a Decimal field has the span “a lot” in an English turn or “mucho” in a Spanish turn
 - **THEN** no entry for that field is returned
 
 ### Requirement: Evidence check and returned patch
-The engine SHALL keep an entry only when its evidence, after normalizing case, whitespace and punctuation, occurs in the transcript, and the value span occurs within or equals the evidence. The returned patch SHALL hold field ids, typed values and evidence. It SHALL contain nothing for fields the model left `null`. When no entry survives, the turn SHALL fail with `nothingMatched`.
+The engine SHALL keep an entry only when its evidence, after normalizing case, whitespace, punctuation (including “¿” and “¡”) and accents, occurs in the transcript, and the value span occurs within or equals the evidence. The returned patch SHALL hold field ids, typed values and evidence. It SHALL contain nothing for fields the model left `null`. When no entry survives, the turn SHALL fail with `nothingMatched`.
 
 #### Scenario: Invented value removed
 - **WHEN** the transcript is “Taxi home yesterday” and the model proposes amount “20” with evidence “twenty”
 - **THEN** the amount entry is removed because “twenty” is not in the transcript
+
+#### Scenario: Accents ignored in evidence
+- **WHEN** the transcript is “Café con Ana, ¿cuánto? doce euros” and the model gives evidence “cafe con ana”
+- **THEN** the evidence counts as found in the transcript
 
 #### Scenario: Nothing survives
 - **WHEN** every proposed entry fails the evidence check
@@ -128,14 +206,18 @@ These targets are accepted by a recorded on-device measurement, not by automated
 - **THEN** the recorded medians, 90th percentile and peak memory meet the targets, or the shortfall is recorded with the chosen mitigation
 
 ### Requirement: Evaluation harness
-The repository SHALL contain an opt-in evaluation that runs the engine's filling and normalization on a fixed set of at least 60 English utterances against at least three sample schemas, using the provisioned models on a desktop build with the native feature enabled. For each run it SHALL report:
+The repository SHALL contain an opt-in evaluation that runs the engine's filling and normalization on a fixed set of at least 60 English utterances and a fixed set of at least 30 Spanish utterances, each against at least three sample schemas, using the provisioned models on a desktop build with the native feature enabled. A run SHALL evaluate one language, chosen when it is started, and English by default. For each run it SHALL report:
 - field-level accuracy;
 - the rate of invented fields (entries for fields the utterance does not mention);
 - the evidence-rejection rate;
 - the median fill latency.
 
-It SHALL not run in the default test suite. The acceptance bar SHALL be at least 85% field-level accuracy and at most 5% invented fields after the evidence check.
+It SHALL not run in the default test suite. The acceptance bar SHALL be at least 85% field-level accuracy and at most 5% invented fields after the evidence check, for each language.
 
 #### Scenario: Evaluation report
 - **WHEN** the evaluation is run with the models present
 - **THEN** it prints accuracy, invented-field rate, evidence-rejection rate and median latency, and exits non-zero when the acceptance bar is not met
+
+#### Scenario: Spanish evaluation
+- **WHEN** the evaluation is run for Spanish
+- **THEN** it fills the Spanish utterance set as Spanish turns and reports the same figures against the same bar

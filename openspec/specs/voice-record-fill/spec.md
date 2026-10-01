@@ -25,21 +25,36 @@ Voice fill SHALL be offered only in the New record sheet on screens narrower tha
 - **WHEN** the user dismisses the "Fill by voice" tip and later opens New record again
 - **THEN** the tip is not shown
 
+### Requirement: Voice language follows the app language
+The voice language SHALL be the app's resolved interface language: English when the interface is English and Spanish when it is Spanish. There SHALL be no separate voice-language setting. The voice language SHALL decide the speech model the turn uses and that must be downloaded, the language Whisper transcribes, the normalization rules, the listening example, the spoken feedback and its text-to-speech voice. When the interface language changes, the voice language SHALL change with it before the next turn starts. A turn already running SHALL finish in the language it started with. When the new language's model set is not ready, voice fill SHALL behave as for models not downloaded: the mic stays offered and tapping it shows the download offer for that language.
+
+#### Scenario: Spanish interface fills in Spanish
+- **WHEN** the interface is Spanish, the Spanish set is ready, and the user says “Almuerzo, doce con cincuenta, comida, ayer”
+- **THEN** the turn runs as a Spanish turn and amount is filled with 12.50
+
+#### Scenario: Switching to a language without its speech model
+- **WHEN** the English set is ready, the user switches the interface to Español, and taps the mic in New record
+- **THEN** the panel shows the download offer for the Spanish speech model with "Descargar 148 MB"
+
 ### Requirement: First-use setup inline in the sheet
 The first mic tap SHALL run setup inside the sheet's voice panel slot, in this order, skipping any step already satisfied:
 
-1. A microphone primer. It has a mic icon, "Speak to fill records", "Audio is processed on this device and never saved. English only for now.", "Next, Android will ask for microphone access.", and "Not now" / "Continue". Continue requests the Android microphone permission.
-2. A model download offer (mock 8f). It has "Download voice models", "<language> · <size> total, one time. Everything runs on this phone.", one row per manifest model with its role ("Speech recognition" or "Understanding"), its friendly label and its manifest size, a line stating whether the phone is on mobile data (with "Wi-Fi recommended") or Wi-Fi, a line with free storage, and "Later" / "Download <size>". <size> is the sum of the files not yet verified, and <language> is the language name of the speech model.
+1. A microphone primer. It has a mic icon, "Speak to fill records", "Audio is processed on this device and never saved.", "Next, Android will ask for microphone access.", and "Not now" / "Continue". Continue requests the Android microphone permission.
+2. A model download offer for the voice language's model set (mock 8f). It has "Download voice models", a summary line, one row per file of the set with its role ("Speech recognition" or "Understanding"), its friendly label and its manifest size, a line stating whether the phone is on mobile data (with "Wi-Fi recommended") or Wi-Fi, a line with free storage, and "Later" / "Download <size>". <size> is the sum of the set's files not yet verified, and <language> is the name of the voice language. When no file of the set is verified, the summary reads "<language> · <size> total, one time. Everything runs on this phone.". When some file of the set is already verified, the summary reads "<language> · <size> to download, one time. Everything runs on this phone." and each verified file's row shows "On this phone" instead of its size.
 
-While the model downloads, the panel SHALL show a compact card: a title, a pause action, a hide action, a progress bar, "<done> of <total> · <percent>%" with the time left, and "Keep filling by hand. The mic turns on when it's ready." The title SHALL read "Downloading voice models" while downloading, "Reconnecting…" while reconnecting, "Checking downloaded data…" while verifying, and "Download paused" while paused. A failed download SHALL show its reason line in the card. The form SHALL stay fully usable during setup and download. The mic SHALL show a progress ring with the percentage and a download icon while downloading, reconnecting or verifying, and SHALL become the idle mic when the model is ready.
+While the model downloads, the panel SHALL show a compact card: a title, a pause action, a hide action, a progress bar, "<done> of <total> · <percent>%" with the time left, and "Keep filling by hand. The mic turns on when it's ready." The title SHALL read "Downloading voice models" while downloading, "Reconnecting…" while reconnecting, "Checking downloaded data…" while verifying, and "Download paused" while paused. A failed download SHALL show its reason line in the card. The form SHALL stay fully usable during setup and download. The mic SHALL show a progress ring with the percentage and a download icon while downloading, reconnecting or verifying, and SHALL become the idle mic when the voice language's set is ready.
 
 #### Scenario: Primer then permission
 - **WHEN** the microphone permission was never granted and the user taps the mic
 - **THEN** the primer appears, and Continue triggers the Android permission request
 
 #### Scenario: Offer after permission
-- **WHEN** the permission is granted and no model is ready
+- **WHEN** the interface is English, the permission is granted and no model is on the device
 - **THEN** the download offer shows "English · 1.43 GB total, one time. Everything runs on this phone.", the rows "Speech recognition · Whisper Base (English) · 148 MB" and "Understanding · Qwen2.5 1.5B Instruct · 1.29 GB", the network line, free storage, and "Download 1.43 GB"
+
+#### Scenario: Spanish offer with the understanding model on the phone
+- **WHEN** the interface is Spanish, the permission is granted, the understanding model is verified and the Spanish speech model is not on the device
+- **THEN** the offer shows "Español · 148 MB por descargar, una sola vez. Todo se procesa en este teléfono.", the row "Reconocimiento de voz · Whisper Base (español) · 148 MB", the row "Comprensión · Qwen2.5 1.5B Instruct · En este teléfono", and "Descargar 148 MB"
 
 #### Scenario: Keep typing while downloading
 - **WHEN** the download is at 42% and the user types "Lunch" in description
@@ -72,11 +87,15 @@ Tapping the mic in the idle or ready state SHALL start listening, and tapping it
 - **THEN** listening runs only while the mic is held, and processing starts on release
 
 ### Requirement: Listening and processing panels
-While listening, the panel SHALL show a pulsing dot with "Listening", an elapsed timer (m:ss), live input-level bars, "Try: “<example>”" built from this collection's active field names and plausible values, "Tap stop when done, or hold the mic to talk", and Cancel. While processing, the panel SHALL show two steps: "Transcribed", checked once the transcript exists, then "Filling fields…" with a progress ring. It SHALL also show the transcript as soon as it exists, "Usually 4–8 seconds", and Cancel. Cancel SHALL stop the current turn, discard its audio and transcript, and leave the form as it was before the turn. "Save record" SHALL be disabled while listening or processing and enabled otherwise. Panel state changes SHALL be announced to screen readers.
+While listening, the panel SHALL show a pulsing dot with "Listening", an elapsed timer (m:ss), live input-level bars, "Try: “<example>”" built from this collection's active field names and plausible values in the voice language, "Tap stop when done, or hold the mic to talk", and Cancel. The example SHALL use sample values of the voice language: a text sample ("Lunch" / "Almuerzo"), a decimal written with the language's decimal separator ("12.50" / "12,50"), a whole number, "<field name> <first option>" for a Choice field, a date ("yesterday" / "ayer"), a date and time ("yesterday at noon" / "ayer al mediodía"), "<field name> yes" / "<field name> sí" for a Boolean field, and a duration ("45 minutes" / "45 minutos"). Field names and option labels SHALL be shown as the user wrote them. In Spanish the example SHALL be quoted with «». While processing, the panel SHALL show two steps: "Transcribed", checked once the transcript exists, then "Filling fields…" with a progress ring. It SHALL also show the transcript as soon as it exists, "Usually 4–8 seconds", and Cancel. Cancel SHALL stop the current turn, discard its audio and transcript, and leave the form as it was before the turn. "Save record" SHALL be disabled while listening or processing and enabled otherwise. Panel state changes SHALL be announced to screen readers.
 
 #### Scenario: Example from the collection
-- **WHEN** the collection has fields description, amount, category and date
+- **WHEN** the voice language is English and the collection has fields description, amount, category and date
 - **THEN** the listening hint names values for some of those fields, for example “Lunch, 12.50, category food, yesterday”
+
+#### Scenario: Spanish example
+- **WHEN** the voice language is Spanish and the collection has fields descripción, importe, categoría (first option "comida") and fecha
+- **THEN** the listening hint reads "Prueba: «Almuerzo, 12,50, categoría comida, ayer»"
 
 #### Scenario: Transcript shown early
 - **WHEN** transcription finishes while filling is still running
@@ -178,37 +197,56 @@ Captured audio and transcripts SHALL be processed only on the device. Audio SHAL
 - **THEN** no audio or transcript exists in app storage, retained log events, or the diagnostic block
 
 ### Requirement: Hands-free spoken feedback
-When the Settings switch "Hands-free spoken feedback" is on, the app SHALL speak, using the phone's built-in text-to-speech, the "Still need" question and, after a turn that leaves nothing missing, "N fields filled. Tap Save record when ready." While speaking, the panel SHALL show speaking bars, "Speaking", the spoken line, and a mute action that stops speech and turns the switch off. The switch SHALL be off by default and hidden while the model set is not ready.
+When the Settings switch "Hands-free spoken feedback" is on, the app SHALL speak, using the phone's built-in text-to-speech in the voice language, the "Still need" question and, after a turn that leaves nothing missing, "N fields filled. Tap Save record when ready." In Spanish the lines SHALL read "Todavía falta: <field names>." and "Se rellenaron N campos. Toca Guardar registro cuando quieras." (singular "Se rellenó 1 campo."). The text-to-speech voice SHALL be a Spanish voice for Spanish, preferring Latin American Spanish when the phone has it, and an English voice for English. While speaking, the panel SHALL show speaking bars, "Speaking", the spoken line, and a mute action that stops speech and turns the switch off. The switch SHALL be off by default and hidden while the voice language's set is not ready.
 
 #### Scenario: Spoken confirmation
-- **WHEN** hands-free is on and a turn fills every required field with four fields
+- **WHEN** the voice language is English, hands-free is on and a turn fills every required field with four fields
 - **THEN** the phone says "4 fields filled. Tap Save record when ready." and the panel shows the speaking state with mute
 
+#### Scenario: Spoken question in Spanish
+- **WHEN** the voice language is Spanish, hands-free is on, and a turn leaves importe and categoría empty
+- **THEN** the phone says "Todavía falta: importe, categoría." with a Spanish voice
+
 ### Requirement: Settings tab with voice input
-Settings SHALL include a Voice input section wherever the app-settings capability shows it (a platform with on-device voice and an available voice engine). The Voice input section holds:
-- The voice models card (mocks 8b, 8d). Its header reads "Voice models", a state tag with an icon and text, and a summary line starting with the speech model's language name. Below it, one row per manifest model shows its role ("Speech recognition" or "Understanding"), its friendly label, and its size or state: the manifest size when waiting or ready, "<stored> of <size>" while partly stored, "Checking" while verifying, and "<size> · damaged" after a checksum failure. The card shows one of these states:
-  - Not downloaded: tag "Not downloaded", summary "<language> · <total> total", "Wi-Fi recommended", "Needs <remaining> · <free> free on this phone", and "Download <remaining>".
+Settings SHALL include a Voice input section wherever the app-settings capability shows it (a platform with on-device voice and an available voice engine). All of it describes the voice language's model set. The Voice input section holds:
+- A status line at the top, shown only when the understanding model is on the phone and the voice language's speech model is not verified and not downloading: "Voice input: <language> — needs <language> speech model (<size>)", for example "Voice input: English — needs English speech model (148 MB)", or "Entrada de voz: Español — necesita el modelo de voz en español (148 MB)" in Spanish.
+- The voice models card (mocks 8b, 8c, 8d). Its header reads "Voice models", a state tag with an icon and text, and a summary line starting with the voice language's name. Below it, one row per file of the voice language's set shows its role ("Speech recognition" or "Understanding"), its friendly label, and its size or state: the manifest size when waiting or ready, "<stored> of <size>" while partly stored, "Checking" while verifying, and "<size> · damaged" after a checksum failure. The card shows one of these states:
+  - Not downloaded, with no file of the set verified: tag "Not downloaded", summary "<language> · <total> total", "Wi-Fi recommended", "Needs <remaining> · <free> free on this phone", and "Download <remaining>".
+  - Not downloaded, with some file of the set verified (mock 8c): tag "<N> model missing" ("1 model missing", "2 models missing"), where N counts the set's files not verified, summary "<language> · <remaining> to download", "Wi-Fi recommended", "Needs <remaining> · <free> free on this phone", and "Download <remaining>".
   - Downloading: tag "Downloading", summary "<language> · <done> of <total>", a progress bar with the percent and "about <time> left", Pause and Cancel.
   - Reconnecting: tag "Reconnecting", "Connection lost — reconnecting…", the progress bar frozen in a neutral color, "The download resumes where it stopped.", "Leaving Fi can pause the network. Keep it open to finish faster.", Pause and Cancel.
   - Verifying: tag "Verifying", summary "<language> · <total>", "Checking downloaded data…" with the time left when known, a striped bar without a percent, and Cancel.
   - Paused: tag "Paused", summary "<language> · paused at <done> of <total>", the frozen progress bar with the percent and "resumes from here", Resume and Cancel.
   - Failed: tag "Failed", a reason title and line, Retry and "Cancel and delete". A network or HTTP failure reads "No connection" / "Couldn't reach the download server. Check your Wi-Fi, then retry. Downloaded data is kept." with summary "<language> · stopped at <done>". A storage failure reads "Not enough storage" / "Free up <needed> on this phone, then retry." with the same summary. A checksum failure reads "Downloaded file is damaged" / "The <role> model failed its check. Retry downloads it again (<size>)." with summary "<language> · check failed".
   - Ready: tag "Ready", summary "<language> · <total> used on this phone", Re-download and Delete.
-- The hands-free switch with "Speaks the “still need” question and a short confirmation", shown only when the models are ready.
-- The privacy line "Audio is processed on this device and never saved. English only for now."
+- Under the model rows, when speech models of other languages are on the phone, the label "Other languages" and one row per such model with "Speech recognition", its friendly label, its manifest size (or "<stored> of <size>" when partial), and "Delete".
+- The hands-free switch with "Speaks the “still need” question and a short confirmation", shown only when the voice language's set is ready.
+- The privacy line "Audio is processed on this device and never saved."
 
-State tags SHALL pair an icon with their text, never color alone. Retry SHALL resume from the stored bytes. Cancel and "Cancel and delete" SHALL ask "Cancel download?" with "Downloaded data (<done>) will be deleted.", "Cancel download" and "Keep downloading", unless nothing is stored. Delete SHALL ask "Delete voice models?" with "Frees <size>. Voice fill won’t work until you download them again.", "Delete" and "Keep models". Re-download SHALL be confirmed first. In each confirm dialog the safe choice SHALL be the primary button on the right and the destructive choice the secondary button on the left. There is no undo.
+State tags SHALL pair an icon with their text, never color alone. Retry SHALL resume from the stored bytes. Cancel and "Cancel and delete" SHALL ask "Cancel download?" with "Downloaded data (<size>) will be deleted.", where <size> is what Cancel deletes, "Cancel download" and "Keep downloading", unless nothing would be deleted. Delete SHALL delete every voice model on the phone, of every language, and SHALL ask "Delete voice models?" with "Frees <size>. Voice fill won’t work until you download them again.", where <size> is everything stored for voice models, "Delete" and "Keep models". An other-language row's Delete SHALL ask "Delete this speech model?" with "Frees <size>. Voice fill in <language> needs it again.", "Delete" and "Keep model", and SHALL delete only that speech model. Re-download SHALL be confirmed first. In each confirm dialog the safe choice SHALL be the primary button on the right and the destructive choice the secondary button on the left. There is no undo.
 
 #### Scenario: Ready model in Settings
-- **WHEN** the model set is ready
+- **WHEN** the voice language is English and the English set is ready
 - **THEN** Settings › Voice input shows "Voice models", "English · 1.43 GB used on this phone", a "Ready" tag, the rows "Speech recognition · Whisper Base (English) · 148 MB" and "Understanding · Qwen2.5 1.5B Instruct · 1.29 GB", Re-download, Delete and the hands-free switch
+
+#### Scenario: Spanish ready in Settings
+- **WHEN** the interface is Spanish and the Spanish set is ready
+- **THEN** the card shows "Modelos de voz", "Español · 1,43 GB en este teléfono", a "Listo" tag, the rows "Reconocimiento de voz · Whisper Base (español) · 148 MB" and "Comprensión · Qwen2.5 1.5B Instruct · 1,29 GB", and the privacy line has no mention of English
+
+#### Scenario: Spanish speech model missing
+- **WHEN** the English set is ready and the interface is switched to Español
+- **THEN** the Voice input section starts with "Entrada de voz: Español — necesita el modelo de voz en español (148 MB)", the card shows the tag "Falta 1 modelo", the summary "Español · 148 MB por descargar", the Spanish speech row waiting at 148 MB, the understanding row at 1,29 GB, "Descargar 148 MB", the hands-free switch hidden, and under "Otros idiomas" the row "Whisper Base (inglés) · 148 MB" with "Eliminar"
+
+#### Scenario: Delete another language's model
+- **WHEN** the Spanish set is ready, the English speech model is on the phone, and the user taps its Delete and confirms
+- **THEN** only the English speech model is deleted, the "Other languages" rows disappear, and the card still shows Ready
 
 #### Scenario: Downloading in Settings
 - **WHEN** the speech model is verified and 464 MB of the understanding model are stored
 - **THEN** the card shows "English · 612 MB of 1.43 GB", a "Downloading" tag, "42%", the understanding row "464 MB of 1.29 GB", Pause and Cancel
 
 #### Scenario: Cancel asks first
-- **WHEN** the user taps Cancel while downloading with 612 MB stored and confirms "Cancel download"
+- **WHEN** no other language's speech model is on the phone and the user taps Cancel while downloading with 612 MB stored and confirms "Cancel download"
 - **THEN** the download stops, the downloaded data is deleted, and the card shows "Not downloaded" with "Download 1.43 GB"
 
 #### Scenario: Keep downloading
@@ -224,11 +262,11 @@ State tags SHALL pair an icon with their text, never color alone. Retry SHALL re
 - **THEN** the card shows "Downloaded file is damaged", "The understanding model failed its check. Retry downloads it again (1.29 GB).", and the understanding row reads "1.29 GB · damaged"
 
 #### Scenario: Delete asks first
-- **WHEN** the user taps Delete and confirms
+- **WHEN** only the English set is on the phone and the user taps Delete and confirms
 - **THEN** the models are deleted, the card shows "Not downloaded" with "Download 1.43 GB", and the hands-free switch is hidden
 
 ### Requirement: Voice engine boundary and fake engine
-The app SHALL reach speech-to-text and field filling only through one voice engine boundary. It takes the audio of one turn, the collection's active fields (id, name, type, required, options, bounds) and the current draft values, and returns a transcript and a patch. It SHALL report typed failures (no speech, model not loaded, out of memory, microphone busy, cancelled). It SHALL report input levels while listening, so the level bars reflect the microphone. A scripted fake engine SHALL be available in debug builds, or when the build defines `FI_VOICE_FAKE=true`. It returns scripted transcripts and patches after realistic delays, and can be set to produce each typed failure.
+The app SHALL reach speech-to-text and field filling only through one voice engine boundary. It takes the audio of one turn, the voice language (`en` or `es`), the collection's active fields (id, name, type, required, options, bounds) and the current draft values, and returns a transcript and a patch. It SHALL report typed failures (no speech, model not loaded, out of memory, microphone busy, cancelled). It SHALL report input levels while listening, so the level bars reflect the microphone. A scripted fake engine SHALL be available in debug builds, or when the build defines `FI_VOICE_FAKE=true`. It returns scripted transcripts and patches after realistic delays, records the voice language of each turn, and can be set to produce each typed failure.
 
 The native on-device engine SHALL be the engine of every build that includes it, which is Android arm64 release and debug builds. It is not used when the build defines `FI_VOICE_FAKE=true`, which forces the fake engine. The native engine SHALL report itself available whether or not the models are downloaded, so the first-use download flow can run. Builds without the native engine and without `FI_VOICE_FAKE` SHALL use the fake engine in debug mode and report the engine as unavailable in release mode.
 
@@ -243,3 +281,7 @@ The native on-device engine SHALL be the engine of every build that includes it,
 #### Scenario: Fake engine drives every state
 - **WHEN** the fake engine is scripted to return “Taxi home yesterday” with description and date entries, and then to fail with no speech
 - **THEN** the sheet shows the filled state with "Still need" for the missing required fields, and then the "Didn't hear anything" panel
+
+#### Scenario: Turn carries the voice language
+- **WHEN** the interface is Spanish and the user completes a turn with the fake engine
+- **THEN** the fake engine records the voice language `es` for that turn

@@ -37,7 +37,7 @@ The app SHALL keep a device-local language preference with three values: System 
 - **THEN** the interface is in English
 
 ### Requirement: All user-facing text is localized
-Every text the Flutter app shows to the user SHALL come from the active language's copy. This covers labels, headings, buttons, tabs, tooltips, hints, placeholders, empty states, dialogs, snackbars, banners, error lines, contextual help, pairing and SAS screens, the voice sheet panels and the voice models card, and the Settings sections. Pluralized counts SHALL use the plural rules of the active language. Spanish copy SHALL use neutral Latin American Spanish and address the user as "tú". The following SHALL stay the same in every language: user data (collection, field, option and device names, record values), the language names "English" and "Español", model friendly names, the product name "Fi", the build label, ids, addresses, ports, formulas, and the raw state, codes and log lines under a device's Details. Spoken voice feedback and voice example utterances are outside this requirement.
+Every text the Flutter app shows to the user SHALL come from the active language's copy. This covers labels, headings, buttons, tabs, tooltips, hints, placeholders, empty states, dialogs, snackbars, banners, error lines, contextual help, pairing and SAS screens, the voice sheet panels and the voice models card, the Settings sections, the spoken voice feedback, and the voice example utterances. Pluralized counts SHALL use the plural rules of the active language. Spanish copy SHALL use neutral Latin American Spanish and address the user as "tú". The following SHALL stay the same in every language: user data (collection, field, option and device names, record values), the language names "English" and "Español", the product name "Fi", the build label, ids, addresses, ports, formulas, and the raw state, codes and log lines under a device's Details. Model friendly names SHALL stay the same in every language, except that the language in a speech model's name SHALL be written in the interface language ("Whisper Base (Spanish)" in English, "Whisper Base (español)" in Spanish). Model file names SHALL never be shown.
 
 #### Scenario: Dialog in Spanish
 - **WHEN** the interface is in Spanish and the user opens the voice models delete confirmation
@@ -50,6 +50,14 @@ Every text the Flutter app shows to the user SHALL come from the active language
 #### Scenario: User data untouched
 - **WHEN** the interface is in Spanish and a collection is named "Expenses"
 - **THEN** the collection still reads "Expenses"
+
+#### Scenario: Speech model name in Spanish
+- **WHEN** the interface is in Spanish and the voice models card lists the English and Spanish speech models
+- **THEN** they read "Whisper Base (inglés)" and "Whisper Base (español)", and "Qwen2.5 1.5B Instruct" is unchanged
+
+#### Scenario: Spoken feedback in Spanish
+- **WHEN** the interface is in Spanish and hands-free feedback speaks after a turn that filled 4 fields
+- **THEN** the spoken and shown line is Spanish
 
 ### Requirement: Rust-originated errors are shown in the active language
 When a failure reported by Rust carries a typed kind or code, the app SHALL show text for that kind or code in the active language, not the English message Rust attached. This SHALL apply to: bridge error kinds other than validation; validation issues with the codes required, type_mismatch, length, out_of_range, inactive_option and field_unavailable; networking-deferred reasons (locked keyring, unavailable secure store, exhausted port range, which names the UDP range); widget evaluation error kinds; pairing failure kinds; voice error kinds; and voice model error kinds. A length or out_of_range issue SHALL state the field's bounds when the form knows the field. The Rust message SHALL be shown as given only for an `invalid` validation issue, for the reason of a stopped import, and inside technical details such as logs.

@@ -59,17 +59,36 @@ The Language section SHALL offer three choices: System default, English and Espa
 - On a platform other than Android (mock 8a), the section SHALL be one card with the row "App language", the line "Menus, labels and dates. Changes apply right away." under it, and a dropdown showing the current choice. The System default entry SHALL read "System default (<language>)", for example "System default (English)".
 - On Android (mocks 8b, 8i), the section SHALL be one card holding a radio list with the rows "System default" (with the line "<language> — same as your phone", for example "English — same as your phone"), "English" and "Español".
 
+Where the Voice input section is shown, the Language section SHALL also tell the user that voice input follows the app language, under the language choices (mocks 8b, 8c):
+- When the voice language's model set is ready: the line "Voice input follows the app language · <language> models ready", for example "Voice input follows the app language · English models ready".
+- When the understanding model is on the phone, the voice language's speech model is not verified, no download is running, and the offer was not dismissed for this language: an inline offer with the title "Download <language> speech model · <size>" (for example "Download Spanish speech model · 148 MB", "Descargar modelo de voz en español · 148 MB"), the line "Voice input follows the app language. Understanding (<size>) is already on this phone.", and "Not now" / "Download". Download SHALL start the download of the voice language's set, which then fetches only the speech model. Not now SHALL keep the chosen language, hide the offer for that language until the app language changes again or Settings is opened again, and leave voice fill off until the model is downloaded.
+- Otherwise: the line "Voice input follows the app language".
+
+Sizes SHALL come from the model manifest. Where the Voice input section is not shown, no voice text SHALL appear in the Language section.
+
 #### Scenario: Desktop dropdown
 - **WHEN** the app runs with desktop capabilities on an English system and the user opens Settings
-- **THEN** the Language section shows "App language", "Menus, labels and dates. Changes apply right away." and a dropdown reading "System default (English)", whose entries are "System default (English)", "English" and "Español"
+- **THEN** the Language section shows "App language", "Menus, labels and dates. Changes apply right away." and a dropdown reading "System default (English)", whose entries are "System default (English)", "English" and "Español", and no voice line
 
 #### Scenario: Android radio list
-- **WHEN** the app runs with Android capabilities on an English system and the user opens Settings
-- **THEN** the Language section shows the rows "System default" with "English — same as your phone", "English" and "Español", and System default is selected
+- **WHEN** the app runs with Android capabilities on an English system, a voice engine is available, the English set is ready, and the user opens Settings
+- **THEN** the Language section shows the rows "System default" with "English — same as your phone", "English" and "Español", System default is selected, and the line "Voice input follows the app language · English models ready" is shown
 
 #### Scenario: Picking Español on Android
 - **WHEN** the user taps "Español" in the Android Language section
 - **THEN** the row "Español" is selected, the page title reads "Ajustes", and the System default row reads "Predeterminado del sistema" with "English — igual que tu teléfono"
+
+#### Scenario: Spanish speech model offer
+- **WHEN** the English set is ready, a voice engine is available on Android, and the user picks Español
+- **THEN** under the language list the offer "Descargar modelo de voz en español · 148 MB" appears with "La entrada de voz sigue el idioma de la app. El modelo de comprensión (1,29 GB) ya está en este teléfono.", "Ahora no" and "Descargar"
+
+#### Scenario: Download from the offer
+- **WHEN** the Spanish speech model offer is shown and the user taps "Descargar"
+- **THEN** the download of `ggml-base.bin` starts, the offer is replaced by the line "La entrada de voz sigue el idioma de la app", and the voice models card shows the download progress
+
+#### Scenario: Not now keeps the language
+- **WHEN** the Spanish speech model offer is shown and the user taps "Ahora no"
+- **THEN** the offer closes, the interface stays in Spanish, and the mic in New record leads to the download offer
 
 ### Requirement: About section
 The About section SHALL be shown on every platform as one card with these rows in order:
