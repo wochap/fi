@@ -37,19 +37,19 @@ Flutter SHALL display the zero-padded six-digit SAS supplied by Rust for the cur
 ### Requirement: Trusted-device list
 The devices screen SHALL list locally trusted and revoked device records with friendly name, DeviceId presentation, connectivity, last seen, last sync, and status obtained through Rust queries/events. Last sync SHALL reflect the most recent time the peer reached the synced state, not only the pairing time, and SHALL be carried by the same connection-state emission that reports the synced state so the row never shows synced connectivity alongside a never-synced timestamp.
 
-The list SHALL be headed "Trusted devices" with the device count beside it. Each row SHALL show a device icon tile, the friendly name, a state tag (accent with a dot for Connected, Syncing and Synced; neutral otherwise), and one line "Seen <time> · Synced <time>", with an absent value reading "Never seen" or "Never synced". Last seen and last sync SHALL be presented as status times, not exact values: a value under one minute old reads "just now"; under one hour reads a whole number of minutes ago; under twenty-four hours reads a whole number of hours ago; anything older reads as a short local date and time with weekday, day, month, and hour:minute, adding the year only when it differs from the current year. A value in the future because of clock skew SHALL read as "just now". Relative wording SHALL be refreshed at least once per minute while the devices screen is mounted, without waiting for a device event. Record field values, chart axes, and query output SHALL keep their exact formatting; this presentation applies to status metadata only.
+The list SHALL be headed "Trusted devices" with the device count beside it. Each row SHALL show a device icon tile, the friendly name, a state tag (accent with a dot for Connected, Syncing and Synced; the error tag of the unreachable-peer state for a non-revoked row whose last attempt failed; neutral otherwise), and one line "Seen <time> · Synced <time>", with an absent value reading "Never seen" or "Never synced". A non-revoked row whose last attempt failed SHALL instead show the plain-language line, guidance and actions of the unreachable-peer state. Last seen and last sync SHALL be presented as status times, not exact values: a value under one minute old reads "just now"; under one hour reads a whole number of minutes ago; under twenty-four hours reads a whole number of hours ago; anything older reads as a short local date and time with weekday, day, month, and hour:minute, adding the year only when it differs from the current year. A value in the future because of clock skew SHALL read as "just now". Relative wording SHALL be refreshed at least once per minute while the devices screen is mounted, without waiting for a device event. Record field values, chart axes, and query output SHALL keep their exact formatting; this presentation applies to status metadata only.
 
 Each trusted row SHALL offer "Details", collapsed by default, and a ⋮ menu with the row's rename, revoke and delete actions. At 720px and wider Details SHALL expand inline under the row. Below 720px Details SHALL open as a pushed screen titled with the friendly name, with a back action and the same ⋮ menu.
 
 Details SHALL show:
 - The state, the endpoint being tried or last tried, the last attempt time as a status time, and the local device's bound sync port. These are a four-column grid at 720px and wider and label/value rows below 720px.
-- The failure reason text when the last attempt failed.
+- The failure code and the failure reason text when the last attempt failed, both as Rust reports them and in every language unchanged.
 - The full DeviceId with a copy action. Below 720px the id may be shortened to its first and last eight hex characters, but copy SHALL always place the full id on the clipboard.
 - A connection log headed "Connection log · N events".
 
 The connection log SHALL list the retained events for that peer and the retained local-device events, oldest first, each as time (HH:mm:ss), category, and message. The category SHALL be "pairing" for pairing events, "address" for address and discovery events, "peer" for peer connection and sync events, and "device" for other local events. The message SHALL be the event's technical text without reformatting its fields. At 720px and wider the log SHALL offer an All / Pairing / Peer filter: Pairing shows only pairing events, and Peer shows peer and address events.
 
-Details SHALL contain a "Reconnect" action that invokes the manual reconnect command and a "Copy log" action that places the peer's diagnostic block on the clipboard and confirms the copy. "Reconnect" SHALL be unavailable on a revoked row and while a reconnect for that row is in flight.
+Details SHALL contain a "Reconnect" action that invokes the manual reconnect command, a "Connect by address…" action that opens the Connect by address dialog for that device, and a "Copy log" action that places the peer's diagnostic block on the clipboard and confirms the copy. "Reconnect" SHALL be unavailable on a revoked row and while a reconnect for that row is in flight. "Connect by address…" SHALL NOT be offered on a revoked row.
 
 #### Scenario: Device connects and syncs
 - **WHEN** Rust advances a trusted peer from connected through syncing to synced
@@ -81,7 +81,7 @@ Details SHALL contain a "Reconnect" action that invokes the manual reconnect com
 
 #### Scenario: Failed peer shows why
 - **WHEN** a peer's last attempt failed with a TLS failure at `192.168.1.20:47380` and the user opens Details
-- **THEN** the panel shows the failure category and message, the endpoint, when the attempt happened, and the log lines for that peer
+- **THEN** the panel shows the failure code `TLS_FAILED` with the failure category and message, the endpoint, when the attempt happened, and the log lines for that peer
 
 #### Scenario: Categorized log with filter
 - **WHEN** Details are open on a 1240px-wide screen and the retained events include pairing, address and peer events
@@ -101,7 +101,7 @@ Details SHALL contain a "Reconnect" action that invokes the manual reconnect com
 
 #### Scenario: Revoked row offers no reconnect
 - **WHEN** a row's record is revoked and its Details are opened
-- **THEN** the panel shows the retained lines and Copy log, but no Reconnect action
+- **THEN** the panel shows the retained lines and Copy log, but no Reconnect and no Connect by address action
 
 ### Requirement: Device rename and revoke actions
 Flutter SHALL expose friendly-name editing and confirmed revoke/unpair actions that delegate to Rust and refresh persisted device state.
@@ -361,3 +361,89 @@ When no device is trusted, the "Trusted devices" section SHALL show a dashed emp
 #### Scenario: Discovery off note
 - **WHEN** Discoverable is off and no device is trusted
 - **THEN** the empty state includes the note that discovery is off and pairing still works, and "Start pairing" is enabled
+
+### Requirement: Unreachable peer is explained in plain language
+A trusted, non-revoked row whose last connection attempt failed SHALL present the failure as a person-facing state chosen from the typed failure kind, while Sync with paired devices is on (mock 8g):
+- No route: the tag "Not reachable" and the line "Not found on your network".
+- Route, transport or stream failure, or a failure without a kind: the tag "Not reachable" and the line "Didn't answer at its last address".
+- Trust or TLS failure: the tag "Can't verify" and the line "It no longer recognizes this device".
+
+The tag SHALL use the error style with an icon beside its text, never colour alone. The line SHALL replace the "Seen · Synced" line and SHALL end with " · Last synced <time>" as a status time, or " · Never synced". Under the row, without opening Details, a guidance box SHALL show:
+- For "Not reachable": "Make sure both devices are on the same Wi-Fi and Fi is open on the other device. Fi keeps trying on its own." and the actions "Try again", "Pair again" and "Connect by address…".
+- For "Can't verify": "The other device may have been reset or may have unpaired this one. Pair again on both devices." and the actions "Try again" and "Pair again".
+
+"Try again" SHALL invoke the manual reconnect command and be unavailable while a reconnect for that row is in flight. "Pair again" SHALL enter pairing mode exactly as "Pair device" does. "Connect by address…" SHALL open the Connect by address dialog for that device. At 720px and wider the box SHALL hold all its actions; below 720px it SHALL hold "Try again" and "Pair again", and "Connect by address…" SHALL be reached from the device's Details screen. The actions SHALL wrap onto another line rather than truncate. The raw failure text, failure code, endpoints, ports and log lines SHALL appear only under Details. When the peer later connects, the row SHALL return to its normal tag, line and no guidance box. While Sync with paired devices is off the row SHALL read "Paused" with no guidance box.
+
+#### Scenario: Peer not found on the network
+- **WHEN** the last attempt for "Fi f755167e" failed with no route and it last synced 2 hours ago, on a 1240px-wide screen
+- **THEN** the row shows the "Not reachable" error tag and "Not found on your network · Last synced 2 h ago", the guidance box shows the same-Wi-Fi guidance with "Try again", "Pair again" and "Connect by address…", and neither "no eligible endpoint" nor `NO_ELIGIBLE_ENDPOINT` is visible until Details is opened
+
+#### Scenario: Peer did not answer
+- **WHEN** the last attempt failed because the dial to the last known address timed out
+- **THEN** the row shows "Not reachable" and "Didn't answer at its last address" with the same guidance and actions
+
+#### Scenario: Peer no longer recognizes this device
+- **WHEN** the last attempt failed with a trust failure
+- **THEN** the row shows the "Can't verify" error tag, "It no longer recognizes this device", the pair-again guidance, and "Try again" and "Pair again" without "Connect by address…"
+
+#### Scenario: Try again
+- **WHEN** the user presses "Try again"
+- **THEN** the manual reconnect command is invoked for that device and the action is unavailable until it returns
+
+#### Scenario: Pair again
+- **WHEN** the user presses "Pair again"
+- **THEN** pairing mode starts and the pairing card is shown
+
+#### Scenario: Error state on a phone
+- **WHEN** the same no-route failure is shown on a 390px-wide screen
+- **THEN** the guidance box shows "Try again" and "Pair again", and the device's Details screen offers "Connect by address…"
+
+#### Scenario: Peer comes back
+- **WHEN** a row shows "Not reachable" and the peer then reaches the synced state
+- **THEN** the row shows "Synced" with the "Seen · Synced" line and no guidance box
+
+#### Scenario: Spanish copy fits
+- **WHEN** the interface is in Spanish on a 360px-wide screen and a row shows the "Not reachable" state
+- **THEN** the tag, the line, the guidance and both buttons show their full Spanish text without overflow
+
+### Requirement: Connect by address dialog
+"Connect by address…" SHALL open, for one trusted device, a dialog at 720px and wider and a bottom sheet below 720px (mock 8h), holding:
+- The title "Connect by address".
+- The line "Reach <name> directly when it isn't found on the network. It must already be paired."
+- An "Address" field prefilled with the device's last known address, else the endpoint last tried for it, else empty, with the example `192.168.0.165:47380` as its hint, and the help line "Find it on the other device under Settings › About › This device."
+- "Cancel" and "Connect".
+
+"Connect" SHALL be unavailable while the field is empty and while an attempt runs. While an attempt runs the dialog SHALL show "Connecting…" and the field SHALL not be editable. "Connect" SHALL invoke the connect-by-address command for that device with the field text. The outcome SHALL be shown as follows:
+- Connected: the dialog closes and a brief confirmation reads "Connected to <name>".
+- Invalid address: the field shows "Enter an IPv4 address like 192.168.0.165, optionally followed by :port."
+- Not a local-network address: the field shows "Use an address on your local network, like 192.168.x.x."
+- No route, route, transport or stream failure: "No answer at <address>. Check the address and that Fi is open on the other device."
+- Trust or TLS failure: "The device at <address> isn't <name>."
+- Paused: "Sync with paired devices is off. Turn it on to connect."
+- Any other error: the error's localized text.
+
+After a failure the dialog SHALL stay open with the typed text kept, so the user can correct it. "Cancel" SHALL close the dialog at any time. Every text SHALL be shown in the active language; the address, the example address and the device name SHALL stay as they are.
+
+#### Scenario: Prefilled with the last known address
+- **WHEN** the user opens Connect by address for "Fi f755167e" whose last known address is `192.168.0.165:47380`
+- **THEN** the dialog reads "Reach Fi f755167e directly when it isn't found on the network. It must already be paired." and the Address field holds `192.168.0.165:47380`
+
+#### Scenario: Successful connection
+- **WHEN** the user presses Connect and the command reports connected
+- **THEN** "Connect" was unavailable and "Connecting…" was shown while the command ran, the dialog closes, and "Connected to Fi f755167e" is shown
+
+#### Scenario: Invalid address
+- **WHEN** the user enters `192.168.0` and presses Connect
+- **THEN** the dialog stays open, the text `192.168.0` is kept, and the field shows the invalid-address line
+
+#### Scenario: Wrong device at the address
+- **WHEN** the command reports a trust failure for `192.168.0.20:47380`
+- **THEN** the dialog shows "The device at 192.168.0.20:47380 isn't Fi f755167e." and stays open
+
+#### Scenario: Dialog in Spanish
+- **WHEN** the interface is in Spanish and the user opens Connect by address
+- **THEN** the title, lead line, field label, help line and buttons are Spanish, and the prefilled address is unchanged
+
+#### Scenario: Phone
+- **WHEN** the user opens Connect by address from Details on a 390px-wide screen
+- **THEN** it opens as a bottom sheet with the same content and actions

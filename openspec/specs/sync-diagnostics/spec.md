@@ -77,3 +77,26 @@ The application SHALL produce a plain-text diagnostic block for a trusted device
 #### Scenario: Diagnostic block is secret-free
 - **WHEN** the block is produced after a pairing that derived a SAS and after key operations with sentinel values
 - **THEN** the text contains none of the sentinel values and no SAS representation
+
+### Requirement: Per-peer detail carries a typed failure kind and the last known address
+Alongside the failure reason text, the per-peer connection detail SHALL carry the failure kind as a typed value, exactly one of: no route (no eligible endpoint known), route (the address did not answer or the dial timed out), TLS, trust, stream, transport, or paused. Each kind SHALL have a stable failure code for display under Details and in support conversations: `NO_ELIGIBLE_ENDPOINT`, `ROUTE_FAILED`, `TLS_FAILED`, `TRUST_FAILED`, `STREAM_FAILED`, `TRANSPORT_FAILED` and `SYNC_PAUSED`. The kind SHALL be absent when the last attempt did not fail. The detail SHALL also carry the peer's most recently successful remembered address, or none when no address is remembered, so a client can prefill a manual connection. Both values SHALL be carried by the same emission that carries the connection state.
+
+#### Scenario: No route
+- **WHEN** a peer's last attempt failed because no eligible endpoint was known
+- **THEN** its detail carries the no-route kind, whose code is `NO_ELIGIBLE_ENDPOINT`, and no attempt endpoint
+
+#### Scenario: Timed-out dial
+- **WHEN** a peer's last attempt timed out at `192.168.0.165:47380`
+- **THEN** its detail carries the route kind and the attempt endpoint `192.168.0.165:47380`
+
+#### Scenario: Key mismatch
+- **WHEN** the device at the dialed address presented a key other than the peer's trusted key
+- **THEN** the detail carries the trust kind
+
+#### Scenario: Last known address
+- **WHEN** a peer was last reached at `192.168.0.165:47380` and earlier at `192.168.0.20:47380`
+- **THEN** its detail's last known address is `192.168.0.165:47380`
+
+#### Scenario: Synced peer
+- **WHEN** a peer is synced
+- **THEN** its detail carries no failure kind
