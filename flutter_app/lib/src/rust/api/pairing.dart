@@ -53,6 +53,22 @@ Future<LocalDeviceDto?> localDevice() =>
 Future<void> connectDeviceNow({required String deviceId}) =>
     RustLib.instance.api.crateApiPairingConnectDeviceNow(deviceId: deviceId);
 
+/// Dials a trusted, non-revoked peer at a user-typed address. Address and
+/// connection problems are outcomes; paused and unknown/revoked devices are
+/// errors.
+Future<ManualConnectOutcomeDto> connectDeviceAtAddress({
+  required String deviceId,
+  required String address,
+}) => RustLib.instance.api.crateApiPairingConnectDeviceAtAddress(
+  deviceId: deviceId,
+  address: address,
+);
+
+/// Addresses at which a paired device on the same LAN can reach this one, as
+/// `ip:port`; empty when networking has no bound sync port.
+Future<List<String>> localSyncAddresses() =>
+    RustLib.instance.api.crateApiPairingLocalSyncAddresses();
+
 Future<NetworkPreferencesDto> networkPreferences() =>
     RustLib.instance.api.crateApiPairingNetworkPreferences();
 

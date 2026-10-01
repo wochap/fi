@@ -5,6 +5,7 @@ import 'package:fi/voice/engine.dart';
 import 'package:fi/voice/fakes.dart';
 import 'package:fi/voice/services.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/intl.dart';
 
@@ -265,7 +266,92 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 200));
     expect(find.byKey(const Key('settings-network')), findsOneWidget);
+    expect(find.byKey(const Key('settings-this-device')), findsOneWidget);
     expect(find.byKey(const Key('build-version')), findsNothing);
+  });
+
+  group('This device', () {
+    Future<void> openDesktop(
+      WidgetTester tester,
+      FakeCollectionBridge bridge,
+    ) async {
+      await _openSettings(
+        tester,
+        capabilities: PlatformCapabilities.desktop,
+        size: const Size(1240, 900),
+        bridge: bridge,
+      );
+      await pumpUntilFound(tester, find.byKey(const Key('build-version')));
+    }
+
+    testWidgets('sits between Version and Network', (tester) async {
+      await openDesktop(tester, _ready());
+      final about = find.byKey(const Key('settings-about'));
+      double top(String text) => tester
+          .getTopLeft(find.descendant(of: about, matching: find.text(text)))
+          .dy;
+      expect(find.text('192.168.0.165:47380'), findsOneWidget);
+      expect(top('Version'), lessThan(top('This device')));
+      expect(top('This device'), lessThan(top('Network')));
+    });
+
+    testWidgets('copies exactly the address', (tester) async {
+      final copied = <String>[];
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method == 'Clipboard.setData') {
+            copied.add((call.arguments as Map)['text'] as String);
+          }
+          return null;
+        },
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        ),
+      );
+      await openDesktop(tester, _ready());
+      await tester.tap(
+        find.byKey(const Key('settings-copy-address-192.168.0.165:47380')),
+      );
+      await tester.pump();
+      expect(copied, ['192.168.0.165:47380']);
+      expect(find.text('Address copied'), findsOneWidget);
+    });
+
+    testWidgets('reads Not on a local network without addresses', (
+      tester,
+    ) async {
+      await openDesktop(tester, _ready()..localAddresses = const []);
+      expect(find.text('Not on a local network'), findsOneWidget);
+      expect(find.byTooltip('Copy address'), findsNothing);
+    });
+
+    testWidgets('lists each address with its own copy action', (tester) async {
+      await openDesktop(
+        tester,
+        _ready()
+          ..localAddresses = const [
+            '192.168.0.10:47380',
+            '192.168.0.165:47380',
+          ],
+      );
+      expect(find.byTooltip('Copy address'), findsNWidgets(2));
+    });
+
+    testWidgets('re-reads the addresses on resume', (tester) async {
+      final bridge = _ready();
+      await openDesktop(tester, bridge);
+      bridge.localAddresses = const ['10.0.0.7:47380'];
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('nav-settings')));
+      await tester.pumpAndSettle();
+      expect(find.text('10.0.0.7:47380'), findsOneWidget);
+      expect(find.text('192.168.0.165:47380'), findsNothing);
+    });
   });
 
   testWidgets('without voice services only Language and About show', (

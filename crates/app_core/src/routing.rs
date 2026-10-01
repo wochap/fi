@@ -2,7 +2,7 @@
 
 use std::{
     cmp::Reverse,
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, HashMap, HashSet},
     net::SocketAddr,
     sync::{
         Arc, Mutex, Weak,
@@ -16,12 +16,16 @@ use tokio::sync::{Notify, Semaphore, watch};
 
 use crate::{
     discovery::{AddressPolicy, Clock},
+    endpoint_memory::REMEMBERED_ENDPOINT_TTL_MS,
     identity::DeviceId,
 };
 
+/// Where an endpoint was learned. Declaration order is rank order:
+/// remembered addresses rank below anything fresh.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum EndpointSource {
     Lan,
+    Remembered,
     Tailscale,
 }
 
@@ -150,15 +154,39 @@ impl EndpointRegistry {
             .min()
     }
 
-    pub fn endpoint_mut(
+    /// Records a success on every endpoint of `device` with `address`,
+    /// whatever its source.
+    pub fn record_success(&mut self, device: DeviceId, address: SocketAddr, now_ms: u64) {
+        for endpoint in self.matching(device, address) {
+            endpoint.record_success(now_ms);
+        }
+    }
+
+    /// Records a failure on every endpoint of `device` with `address`, so
+    /// backoff holds across sources.
+    pub fn record_failure(
         &mut self,
         device: DeviceId,
         address: SocketAddr,
-    ) -> Option<&mut NetworkEndpoint> {
+        now_ms: u64,
+        minimum_ms: u64,
+        maximum_ms: u64,
+    ) {
+        for endpoint in self.matching(device, address) {
+            endpoint.record_failure(now_ms, minimum_ms, maximum_ms);
+        }
+    }
+
+    fn matching(
+        &mut self,
+        device: DeviceId,
+        address: SocketAddr,
+    ) -> impl Iterator<Item = &mut NetworkEndpoint> {
         self.endpoints
-            .get_mut(&device)?
-            .iter_mut()
-            .find(|endpoint| endpoint.address == address)
+            .get_mut(&device)
+            .into_iter()
+            .flatten()
+            .filter(move |endpoint| endpoint.address == address)
     }
 }
 
@@ -195,6 +223,8 @@ pub fn rank_endpoints_with_policy(
             endpoint.interface_scope,
         )
     });
+    let mut seen = HashSet::new();
+    ranked.retain(|endpoint| seen.insert(endpoint.address));
     ranked
 }
 
@@ -663,6 +693,93 @@ impl ConnectionManager {
         self.dial(peer, now_ms).await
     }
 
+    /// Dials `peer` at one user-supplied address, pinned to its trusted key
+    /// like every dial. Never replaces a live session: an established peer
+    /// returns `Ok(0)` without dialing. The address is not added to the
+    /// registry; a session that authenticates is remembered by the caller.
+    pub async fn connect_address(
+        &self,
+        peer: DeviceId,
+        address: SocketAddr,
+        now_ms: u64,
+    ) -> Result<u64, ConnectionFailure> {
+        if self.is_paused() {
+            return Err(ConnectionFailure::Paused);
+        }
+        if self.states.borrow().get(&peer).is_some_and(is_established) {
+            return Ok(0);
+        }
+        let _claim = self.claim(peer, false);
+        let _permit = self
+            .attempts
+            .acquire()
+            .await
+            .map_err(|_| ConnectionFailure::Transport("connection manager closed".into()))?;
+        let started = tokio::time::Instant::now();
+        let elapsed_now =
+            || now_ms.saturating_add(started.elapsed().as_millis().try_into().unwrap_or(u64::MAX));
+        if let Ok(mut last_attempt) = self.last_attempt.lock() {
+            last_attempt.insert(peer, now_ms);
+        }
+        self.set_attempt_state(peer, PeerConnectionState::Connecting { endpoint: address });
+        self.set_attempt_state(
+            peer,
+            PeerConnectionState::Authenticating { endpoint: address },
+        );
+        let endpoint = NetworkEndpoint {
+            address,
+            source: EndpointSource::Remembered,
+            observed_at_ms: now_ms,
+            expires_at_ms: now_ms.saturating_add(REMEMBERED_ENDPOINT_TTL_MS),
+            interface_scope: None,
+            last_success_ms: None,
+            failures: 0,
+            retry_after_ms: None,
+        };
+        let timeout = Duration::from_millis(self.timing.dial_timeout_ms);
+        let result = tokio::time::timeout(timeout, self.connector.connect(peer, endpoint))
+            .await
+            .unwrap_or_else(|_| {
+                Err(ConnectionFailure::Route(format!(
+                    "dial timed out after {} ms",
+                    self.timing.dial_timeout_ms
+                )))
+            });
+        match result {
+            Ok(generation) => {
+                if let Ok(mut registry) = self.registry.lock() {
+                    registry.record_success(peer, address, elapsed_now());
+                }
+                if let Ok(mut not_before) = self.not_before.lock() {
+                    not_before.remove(&peer);
+                }
+                self.set_attempt_state(peer, PeerConnectionState::Connected);
+                Ok(generation)
+            }
+            Err(error) => {
+                tracing::info!(
+                    event = "peer_dial_failed",
+                    device_id = %peer,
+                    endpoint = %address,
+                    source = "manual",
+                    error = %error,
+                    "dial to peer endpoint failed"
+                );
+                if let Ok(mut not_before) = self.not_before.lock() {
+                    not_before.insert(peer, elapsed_now().saturating_add(self.retry_min_ms));
+                }
+                self.set_attempt_state(
+                    peer,
+                    PeerConnectionState::Failed {
+                        failure: error.clone(),
+                        endpoint: Some(address),
+                    },
+                );
+                Err(error)
+            }
+        }
+    }
+
     /// The provisioning dial of a pairing commit. Explicit pairing is not
     /// governed by the sync pause, so this dials even while paused.
     pub async fn connect_for_pairing(
@@ -722,10 +839,8 @@ impl ConnectionManager {
                     });
             match result {
                 Ok(generation) => {
-                    if let Ok(mut registry) = self.registry.lock()
-                        && let Some(route) = registry.endpoint_mut(peer, endpoint.address)
-                    {
-                        route.record_success(elapsed_now());
+                    if let Ok(mut registry) = self.registry.lock() {
+                        registry.record_success(peer, endpoint.address, elapsed_now());
                     }
                     if let Ok(mut not_before) = self.not_before.lock() {
                         not_before.remove(&peer);
@@ -742,10 +857,14 @@ impl ConnectionManager {
                         error = %error,
                         "dial to peer endpoint failed"
                     );
-                    if let Ok(mut registry) = self.registry.lock()
-                        && let Some(route) = registry.endpoint_mut(peer, endpoint.address)
-                    {
-                        route.record_failure(elapsed_now(), self.retry_min_ms, self.retry_max_ms);
+                    if let Ok(mut registry) = self.registry.lock() {
+                        registry.record_failure(
+                            peer,
+                            endpoint.address,
+                            elapsed_now(),
+                            self.retry_min_ms,
+                            self.retry_max_ms,
+                        );
                     }
                     last = error;
                 }
@@ -1008,15 +1127,15 @@ mod tests {
             2,
             "upsert must not replace"
         );
-        registry
-            .endpoint_mut(device, second.address)
-            .unwrap()
-            .record_failure(10, 10, 100);
+        registry.record_failure(device, second.address, 10, 10, 100);
         let mut refreshed = second.clone();
         refreshed.observed_at_ms = 11;
         refreshed.expires_at_ms = 200;
         registry.upsert(device, refreshed);
-        let kept = registry.endpoint_mut(device, second.address).unwrap();
+        let kept = registry.endpoints[&device]
+            .iter()
+            .find(|endpoint| endpoint.address == second.address)
+            .unwrap();
         assert_eq!(kept.failures, 1, "history survives a refresh");
         assert_eq!(kept.expires_at_ms, 200);
         // An observed successful connection ranks first on the next dial.
@@ -1035,6 +1154,41 @@ mod tests {
         late.expires_at_ms = 300;
         registry.upsert(device, late);
         assert_eq!(registry.ranked(device, 150).len(), 2);
+    }
+
+    #[test]
+    fn fresh_lan_outranks_a_newer_remembered_address() {
+        let lan = endpoint(EndpointSource::Lan, 1);
+        let mut remembered = endpoint(EndpointSource::Remembered, 2);
+        remembered.last_success_ms = Some(50);
+        let ranked = rank_endpoints(&[remembered, lan], 10);
+        assert_eq!(
+            ranked.iter().map(|item| item.source).collect::<Vec<_>>(),
+            vec![EndpointSource::Lan, EndpointSource::Remembered]
+        );
+    }
+
+    #[test]
+    fn one_address_from_two_sources_is_ranked_once_and_backs_off_together() {
+        let device = DeviceId::from_public_key(&[4; 32]);
+        let mut registry = EndpointRegistry::default();
+        let lan = endpoint(EndpointSource::Lan, 1);
+        let mut remembered = endpoint(EndpointSource::Remembered, 1);
+        remembered.expires_at_ms = 1_000;
+        registry.upsert(device, lan.clone());
+        registry.upsert(device, remembered);
+        let ranked = registry.ranked(device, 10);
+        assert_eq!(ranked.len(), 1);
+        assert_eq!(ranked[0].source, EndpointSource::Lan);
+
+        registry.record_failure(device, lan.address, 10, 20, 100);
+        assert!(
+            registry.endpoints[&device]
+                .iter()
+                .all(|item| item.failures == 1)
+        );
+        assert!(registry.ranked(device, 29).is_empty());
+        assert_eq!(registry.ranked(device, 30).len(), 1);
     }
 
     #[test]
@@ -1077,8 +1231,6 @@ mod tests {
     }
 
     // ---- Reconnect orchestration -------------------------------------------------
-
-    use std::collections::HashSet;
 
     /// Milliseconds on Tokio's clock, so paused virtual time drives both the
     /// scheduler's sleeps and the timestamps it compares against.
@@ -1508,6 +1660,75 @@ mod tests {
         let times = node.manager.attempt_times();
         assert_eq!(times.get(&remote), Some(&now));
         assert_eq!(times.get(&other), None);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn connect_address_reaches_a_peer_without_registry_entries() {
+        let (local, remote) = devices();
+        let lan = Arc::new(FakeLan::default());
+        lan.listeners
+            .lock()
+            .unwrap()
+            .insert(address(2, 7000), remote);
+        let node = Node::new(local, &lan);
+        assert!(
+            node.manager
+                .connect_address(remote, address(2, 7000), node.now())
+                .await
+                .is_ok()
+        );
+        assert_eq!(lan.dialed_addresses(), vec![address(2, 7000)]);
+        assert_eq!(node.state(remote), Some(PeerConnectionState::Connected));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn connect_address_without_listener_fails_with_route() {
+        let (local, remote) = devices();
+        let lan = Arc::new(FakeLan::default());
+        lan.black_holes.lock().unwrap().insert(address(2, 7000));
+        let node = Node::new(local, &lan);
+        let started = tokio::time::Instant::now();
+        let result = node
+            .manager
+            .connect_address(remote, address(2, 7000), node.now())
+            .await;
+        assert!(matches!(result, Err(ConnectionFailure::Route(_))));
+        assert!(started.elapsed() <= Duration::from_millis(5_100));
+        assert!(matches!(
+            node.state(remote),
+            Some(PeerConnectionState::Failed {
+                failure: ConnectionFailure::Route(_),
+                endpoint: Some(endpoint),
+            }) if endpoint == address(2, 7000)
+        ));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn connect_address_respects_pause_and_live_sessions() {
+        let (local, remote) = devices();
+        let lan = Arc::new(FakeLan::default());
+        lan.listeners
+            .lock()
+            .unwrap()
+            .insert(address(2, 7000), remote);
+        let node = Node::new(local, &lan);
+        node.manager.set_paused(true);
+        assert_eq!(
+            node.manager
+                .connect_address(remote, address(2, 7000), node.now())
+                .await,
+            Err(ConnectionFailure::Paused)
+        );
+        assert_eq!(lan.dial_count(), 0);
+        node.manager.set_paused(false);
+        node.manager.set_state(remote, PeerConnectionState::Synced);
+        assert_eq!(
+            node.manager
+                .connect_address(remote, address(2, 7000), node.now())
+                .await,
+            Ok(0)
+        );
+        assert_eq!(lan.dial_count(), 0);
     }
 
     // Pins that suspending (Android background) stops automatic redials.

@@ -236,6 +236,35 @@ final class FakeCollectionBridge implements CollectionBridge {
     if (connectDelay case final delay?) await delay();
   }
 
+  /// Outcome [connectDeviceAtAddress] returns unless [connectAddressError]
+  /// is set; a set [connectAddressGate] holds each call open until it
+  /// completes.
+  ManualConnectOutcomeDto connectOutcome = const ManualConnectOutcomeDto(
+    kind: ManualConnectKindDto.connected,
+  );
+  Object? connectAddressError;
+  final List<(String, String)> connectAddressCalls = [];
+  Completer<void>? connectAddressGate;
+  @override
+  Future<ManualConnectOutcomeDto> connectDeviceAtAddress(
+    String deviceId,
+    String address,
+  ) async {
+    connectAddressCalls.add((deviceId, address));
+    if (connectAddressGate case final gate?) await gate.future;
+    if (connectAddressError case final error?) throw error;
+    return connectOutcome;
+  }
+
+  /// What [localSyncAddresses] reports; [localAddressesError] makes it throw.
+  List<String> localAddresses = const ['192.168.0.165:47380'];
+  Object? localAddressesError;
+  @override
+  Future<List<String>> localSyncAddresses() async {
+    if (localAddressesError case final error?) throw error;
+    return List.of(localAddresses);
+  }
+
   /// Retained lines per device id; local lines use the key `null`.
   final Map<String?, List<LogEventDto>> logs = {};
   final List<String?> logQueries = [];
@@ -1264,6 +1293,8 @@ final class FakeCollectionBridge implements CollectionBridge {
       attemptEndpoint: old.attemptEndpoint,
       lastAttemptMs: old.lastAttemptMs,
       failure: old.failure,
+      failureKind: old.failureKind,
+      lastKnownEndpoint: old.lastKnownEndpoint,
     );
     devicesController.add(List.of(devices));
   }
@@ -1291,6 +1322,8 @@ final class FakeCollectionBridge implements CollectionBridge {
       attemptEndpoint: old.attemptEndpoint,
       lastAttemptMs: old.lastAttemptMs,
       failure: old.failure,
+      failureKind: old.failureKind,
+      lastKnownEndpoint: old.lastKnownEndpoint,
     );
     devicesController.add(List.of(devices));
     return RevocationOutcomeDto(

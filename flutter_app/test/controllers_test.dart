@@ -615,6 +615,40 @@ void main() {
     controller.dispose();
   });
 
+  test('devices controller loads local sync addresses', () async {
+    final bridge = FakeCollectionBridge();
+    final controller = DevicesController(bridge);
+    await controller.loadLocalAddresses();
+    expect(controller.localAddresses, ['192.168.0.165:47380']);
+    bridge.localAddressesError = StateError('no network');
+    await controller.loadLocalAddresses();
+    expect(controller.localAddresses, isEmpty);
+    controller.dispose();
+  });
+
+  test('devices controller connects by address while marked busy', () async {
+    const peer = TrustedDeviceDto(
+      deviceId: 'peer',
+      friendlyName: 'Peer',
+      pairedAtMs: 1,
+      revoked: false,
+      connection: PeerConnectionKindDto.error,
+    );
+    final gate = Completer<void>();
+    final bridge = FakeCollectionBridge()
+      ..devices.add(peer)
+      ..connectAddressGate = gate;
+    final controller = DevicesController(bridge);
+    final pending = controller.connectByAddress(peer, '192.168.0.20');
+    expect(controller.reconnecting, {'peer'});
+    gate.complete();
+    final outcome = await pending;
+    expect(outcome.kind, ManualConnectKindDto.connected);
+    expect(controller.reconnecting, isEmpty);
+    expect(bridge.connectAddressCalls, [('peer', '192.168.0.20')]);
+    controller.dispose();
+  });
+
   test('devices controller loads peer and local log lines', () async {
     const peer = TrustedDeviceDto(
       deviceId: 'peer',
@@ -1029,6 +1063,8 @@ final class ClosingDevicesBridge implements CollectionBridge {
   Future<void> setBuildInfo(String version) => inner.setBuildInfo(version);
   @override
   Future<LocalDeviceDto?> localDevice() => inner.localDevice();
+  @override
+  Future<List<String>> localSyncAddresses() => inner.localSyncAddresses();
 
   @override
   dynamic noSuchMethod(Invocation invocation) =>

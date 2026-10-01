@@ -4783,6 +4783,180 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Download'**
   String get langVoiceDownload;
+
+  /// Error tag on a device row whose last connection attempt failed to reach it.
+  ///
+  /// In en, this message translates to:
+  /// **'Not reachable'**
+  String get peerNotReachable;
+
+  /// Error tag on a device row whose last attempt failed a trust or TLS check.
+  ///
+  /// In en, this message translates to:
+  /// **'Can\'t verify'**
+  String get peerCantVerify;
+
+  /// Problem line when no address is known for the device.
+  ///
+  /// In en, this message translates to:
+  /// **'Not found on your network'**
+  String get peerNotFound;
+
+  /// Problem line when the device did not answer at the address tried.
+  ///
+  /// In en, this message translates to:
+  /// **'Didn\'t answer at its last address'**
+  String get peerNoAnswer;
+
+  /// Problem line after a trust or TLS failure.
+  ///
+  /// In en, this message translates to:
+  /// **'It no longer recognizes this device'**
+  String get peerNotRecognized;
+
+  /// Device row line combining the problem and when it last synced.
+  ///
+  /// In en, this message translates to:
+  /// **'{problem} · Last synced {time}'**
+  String peerLastSynced(String problem, String time);
+
+  /// Device row line for a problem device that never synced.
+  ///
+  /// In en, this message translates to:
+  /// **'{problem} · Never synced'**
+  String peerNeverSynced(String problem);
+
+  /// Guidance under a device that cannot be reached.
+  ///
+  /// In en, this message translates to:
+  /// **'Make sure both devices are on the same Wi-Fi and Fi is open on the other device. Fi keeps trying on its own.'**
+  String get peerGuidanceReach;
+
+  /// Guidance under a device that cannot be verified.
+  ///
+  /// In en, this message translates to:
+  /// **'The other device may have been reset or may have unpaired this one. Pair again on both devices.'**
+  String get peerGuidanceVerify;
+
+  /// Button that retries the connection to a device now.
+  ///
+  /// In en, this message translates to:
+  /// **'Try again'**
+  String get peerTryAgain;
+
+  /// Button that starts pairing mode again.
+  ///
+  /// In en, this message translates to:
+  /// **'Pair again'**
+  String get peerPairAgain;
+
+  /// Button that opens the Connect by address dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect by address…'**
+  String get peerConnectByAddress;
+
+  /// Title of the Connect by address dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect by address'**
+  String get connectAddressTitle;
+
+  /// Lead line of the Connect by address dialog, naming the device.
+  ///
+  /// In en, this message translates to:
+  /// **'Reach {name} directly when it isn\'t found on the network. It must already be paired.'**
+  String connectAddressLead(String name);
+
+  /// Label of the address field.
+  ///
+  /// In en, this message translates to:
+  /// **'Address'**
+  String get connectAddressField;
+
+  /// Help line under the address field.
+  ///
+  /// In en, this message translates to:
+  /// **'Find it on the other device under Settings › About › This device.'**
+  String get connectAddressHelp;
+
+  /// Button that dials the typed address.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect'**
+  String get connectAddressConnect;
+
+  /// Shown while the dial runs.
+  ///
+  /// In en, this message translates to:
+  /// **'Connecting…'**
+  String get connectAddressConnecting;
+
+  /// Confirmation after a successful connect by address.
+  ///
+  /// In en, this message translates to:
+  /// **'Connected to {name}'**
+  String connectAddressConnected(String name);
+
+  /// Field error for an address that does not parse.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter an IPv4 address like 192.168.0.165, optionally followed by :port.'**
+  String get connectAddressInvalid;
+
+  /// Field error for an address outside the local network.
+  ///
+  /// In en, this message translates to:
+  /// **'Use an address on your local network, like 192.168.x.x.'**
+  String get connectAddressNotLocal;
+
+  /// Error when nothing answered at the typed address.
+  ///
+  /// In en, this message translates to:
+  /// **'No answer at {address}. Check the address and that Fi is open on the other device.'**
+  String connectAddressNoAnswer(String address);
+
+  /// Error when another device answered at the typed address.
+  ///
+  /// In en, this message translates to:
+  /// **'The device at {address} isn\'t {name}.'**
+  String connectAddressWrongDevice(String address, String name);
+
+  /// Error when sync is paused.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync with paired devices is off. Turn it on to connect.'**
+  String get connectAddressPaused;
+
+  /// About row listing this device's sync addresses.
+  ///
+  /// In en, this message translates to:
+  /// **'This device'**
+  String get aboutThisDevice;
+
+  /// About row value when this device has no local-network address.
+  ///
+  /// In en, this message translates to:
+  /// **'Not on a local network'**
+  String get aboutNotOnLocalNetwork;
+
+  /// Confirmation after copying an address.
+  ///
+  /// In en, this message translates to:
+  /// **'Address copied'**
+  String get aboutAddressCopied;
+
+  /// Tooltip of the copy-address button.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy address'**
+  String get aboutCopyAddress;
+
+  /// Details label of the failure code.
+  ///
+  /// In en, this message translates to:
+  /// **'Failure code'**
+  String get devicesFailureCode;
 }
 
 class _AppLocalizationsDelegate

@@ -82,6 +82,7 @@ const failedPeer = TrustedDeviceDto(
   attemptEndpoint: '192.168.1.20:47380',
   lastAttemptMs: 1,
   failure: 'TLS failed: bad certificate',
+  failureKind: ConnectionFailureKindDto.tls,
 );
 
 /// Records what the app writes to the clipboard.
@@ -174,6 +175,14 @@ void diagnosticsTests() {
       find.byKey(const Key('device-details-$failedPeerId')),
     );
     expect(find.text('TLS failed: bad certificate'), findsOneWidget);
+    expect(
+      tester
+          .widget<Text>(
+            find.byKey(const Key('device-failure-code-$failedPeerId')),
+          )
+          .data,
+      'TLS_FAILED',
+    );
     String fact(String name) =>
         tester.widget<Text>(find.byKey(Key('device-fact-$name'))).data!;
     expect(fact('Endpoint'), '192.168.1.20:47380');
@@ -248,6 +257,10 @@ void diagnosticsTests() {
     expect(find.byKey(const Key('device-copy-$failedPeerId')), findsOneWidget);
     expect(
       find.byKey(const Key('device-reconnect-$failedPeerId')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const Key('device-details-connect-address-$failedPeerId')),
       findsNothing,
     );
   });

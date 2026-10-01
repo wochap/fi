@@ -2993,4 +2993,109 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get langVoiceDownload => 'Download';
+
+  @override
+  String get peerNotReachable => 'Not reachable';
+
+  @override
+  String get peerCantVerify => 'Can\'t verify';
+
+  @override
+  String get peerNotFound => 'Not found on your network';
+
+  @override
+  String get peerNoAnswer => 'Didn\'t answer at its last address';
+
+  @override
+  String get peerNotRecognized => 'It no longer recognizes this device';
+
+  @override
+  String peerLastSynced(String problem, String time) {
+    return '$problem · Last synced $time';
+  }
+
+  @override
+  String peerNeverSynced(String problem) {
+    return '$problem · Never synced';
+  }
+
+  @override
+  String get peerGuidanceReach =>
+      'Make sure both devices are on the same Wi-Fi and Fi is open on the other device. Fi keeps trying on its own.';
+
+  @override
+  String get peerGuidanceVerify =>
+      'The other device may have been reset or may have unpaired this one. Pair again on both devices.';
+
+  @override
+  String get peerTryAgain => 'Try again';
+
+  @override
+  String get peerPairAgain => 'Pair again';
+
+  @override
+  String get peerConnectByAddress => 'Connect by address…';
+
+  @override
+  String get connectAddressTitle => 'Connect by address';
+
+  @override
+  String connectAddressLead(String name) {
+    return 'Reach $name directly when it isn\'t found on the network. It must already be paired.';
+  }
+
+  @override
+  String get connectAddressField => 'Address';
+
+  @override
+  String get connectAddressHelp =>
+      'Find it on the other device under Settings › About › This device.';
+
+  @override
+  String get connectAddressConnect => 'Connect';
+
+  @override
+  String get connectAddressConnecting => 'Connecting…';
+
+  @override
+  String connectAddressConnected(String name) {
+    return 'Connected to $name';
+  }
+
+  @override
+  String get connectAddressInvalid =>
+      'Enter an IPv4 address like 192.168.0.165, optionally followed by :port.';
+
+  @override
+  String get connectAddressNotLocal =>
+      'Use an address on your local network, like 192.168.x.x.';
+
+  @override
+  String connectAddressNoAnswer(String address) {
+    return 'No answer at $address. Check the address and that Fi is open on the other device.';
+  }
+
+  @override
+  String connectAddressWrongDevice(String address, String name) {
+    return 'The device at $address isn\'t $name.';
+  }
+
+  @override
+  String get connectAddressPaused =>
+      'Sync with paired devices is off. Turn it on to connect.';
+
+  @override
+  String get aboutThisDevice => 'This device';
+
+  @override
+  String get aboutNotOnLocalNetwork => 'Not on a local network';
+
+  @override
+  String get aboutAddressCopied => 'Address copied';
+
+  @override
+  String get aboutCopyAddress => 'Copy address';
+
+  @override
+  String get devicesFailureCode => 'Failure code';
 }

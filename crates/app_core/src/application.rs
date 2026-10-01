@@ -22,8 +22,9 @@ use tracing::{error, info, instrument, warn};
 use crate::{
     LocalIdentityRecord, ResetIntent,
     adapters::{FileDocumentStore, LocalTransport, SqliteControlStore},
-    control::NetworkPreferences,
-    discovery::DiscoveryGroupSecret,
+    control::{NetworkPreferences, TrustState},
+    discovery::{AddressPolicy, DiscoveryGroupSecret},
+    endpoint_memory::{ManualConnectOutcome, REMEMBERED_ENDPOINT_TTL_MS, parse_manual_address},
     error::{AppError, BootstrapError, Result},
     events::{ApplicationState, DataChanged, DomainKind, ErrorEvent, ProjectionState},
     generic::{
@@ -46,7 +47,10 @@ use crate::{
     },
     quinn_transport::{QuinnTransport, QuinnTransportConfig, QuinnTransportError},
     records::{GenericRecord, RecordId},
-    routing::{ConnectionManager, EndpointRegistry, NetworkEndpoint, PeerConnectionState},
+    routing::{
+        ConnectionFailure, ConnectionManager, EndpointRegistry, EndpointSource, NetworkEndpoint,
+        PeerConnectionState,
+    },
     schema::{
         CollectionSchema, CollectionSchemaId, EnumOption, EnumOptionId, FieldDefinition, FieldId,
     },
@@ -510,6 +514,7 @@ impl AppCore {
         let endpoints = Arc::new(Mutex::new(EndpointRegistry::new(
             crate::discovery::AddressPolicy::for_bind(bind.ip()),
         )));
+        load_remembered_endpoints(&control_store, &endpoints, current_time_ms());
         network.set_accepting(preferences.sync_enabled);
         pairing.set_normal_discovery_enabled(preferences.discoverable);
         let connections =
@@ -541,7 +546,7 @@ impl AppCore {
                 requires_reopen: false,
             });
         }
-        Self::open_with_components(
+        let core = Self::open_with_components(
             data_dir,
             config,
             network.clone(),
@@ -555,7 +560,15 @@ impl AppCore {
                 deferred,
             },
         )
-        .await
+        .await?;
+        // Remembered endpoints are dialable without waiting for discovery.
+        if core.networking_active()
+            && core.networking_deferred().is_none()
+            && let Some(connections) = core.connections.as_ref()
+        {
+            connections.reconnect_known_peers(current_time_ms());
+        }
+        Ok(core)
     }
 
     async fn open_with_config_and_transport(
@@ -646,7 +659,11 @@ impl AppCore {
             network_components.connections.clone(),
             network_components.network.clone(),
         ) {
-            spawn_observed_address_bridge(network.clone(), network_components.endpoints.clone());
+            spawn_observed_address_bridge(
+                network.clone(),
+                network_components.endpoints.clone(),
+                control_store.clone(),
+            );
             spawn_discovery_bridge(
                 pairing,
                 network_components.endpoints.clone(),
@@ -1041,6 +1058,60 @@ impl AppCore {
             .await
             .map_err(AppError::from)
     }
+    /// Dials a trusted peer at a user-typed address. Input and policy
+    /// problems are outcomes, not errors; a paused sync is an error so the
+    /// caller keeps its paused mapping.
+    pub async fn connect_peer_at_address(
+        &self,
+        peer: DeviceId,
+        input: &str,
+        now_ms: u64,
+    ) -> Result<ManualConnectOutcome> {
+        let connections = self
+            .connections
+            .as_ref()
+            .ok_or_else(|| AppError::Storage("networking is not enabled".into()))?;
+        let Ok(address) = parse_manual_address(input) else {
+            return Ok(ManualConnectOutcome::InvalidAddress);
+        };
+        let policy = self
+            .endpoints
+            .lock()
+            .map_err(|_| AppError::Storage("endpoint registry lock poisoned".into()))?
+            .policy();
+        if !policy.admits_peer_address(address.ip()) {
+            return Ok(ManualConnectOutcome::NotLocalNetwork);
+        }
+        match connections.connect_address(peer, address, now_ms).await {
+            Ok(_) => Ok(ManualConnectOutcome::Connected),
+            Err(ConnectionFailure::Paused) => Err(AppError::Connection(ConnectionFailure::Paused)),
+            Err(failure) => Ok(ManualConnectOutcome::Failed(failure)),
+        }
+    }
+
+    /// Most recently successful remembered address per device.
+    #[must_use]
+    pub fn last_known_endpoints(&self) -> std::collections::HashMap<DeviceId, SocketAddr> {
+        let mut known = std::collections::HashMap::new();
+        for row in self.control.remembered_endpoints().unwrap_or_default() {
+            known.entry(row.device_id).or_insert(row.address);
+        }
+        known
+    }
+
+    /// Addresses at which a LAN peer can dial this device: every advertisable
+    /// interface address with the bound sync port.
+    #[must_use]
+    pub fn local_sync_addresses(&self) -> Vec<SocketAddr> {
+        let Some(bound) = self.network_addr() else {
+            return Vec::new();
+        };
+        order_sync_addresses(
+            AddressPolicy::for_bind(bound.ip()).local_advertisable_addresses(),
+            bound.port(),
+        )
+    }
+
     pub async fn disconnect_peer(&self, peer: DeviceId) -> Result<()> {
         let network = self
             .network
@@ -2668,9 +2739,81 @@ async fn wait_for_session(
 
 /// Records the address each authenticated session was actually reached on, so the
 /// demonstrated-reachable address ranks ahead of whatever was advertised.
+/// Private IPv4 first (by [`AddressPolicy::rank`]), then ascending.
+fn order_sync_addresses(ips: Vec<std::net::IpAddr>, port: u16) -> Vec<SocketAddr> {
+    let mut addresses: Vec<SocketAddr> = ips
+        .into_iter()
+        .map(|ip| SocketAddr::new(ip, port))
+        .collect();
+    addresses.sort_by_key(|address| (AddressPolicy::rank(address.ip()), *address));
+    addresses.dedup();
+    addresses
+}
+
+/// Prunes expired remembered addresses and loads those of trusted devices
+/// into the registry. Storage errors are logged and never fail the open.
+fn load_remembered_endpoints(
+    control: &SqliteControlStore,
+    registry: &Mutex<EndpointRegistry>,
+    now_ms: u64,
+) {
+    if let Err(error) =
+        control.prune_remembered_endpoints(now_ms.saturating_sub(REMEMBERED_ENDPOINT_TTL_MS))
+    {
+        warn!(event = "remembered_endpoints_prune_failed", error = %error);
+    }
+    let rows = match control.remembered_endpoints() {
+        Ok(rows) => rows,
+        Err(error) => {
+            warn!(event = "remembered_endpoints_load_failed", error = %error);
+            return;
+        }
+    };
+    let Ok(mut registry) = registry.lock() else {
+        return;
+    };
+    let mut count = 0_usize;
+    for row in rows {
+        let trusted = matches!(
+            control.trusted_device(row.device_id),
+            Ok(Some(record)) if record.state == TrustState::Trusted
+        );
+        if !trusted {
+            continue;
+        }
+        registry.upsert(
+            row.device_id,
+            NetworkEndpoint {
+                address: row.address,
+                source: EndpointSource::Remembered,
+                observed_at_ms: row.last_success_ms,
+                expires_at_ms: row
+                    .last_success_ms
+                    .saturating_add(REMEMBERED_ENDPOINT_TTL_MS),
+                interface_scope: None,
+                last_success_ms: Some(row.last_success_ms),
+                failures: 0,
+                retry_after_ms: None,
+            },
+        );
+        info!(
+            event = "remembered_endpoint_loaded",
+            device_id = %row.device_id,
+            address = %row.address,
+            "loaded remembered peer endpoint"
+        );
+        count += 1;
+    }
+    info!(
+        event = "remembered_endpoints_loaded",
+        count, "loaded remembered peer endpoints"
+    );
+}
+
 fn spawn_observed_address_bridge(
     network: Arc<QuinnTransport>,
     endpoints: Arc<Mutex<EndpointRegistry>>,
+    control: Arc<SqliteControlStore>,
 ) {
     let mut observed = network.subscribe_observed_addresses();
     tokio::spawn(async move {
@@ -2688,12 +2831,13 @@ fn spawn_observed_address_bridge(
                 direction = ?event.direction,
                 "recorded observed peer address"
             );
+            let mut admitted = false;
             if let Ok(mut endpoints) = endpoints.lock() {
                 endpoints.upsert(
                     event.device,
                     NetworkEndpoint {
                         address: event.address,
-                        source: crate::routing::EndpointSource::Lan,
+                        source: EndpointSource::Lan,
                         observed_at_ms: now,
                         expires_at_ms: now.saturating_add(OBSERVED_ADDRESS_TTL_MS),
                         interface_scope: None,
@@ -2702,6 +2846,44 @@ fn spawn_observed_address_bridge(
                         retry_after_ms: None,
                     },
                 );
+                admitted = endpoints.policy().admits_peer_address(event.address.ip());
+            }
+            let trusted = matches!(
+                control.trusted_device(event.device),
+                Ok(Some(record)) if record.state == TrustState::Trusted
+            );
+            if !admitted || !trusted {
+                continue;
+            }
+            if let Ok(mut endpoints) = endpoints.lock() {
+                endpoints.upsert(
+                    event.device,
+                    NetworkEndpoint {
+                        address: event.address,
+                        source: EndpointSource::Remembered,
+                        observed_at_ms: now,
+                        expires_at_ms: now.saturating_add(REMEMBERED_ENDPOINT_TTL_MS),
+                        interface_scope: None,
+                        last_success_ms: Some(now),
+                        failures: 0,
+                        retry_after_ms: None,
+                    },
+                );
+            }
+            match control.remember_peer_endpoint(event.device, event.address, now) {
+                Ok(true) => info!(
+                    event = "peer_endpoint_remembered",
+                    device_id = %event.device,
+                    address = %event.address,
+                    "remembered peer endpoint"
+                ),
+                Ok(false) => {}
+                Err(error) => warn!(
+                    event = "remember_endpoint_failed",
+                    device_id = %event.device,
+                    error = %error,
+                    "could not remember peer endpoint"
+                ),
             }
         }
     });
@@ -3254,6 +3436,26 @@ mod tests {
 
     fn device(seed: u8) -> DeviceId {
         DeviceId::from_public_key(&[seed; 32])
+    }
+
+    #[test]
+    fn order_sync_addresses_puts_private_first_then_ascending() {
+        let ordered = order_sync_addresses(
+            vec![
+                [192, 168, 0, 165].into(),
+                [10, 0, 0, 2].into(),
+                [169, 254, 1, 1].into(),
+            ],
+            47380,
+        );
+        assert_eq!(
+            ordered,
+            vec![
+                "10.0.0.2:47380".parse::<SocketAddr>().unwrap(),
+                "192.168.0.165:47380".parse().unwrap(),
+                "169.254.1.1:47380".parse().unwrap(),
+            ]
+        );
     }
 
     // Pins the sync-bridge side of "Last sync never": entering Synced records

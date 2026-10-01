@@ -938,6 +938,77 @@ pub struct TrustedDeviceDto {
     pub last_attempt_ms: Option<u64>,
     /// Failure category and message of the last attempt, when it failed.
     pub failure: Option<String>,
+    /// Typed kind of the last attempt's failure; absent when it did not fail.
+    pub failure_kind: Option<ConnectionFailureKindDto>,
+    /// Most recently successful remembered address, as `ip:port`.
+    pub last_known_endpoint: Option<String>,
+}
+
+/// Typed kind of a connection failure.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ConnectionFailureKindDto {
+    NoRoute,
+    Route,
+    Tls,
+    Trust,
+    Stream,
+    Transport,
+    Paused,
+}
+
+impl From<&app_core::ConnectionFailure> for ConnectionFailureKindDto {
+    fn from(value: &app_core::ConnectionFailure) -> Self {
+        use app_core::ConnectionFailure;
+        match value {
+            ConnectionFailure::NoRoute => Self::NoRoute,
+            ConnectionFailure::Route(_) => Self::Route,
+            ConnectionFailure::Tls(_) => Self::Tls,
+            ConnectionFailure::Trust(_) => Self::Trust,
+            ConnectionFailure::Stream(_) => Self::Stream,
+            ConnectionFailure::Transport(_) => Self::Transport,
+            ConnectionFailure::Paused => Self::Paused,
+        }
+    }
+}
+
+/// What a connect-by-address request ended with.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ManualConnectKindDto {
+    Connected,
+    InvalidAddress,
+    NotLocalNetwork,
+    Failed,
+}
+
+/// Outcome of a connect-by-address request. `failure_kind` and `message` are
+/// set only when `kind` is `Failed`. A struct rather than a data-carrying
+/// enum so the Dart side needs no code generation beyond the bridge.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ManualConnectOutcomeDto {
+    pub kind: ManualConnectKindDto,
+    pub failure_kind: Option<ConnectionFailureKindDto>,
+    pub message: Option<String>,
+}
+
+impl From<app_core::ManualConnectOutcome> for ManualConnectOutcomeDto {
+    fn from(value: app_core::ManualConnectOutcome) -> Self {
+        use app_core::ManualConnectOutcome;
+        let plain = |kind| Self {
+            kind,
+            failure_kind: None,
+            message: None,
+        };
+        match value {
+            ManualConnectOutcome::Connected => plain(ManualConnectKindDto::Connected),
+            ManualConnectOutcome::InvalidAddress => plain(ManualConnectKindDto::InvalidAddress),
+            ManualConnectOutcome::NotLocalNetwork => plain(ManualConnectKindDto::NotLocalNetwork),
+            ManualConnectOutcome::Failed(failure) => Self {
+                kind: ManualConnectKindDto::Failed,
+                failure_kind: Some((&failure).into()),
+                message: Some(failure.to_string()),
+            },
+        }
+    }
 }
 
 /// This device's identity as peers see it.
@@ -1113,20 +1184,22 @@ impl TrustedDeviceDto {
         value: app_core::TrustedDeviceRecord,
         connection: Option<&app_core::PeerConnectionState>,
         last_attempt_ms: Option<u64>,
+        last_known: Option<std::net::SocketAddr>,
         paused: bool,
     ) -> Self {
         use app_core::PeerConnectionState;
         let revoked = value.state == app_core::TrustState::Revoked;
-        let (attempt_endpoint, failure) = match connection {
+        let (attempt_endpoint, failure, failure_kind) = match connection {
             Some(
                 PeerConnectionState::Connecting { endpoint }
                 | PeerConnectionState::Authenticating { endpoint },
-            ) => (Some(endpoint.to_string()), None),
+            ) => (Some(endpoint.to_string()), None, None),
             Some(PeerConnectionState::Failed { failure, endpoint }) => (
                 endpoint.map(|endpoint| endpoint.to_string()),
                 Some(failure.to_string()),
+                Some(failure.into()),
             ),
-            _ => (None, None),
+            _ => (None, None, None),
         };
         Self {
             device_id: value.device_id.to_string(),
@@ -1143,6 +1216,8 @@ impl TrustedDeviceDto {
             attempt_endpoint,
             last_attempt_ms,
             failure,
+            failure_kind,
+            last_known_endpoint: last_known.map(|address| address.to_string()),
         }
     }
 }
@@ -1845,7 +1920,8 @@ mod tests {
             PeerConnectionState::Connecting { endpoint },
             PeerConnectionState::Authenticating { endpoint },
         ] {
-            let dto = TrustedDeviceDto::from_core(trusted_record(), Some(&state), Some(9), false);
+            let dto =
+                TrustedDeviceDto::from_core(trusted_record(), Some(&state), Some(9), None, false);
             assert_eq!(dto.connection, PeerConnectionKindDto::Searching);
             assert_eq!(dto.attempt_endpoint.as_deref(), Some("192.168.1.20:47380"));
             assert_eq!(dto.last_attempt_ms, Some(9));
@@ -1855,18 +1931,35 @@ mod tests {
             failure: ConnectionFailure::Tls("bad certificate".into()),
             endpoint: Some(endpoint),
         };
-        let dto = TrustedDeviceDto::from_core(trusted_record(), Some(&failed), Some(9), false);
+        let dto =
+            TrustedDeviceDto::from_core(trusted_record(), Some(&failed), Some(9), None, false);
         assert_eq!(dto.connection, PeerConnectionKindDto::Error);
         assert_eq!(dto.attempt_endpoint.as_deref(), Some("192.168.1.20:47380"));
         assert_eq!(dto.failure.as_deref(), Some("TLS failed: bad certificate"));
+        assert_eq!(dto.failure_kind, Some(super::ConnectionFailureKindDto::Tls));
         let no_route = PeerConnectionState::Failed {
             failure: ConnectionFailure::NoRoute,
             endpoint: None,
         };
-        let dto = TrustedDeviceDto::from_core(trusted_record(), Some(&no_route), None, false);
+        let dto = TrustedDeviceDto::from_core(trusted_record(), Some(&no_route), None, None, false);
         assert_eq!(dto.attempt_endpoint, None);
         assert_eq!(dto.failure.as_deref(), Some("no eligible endpoint"));
-        let never = TrustedDeviceDto::from_core(trusted_record(), None, None, false);
+        assert_eq!(
+            dto.failure_kind,
+            Some(super::ConnectionFailureKindDto::NoRoute)
+        );
+        let never = TrustedDeviceDto::from_core(
+            trusted_record(),
+            None,
+            None,
+            Some("192.168.0.165:47380".parse().unwrap()),
+            false,
+        );
+        assert_eq!(never.failure_kind, None);
+        assert_eq!(
+            never.last_known_endpoint.as_deref(),
+            Some("192.168.0.165:47380")
+        );
         assert_eq!(
             (never.attempt_endpoint, never.last_attempt_ms, never.failure),
             (None, None, None)

@@ -4035,5 +4035,157 @@
   "langVoiceDownload": "Download",
   "@langVoiceDownload": {
     "description": "Button that downloads the speech model the app language needs."
+  },
+  "peerNotReachable": "Not reachable",
+  "@peerNotReachable": {
+    "description": "Error tag on a device row whose last connection attempt failed to reach it."
+  },
+  "peerCantVerify": "Can't verify",
+  "@peerCantVerify": {
+    "description": "Error tag on a device row whose last attempt failed a trust or TLS check."
+  },
+  "peerNotFound": "Not found on your network",
+  "@peerNotFound": {
+    "description": "Problem line when no address is known for the device."
+  },
+  "peerNoAnswer": "Didn't answer at its last address",
+  "@peerNoAnswer": {
+    "description": "Problem line when the device did not answer at the address tried."
+  },
+  "peerNotRecognized": "It no longer recognizes this device",
+  "@peerNotRecognized": {
+    "description": "Problem line after a trust or TLS failure."
+  },
+  "peerLastSynced": "{problem} · Last synced {time}",
+  "@peerLastSynced": {
+    "description": "Device row line combining the problem and when it last synced.",
+    "placeholders": {
+      "problem": {
+        "type": "String"
+      },
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "peerNeverSynced": "{problem} · Never synced",
+  "@peerNeverSynced": {
+    "description": "Device row line for a problem device that never synced.",
+    "placeholders": {
+      "problem": {
+        "type": "String"
+      }
+    }
+  },
+  "peerGuidanceReach": "Make sure both devices are on the same Wi-Fi and Fi is open on the other device. Fi keeps trying on its own.",
+  "@peerGuidanceReach": {
+    "description": "Guidance under a device that cannot be reached."
+  },
+  "peerGuidanceVerify": "The other device may have been reset or may have unpaired this one. Pair again on both devices.",
+  "@peerGuidanceVerify": {
+    "description": "Guidance under a device that cannot be verified."
+  },
+  "peerTryAgain": "Try again",
+  "@peerTryAgain": {
+    "description": "Button that retries the connection to a device now."
+  },
+  "peerPairAgain": "Pair again",
+  "@peerPairAgain": {
+    "description": "Button that starts pairing mode again."
+  },
+  "peerConnectByAddress": "Connect by address…",
+  "@peerConnectByAddress": {
+    "description": "Button that opens the Connect by address dialog."
+  },
+  "connectAddressTitle": "Connect by address",
+  "@connectAddressTitle": {
+    "description": "Title of the Connect by address dialog."
+  },
+  "connectAddressLead": "Reach {name} directly when it isn't found on the network. It must already be paired.",
+  "@connectAddressLead": {
+    "description": "Lead line of the Connect by address dialog, naming the device.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "connectAddressField": "Address",
+  "@connectAddressField": {
+    "description": "Label of the address field."
+  },
+  "connectAddressHelp": "Find it on the other device under Settings › About › This device.",
+  "@connectAddressHelp": {
+    "description": "Help line under the address field."
+  },
+  "connectAddressConnect": "Connect",
+  "@connectAddressConnect": {
+    "description": "Button that dials the typed address."
+  },
+  "connectAddressConnecting": "Connecting…",
+  "@connectAddressConnecting": {
+    "description": "Shown while the dial runs."
+  },
+  "connectAddressConnected": "Connected to {name}",
+  "@connectAddressConnected": {
+    "description": "Confirmation after a successful connect by address.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "connectAddressInvalid": "Enter an IPv4 address like 192.168.0.165, optionally followed by :port.",
+  "@connectAddressInvalid": {
+    "description": "Field error for an address that does not parse."
+  },
+  "connectAddressNotLocal": "Use an address on your local network, like 192.168.x.x.",
+  "@connectAddressNotLocal": {
+    "description": "Field error for an address outside the local network."
+  },
+  "connectAddressNoAnswer": "No answer at {address}. Check the address and that Fi is open on the other device.",
+  "@connectAddressNoAnswer": {
+    "description": "Error when nothing answered at the typed address.",
+    "placeholders": {
+      "address": {
+        "type": "String"
+      }
+    }
+  },
+  "connectAddressWrongDevice": "The device at {address} isn't {name}.",
+  "@connectAddressWrongDevice": {
+    "description": "Error when another device answered at the typed address.",
+    "placeholders": {
+      "address": {
+        "type": "String"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "connectAddressPaused": "Sync with paired devices is off. Turn it on to connect.",
+  "@connectAddressPaused": {
+    "description": "Error when sync is paused."
+  },
+  "aboutThisDevice": "This device",
+  "@aboutThisDevice": {
+    "description": "About row listing this device's sync addresses."
+  },
+  "aboutNotOnLocalNetwork": "Not on a local network",
+  "@aboutNotOnLocalNetwork": {
+    "description": "About row value when this device has no local-network address."
+  },
+  "aboutAddressCopied": "Address copied",
+  "@aboutAddressCopied": {
+    "description": "Confirmation after copying an address."
+  },
+  "aboutCopyAddress": "Copy address",
+  "@aboutCopyAddress": {
+    "description": "Tooltip of the copy-address button."
+  },
+  "devicesFailureCode": "Failure code",
+  "@devicesFailureCode": {
+    "description": "Details label of the failure code."
   }
 }

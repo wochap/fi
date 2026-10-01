@@ -145,6 +145,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   dco_decode_box_autoadd_computed_field_definition_dto(dynamic raw);
 
   @protected
+  ConnectionFailureKindDto dco_decode_box_autoadd_connection_failure_kind_dto(
+    dynamic raw,
+  );
+
+  @protected
   CurrentBoundaryDto dco_decode_box_autoadd_current_boundary_dto(dynamic raw);
 
   @protected
@@ -289,6 +294,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   ComputedFieldDefinitionDto dco_decode_computed_field_definition_dto(
     dynamic raw,
   );
+
+  @protected
+  ConnectionFailureKindDto dco_decode_connection_failure_kind_dto(dynamic raw);
 
   @protected
   CurrentBoundaryDto dco_decode_current_boundary_dto(dynamic raw);
@@ -484,6 +492,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   LogEventDto dco_decode_log_event_dto(dynamic raw);
 
   @protected
+  ManualConnectKindDto dco_decode_manual_connect_kind_dto(dynamic raw);
+
+  @protected
+  ManualConnectOutcomeDto dco_decode_manual_connect_outcome_dto(dynamic raw);
+
+  @protected
   ModelErrorDto dco_decode_model_error_dto(dynamic raw);
 
   @protected
@@ -560,6 +574,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   ComparisonOperatorDto? dco_decode_opt_box_autoadd_comparison_operator_dto(
     dynamic raw,
   );
+
+  @protected
+  ConnectionFailureKindDto?
+  dco_decode_opt_box_autoadd_connection_failure_kind_dto(dynamic raw);
 
   @protected
   CurrentBoundaryDto? dco_decode_opt_box_autoadd_current_boundary_dto(
@@ -979,6 +997,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  ConnectionFailureKindDto sse_decode_box_autoadd_connection_failure_kind_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   CurrentBoundaryDto sse_decode_box_autoadd_current_boundary_dto(
     SseDeserializer deserializer,
   );
@@ -1173,6 +1196,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ComputedFieldDefinitionDto sse_decode_computed_field_definition_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ConnectionFailureKindDto sse_decode_connection_failure_kind_dto(
     SseDeserializer deserializer,
   );
 
@@ -1438,6 +1466,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   LogEventDto sse_decode_log_event_dto(SseDeserializer deserializer);
 
   @protected
+  ManualConnectKindDto sse_decode_manual_connect_kind_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ManualConnectOutcomeDto sse_decode_manual_connect_outcome_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   ModelErrorDto sse_decode_model_error_dto(SseDeserializer deserializer);
 
   @protected
@@ -1524,6 +1562,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ComparisonOperatorDto? sse_decode_opt_box_autoadd_comparison_operator_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ConnectionFailureKindDto?
+  sse_decode_opt_box_autoadd_connection_failure_kind_dto(
     SseDeserializer deserializer,
   );
 
@@ -2062,6 +2106,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_box_autoadd_connection_failure_kind_dto(
+    ConnectionFailureKindDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_box_autoadd_current_boundary_dto(
     CurrentBoundaryDto self,
     SseSerializer serializer,
@@ -2307,6 +2357,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_computed_field_definition_dto(
     ComputedFieldDefinitionDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_connection_failure_kind_dto(
+    ConnectionFailureKindDto self,
     SseSerializer serializer,
   );
 
@@ -2641,6 +2697,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_log_event_dto(LogEventDto self, SseSerializer serializer);
 
   @protected
+  void sse_encode_manual_connect_kind_dto(
+    ManualConnectKindDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_manual_connect_outcome_dto(
+    ManualConnectOutcomeDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_model_error_dto(ModelErrorDto self, SseSerializer serializer);
 
   @protected
@@ -2745,6 +2813,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_opt_box_autoadd_comparison_operator_dto(
     ComparisonOperatorDto? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_connection_failure_kind_dto(
+    ConnectionFailureKindDto? self,
     SseSerializer serializer,
   );
 

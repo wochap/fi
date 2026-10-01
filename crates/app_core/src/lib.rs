@@ -7,6 +7,7 @@ pub mod diagnostics;
 pub mod discovery;
 pub mod discovery_control;
 pub mod duration;
+pub mod endpoint_memory;
 pub mod error;
 pub mod events;
 pub mod generic;
@@ -42,7 +43,7 @@ pub use automerge_repo::{
 pub use control::{
     DiscoveryGroupMetadata, DiscoveryRotationJournal, DiscoveryRotationStage, LocalIdentityRecord,
     NetworkPreferences, PairingJournalRecord, PairingJournalStage, PeerConnectionMetadata,
-    PeerTrustRecord, ResetIntent, TrustState, TrustedDeviceRecord,
+    PeerTrustRecord, RememberedEndpoint, ResetIntent, TrustState, TrustedDeviceRecord,
 };
 pub use discovery::{
     Clock, DiscoveredEndpoint, DiscoveryAdvertisement, DiscoveryError, DiscoveryEvent,
@@ -56,6 +57,7 @@ pub use discovery_control::{
     DiscoverySecretAck, DiscoverySecretUpdate, authorize_peer, decode_ack, decode_update,
     encode_ack, encode_update,
 };
+pub use endpoint_memory::{ManualAddressError, ManualConnectOutcome, parse_manual_address};
 pub use error::{
     AppError, BootstrapError, DomainError, IssueCode, ProjectionError, Result, ValidationIssue,
     summarize_issues,

@@ -76,6 +76,10 @@ pub enum QuinnTransportError {
     AddrInUse(u16),
     #[error("QUIC connection failed: {0}")]
     Connection(String),
+    /// The TLS handshake was rejected by either side, for example because
+    /// the device at the address holds a different key.
+    #[error("TLS handshake failed: {0}")]
+    Handshake(String),
     #[error("sync stream failed: {0}")]
     Stream(String),
     #[error("sync stream protocol violation: {0}")]
@@ -733,9 +737,13 @@ impl QuinnTransport {
             .endpoint
             .connect_with(self.client_config(expected)?, address, "fi.invalid")
             .map_err(|error| QuinnTransportError::Connection(error.to_string()))?;
-        let connection = connecting
-            .await
-            .map_err(|error| QuinnTransportError::Connection(error.to_string()))?;
+        let connection = connecting.await.map_err(|error| {
+            if is_handshake_rejection(&error) {
+                QuinnTransportError::Handshake(error.to_string())
+            } else {
+                QuinnTransportError::Connection(error.to_string())
+            }
+        })?;
         let unauthenticated = UnauthenticatedConnection { connection };
         let authenticated =
             unauthenticated.authenticate(self.trust.as_ref(), ConnectionDirection::Outbound)?;
@@ -1158,6 +1166,17 @@ impl NetworkTransport for QuinnTransport {
     }
 }
 
+/// A QUIC close carrying a TLS alert (crypto error codes 0x100-0x1ff),
+/// raised locally or by the peer.
+fn is_handshake_rejection(error: &quinn::ConnectionError) -> bool {
+    let code = match error {
+        quinn::ConnectionError::TransportError(error) => u64::from(error.code),
+        quinn::ConnectionError::ConnectionClosed(close) => u64::from(close.error_code),
+        _ => return false,
+    };
+    (0x100..=0x1ff).contains(&code)
+}
+
 #[async_trait]
 impl PeerConnector for QuinnTransport {
     async fn connect(
@@ -1176,9 +1195,8 @@ impl PeerConnector for QuinnTransport {
                 QuinnTransportError::MalformedCertificate
                 | QuinnTransportError::WrongPublicKeyAlgorithm
                 | QuinnTransportError::InvalidCertificateSignature
-                | QuinnTransportError::Configuration(_) => {
-                    ConnectionFailure::Tls(error.to_string())
-                }
+                | QuinnTransportError::Configuration(_)
+                | QuinnTransportError::Handshake(_) => ConnectionFailure::Tls(error.to_string()),
                 QuinnTransportError::Stream(_) | QuinnTransportError::Protocol(_) => {
                     ConnectionFailure::Stream(error.to_string())
                 }

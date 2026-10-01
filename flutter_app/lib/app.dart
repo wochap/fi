@@ -13,11 +13,14 @@ import 'package:fi/l10n/language.dart';
 import 'package:intl/intl.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/collections_page.dart';
+import 'package:fi/connect_by_address.dart';
+import 'package:fi/peer_problem.dart';
 import 'package:fi/device_details.dart';
 import 'package:fi/pairing_card.dart';
 import 'package:fi/platform_capabilities.dart';
 import 'package:fi/reset_dialog.dart';
 import 'package:fi/settings_page.dart';
+import 'package:fi/status_time.dart';
 import 'package:fi/theme/inputs.dart';
 import 'package:fi/theme/nocturne.dart';
 import 'package:fi/theme/nocturne_widgets.dart';
@@ -148,6 +151,8 @@ class _CollectionAppState extends State<CollectionApp>
   Future<void> _setForeground(bool foreground) async {
     try {
       await widget.bridge.setForeground(foreground);
+      // The device may have changed networks while in the background.
+      if (foreground && mounted) unawaited(devices.loadLocalAddresses());
     } catch (_) {
       // Rust exposes lifecycle failures through its typed error stream.
     }
@@ -654,7 +659,10 @@ class _CollectionShellState extends State<CollectionShell> {
     super.dispose();
   }
 
-  void _select(int value) => setState(() => selected = value);
+  void _select(int value) {
+    setState(() => selected = value);
+    if (value == 2) unawaited(devices.loadLocalAddresses());
+  }
 
   @override
   Widget build(BuildContext context) => VoiceScope(
@@ -681,7 +689,10 @@ class _CollectionShellState extends State<CollectionShell> {
             controller: devices,
             onResetDataset: widget.onResetDataset,
           ),
-          SettingsPage(buildInfo: devices.buildInfo),
+          SettingsPage(
+            buildInfo: devices.buildInfo,
+            localAddresses: devices.localAddresses,
+          ),
         ],
       );
       if (wide) {
@@ -1251,7 +1262,7 @@ class _DevicesPageState extends State<DevicesPage> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        seenSyncedLine(context.l10n, device, now),
+                        _timesLine(context.l10n, device, now),
                         key: Key('device-times-${device.deviceId}'),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
@@ -1283,6 +1294,24 @@ class _DevicesPageState extends State<DevicesPage> {
               ],
             ),
           ),
+          if (peerProblemOf(device) case final problem?)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(50, 10, 10, 0),
+              child: PeerGuidanceBox(
+                key: Key('device-problem-${device.deviceId}'),
+                deviceId: device.deviceId,
+                problem: problem,
+                onTryAgain: controller.reconnecting.contains(device.deviceId)
+                    ? null
+                    : () => unawaited(controller.reconnect(device)),
+                onPairAgain: () => unawaited(controller.beginPairing()),
+                onConnectByAddress: !phone && problem != PeerProblem.notVerified
+                    ? () => unawaited(
+                        showConnectByAddress(context, controller, device),
+                      )
+                    : null,
+              ),
+            ),
           if (open && !phone)
             Padding(
               padding: const EdgeInsets.fromLTRB(50, 12, 10, 4),
@@ -1296,6 +1325,20 @@ class _DevicesPageState extends State<DevicesPage> {
         ],
       ),
     );
+  }
+
+  /// The row's second line: the problem and last sync for an unreachable device, else when it
+  /// was last seen and synced.
+  String _timesLine(AppLocalizations l, TrustedDeviceDto device, DateTime now) {
+    final problem = peerProblemOf(device);
+    if (problem == null) return seenSyncedLine(l, device, now);
+    final line = peerProblemLine(l, problem);
+    return device.lastSyncMs == null
+        ? l.peerNeverSynced(line)
+        : l.peerLastSynced(
+            line,
+            formatStatusTime(l, device.lastSyncMs, now: now),
+          );
   }
 
   /// The row's rename, revoke and delete actions.

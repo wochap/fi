@@ -148,6 +148,12 @@ class Tag extends StatelessWidget {
       color = Nocturne.neutral100,
       border = null;
 
+  /// Error state: an error-tinted fill and error text, no border.
+  const Tag.error(this.text, {this.fontSize = 11, this.leading, super.key})
+    : background = Nocturne.errorTint,
+      color = Nocturne.error,
+      border = null;
+
   /// `.tag-outline`: no fill, a 1px accent border and accent text.
   const Tag.outline(this.text, {this.fontSize = 11, this.leading, super.key})
     : background = Colors.transparent,

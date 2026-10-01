@@ -1,6 +1,7 @@
 use std::{
     fs::{self, File, OpenOptions},
     io::Write,
+    net::SocketAddr,
     path::{Path, PathBuf},
     str::FromStr,
     sync::{
@@ -26,8 +27,10 @@ use crate::{
     control::{
         DiscoveryGroupMetadata, DiscoveryRotationJournal, DiscoveryRotationStage,
         LocalIdentityRecord, NetworkPreferences, PairingJournalRecord, PairingJournalStage,
-        PeerConnectionMetadata, PeerTrustRecord, ResetIntent, TrustState, TrustedDeviceRecord,
+        PeerConnectionMetadata, PeerTrustRecord, RememberedEndpoint, ResetIntent, TrustState,
+        TrustedDeviceRecord,
     },
+    endpoint_memory::{REMEMBER_WRITE_THROTTLE_MS, REMEMBERED_ENDPOINTS_PER_PEER},
     identity::{DeviceId, PublicDeviceKey},
     routing::{ConnectionFailure, PeerConnectionState},
 };
@@ -371,6 +374,11 @@ impl SqliteControlStore {
              ) STRICT;
              CREATE TABLE IF NOT EXISTS network_preferences (
                 key TEXT PRIMARY KEY, enabled INTEGER NOT NULL CHECK(enabled IN (0, 1))
+             ) STRICT;
+             CREATE TABLE IF NOT EXISTS peer_endpoints (
+                device_id TEXT NOT NULL, address TEXT NOT NULL,
+                last_success_ms INTEGER NOT NULL CHECK(last_success_ms >= 0),
+                PRIMARY KEY(device_id, address)
              ) STRICT;",
         )
             .map_err(|e| storage_error("control_open", None, &path, e))?;
@@ -816,6 +824,12 @@ impl SqliteControlStore {
         transaction.execute("UPDATE trusted_peers SET trust_state='revoked',updated_at_ms=?1 WHERE device_id=?2", params![now, device.to_string()])
             .map_err(|error| storage_error("trusted_device_revoke", None, &self.path, error))?;
         transaction
+            .execute(
+                "DELETE FROM peer_endpoints WHERE device_id=?1",
+                [device.to_string()],
+            )
+            .map_err(|error| storage_error("trusted_device_revoke", None, &self.path, error))?;
+        transaction
             .commit()
             .map_err(|error| storage_error("trusted_device_revoke", None, &self.path, error))?;
         Ok(changed == 1)
@@ -850,11 +864,156 @@ impl SqliteControlStore {
                     [device.to_string()],
                 )
                 .map_err(|error| storage_error("trusted_device_delete", None, &self.path, error))?;
+            transaction
+                .execute(
+                    "DELETE FROM peer_endpoints WHERE device_id=?1",
+                    [device.to_string()],
+                )
+                .map_err(|error| storage_error("trusted_device_delete", None, &self.path, error))?;
         }
         transaction
             .commit()
             .map_err(|error| storage_error("trusted_device_delete", None, &self.path, error))?;
         Ok(changed == 1)
+    }
+
+    /// Records a successful session address for `device`. Returns `false`
+    /// without writing when the stored success is younger than
+    /// [`REMEMBER_WRITE_THROTTLE_MS`]; keeps the newest
+    /// [`REMEMBERED_ENDPOINTS_PER_PEER`] addresses per device.
+    pub fn remember_peer_endpoint(
+        &self,
+        device: DeviceId,
+        address: SocketAddr,
+        now_ms: u64,
+    ) -> Result<bool, StorageError> {
+        self.ensure_open("endpoint_remember")?;
+        let now = checked_timestamp(now_ms, "endpoint_remember", &self.path)?;
+        let throttle = checked_timestamp(
+            now_ms.saturating_sub(REMEMBER_WRITE_THROTTLE_MS),
+            "endpoint_remember",
+            &self.path,
+        )?;
+        let limit = i64::try_from(REMEMBERED_ENDPOINTS_PER_PEER).unwrap_or(i64::MAX);
+        let mut connection = self.connection.lock().map_err(|_| {
+            storage_error(
+                "endpoint_remember",
+                None,
+                &self.path,
+                "connection lock poisoned",
+            )
+        })?;
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|error| storage_error("endpoint_remember", None, &self.path, error))?;
+        let (device, address) = (device.to_string(), address.to_string());
+        let existing: Option<i64> = transaction
+            .query_row(
+                "SELECT last_success_ms FROM peer_endpoints WHERE device_id=?1 AND address=?2",
+                params![device, address],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|error| storage_error("endpoint_remember", None, &self.path, error))?;
+        if existing.is_some_and(|last| last > throttle) {
+            transaction
+                .commit()
+                .map_err(|error| storage_error("endpoint_remember", None, &self.path, error))?;
+            return Ok(false);
+        }
+        transaction
+            .execute(
+                "INSERT INTO peer_endpoints(device_id,address,last_success_ms) VALUES(?1,?2,?3)
+                 ON CONFLICT(device_id, address) DO UPDATE SET last_success_ms=excluded.last_success_ms",
+                params![device, address, now],
+            )
+            .map_err(|error| storage_error("endpoint_remember", None, &self.path, error))?;
+        transaction
+            .execute(
+                "DELETE FROM peer_endpoints WHERE device_id=?1 AND address NOT IN
+                 (SELECT address FROM peer_endpoints WHERE device_id=?1 ORDER BY last_success_ms DESC, address LIMIT ?2)",
+                params![device, limit],
+            )
+            .map_err(|error| storage_error("endpoint_remember", None, &self.path, error))?;
+        transaction
+            .commit()
+            .map_err(|error| storage_error("endpoint_remember", None, &self.path, error))?;
+        Ok(true)
+    }
+
+    /// Every remembered address, per device newest success first. Rows that
+    /// do not parse are skipped.
+    pub fn remembered_endpoints(&self) -> Result<Vec<RememberedEndpoint>, StorageError> {
+        self.ensure_open("endpoint_load")?;
+        let connection = self.connection.lock().map_err(|_| {
+            storage_error(
+                "endpoint_load",
+                None,
+                &self.path,
+                "connection lock poisoned",
+            )
+        })?;
+        let mut statement = connection
+            .prepare(
+                "SELECT device_id, address, last_success_ms FROM peer_endpoints
+                 ORDER BY device_id, last_success_ms DESC, address",
+            )
+            .map_err(|error| storage_error("endpoint_load", None, &self.path, error))?;
+        let rows = statement
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, i64>(2)?,
+                ))
+            })
+            .map_err(|error| storage_error("endpoint_load", None, &self.path, error))?;
+        let mut endpoints = Vec::new();
+        for row in rows {
+            let (device, address, last) =
+                row.map_err(|error| storage_error("endpoint_load", None, &self.path, error))?;
+            match (
+                DeviceId::from_str(&device),
+                address.parse::<SocketAddr>(),
+                u64::try_from(last),
+            ) {
+                (Ok(device_id), Ok(address), Ok(last_success_ms)) => {
+                    endpoints.push(RememberedEndpoint {
+                        device_id,
+                        address,
+                        last_success_ms,
+                    });
+                }
+                _ => tracing::warn!(
+                    event = "remembered_endpoint_malformed",
+                    device_id = %device,
+                    address = %address,
+                    "skipping malformed remembered endpoint"
+                ),
+            }
+        }
+        Ok(endpoints)
+    }
+
+    /// Deletes remembered addresses whose last success is before `older_than_ms`.
+    pub fn prune_remembered_endpoints(&self, older_than_ms: u64) -> Result<usize, StorageError> {
+        self.ensure_open("endpoint_prune")?;
+        let older_than = checked_timestamp(older_than_ms, "endpoint_prune", &self.path)?;
+        self.connection
+            .lock()
+            .map_err(|_| {
+                storage_error(
+                    "endpoint_prune",
+                    None,
+                    &self.path,
+                    "connection lock poisoned",
+                )
+            })?
+            .execute(
+                "DELETE FROM peer_endpoints WHERE last_success_ms < ?1",
+                [older_than],
+            )
+            .map_err(|error| storage_error("endpoint_prune", None, &self.path, error))
     }
 
     pub fn store_pairing_journal(&self, record: &PairingJournalRecord) -> Result<(), StorageError> {
@@ -1314,7 +1473,8 @@ impl SqliteControlStore {
                  DELETE FROM discovery_group;
                  DELETE FROM discovery_rotation;
                  DELETE FROM reset_intent;
-                 DELETE FROM recovery_attempts;",
+                 DELETE FROM recovery_attempts;
+                 DELETE FROM peer_endpoints;",
             )
             .map_err(|error| storage_error("reset_complete", None, &self.path, error))?;
         transaction
@@ -1857,6 +2017,121 @@ mod tests {
             last_sync_ms: None,
             state: TrustState::Trusted,
         }
+    }
+
+    fn addresses_of(store: &SqliteControlStore, device: DeviceId) -> Vec<(SocketAddr, u64)> {
+        store
+            .remembered_endpoints()
+            .unwrap()
+            .into_iter()
+            .filter(|row| row.device_id == device)
+            .map(|row| (row.address, row.last_success_ms))
+            .collect()
+    }
+
+    #[test]
+    fn remembered_endpoint_writes_are_throttled() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = SqliteControlStore::open(directory.path().join("control.sqlite")).unwrap();
+        let device = trusted_record(40, 1).device_id;
+        let address: SocketAddr = "192.168.0.165:47380".parse().unwrap();
+        let start = 10 * 60_000;
+        assert!(
+            store
+                .remember_peer_endpoint(device, address, start)
+                .unwrap()
+        );
+        assert_eq!(addresses_of(&store, device), vec![(address, start)]);
+        assert!(
+            !store
+                .remember_peer_endpoint(device, address, start + 60_000)
+                .unwrap()
+        );
+        assert_eq!(addresses_of(&store, device), vec![(address, start)]);
+        assert!(
+            store
+                .remember_peer_endpoint(device, address, start + 6 * 60_000)
+                .unwrap()
+        );
+        assert_eq!(
+            addresses_of(&store, device),
+            vec![(address, start + 6 * 60_000)]
+        );
+    }
+
+    #[test]
+    fn remembered_endpoints_keep_the_three_newest() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = SqliteControlStore::open(directory.path().join("control.sqlite")).unwrap();
+        let device = trusted_record(41, 1).device_id;
+        for (index, at) in [100_u64, 200, 300, 400].into_iter().enumerate() {
+            let address = SocketAddr::from(([192, 168, 0, 10 + index as u8], 47380));
+            assert!(store.remember_peer_endpoint(device, address, at).unwrap());
+        }
+        assert_eq!(
+            addresses_of(&store, device)
+                .into_iter()
+                .map(|(_, at)| at)
+                .collect::<Vec<_>>(),
+            vec![400, 300, 200]
+        );
+    }
+
+    #[test]
+    fn prune_removes_only_older_rows() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = SqliteControlStore::open(directory.path().join("control.sqlite")).unwrap();
+        let device = trusted_record(42, 1).device_id;
+        let old: SocketAddr = "192.168.0.1:47380".parse().unwrap();
+        let new: SocketAddr = "192.168.0.2:47380".parse().unwrap();
+        store.remember_peer_endpoint(device, old, 100).unwrap();
+        store.remember_peer_endpoint(device, new, 500).unwrap();
+        assert_eq!(store.prune_remembered_endpoints(500).unwrap(), 1);
+        assert_eq!(addresses_of(&store, device), vec![(new, 500)]);
+    }
+
+    #[test]
+    fn revoke_delete_and_reset_forget_remembered_endpoints() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = SqliteControlStore::open(directory.path().join("control.sqlite")).unwrap();
+        let revoked = trusted_record(43, 1);
+        let other = trusted_record(44, 1);
+        store.upsert_trusted_device(&revoked).unwrap();
+        store.upsert_trusted_device(&other).unwrap();
+        let address: SocketAddr = "192.168.0.3:47380".parse().unwrap();
+        store
+            .remember_peer_endpoint(revoked.device_id, address, 10)
+            .unwrap();
+        store
+            .remember_peer_endpoint(other.device_id, address, 10)
+            .unwrap();
+        assert!(store.revoke_trusted_device(revoked.device_id, 20).unwrap());
+        assert!(addresses_of(&store, revoked.device_id).is_empty());
+        assert_eq!(addresses_of(&store, other.device_id).len(), 1);
+
+        // A row left behind (written on another path) goes with the record.
+        store
+            .remember_peer_endpoint(revoked.device_id, address, 30)
+            .unwrap();
+        assert!(store.delete_revoked_device(revoked.device_id).unwrap());
+        assert!(addresses_of(&store, revoked.device_id).is_empty());
+
+        store.complete_reset().unwrap();
+        assert!(store.remembered_endpoints().unwrap().is_empty());
+    }
+
+    #[test]
+    fn remembered_endpoints_survive_reopen() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("control.sqlite");
+        let device = trusted_record(45, 1).device_id;
+        let address: SocketAddr = "192.168.0.4:47380".parse().unwrap();
+        {
+            let store = SqliteControlStore::open(path.clone()).unwrap();
+            store.remember_peer_endpoint(device, address, 77).unwrap();
+        }
+        let store = SqliteControlStore::open(path).unwrap();
+        assert_eq!(addresses_of(&store, device), vec![(address, 77)]);
     }
 
     #[test]

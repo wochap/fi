@@ -4,8 +4,9 @@ use crate::{
     api::{
         lifecycle::core,
         models::{
-            BridgeError, LocalDeviceDto, NetworkPreferencesDto, PairingCandidateDto,
-            PairingStateDto, RevocationOutcomeDto, SyncStatusDto, TrustedDeviceDto,
+            BridgeError, LocalDeviceDto, ManualConnectOutcomeDto, NetworkPreferencesDto,
+            PairingCandidateDto, PairingStateDto, RevocationOutcomeDto, SyncStatusDto,
+            TrustedDeviceDto,
         },
     },
     frb_generated::StreamSink,
@@ -94,6 +95,7 @@ pub async fn trusted_devices() -> Result<Vec<TrustedDeviceDto>, BridgeError> {
     let connections = core.connection_states();
     let attempts = core.attempt_times();
     let paused = !core.network_preferences().sync_enabled;
+    let last_known = core.last_known_endpoints();
     Ok(core
         .trusted_devices()
         .map_err(BridgeError::from)?
@@ -101,7 +103,8 @@ pub async fn trusted_devices() -> Result<Vec<TrustedDeviceDto>, BridgeError> {
         .map(|record| {
             let connection = connections.get(&record.device_id);
             let attempt = attempts.get(&record.device_id).copied();
-            TrustedDeviceDto::from_core(record, connection, attempt, paused)
+            let known = last_known.get(&record.device_id).copied();
+            TrustedDeviceDto::from_core(record, connection, attempt, known, paused)
         })
         .collect())
 }
@@ -141,6 +144,40 @@ pub async fn connect_device_now(device_id: String) -> Result<(), BridgeError> {
         }
         Err(error) => Err(error.into()),
     }
+}
+
+/// Dials a trusted, non-revoked peer at a user-typed address. Address and
+/// connection problems are outcomes; paused and unknown/revoked devices are
+/// errors.
+pub async fn connect_device_at_address(
+    device_id: String,
+    address: String,
+) -> Result<ManualConnectOutcomeDto, BridgeError> {
+    let peer: DeviceId = device_id
+        .parse()
+        .map_err(|_| BridgeError::lifecycle("The device identifier is invalid."))?;
+    let core = core().await?;
+    reconnect_allowed(&core.trusted_devices().map_err(BridgeError::from)?, peer)?;
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |elapsed| {
+            elapsed.as_millis().try_into().unwrap_or(u64::MAX)
+        });
+    core.connect_peer_at_address(peer, &address, now_ms)
+        .await
+        .map(Into::into)
+        .map_err(BridgeError::from)
+}
+
+/// Addresses at which a paired device on the same LAN can reach this one, as
+/// `ip:port`; empty when networking has no bound sync port.
+pub async fn local_sync_addresses() -> Result<Vec<String>, BridgeError> {
+    Ok(core()
+        .await?
+        .local_sync_addresses()
+        .into_iter()
+        .map(|address| address.to_string())
+        .collect())
 }
 
 /// Refuses a reconnect for an unknown or revoked record before any dial.
@@ -198,6 +235,7 @@ pub async fn connection_state_stream(
             Ok(DeviceRows {
                 devices: core.trusted_devices().map_err(BridgeError::from)?,
                 attempts: core.attempt_times(),
+                last_known: core.last_known_endpoints(),
                 paused: !core.network_preferences().sync_enabled,
             })
         },
@@ -210,6 +248,7 @@ pub async fn connection_state_stream(
 struct DeviceRows {
     devices: Vec<app_core::TrustedDeviceRecord>,
     attempts: std::collections::HashMap<DeviceId, u64>,
+    last_known: std::collections::HashMap<DeviceId, std::net::SocketAddr>,
     paused: bool,
 }
 
@@ -239,7 +278,8 @@ async fn forward_connection_states<Q, E>(
                     .map(|record| {
                         let connection = connections.get(&record.device_id);
                         let attempt = rows.attempts.get(&record.device_id).copied();
-                        TrustedDeviceDto::from_core(record, connection, attempt, rows.paused)
+                        let known = rows.last_known.get(&record.device_id).copied();
+                        TrustedDeviceDto::from_core(record, connection, attempt, known, rows.paused)
                     })
                     .collect();
                 if !emit(values) {
@@ -407,6 +447,49 @@ fn encode_16(value: [u8; 16]) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn manual_connect_outcome_maps_every_variant() {
+        use app_core::{ConnectionFailure, ManualConnectOutcome};
+
+        use crate::api::models::{
+            ConnectionFailureKindDto, ManualConnectKindDto, ManualConnectOutcomeDto,
+        };
+
+        for (outcome, kind) in [
+            (
+                ManualConnectOutcome::Connected,
+                ManualConnectKindDto::Connected,
+            ),
+            (
+                ManualConnectOutcome::InvalidAddress,
+                ManualConnectKindDto::InvalidAddress,
+            ),
+            (
+                ManualConnectOutcome::NotLocalNetwork,
+                ManualConnectKindDto::NotLocalNetwork,
+            ),
+        ] {
+            assert_eq!(
+                ManualConnectOutcomeDto::from(outcome),
+                ManualConnectOutcomeDto {
+                    kind,
+                    failure_kind: None,
+                    message: None,
+                }
+            );
+        }
+        assert_eq!(
+            ManualConnectOutcomeDto::from(ManualConnectOutcome::Failed(ConnectionFailure::Trust(
+                "key mismatch".into()
+            ))),
+            ManualConnectOutcomeDto {
+                kind: ManualConnectKindDto::Failed,
+                failure_kind: Some(ConnectionFailureKindDto::Trust),
+                message: Some("trust failed: key mismatch".into()),
+            }
+        );
+    }
+
     use std::{
         collections::HashMap,
         sync::{Arc, Mutex},
@@ -448,6 +531,7 @@ mod tests {
                     Ok(DeviceRows {
                         devices: vec![record()],
                         attempts: HashMap::new(),
+                        last_known: HashMap::new(),
                         paused: false,
                     })
                 }
@@ -524,6 +608,7 @@ mod tests {
                 Ok(DeviceRows {
                     devices: vec![record()],
                     attempts: HashMap::from([(peer, 42)]),
+                    last_known: HashMap::new(),
                     paused: false,
                 })
             },
@@ -563,6 +648,7 @@ mod tests {
                 TrustedDeviceDto::from_core(
                     record,
                     Some(&PeerConnectionState::Synced),
+                    None,
                     None,
                     paused,
                 )
@@ -610,6 +696,7 @@ mod tests {
                 Ok(DeviceRows {
                     devices: vec![record()],
                     attempts: HashMap::new(),
+                    last_known: HashMap::new(),
                     paused: true,
                 })
             },

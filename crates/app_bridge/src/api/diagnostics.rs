@@ -75,7 +75,7 @@ fn assemble_block(
 ) -> String {
     let peer_device_id = record.device_id.to_string();
     let peer_name = record.friendly_name.clone();
-    let row = TrustedDeviceDto::from_core(record, connection, last_attempt_ms, false);
+    let row = TrustedDeviceDto::from_core(record, connection, last_attempt_ms, None, false);
     let connection_state = if row.revoked {
         "revoked".to_owned()
     } else {

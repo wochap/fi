@@ -3018,4 +3018,109 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get langVoiceDownload => 'Descargar';
+
+  @override
+  String get peerNotReachable => 'No disponible';
+
+  @override
+  String get peerCantVerify => 'No se puede verificar';
+
+  @override
+  String get peerNotFound => 'No se encuentra en tu red';
+
+  @override
+  String get peerNoAnswer => 'No respondió en su última dirección';
+
+  @override
+  String get peerNotRecognized => 'Ya no reconoce este dispositivo';
+
+  @override
+  String peerLastSynced(String problem, String time) {
+    return '$problem · Última sincronización $time';
+  }
+
+  @override
+  String peerNeverSynced(String problem) {
+    return '$problem · Nunca sincronizado';
+  }
+
+  @override
+  String get peerGuidanceReach =>
+      'Asegúrate de que ambos dispositivos estén en la misma red Wi-Fi y de que Fi esté abierto en el otro dispositivo. Fi sigue intentándolo por su cuenta.';
+
+  @override
+  String get peerGuidanceVerify =>
+      'Es posible que el otro dispositivo se haya restablecido o haya desemparejado este. Vuelve a emparejar ambos dispositivos.';
+
+  @override
+  String get peerTryAgain => 'Intentar de nuevo';
+
+  @override
+  String get peerPairAgain => 'Emparejar de nuevo';
+
+  @override
+  String get peerConnectByAddress => 'Conectar por dirección…';
+
+  @override
+  String get connectAddressTitle => 'Conectar por dirección';
+
+  @override
+  String connectAddressLead(String name) {
+    return 'Conéctate directamente con $name cuando no aparece en la red. Debe estar emparejado.';
+  }
+
+  @override
+  String get connectAddressField => 'Dirección';
+
+  @override
+  String get connectAddressHelp =>
+      'Encuéntrala en el otro dispositivo en Ajustes › Acerca de › Este dispositivo.';
+
+  @override
+  String get connectAddressConnect => 'Conectar';
+
+  @override
+  String get connectAddressConnecting => 'Conectando…';
+
+  @override
+  String connectAddressConnected(String name) {
+    return 'Conectado a $name';
+  }
+
+  @override
+  String get connectAddressInvalid =>
+      'Escribe una dirección IPv4 como 192.168.0.165, opcionalmente seguida de :puerto.';
+
+  @override
+  String get connectAddressNotLocal =>
+      'Usa una dirección de tu red local, como 192.168.x.x.';
+
+  @override
+  String connectAddressNoAnswer(String address) {
+    return 'No hubo respuesta en $address. Revisa la dirección y que Fi esté abierto en el otro dispositivo.';
+  }
+
+  @override
+  String connectAddressWrongDevice(String address, String name) {
+    return 'El dispositivo en $address no es $name.';
+  }
+
+  @override
+  String get connectAddressPaused =>
+      'La sincronización con dispositivos emparejados está desactivada. Actívala para conectar.';
+
+  @override
+  String get aboutThisDevice => 'Este dispositivo';
+
+  @override
+  String get aboutNotOnLocalNetwork => 'Sin red local';
+
+  @override
+  String get aboutAddressCopied => 'Dirección copiada';
+
+  @override
+  String get aboutCopyAddress => 'Copiar dirección';
+
+  @override
+  String get devicesFailureCode => 'Código de error';
 }

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:fi/build_label.dart';
+import 'package:fi/device_details.dart';
 import 'package:fi/l10n/l10n.dart';
 import 'package:fi/l10n/language.dart';
 import 'package:fi/platform_capabilities.dart';
@@ -22,10 +23,17 @@ typedef _Section = ({String label, Widget child});
 
 /// Settings (mocks 8a, 8b): sections chosen by platform capability.
 class SettingsPage extends StatefulWidget {
-  const SettingsPage({required this.buildInfo, super.key});
+  const SettingsPage({
+    required this.buildInfo,
+    this.localAddresses = const [],
+    super.key,
+  });
 
   /// The build identity for About, when known.
   final BuildInfoDto? buildInfo;
+
+  /// This device's sync addresses as `ip:port`, for About › This device.
+  final List<String> localAddresses;
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -141,6 +149,12 @@ class _SettingsPageState extends State<SettingsPage>
           const FadedRule(),
         ],
         _AboutRow(
+          key: const Key('settings-this-device'),
+          label: context.l10n.aboutThisDevice,
+          value: _thisDevice(),
+        ),
+        const FadedRule(),
+        _AboutRow(
           key: const Key('settings-network'),
           label: context.l10n.settingsNetwork,
           detail: networkSummary(context.l10n),
@@ -148,6 +162,44 @@ class _SettingsPageState extends State<SettingsPage>
       ],
     ),
   );
+
+  Widget _thisDevice() {
+    final l = context.l10n;
+    if (widget.localAddresses.isEmpty) {
+      return Text(
+        l.aboutNotOnLocalNetwork,
+        style: TextStyle(fontSize: 13, color: Nocturne.muted(.55)),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        for (final addr in widget.localAddresses)
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(
+                child: SelectableText(
+                  addr,
+                  style: const TextStyle(
+                    fontFamily: Nocturne.monoFamily,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+              IconButton(
+                key: Key('settings-copy-address-$addr'),
+                tooltip: l.aboutCopyAddress,
+                icon: const Icon(FiIcons.copy, size: 16),
+                onPressed: () => unawaited(
+                  copyWithConfirmation(context, addr, l.aboutAddressCopied),
+                ),
+              ),
+            ],
+          ),
+      ],
+    );
+  }
 
   Widget _microphone(VoiceServices services) {
     final l = context.l10n;
@@ -445,7 +497,7 @@ class _AboutRow extends StatelessWidget {
             ],
           ),
         ),
-        ?value,
+        if (value case final value?) Flexible(child: value),
         ?trailing,
       ],
     ),

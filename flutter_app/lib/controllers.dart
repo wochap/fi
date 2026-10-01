@@ -907,6 +907,8 @@ LogCategory logCategory(LogEventDto event) {
   if (name.startsWith('pairing_')) return LogCategory.pairing;
   if (name == 'peer_address_observed' ||
       name == 'peer_endpoint_discovered' ||
+      name == 'peer_endpoint_remembered' ||
+      name.startsWith('remember') ||
       name.startsWith('discovery_')) {
     return LogCategory.address;
   }
@@ -986,6 +988,9 @@ final class DevicesController extends ChangeNotifier {
   /// Locally bound sync port, read when Details opens; null when unbound.
   int? syncPort;
 
+  /// This device's sync addresses as `ip:port`, for Settings › About.
+  List<String> localAddresses = const [];
+
   /// Lines requested per query for the Details panel.
   static const logLimit = 200;
   Object? failure;
@@ -1027,6 +1032,41 @@ final class DevicesController extends ChangeNotifier {
     await _loadPreferences();
     await _loadBuildInfo();
     await _loadLocalDevice();
+    await loadLocalAddresses();
+  }
+
+  /// Re-reads this device's sync addresses; an error reads as none.
+  Future<void> loadLocalAddresses() async {
+    List<String> value;
+    try {
+      value = await bridge.localSyncAddresses();
+    } catch (_) {
+      value = const [];
+    }
+    if (_disposed) return;
+    localAddresses = value;
+    notifyListeners();
+  }
+
+  /// Dials [device] at [address]. Marks it as reconnecting while running so
+  /// Try again and Reconnect stay disabled. Errors propagate to the caller.
+  Future<ManualConnectOutcomeDto> connectByAddress(
+    TrustedDeviceDto device,
+    String address,
+  ) async {
+    reconnecting.add(device.deviceId);
+    notifyListeners();
+    try {
+      return await bridge.connectDeviceAtAddress(device.deviceId, address);
+    } finally {
+      reconnecting.remove(device.deviceId);
+      if (!_disposed) {
+        notifyListeners();
+        if (details.containsKey(device.deviceId)) {
+          unawaited(loadDetails(device));
+        }
+      }
+    }
   }
 
   Future<void> _loadLocalDevice() async {
@@ -1201,6 +1241,7 @@ final class DevicesController extends ChangeNotifier {
     reconnecting.clear();
     details.clear();
     syncPort = null;
+    localAddresses = const [];
     failure = null;
     rotationError = null;
     busy = false;

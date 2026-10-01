@@ -36,6 +36,9 @@ abstract final class Nocturne {
   /// The design has no error role; this muted red sits on the shared lightness scale.
   static const error = Color(0xFFE8797F);
 
+  /// [error] at low alpha, the fill behind error-tinted text.
+  static const errorTint = Color(0x29E8797F);
+
   static const radiusSm = 4.0;
   static const radius = 8.0;
   static const radiusLg = 14.0;

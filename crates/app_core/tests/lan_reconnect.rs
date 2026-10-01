@@ -272,10 +272,8 @@ fn drop_then_reestablish(
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn discovery_upsert_for_trusted_peer_without_session_dials_it() {
     let pair = paired(63, LifecyclePolicy::KeepNetworkingInBackground).await;
-    pair.existing
-        .replace_endpoints(pair.joining_id(), EndpointSource::Lan, []);
-    pair.joining
-        .replace_endpoints(pair.existing_id(), EndpointSource::Lan, []);
+    forget_routes(&pair.existing, pair.joining_id());
+    forget_routes(&pair.joining, pair.existing_id());
     pair.existing
         .disconnect_peer(pair.joining_id())
         .await
@@ -611,4 +609,202 @@ async fn pairing_with_both_preferences_off_completes_and_leaves_them_off() {
     assert_never_dials(&joining, Duration::from_millis(500)).await;
     existing.shutdown().await.unwrap();
     joining.shutdown().await.unwrap();
+}
+
+async fn wait_synced(core: &AppCore, peer: DeviceId, within: Duration) {
+    let mut states = core.subscribe_connections().unwrap();
+    tokio::time::timeout(within, async {
+        loop {
+            if matches!(
+                states.borrow_and_update().get(&peer),
+                Some(PeerConnectionState::Synced)
+            ) {
+                return;
+            }
+            states.changed().await.unwrap();
+        }
+    })
+    .await
+    .unwrap_or_else(|_| {
+        panic!(
+            "peer synced: last state {:?}",
+            core.connection_states().get(&peer)
+        )
+    });
+}
+
+/// Empties every route `core` knows for `peer`, so only an explicit dial can
+/// reach it.
+fn forget_routes(core: &AppCore, peer: DeviceId) {
+    core.replace_endpoints(peer, EndpointSource::Lan, []);
+    core.replace_endpoints(peer, EndpointSource::Remembered, []);
+}
+
+// Pins the mDNS-silent restart: the address of the last authenticated session
+// is persisted and dialed at open with no discovery at all.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn remembered_endpoint_reconnects_without_discovery() {
+    let pair = paired(81, LifecyclePolicy::KeepNetworkingInBackground).await;
+    let joining_id = pair.joining_id();
+    wait_synced(&pair.existing, joining_id, Duration::from_secs(15)).await;
+    let joining_addr = pair.joining.network_addr().unwrap();
+    assert_eq!(
+        pair.existing.last_known_endpoints().get(&joining_id),
+        Some(&joining_addr)
+    );
+    let Pair {
+        _dirs: (existing_dir, _joining_dir),
+        existing,
+        joining,
+        existing_keys,
+        ..
+    } = pair;
+    existing.shutdown().await.unwrap();
+    let (existing, _silent_discovery) = open_with_keys(
+        existing_dir.path(),
+        existing_keys,
+        LifecyclePolicy::KeepNetworkingInBackground,
+    )
+    .await;
+    wait_synced(&existing, joining_id, Duration::from_secs(20)).await;
+    existing.shutdown().await.unwrap();
+    joining.shutdown().await.unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn revoked_peer_is_forgotten() {
+    let pair = paired(83, LifecyclePolicy::KeepNetworkingInBackground).await;
+    let joining_id = pair.joining_id();
+    wait_synced(&pair.existing, joining_id, Duration::from_secs(15)).await;
+    assert!(
+        pair.existing
+            .last_known_endpoints()
+            .contains_key(&joining_id)
+    );
+    pair.existing
+        .revoke_trusted_device(joining_id, now_ms())
+        .await
+        .unwrap();
+    let Pair {
+        _dirs: (existing_dir, _joining_dir),
+        existing,
+        joining,
+        existing_keys,
+        ..
+    } = pair;
+    existing.shutdown().await.unwrap();
+    let (existing, _) = open_with_keys(
+        existing_dir.path(),
+        existing_keys,
+        LifecyclePolicy::KeepNetworkingInBackground,
+    )
+    .await;
+    assert!(existing.last_known_endpoints().is_empty());
+    tokio::time::sleep(Duration::from_secs(3)).await;
+    assert_eq!(existing.connection_states().get(&joining_id), None);
+    existing.shutdown().await.unwrap();
+    joining.shutdown().await.unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn connect_by_address_reaches_the_peer() {
+    let pair = paired(85, LifecyclePolicy::KeepNetworkingInBackground).await;
+    let (existing_id, joining_id) = (pair.existing_id(), pair.joining_id());
+    wait_synced(&pair.existing, joining_id, Duration::from_secs(15)).await;
+    let joining_addr = pair.joining.network_addr().unwrap();
+    forget_routes(&pair.existing, joining_id);
+    forget_routes(&pair.joining, existing_id);
+    pair.existing.disconnect_peer(joining_id).await.unwrap();
+    pair.joining.disconnect_peer(existing_id).await.unwrap();
+    wait_for(&pair.existing, joining_id, "session dropped", |state| {
+        !established(state)
+    })
+    .await;
+
+    // A different, unpaired device at the address is rejected by the pinned
+    // handshake and never remembered.
+    let third_dir = tempfile::tempdir().unwrap();
+    let (third, _) = open(
+        third_dir.path(),
+        87,
+        LifecyclePolicy::KeepNetworkingInBackground,
+    )
+    .await;
+    third.create_new_dataset().await.unwrap();
+    let third_addr = third.network_addr().unwrap();
+    let outcome = pair
+        .existing
+        .connect_peer_at_address(joining_id, &third_addr.to_string(), now_ms())
+        .await
+        .unwrap();
+    assert!(
+        matches!(
+            outcome,
+            app_core::ManualConnectOutcome::Failed(
+                app_core::ConnectionFailure::Trust(_) | app_core::ConnectionFailure::Tls(_)
+            )
+        ),
+        "{outcome:?}"
+    );
+    assert!(
+        !pair
+            .existing
+            .last_known_endpoints()
+            .values()
+            .any(|address| *address == third_addr)
+    );
+
+    assert_eq!(
+        pair.existing
+            .connect_peer_at_address(joining_id, "8.8.8.8:47380", now_ms())
+            .await
+            .unwrap(),
+        app_core::ManualConnectOutcome::NotLocalNetwork
+    );
+    assert_eq!(
+        pair.existing
+            .connect_peer_at_address(joining_id, "nonsense", now_ms())
+            .await
+            .unwrap(),
+        app_core::ManualConnectOutcome::InvalidAddress
+    );
+
+    assert_eq!(
+        pair.existing
+            .connect_peer_at_address(joining_id, &joining_addr.to_string(), now_ms())
+            .await
+            .unwrap(),
+        app_core::ManualConnectOutcome::Connected
+    );
+    wait_synced(&pair.existing, joining_id, Duration::from_secs(15)).await;
+    third.shutdown().await.unwrap();
+    pair.shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn dataset_reset_clears_remembered_endpoints() {
+    let pair = paired(89, LifecyclePolicy::KeepNetworkingInBackground).await;
+    let joining_id = pair.joining_id();
+    wait_synced(&pair.existing, joining_id, Duration::from_secs(15)).await;
+    assert!(!pair.existing.last_known_endpoints().is_empty());
+    let Pair {
+        _dirs: (existing_dir, _joining_dir),
+        existing,
+        joining,
+        existing_keys,
+        ..
+    } = pair;
+    existing.shutdown().await.unwrap();
+    joining.shutdown().await.unwrap();
+    reset_dataset(existing_dir.path(), Some(existing_keys.as_ref()))
+        .await
+        .unwrap();
+    let (existing, _) = open_with_keys(
+        existing_dir.path(),
+        existing_keys,
+        LifecyclePolicy::KeepNetworkingInBackground,
+    )
+    .await;
+    assert!(existing.last_known_endpoints().is_empty());
+    existing.shutdown().await.unwrap();
 }

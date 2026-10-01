@@ -54,6 +54,15 @@ pub struct PeerConnectionMetadata {
     pub updated_at_ms: u64,
 }
 
+/// A socket address on which an authenticated session with a trusted peer
+/// was last established.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct RememberedEndpoint {
+    pub device_id: DeviceId,
+    pub address: SocketAddr,
+    pub last_success_ms: u64,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TrustedDeviceRecord {
     pub device_id: DeviceId,

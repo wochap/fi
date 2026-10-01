@@ -47,6 +47,16 @@ abstract interface class CollectionBridge {
   /// Dials a trusted, non-revoked device now. Throws the typed failure.
   Future<void> connectDeviceNow(String deviceId);
 
+  /// Dials a trusted device at a typed address. Address and connection
+  /// problems are outcomes; paused and revoked devices throw.
+  Future<ManualConnectOutcomeDto> connectDeviceAtAddress(
+    String deviceId,
+    String address,
+  );
+
+  /// Addresses at which a paired device on the same LAN reaches this one.
+  Future<List<String>> localSyncAddresses();
+
   /// Retained log lines for one peer, oldest first.
   Future<List<LogEventDto>> recentDeviceLogs(String deviceId, int limit);
 
@@ -264,6 +274,13 @@ final class RustCollectionBridge implements CollectionBridge {
   @override
   Future<void> connectDeviceNow(String deviceId) =>
       pairing.connectDeviceNow(deviceId: deviceId);
+  @override
+  Future<ManualConnectOutcomeDto> connectDeviceAtAddress(
+    String deviceId,
+    String address,
+  ) => pairing.connectDeviceAtAddress(deviceId: deviceId, address: address);
+  @override
+  Future<List<String>> localSyncAddresses() => pairing.localSyncAddresses();
   @override
   Future<List<LogEventDto>> recentDeviceLogs(String deviceId, int limit) =>
       diagnostics.recentDeviceLogs(deviceId: deviceId, limit: limit);

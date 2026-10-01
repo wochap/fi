@@ -1,8 +1,10 @@
 import 'dart:async';
 
 import 'package:clock/clock.dart';
+import 'package:fi/connect_by_address.dart';
 import 'package:fi/l10n/l10n.dart';
 import 'package:fi/controllers.dart';
+import 'package:fi/peer_problem.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/status_time.dart';
 import 'package:fi/theme/fi_icons.dart';
@@ -39,29 +41,36 @@ String connectionLabel(AppLocalizations l, PeerConnectionKindDto state) =>
       PeerConnectionKindDto.paused => l.devicesStatusPaused,
     };
 
-/// A trusted row's state: accent with a dot while connected, syncing or synced; neutral
-/// otherwise.
+/// A trusted row's state: accent with a dot while connected, syncing or synced; the error tag
+/// for an unreachable or unverifiable device; neutral otherwise.
 class DeviceStateTag extends StatelessWidget {
   const DeviceStateTag({required this.device, super.key});
 
   final TrustedDeviceDto device;
 
   @override
-  Widget build(BuildContext context) =>
-      switch ((device.revoked, device.connection)) {
-        (true, _) => Tag.neutral(context.l10n.devicesStatusRevoked),
-        (
-          _,
-          PeerConnectionKindDto.connected ||
-              PeerConnectionKindDto.syncing ||
-              PeerConnectionKindDto.synced,
-        ) =>
-          Tag(
-            connectionLabel(context.l10n, device.connection),
-            leading: FiIcons.dot,
-          ),
-        _ => Tag.neutral(connectionLabel(context.l10n, device.connection)),
-      };
+  Widget build(BuildContext context) {
+    if (peerProblemOf(device) case final problem?) {
+      return Tag.error(
+        peerProblemTag(context.l10n, problem),
+        leading: FiIcons.error,
+      );
+    }
+    return switch ((device.revoked, device.connection)) {
+      (true, _) => Tag.neutral(context.l10n.devicesStatusRevoked),
+      (
+        _,
+        PeerConnectionKindDto.connected ||
+            PeerConnectionKindDto.syncing ||
+            PeerConnectionKindDto.synced,
+      ) =>
+        Tag(
+          connectionLabel(context.l10n, device.connection),
+          leading: FiIcons.dot,
+        ),
+      _ => Tag.neutral(connectionLabel(context.l10n, device.connection)),
+    };
+  }
 }
 
 /// "Seen <time> · Synced <time>", with "Never seen" / "Never synced" for absent values.
@@ -198,6 +207,24 @@ class _DeviceDetailsState extends State<DeviceDetails> {
             icon: const Icon(FiIcons.refresh, size: 18),
             label: Text(l.devicesReconnect),
           );
+    void openConnectByAddress() =>
+        unawaited(showConnectByAddress(context, controller, device));
+    final Widget? connectAddress = device.revoked
+        ? null
+        : compact
+        ? SizedBox(
+            width: double.infinity,
+            child: OutlinedButton(
+              key: Key('device-details-connect-address-$id'),
+              onPressed: openConnectByAddress,
+              child: Text(l.peerConnectByAddress),
+            ),
+          )
+        : OutlinedButton(
+            key: Key('device-details-connect-address-$id'),
+            onPressed: openConnectByAddress,
+            child: Text(l.peerConnectByAddress),
+          );
     final copyLog = compact
         ? TextButton.icon(
             key: Key('device-copy-$id'),
@@ -258,11 +285,39 @@ class _DeviceDetailsState extends State<DeviceDetails> {
           ),
         if (device.failure case final failure?) ...[
           const SizedBox(height: 10),
+          if (compact && device.failureKind != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 110,
+                    child: Text(l.devicesFailureCode, style: label),
+                  ),
+                  Expanded(
+                    child: Text(
+                      failureCode(device.failureKind!),
+                      key: Key('device-failure-code-$id'),
+                      textAlign: TextAlign.right,
+                      style: mono,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Icon(FiIcons.error, size: 15, color: Nocturne.error),
               const SizedBox(width: 8),
+              if (!compact && device.failureKind != null) ...[
+                Text(
+                  failureCode(device.failureKind!),
+                  key: Key('device-failure-code-$id'),
+                  style: mono,
+                ),
+                const Text(' · ', style: TextStyle(fontSize: 13)),
+              ],
               Expanded(
                 child: Text(
                   failure,
@@ -376,8 +431,16 @@ class _DeviceDetailsState extends State<DeviceDetails> {
         const SizedBox(height: 12),
         if (compact) ...[
           ?reconnect,
+          if (connectAddress != null) ...[
+            const SizedBox(height: 8),
+            connectAddress,
+          ],
         ] else
-          Wrap(spacing: 8, children: [?reconnect, copyLog]),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [?reconnect, ?connectAddress, copyLog],
+          ),
       ],
     );
   }

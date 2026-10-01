@@ -72,6 +72,28 @@ void main() {
       );
     });
 
+    testWidgets('error tag colors', (tester) async {
+      await pumpAt(
+        tester,
+        1240,
+        const Tag.error('Not reachable', leading: FiIcons.error),
+      );
+      final box = decorationOf(
+        tester,
+        find.descendant(of: find.byType(Tag), matching: find.byType(Container)),
+      );
+      expect(box.color, Nocturne.errorTint);
+      expect(box.border, isNull);
+      expect(
+        tester.widget<Text>(find.text('Not reachable')).style!.color,
+        Nocturne.error,
+      );
+      expect(
+        tester.widget<Icon>(find.byIcon(FiIcons.error)).color,
+        Nocturne.error,
+      );
+    });
+
     testWidgets('accent tag colors', (tester) async {
       await pumpAt(tester, 1240, const Tag('Required'));
       final box = decorationOf(

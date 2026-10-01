@@ -74,6 +74,8 @@ final class RootlessBridge implements CollectionBridge {
   Future<void> setBuildInfo(String version) => inner.setBuildInfo(version);
   @override
   Future<LocalDeviceDto?> localDevice() => inner.localDevice();
+  @override
+  Future<List<String>> localSyncAddresses() => inner.localSyncAddresses();
 
   @override
   dynamic noSuchMethod(Invocation invocation) {
