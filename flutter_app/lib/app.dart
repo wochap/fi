@@ -11,6 +11,7 @@ import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/collections_page.dart';
 import 'package:fi/device_details.dart';
 import 'package:fi/pairing_card.dart';
+import 'package:fi/platform_capabilities.dart';
 import 'package:fi/reset_dialog.dart';
 import 'package:fi/settings_page.dart';
 import 'package:fi/theme/inputs.dart';
@@ -31,6 +32,7 @@ class CollectionApp extends StatefulWidget {
     this.fileDialogs = const PlatformFileDialogs(),
     this.uiPrefs,
     this.voiceServices,
+    this.capabilities,
     super.key,
   });
 
@@ -48,6 +50,9 @@ class CollectionApp extends StatefulWidget {
 
   /// Save and open dialogs for export and import; replaced in tests.
   final FileDialogs fileDialogs;
+
+  /// What this platform can do; `PlatformCapabilities.current()` by default, replaced in tests.
+  final PlatformCapabilities? capabilities;
 
   @override
   State<CollectionApp> createState() => _CollectionAppState();
@@ -173,101 +178,105 @@ class _CollectionAppState extends State<CollectionApp>
   }
 
   @override
-  Widget build(BuildContext context) => MaterialApp(
-    title: 'Fi',
-    debugShowCheckedModeBanner: false,
-    theme: nocturneTheme(),
-    home: ListenableBuilder(
-      listenable: controller,
-      builder: (context, _) {
-        if (controller.loading) {
-          return const _CenteredSurface(
-            key: Key('bootstrap-loading'),
-            child: CircularProgressIndicator(),
-          );
-        }
-        if (controller.fatalError case final message?) {
-          return _CenteredSurface(
-            key: const Key('bootstrap-error'),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(FiIcons.error, size: 48),
-                const SizedBox(height: 12),
-                Text(message, textAlign: TextAlign.center),
-                const SizedBox(height: 12),
-                if (controller.fatalSecureStoreLocked)
-                  FilledButton.icon(
-                    key: const Key('retry-after-unlock'),
-                    onPressed: controller.retryingNetworking
-                        ? null
-                        : () => unawaited(controller.retryNetworking()),
-                    icon: const Icon(FiIcons.refresh),
-                    label: const Text('Retry after unlocking'),
-                  )
-                else if (controller.fatalResetResolvable)
-                  FilledButton(
-                    key: const Key('reset-dataset'),
-                    onPressed: () => unawaited(_confirmResetFromError(context)),
-                    child: const Text("Reset this device's data"),
-                  )
-                else
-                  FilledButton(
-                    key: const Key('retry-bootstrap'),
-                    onPressed: () => unawaited(_start()),
-                    child: const Text('Retry'),
-                  ),
-              ],
-            ),
-          );
-        }
-        final surface = switch (controller.state?.kind) {
-          BootstrapKindDto.ready => CollectionShell(
-            bridge: widget.bridge,
-            fileDialogs: widget.fileDialogs,
-            uiPrefs: _uiPrefs,
-            devices: devices,
-            voice: _voice,
-            onResetDataset: _resetDataset,
-          ),
-          BootstrapKindDto.needsDecision => OnboardingPage(
-            controller: controller,
-            devices: devices,
-            onResetDataset: _resetDataset,
-          ),
-          BootstrapKindDto.joining => switch (controller.state?.recovery) {
-            final recovery? when recovery.isActive => RecoverySurface(
-              recovery: recovery,
-              onResetDataset: () => _confirmResetFromRecovery(context),
-            ),
-            _ => JoiningSurface(devices: devices),
-          },
-          BootstrapKindDto.creating => const _CenteredSurface(
-            child: CircularProgressIndicator(),
-          ),
-          _ => const _CenteredSurface(
-            child: Text('The local collection service is unavailable.'),
-          ),
-        };
-        final deferred = controller.networkingDeferred;
-        if (deferred == null) return surface;
-        // Local data is usable; only peer networking is waiting, so the
-        // explanation sits above the app rather than replacing it.
-        return Column(
-          children: [
-            SafeArea(
-              bottom: false,
-              child: _NetworkingDeferredBanner(
-                deferred: deferred,
-                retryError: controller.networkingRetryError,
-                busy: controller.retryingNetworking,
-                onRetry: () => unawaited(controller.retryNetworking()),
+  Widget build(BuildContext context) => PlatformScope(
+    capabilities: widget.capabilities ?? PlatformCapabilities.current(),
+    child: MaterialApp(
+      title: 'Fi',
+      debugShowCheckedModeBanner: false,
+      theme: nocturneTheme(),
+      home: ListenableBuilder(
+        listenable: controller,
+        builder: (context, _) {
+          if (controller.loading) {
+            return const _CenteredSurface(
+              key: Key('bootstrap-loading'),
+              child: CircularProgressIndicator(),
+            );
+          }
+          if (controller.fatalError case final message?) {
+            return _CenteredSurface(
+              key: const Key('bootstrap-error'),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(FiIcons.error, size: 48),
+                  const SizedBox(height: 12),
+                  Text(message, textAlign: TextAlign.center),
+                  const SizedBox(height: 12),
+                  if (controller.fatalSecureStoreLocked)
+                    FilledButton.icon(
+                      key: const Key('retry-after-unlock'),
+                      onPressed: controller.retryingNetworking
+                          ? null
+                          : () => unawaited(controller.retryNetworking()),
+                      icon: const Icon(FiIcons.refresh),
+                      label: const Text('Retry after unlocking'),
+                    )
+                  else if (controller.fatalResetResolvable)
+                    FilledButton(
+                      key: const Key('reset-dataset'),
+                      onPressed: () =>
+                          unawaited(_confirmResetFromError(context)),
+                      child: const Text("Reset this device's data"),
+                    )
+                  else
+                    FilledButton(
+                      key: const Key('retry-bootstrap'),
+                      onPressed: () => unawaited(_start()),
+                      child: const Text('Retry'),
+                    ),
+                ],
               ),
+            );
+          }
+          final surface = switch (controller.state?.kind) {
+            BootstrapKindDto.ready => CollectionShell(
+              bridge: widget.bridge,
+              fileDialogs: widget.fileDialogs,
+              uiPrefs: _uiPrefs,
+              devices: devices,
+              voice: _voice,
+              onResetDataset: _resetDataset,
             ),
-            Expanded(child: surface),
-          ],
-        );
-      },
+            BootstrapKindDto.needsDecision => OnboardingPage(
+              controller: controller,
+              devices: devices,
+              onResetDataset: _resetDataset,
+            ),
+            BootstrapKindDto.joining => switch (controller.state?.recovery) {
+              final recovery? when recovery.isActive => RecoverySurface(
+                recovery: recovery,
+                onResetDataset: () => _confirmResetFromRecovery(context),
+              ),
+              _ => JoiningSurface(devices: devices),
+            },
+            BootstrapKindDto.creating => const _CenteredSurface(
+              child: CircularProgressIndicator(),
+            ),
+            _ => const _CenteredSurface(
+              child: Text('The local collection service is unavailable.'),
+            ),
+          };
+          final deferred = controller.networkingDeferred;
+          if (deferred == null) return surface;
+          // Local data is usable; only peer networking is waiting, so the
+          // explanation sits above the app rather than replacing it.
+          return Column(
+            children: [
+              SafeArea(
+                bottom: false,
+                child: _NetworkingDeferredBanner(
+                  deferred: deferred,
+                  retryError: controller.networkingRetryError,
+                  busy: controller.retryingNetworking,
+                  onRetry: () => unawaited(controller.retryNetworking()),
+                ),
+              ),
+              Expanded(child: surface),
+            ],
+          );
+        },
+      ),
     ),
   );
 }
@@ -638,23 +647,15 @@ class _CollectionShellState extends State<CollectionShell> {
     listenable: Listenable.merge([controller, devices]),
     builder: (context, _) {
       final wide = MediaQuery.sizeOf(context).width >= 720;
-      // Settings is a phone tab; a wide window that was on it shows Collections.
-      final index = wide && selected == 2 ? 0 : selected;
       final page = IndexedStack(
-        index: index,
+        index: selected,
         children: [
           CollectionsPage(controller: controller),
           DevicesPage(
             controller: devices,
             onResetDataset: widget.onResetDataset,
           ),
-          if (!wide)
-            SettingsPage(
-              buildLabel: switch (devices.buildInfo) {
-                final build? => BuildLabel(build),
-                null => null,
-              },
-            ),
+          SettingsPage(buildInfo: devices.buildInfo),
         ],
       );
       if (wide) {
@@ -662,7 +663,11 @@ class _CollectionShellState extends State<CollectionShell> {
           body: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _Sidebar(selected: index, onSelected: _select, devices: devices),
+              _Sidebar(
+                selected: selected,
+                onSelected: _select,
+                devices: devices,
+              ),
               Expanded(child: page),
             ],
           ),
@@ -769,13 +774,16 @@ class _Sidebar extends StatelessWidget {
           selected: selected == 1,
           onTap: () => onSelected(1),
         ),
+        const SizedBox(height: 4),
+        _NavRow(
+          key: const Key('nav-settings'),
+          icon: FiIcons.settings,
+          label: 'Settings',
+          selected: selected == 2,
+          onTap: () => onSelected(2),
+        ),
         const Spacer(),
         _SidebarStatus(devices: devices),
-        if (devices.buildInfo case final build?)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(10, 10, 10, 0),
-            child: BuildLabel(build),
-          ),
       ],
     ),
   );
@@ -787,6 +795,7 @@ class _NavRow extends StatelessWidget {
     required this.label,
     required this.selected,
     required this.onTap,
+    super.key,
   });
 
   final IconData icon;
@@ -1153,8 +1162,6 @@ class _DevicesPageState extends State<DevicesPage> {
                       : () => _resetDataset(context),
                   showReset: onResetDataset != null,
                 ),
-                // The build label lives under the sidebar status on wide screens and in
-                // Settings › About on a phone.
               ],
             ),
           ),
@@ -1767,21 +1774,4 @@ class _LocalIdentity extends StatelessWidget {
       ),
     );
   }
-}
-
-/// The muted, selectable build label: `fi <version> · <hash>`.
-class BuildLabel extends StatelessWidget {
-  const BuildLabel(this.info, {super.key});
-  final BuildInfoDto info;
-
-  @override
-  Widget build(BuildContext context) => SelectableText(
-    buildLabel(info),
-    key: const Key('build-version'),
-    style: TextStyle(
-      fontSize: 11,
-      fontFamily: Nocturne.monoFamily,
-      color: Nocturne.muted(.45),
-    ),
-  );
 }

@@ -2,6 +2,7 @@ import 'package:clock/clock.dart';
 import 'package:fi/theme/nocturne_widgets.dart';
 import 'package:fi/app.dart';
 import 'package:fi/pairing_card.dart';
+import 'package:fi/platform_capabilities.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/ui_prefs.dart';
 import 'package:flutter/material.dart';
@@ -10,12 +11,16 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'fake_bridge.dart';
 
-Widget testApp(FakeCollectionBridge bridge) => CollectionApp(
+Widget testApp(
+  FakeCollectionBridge bridge, {
+  PlatformCapabilities? capabilities,
+}) => CollectionApp(
   bridge: bridge,
   initializeRust: () async {},
   dataDirProvider: () async => '/test',
   setPlatformForeground: (_) async {},
   uiPrefs: MemoryUiPrefsStore(),
+  capabilities: capabilities,
 );
 
 Future<void> pumpUntilFound(WidgetTester tester, Finder finder) async {
@@ -750,23 +755,29 @@ void main() {
       dirty: false,
     );
 
-    testWidgets('sits under the sidebar status on a wide screen', (
+    Future<void> openSettings(WidgetTester tester) async {
+      await tester.tap(find.byKey(const Key('nav-settings')));
+      await tester.pump();
+    }
+
+    testWidgets('is in Settings › About on a wide screen, not in the sidebar', (
       tester,
     ) async {
       final bridge = FakeCollectionBridge()..buildIdentity = clean;
       await openWithBuild(tester, bridge, size: const Size(1240, 900));
       final label = find.byKey(const Key('build-version'));
-      await pumpUntilFound(tester, label);
-      expect(find.text('fi 0.1.21 · a1b2c3d'), findsOneWidget);
       expect(
         find.descendant(of: find.byKey(const Key('sidebar')), matching: label),
-        findsOneWidget,
+        findsNothing,
       );
+      await openSettings(tester);
+      await pumpUntilFound(tester, label);
       expect(
-        tester.getTopLeft(label).dy,
-        greaterThan(
-          tester.getTopLeft(find.byKey(const Key('app-bar-sync-status'))).dy,
+        find.descendant(
+          of: find.byKey(const Key('settings-about')),
+          matching: find.text('fi 0.1.21 · a1b2c3d'),
         ),
+        findsOneWidget,
       );
     });
 
@@ -798,6 +809,7 @@ void main() {
           dirty: true,
         );
       await openWithBuild(tester, bridge);
+      await openSettings(tester);
       await pumpUntilFound(tester, find.byKey(const Key('build-version')));
       expect(find.text('fi 0.1.21 · a1b2c3d-dirty'), findsOneWidget);
     });
@@ -810,6 +822,7 @@ void main() {
           dirty: false,
         );
       await openWithBuild(tester, bridge);
+      await openSettings(tester);
       await pumpUntilFound(tester, find.byKey(const Key('build-version')));
       expect(find.text('fi 0.1.21 · unknown'), findsOneWidget);
     });
@@ -817,8 +830,9 @@ void main() {
     testWidgets('is shown with no device paired', (tester) async {
       final bridge = FakeCollectionBridge()..buildIdentity = clean;
       await openWithBuild(tester, bridge);
+      await pumpUntilFound(tester, find.text('No devices paired yet'));
+      await openSettings(tester);
       await pumpUntilFound(tester, find.byKey(const Key('build-version')));
-      expect(find.text('No devices paired yet'), findsOneWidget);
     });
 
     testWidgets('is absent when the query fails; the rest still renders', (

@@ -1,3 +1,4 @@
+import 'package:fi/platform_capabilities.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/ui_prefs.dart';
 import 'package:fi/voice/engine.dart';
@@ -21,11 +22,15 @@ Future<void> _open(
   WidgetTester tester, {
   VoiceServices? voice,
   Size size = const Size(390, 844),
+  PlatformCapabilities capabilities = PlatformCapabilities.androidPhone,
+  FakeCollectionBridge? bridge,
 }) async {
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = size;
   addTearDown(tester.view.reset);
-  await tester.pumpWidget(app(_ready(), voice: voice));
+  await tester.pumpWidget(
+    app(bridge ?? _ready(), voice: voice, capabilities: capabilities),
+  );
   await pumpUntilFound(tester, find.text('Collections'));
 }
 
@@ -34,9 +39,22 @@ Future<void> _openSettings(
   WidgetTester tester, {
   VoiceServices? voice,
   bool settle = true,
+  PlatformCapabilities capabilities = PlatformCapabilities.androidPhone,
+  Size size = const Size(390, 844),
+  FakeCollectionBridge? bridge,
 }) async {
-  await _open(tester, voice: voice);
-  await tester.tap(find.text('Settings'));
+  await _open(
+    tester,
+    voice: voice,
+    capabilities: capabilities,
+    size: size,
+    bridge: bridge,
+  );
+  await tester.tap(
+    size.width >= 720
+        ? find.byKey(const Key('nav-settings'))
+        : find.text('Settings'),
+  );
   if (settle) {
     await tester.pumpAndSettle();
   } else {
@@ -83,16 +101,143 @@ void main() {
     );
   });
 
-  testWidgets('desktop navigation has no Settings', (tester) async {
+  testWidgets('the sidebar lists Collections · Devices · Settings', (
+    tester,
+  ) async {
     await _open(tester, size: const Size(1240, 900));
     expect(find.byType(NavigationBar), findsNothing);
+    final sidebar = find.byKey(const Key('sidebar'));
+    final tops = [
+      for (final label in ['Collections', 'Devices', 'Settings'])
+        tester
+            .getTopLeft(
+              find.descendant(of: sidebar, matching: find.text(label)),
+            )
+            .dy,
+    ];
+    expect(tops[0], lessThan(tops[1]));
+    expect(tops[1], lessThan(tops[2]));
+    await tester.tap(find.byKey(const Key('nav-settings')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('settings-page')), findsOneWidget);
+  });
+
+  testWidgets('Settings survives widening', (tester) async {
+    await _open(tester, size: const Size(500, 800));
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+    tester.view.physicalSize = const Size(1000, 800);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('sidebar')), findsOneWidget);
+    expect(find.byKey(const Key('settings-page')), findsOneWidget);
+  });
+
+  testWidgets('Settings survives narrowing', (tester) async {
+    await _open(tester, size: const Size(1000, 800));
+    await tester.tap(find.byKey(const Key('nav-settings')));
+    await tester.pumpAndSettle();
+    tester.view.physicalSize = const Size(500, 800);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('settings-page')), findsOneWidget);
     expect(
-      find.descendant(
-        of: find.byKey(const Key('sidebar')),
-        matching: find.text('Settings'),
-      ),
-      findsNothing,
+      tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
+      2,
     );
+  });
+
+  for (final (name, size) in [
+    ('desktop shows only About', const Size(1240, 900)),
+    ('desktop capabilities at phone width', const Size(390, 844)),
+  ]) {
+    testWidgets(name, (tester) async {
+      await _openSettings(
+        tester,
+        voice: fakeVoiceServices(),
+        capabilities: PlatformCapabilities.desktop,
+        size: size,
+      );
+      expect(find.byKey(const Key('settings-about')), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('settings-subtitle')),
+          matching: find.text('Preferences for this computer.'),
+          matchRoot: true,
+        ),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('settings-voice')), findsNothing);
+      expect(find.byKey(const Key('settings-microphone')), findsNothing);
+      expect(find.byKey(const Key('settings-android-settings')), findsNothing);
+      expect(find.textContaining('Android'), findsNothing);
+    });
+  }
+
+  testWidgets(
+    'Android with voice shows Voice input, Microphone, About in order',
+    (tester) async {
+      // Tall enough that the lazy list builds every section.
+      await _openSettings(
+        tester,
+        voice: fakeVoiceServices(),
+        size: const Size(390, 2400),
+      );
+      final tops = [
+        for (final label in ['VOICE INPUT', 'MICROPHONE', 'ABOUT'])
+          tester.getTopLeft(find.text(label)).dy,
+      ];
+      expect(tops[0], lessThan(tops[1]));
+      expect(tops[1], lessThan(tops[2]));
+      expect(find.byKey(const Key('settings-subtitle')), findsNothing);
+    },
+  );
+
+  testWidgets('permission is re-read on resume', (tester) async {
+    final permission = FakeMicrophonePermission(
+      MicPermission.permanentlyDenied,
+    );
+    await _openSettings(
+      tester,
+      voice: fakeVoiceServices(permission: permission),
+    );
+    expect(find.text('Off'), findsOneWidget);
+    permission.state = MicPermission.granted;
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+    expect(find.text('Allowed'), findsOneWidget);
+  });
+
+  testWidgets('About shows Version and Network', (tester) async {
+    await _openSettings(
+      tester,
+      capabilities: PlatformCapabilities.desktop,
+      size: const Size(1240, 900),
+    );
+    final about = find.byKey(const Key('settings-about'));
+    await pumpUntilFound(tester, find.byKey(const Key('build-version')));
+    for (final text in [
+      'Version',
+      'fi 0.1.21 · a1b2c3d',
+      'Network',
+      'Local network only · UDP 47380–47389 · mDNS 5353',
+    ]) {
+      expect(
+        find.descendant(of: about, matching: find.text(text)),
+        findsOneWidget,
+        reason: text,
+      );
+    }
+  });
+
+  testWidgets('About without build identity', (tester) async {
+    await _openSettings(
+      tester,
+      capabilities: PlatformCapabilities.desktop,
+      size: const Size(1240, 900),
+      bridge: _ready()..buildInfoError = StateError('x'),
+    );
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.byKey(const Key('settings-network')), findsOneWidget);
+    expect(find.byKey(const Key('build-version')), findsNothing);
   });
 
   testWidgets('without voice services only About shows', (tester) async {
@@ -109,7 +254,8 @@ void main() {
       voice: fakeVoiceServices(engine: const UnavailableVoiceEngine()),
     );
     expect(find.byKey(const Key('settings-voice')), findsNothing);
-    expect(find.byKey(const Key('settings-microphone')), findsOneWidget);
+    expect(find.byKey(const Key('settings-microphone')), findsNothing);
+    expect(find.byKey(const Key('settings-about')), findsOneWidget);
   });
 
   testWidgets('not downloaded offers the download and hides hands-free', (
