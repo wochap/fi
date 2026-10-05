@@ -10,3 +10,7 @@ RTK.md
 ui-redesign-for-flutter-app
 
 .agents
+
+design/**/*.webp
+design/**/*.png
+.thumbnail
