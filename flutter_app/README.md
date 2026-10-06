@@ -166,6 +166,22 @@ location permission is used. Linux requires Wayland and a Secret Service
 provider. Both platforms require multicast DNS and direct peer traffic on the
 LAN for discovery and synchronization.
 
+## Troubleshooting
+
+`Could not dispatch a message to the daemon` during an Android build means a
+stale Gradle daemon. Stop it and rebuild:
+
+```sh
+(cd android && ./gradlew --stop)
+```
+
+`adb: protocol fault (couldn't read status)` during `adb install` means the adb
+server died. Restart it and retry:
+
+```sh
+adb kill-server && adb start-server
+```
+
 ## Tests and generated code
 
 From the repository root:
