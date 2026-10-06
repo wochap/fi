@@ -61,14 +61,14 @@ Widget results and rendering coordinates SHALL be derived from the current SQLit
 - **THEN** reevaluating its widget query produces updated data without synchronizing a cached result
 
 ### Requirement: Saved queries are editable in place
-Flutter SHALL let the user edit an existing saved query through the same query builder used to create one, pre-filled from the projected definition, and SHALL submit the edit through the update-query command so the `QueryId` is preserved and every widget referencing it evaluates the edited definition. The editor SHALL state how many active widgets reference the query before the edit is saved. The queries dialog SHALL offer edit alongside delete for each saved query, and the widget form SHALL offer "Edit this query" when a saved query is selected.
+Flutter SHALL let the user edit an existing saved query through the same query builder used to create one, pre-filled from the projected definition, and SHALL submit the edit through the update-query command so the `QueryId` is preserved and every widget referencing it evaluates the edited definition. The editor SHALL state how many active widgets reference the query before the edit is saved; when at least one does, the line SHALL add that changes apply there too, for example "Used by 1 widget · changes apply there too". The queries dialog SHALL offer edit alongside delete for each saved query, and the widget form SHALL offer "Edit this query" and "Save as new" when "Use a saved query" is chosen and a query is selected. The widget form SHALL present the query source as a two-way choice, "Define here" or "Use a saved query" (mock widget-editor).
 
 #### Scenario: Edit from the queries dialog
 - **WHEN** the user taps edit on a saved query in the computed-fields-and-queries dialog, changes its aggregation, and saves
 - **THEN** the query keeps its id, the change synchronizes as an update, and every widget referencing it renders the new result on next evaluation
 
 #### Scenario: Edit from the widget form
-- **WHEN** a widget form has "Use a saved query" on with a query selected and the user chooses "Edit this query"
+- **WHEN** a widget form has "Use a saved query" chosen with a query selected and the user chooses "Edit this query"
 - **THEN** the query builder opens pre-filled with that query, and saving updates it in place rather than creating a new definition
 
 #### Scenario: Save as new from the widget form
@@ -77,7 +77,7 @@ Flutter SHALL let the user edit an existing saved query through the same query b
 
 #### Scenario: Referencing widgets are disclosed
 - **WHEN** the user opens the editor for a query referenced by three active widgets
-- **THEN** the editor states that three widgets use this query before the save action is available
+- **THEN** the editor states "Used by 3 widgets · changes apply there too" before the save action is available
 
 #### Scenario: Pre-fill fidelity
 - **WHEN** the builder is opened for a saved query with a filter, a Month grouping on a date field, and a Sum aggregation
@@ -97,3 +97,33 @@ For line-chart and bar-chart widgets the query builder SHALL always show "Group 
 #### Scenario: Controls remain visible
 - **WHEN** the user opens the builder for a bar chart with no grouping chosen
 - **THEN** "Group by" is shown with "None" selected and "Category field" is shown, rather than the period controls being hidden until a bucket is chosen
+
+### Requirement: Deleting a referenced saved query is confirmed
+Deleting a saved query from the queries dialog SHALL ask for confirmation when at least one active widget references it: the title "Delete query “<name>”?", the line stating how many widgets use it and that they will show an error until edited (for example "1 widget uses it and will show an error until you edit it."), and the actions "Delete query" (secondary, left) and "Keep query" (primary, right). A query no widget references SHALL be deleted without the confirmation.
+
+#### Scenario: Keep a referenced query
+- **WHEN** the user deletes "Headache hours", which one widget uses, and chooses "Keep query"
+- **THEN** the query and the widget are unchanged
+
+#### Scenario: Delete a referenced query
+- **WHEN** the user deletes "Headache hours" and chooses "Delete query"
+- **THEN** the query is removed and the widget that used it shows "The saved query of this widget is no longer available."
+
+#### Scenario: Unreferenced query
+- **WHEN** the user deletes "Record count", which no widget uses
+- **THEN** it is removed without a confirmation
+
+### Requirement: Saved query result type and live result
+Each saved-query row in the queries dialog SHALL show a tag with the type of the value its aggregation produces: "Integer" for Count, the operand field's type for Sum, Min and Max, and a decimal at the declared output scale for Average (mock queries). The query editor SHALL show a "Result now" line with the query's current result for this device's records, formatted exactly, reevaluated as the builder changes; while the builder is incomplete or the query cannot run the line SHALL be hidden. "Add query" SHALL open the query editor for a new query instead of creating one immediately.
+
+#### Scenario: Duration sum tag and result
+- **WHEN** the saved query "Headache hours" sums the Duration computed field over records whose total is 5 h 30 min
+- **THEN** its row shows the tag "Duration" and its editor shows "Result now" with "5 h 30 min"
+
+#### Scenario: Count tag
+- **WHEN** the saved query "Record count" counts records
+- **THEN** its row shows the tag "Integer"
+
+#### Scenario: Add query opens the editor
+- **WHEN** the user taps "Add query"
+- **THEN** the query editor opens with an empty name, and nothing is created until the user saves

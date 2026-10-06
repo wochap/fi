@@ -75,3 +75,18 @@ A computed-field definition SHALL be updatable under its existing stable ID with
 #### Scenario: Edit that changes the inferred type
 - **WHEN** an update changes an expression whose inferred type is FixedDecimal to one whose inferred type is Duration, and the submitted declared type is the new inferred type
 - **THEN** the update is accepted and the definition's declared type becomes Duration
+
+### Requirement: Term-based computed-field editor
+The computed-field editor SHALL present the expression as a sequence of term cards joined by operators (mock computed-field-editor). Each term card SHALL offer a choice between "Field", "Number" and "Function", a drag handle and a remove (✕) action; the first term SHALL carry no operator. "Function" SHALL offer only "Absolute value" and "Divide"; Divide SHALL show an output scale and a rounding choice between "Half to even" and "Reject inexact". An "Add term" button SHALL append a term. Dragging a term SHALL move it within its chain of terms and keep the operators in their positions. Under the terms a result line SHALL show the inferred type with a check icon, followed by " · may be empty" when the result is nullable. When inference reports an error, the term at the error's path SHALL be outlined with a dashed accent border and show the error message under it with a warning icon, the result line SHALL be hidden, and Save SHALL be unavailable until the error is resolved. No other functions SHALL be offered.
+
+#### Scenario: Duration result
+- **WHEN** the user builds "End at − Start at" from two Date & time fields, one of them optional
+- **THEN** the result line reads "Result: Duration · may be empty" with a check icon and Save is available
+
+#### Scenario: Error on a term
+- **WHEN** the user replaces "Start at" with the Text field "Note"
+- **THEN** the "Note" term is outlined with "Can't subtract a Text from a Date & time." under it and Save is unavailable
+
+#### Scenario: Divide function
+- **WHEN** the user chooses Function › Divide on a term
+- **THEN** the term shows an output scale input and the choice "Half to even" / "Reject inexact"
