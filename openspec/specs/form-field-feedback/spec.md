@@ -90,3 +90,22 @@ Every input whose value is required SHALL show an `*` after its label in the `ac
 #### Scenario: Legend
 - **WHEN** a form has any required input
 - **THEN** exactly one "* required" legend line appears in the form
+
+### Requirement: Date bounds read as dates
+When a Date or Date & time value is outside its field's range, the error under the field SHALL name the bound as a date (Date) or date and time (Date & time) in the same text format the input uses, never as a raw number. A minimum alone SHALL read "Must be on or after <bound>", a maximum alone "Must be on or before <bound>", and both "Must be between <min> and <max>". Other bounded types keep "Must be at least", "Must be at most" and "Must be between". The text SHALL be shown in the active language.
+
+#### Scenario: Date before the minimum
+- **WHEN** a Date field has the minimum 2026-01-01 and the user saves the value 2025-12-30
+- **THEN** "Must be on or after 2026-01-01" appears under the field
+
+#### Scenario: Date & time after the maximum
+- **WHEN** a Date & time field has only a maximum of 2026-12-31 18:00 and the user saves a later value
+- **THEN** "Must be on or before 2026-12-31 18:00" appears under the field
+
+#### Scenario: Integer keeps its wording
+- **WHEN** an Integer field with the minimum 5 is saved with 2
+- **THEN** "Must be at least 5" appears under the field
+
+#### Scenario: Spanish
+- **WHEN** the interface is in Spanish and a Date field with the minimum 2026-01-01 is saved with 2025-12-30
+- **THEN** the error reads "Debe ser el 2026-01-01 o posterior"

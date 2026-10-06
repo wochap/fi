@@ -7,13 +7,13 @@ TBD: Define collection navigation, schema editing, registry-driven field control
 ### Requirement: Collection list and navigation
 The Flutter application SHALL show active user-defined collections and open a generic collection screen containing its record list, add action, and schema/settings access.
 
-Each collection in the list SHALL show its name, its active record count, its active field count, and when it was last edited as a status time ("Edited 2 h ago"), using the same status-time wording as device rows; a collection with no last-edited time shows no edit time. When one or more of its records are incomplete (projected invalid), the row SHALL also show an outline tag with a warning icon reading "N incomplete". On screens narrower than 720px the row SHALL be at least 64px tall and SHALL show the counts and edit time as one subtitle line under the name ("6 records · edited 2 h ago", or "1 record · 1 incomplete" when some are incomplete).
+Each collection in the list SHALL show its name and, on one subtitle line under the name on every width, its active record count, its active field count, and when it was last edited as a lowercase status time ("6 records · 3 fields · edited 2 h ago"), using the same status-time wording as device rows; a collection with no last-edited time ends the line after the field count. When one or more of its records are incomplete (projected invalid), the row SHALL also show an outline tag with a warning icon reading "N incomplete" beside the name on every width. On screens narrower than 720px the row SHALL be at least 64px tall.
 
-The list header SHALL offer a sort control with two orders, "Last edited" (most recent first, the default) and "Name" (A–Z, case-insensitive), with ties broken by collection id. The chosen order SHALL be remembered on this device across restarts. The header SHALL keep the whole-dataset import/export menu (Import JSON, Export all, Export selected) as an icon button beside the sort control, and SHALL offer "New collection" ("New" below 720px).
+The list header SHALL offer a sort control with two orders, "Last edited" (most recent first, the default) and "Name" (A–Z, case-insensitive), with ties broken by collection id. The chosen order SHALL be remembered on this device across restarts. The header SHALL offer the whole-dataset import/export menu between the sort control and "New collection": at 720px and wider as a labelled "Import and export" button, below 720px as an icon button that opens an action sheet. The menu SHALL hold "Import JSON…", "Export all" and "Export selected…". The header SHALL offer "New collection" ("New" below 720px).
 
-Each row SHALL offer a menu with, in this order: Rename, Duplicate, a divider, a "Data" group with Import CSV…, Export CSV and Export JSON, a divider, and Delete…. On screens at least 720px wide it SHALL be a popup menu and Rename SHALL show the F2 shortcut; pressing F2 while a collection row has focus SHALL start renaming it. Below 720px the menu SHALL open as an action sheet headed by the collection's icon, name, and "N records · N fields".
+Each row SHALL offer a menu with, in this order: Rename, Clone, a divider, an "Export" group with Export CSV and Export JSON, an "Import" group with Import CSV…, a divider, and Delete…. On screens at least 720px wide it SHALL be a popup menu and Rename SHALL show the F2 shortcut; pressing F2 while a collection row has focus SHALL start renaming it. Below 720px the menu SHALL open as an action sheet headed by the collection's icon, name, and "N records · N fields", with the same groups.
 
-The collection screen header SHALL show a back action, the collection title, and "N records · N fields". At 720px and wider it SHALL offer Schema, Queries, Select and New record as buttons. Below 720px it SHALL offer Schema as an icon button and a ⋮ menu holding Queries, Select records and Collection actions… (which opens the same actions as the list row menu), and New record SHALL be the floating "Record" button. A long press on a record card SHALL also start selection.
+The collection screen header SHALL show a back action, the collection title, and "N records · N fields". At 720px and wider it SHALL offer Schema, Queries and Select as buttons, then a ⋮ button, then New record. The ⋮ menu SHALL hold Queries and Select records, a divider, Export CSV, Export JSON and Import CSV…, a divider, and Rename, Clone and Delete…; Rename SHALL start the inline title rename, and the other actions SHALL behave as the same actions on the list row. Below 720px the header SHALL offer Schema as an icon button and a ⋮ menu holding Queries, Select records and Collection actions… (which opens the same actions as the list row menu), and New record SHALL be the floating "Record" button. A long press on a record card SHALL also start selection.
 
 #### Scenario: Open Headache collection
 - **WHEN** the user selects the Headache collection
@@ -21,11 +21,11 @@ The collection screen header SHALL show a back action, the collection title, and
 
 #### Scenario: Row shows size and recency
 - **WHEN** the collection "test" has 6 active records, 3 active fields and was last edited two hours ago
-- **THEN** its desktop row shows "test", "6 records · 3 fields" and "Edited 2 h ago", and no incomplete tag
+- **THEN** its row shows "test" and the subtitle "6 records · 3 fields · edited 2 h ago", and no incomplete tag, on both a 1240px-wide and a 390px-wide screen
 
 #### Scenario: Row flags incomplete records
 - **WHEN** the collection "tst" has one record projected invalid for a missing required field
-- **THEN** its row shows an outline "1 incomplete" tag with a warning icon, and on a phone its subtitle reads "1 record · 1 incomplete"
+- **THEN** its row shows an outline "1 incomplete" tag with a warning icon beside the name, and its subtitle still reads "1 record · 9 fields · edited just now"
 
 #### Scenario: Sort by name is remembered
 - **WHEN** the user switches the sort to Name and restarts the app
@@ -33,15 +33,23 @@ The collection screen header SHALL show a back action, the collection title, and
 
 #### Scenario: Grouped row menu
 - **WHEN** the user opens a row's menu on a 1240px-wide screen
-- **THEN** it lists Rename (with F2), Duplicate, then under "Data" Import CSV…, Export CSV and Export JSON, then Delete…, separated by dividers
+- **THEN** it lists Rename (with F2) and Clone, then under "Export" Export CSV and Export JSON, then under "Import" Import CSV…, then Delete…, separated by dividers
 
 #### Scenario: Action sheet on a phone
 - **WHEN** the user taps a row's ⋮ on a 390px-wide screen
 - **THEN** an action sheet opens headed by the collection name and "N records · N fields", with the same actions in the same groups
 
 #### Scenario: Whole-dataset transfer stays reachable
-- **WHEN** the collections list is shown
-- **THEN** an icon button beside the sort control opens Import JSON, Export all and Export selected
+- **WHEN** the collections list is shown on a 1240px-wide screen
+- **THEN** a labelled "Import and export" button sits between the sort control and "New collection" and opens "Import JSON…", "Export all" and "Export selected…"
+
+#### Scenario: Whole-dataset transfer on a phone
+- **WHEN** the collections list is shown on a 390px-wide screen
+- **THEN** an import/export icon button beside the sort control opens an action sheet with "Import JSON…", "Export all" and "Export selected…"
+
+#### Scenario: Desktop collection menu
+- **WHEN** a collection is opened on a 1240px-wide screen and the user presses the header ⋮
+- **THEN** the menu lists Queries, Select records, Export CSV, Export JSON, Import CSV…, Rename, Clone and Delete…, and choosing Rename turns the title into its inline editor
 
 #### Scenario: Mobile collection header
 - **WHEN** a collection is opened on a 390px-wide screen
@@ -316,15 +324,21 @@ Collection and record controllers SHALL react to typed data/projection events by
 - **THEN** its generic record list refreshes without reading Automerge directly
 
 ### Requirement: Multi-select record actions
-The generic collection screen SHALL offer a selection mode in which the user selects multiple records, sees the selected count, and applies a batch delete or a batch edit that sets one active field to one typed value on every selected record. Both batch actions SHALL require confirmation in a dialog that states the number of affected records, SHALL submit a single batch command through the bridge, and SHALL report the affected count after success. Single-record delete from the list SHALL remain immediate with no confirmation. Selection SHALL be cleared after a batch completes and SHALL drop records that disappear from the projected list.
+The generic collection screen SHALL offer a selection mode in which the user selects multiple records, sees the selected count, and applies a batch delete or a batch edit that sets one active field to one typed value on every selected record. In selection mode the header SHALL become an action bar showing a close action, "N selected", "in <collection>" at 720px and wider, and Select all, "Edit field" and Delete (labelled buttons at 720px and wider, icon buttons below). Selected rows and cards SHALL show the accent tint, an accent outline or leading edge, and a checked box.
+
+"Edit field" SHALL open "Edit field on N records" with a Field select and a "New value" input that uses the field's registered record-form control, with the line "Uses the same control as the record form.", and Cancel and Continue. Continue SHALL ask "Set <field> on N records?" with "Every selected record is updated in one step.", Cancel and "Set <field>". Delete SHALL ask "Delete N records?" with "Every selected record is deleted in one step.", "Delete" as a secondary action at the leading edge and "Keep records" as the primary action. Both batch actions SHALL submit a single batch command through the bridge and SHALL report the affected count after success as "Set <field> on N records" or "Deleted N records". Single-record delete from the list SHALL remain immediate with no confirmation. Selection SHALL be cleared after a batch completes and SHALL drop records that disappear from the projected list.
 
 #### Scenario: Enter selection and batch delete
 - **WHEN** the user long-presses a record, selects two more, and taps Delete
-- **THEN** a dialog reads "Delete 3 records?", confirming submits one batch delete, the list refreshes without those records, and feedback shows "3 records deleted"
+- **THEN** a dialog reads "Delete 3 records?" with "Delete" and "Keep records", confirming with "Delete" submits one batch delete, the list refreshes without those records, and feedback shows "Deleted 3 records"
+
+#### Scenario: Keep records
+- **WHEN** the delete confirmation is open and the user presses "Keep records"
+- **THEN** no command is sent and the selection is unchanged
 
 #### Scenario: Batch edit one field
-- **WHEN** the user selects records, chooses the `category` field, enters a value with that field's registered editor, and confirms "Set category on 4 records?"
-- **THEN** Flutter submits one batch field-set command and the four records show the new value after refresh
+- **WHEN** the user selects 4 records, presses "Edit field", chooses the `category` field, enters a value in "New value" with that field's registered editor, presses Continue and confirms "Set category on 4 records?" with "Set category"
+- **THEN** Flutter submits one batch field-set command, the four records show the new value after refresh, and feedback shows "Set category on 4 records"
 
 #### Scenario: Cancel keeps selection
 - **WHEN** the user dismisses the confirmation dialog
@@ -337,6 +351,10 @@ The generic collection screen SHALL offer a selection mode in which the user sel
 #### Scenario: Single delete unchanged
 - **WHEN** the user taps the delete icon on one record outside selection mode
 - **THEN** the record is deleted immediately with no confirmation dialog
+
+#### Scenario: Action bar on desktop
+- **WHEN** two records of "pains" are selected on a 1240px-wide screen
+- **THEN** the header reads "2 selected" and "in pains" with "Select all", "Edit field" and "Delete" buttons
 
 ### Requirement: Structured computed-field editor
 Flutter SHALL provide a computed-field editor, reachable from the collection's computed-field list for both creating a new field and editing an existing one, that collects a name and a structured expression through a builder limited to source-field references, typed numeric constants, addition, subtraction, multiplication, division with an output scale and rounding policy, and absolute value. The editor SHALL obtain the output type and nullability from Rust inference on every expression change and display them; the user MUST NOT be asked to choose a declared type. When Rust rejects the expression the editor SHALL show the typed error at the offending node and keep the save action disabled. Saving an existing field SHALL issue an in-place update for its stable ID.
@@ -399,13 +417,13 @@ The DateTime editor SHALL show its current value as local time in the sortable f
 - **THEN** the editor shows `2026-09-24 23:00`
 
 ### Requirement: Inline collection title rename
-The collection screen SHALL let the user rename the collection by editing its title in place. A double tap (or double click) on the title SHALL turn it into an editable text in the same position, with the same text style, and with no border, fill, label, or padding around it, holding the current name, focused, with the whole name selected. The editable text SHALL be as wide as its content: it SHALL start at the width of the current name, SHALL grow as the user types, SHALL NOT exceed the width the header layout gives the title, and SHALL keep a small minimum width so an emptied title remains visible and tappable. Neighbouring header widgets SHALL keep their position while the title is edited. Pressing Enter or moving focus away from the editable text SHALL submit the edit; pressing Escape SHALL cancel it and restore the title.
+The collection screen SHALL let the user rename the collection by editing its title in place. A double tap (or double click) on the title, or Rename in the desktop header ⋮ menu, SHALL turn it into an editable text in the same position, with the same text style, and with no border, fill, label, or padding around it, holding the current name, focused, with the whole name selected. The editable text SHALL be as wide as its content: it SHALL start at the width of the current name, SHALL grow as the user types, SHALL NOT exceed the width the header layout gives the title, and SHALL keep a small minimum width so an emptied title remains visible and tappable. Neighbouring header widgets SHALL keep their position while the title is edited. Pressing Enter or moving focus away from the editable text SHALL submit the edit; pressing Escape SHALL cancel it and restore the title.
 
 On submit the text SHALL be trimmed of leading and trailing whitespace. When the trimmed text is empty, or equal to the current name, the edit SHALL be treated as a cancel: no rename command is sent and no error is shown. Otherwise the existing rename command SHALL be sent with the trimmed name, and the title SHALL show the new name once the projection refreshes.
 
 When the rename command is rejected, the title SHALL return to the previous name and the error SHALL be reported to the user without keeping the editable text open.
 
-The Rename action on the collection list card menu SHALL remain available.
+The Rename action on the collection list card menu SHALL remain available. At 720px and wider it SHALL turn that row in place into a name input holding the current name, focused and selected, with the hint "Enter to save · Esc to cancel" inside the input and Cancel and Save buttons beside it. Enter or Save SHALL submit with the same trim and cancel rules as the title; Escape or Cancel SHALL restore the row without a command; a rejected rename SHALL keep the input open with the error under it. Below 720px Rename SHALL open the "Rename collection" sheet.
 
 #### Scenario: Double tap enters edit mode
 - **WHEN** the user double taps the title "Headaches" on the collection screen
@@ -449,11 +467,23 @@ The Rename action on the collection list card menu SHALL remain available.
 
 #### Scenario: Rejected rename restores the title
 - **WHEN** the rename command fails
-- **THEN** the editable text closes, the title shows the previous name, and the failure is reported in a snackbar
+- **THEN** the editable text closes, the title shows the previous name, and the failure is reported to the user
+
+#### Scenario: Header menu rename
+- **WHEN** the user chooses Rename from the collection screen's ⋮ menu on a 1240px-wide screen
+- **THEN** the title becomes its focused editable text with the name selected
 
 #### Scenario: List menu rename still works
-- **WHEN** the user chooses Rename from a collection card menu on the collection list
-- **THEN** the existing Rename dialog opens as before
+- **WHEN** the user chooses Rename from a collection row's menu on a 1240px-wide screen, types "pain log" and presses Enter
+- **THEN** the row showed an input with "Enter to save · Esc to cancel", Cancel and Save, a rename command is sent with "pain log", and the row returns to its normal look with the new name
+
+#### Scenario: Escape cancels the list rename
+- **WHEN** the row's rename input is open and the user presses Escape
+- **THEN** no rename command is sent and the row shows the previous name
+
+#### Scenario: List rename on a phone
+- **WHEN** the user chooses Rename from a collection's action sheet on a 390px-wide screen
+- **THEN** the "Rename collection" sheet opens with the name input, Cancel and Save
 
 ### Requirement: Slider presentation for bounded Integer fields
 The field editor SHALL show a "Show as slider" switch only when the kind is Integer. The switch SHALL be enabled only while both the minimum and the maximum are filled, and SHALL turn off when either bound is cleared or the field type changes. While the switch is on, the field editor SHALL show a Step input that accepts a positive whole number and is empty by default, meaning step 1. Before submitting, the field editor SHALL reject a step that is not positive or that does not divide the distance between the bounds exactly, showing the issue under the Step input, and SHALL clear the step when the switch turns off. The record editor SHALL render an Integer field whose slider flag is set as the shared slider input with those bounds and that step, and SHALL render it as the plain integer input when the flag is unset. In the new-record editor, a required slider field with no default SHALL start at the minimum and SHALL report the minimum as its value. When an existing record lacks a required slider field, the editor SHALL show the unset track with the typed missing-value error from Rust under it, as it does for other inputs, and MUST NOT substitute the minimum. Record lists SHALL display the value as a plain number regardless of the flag or step.
@@ -529,15 +559,15 @@ The record editor SHALL render a slider field with a label row under the track: 
 - **WHEN** a form shows a Text field above a slider field
 - **THEN** the Text input keeps the normal box height and the slider takes the extra height below its own label
 
-### Requirement: Duplicate collection action
-The collection list card menu SHALL offer a Duplicate action next to Rename and Delete. Choosing it SHALL open a dialog with a Name input prefilled with the source name followed by " (copy)". Save SHALL submit the clone command with the trimmed name; Cancel or dismissing the dialog SHALL send no command. A typed name error from Rust SHALL be shown inline on the Name input and the dialog SHALL stay open. On success the dialog SHALL close and the new collection SHALL appear in the list after the projection refreshes, without navigating into it.
+### Requirement: Clone collection action
+The collection list card menu SHALL offer a Clone action next to Rename and Delete, and the collection screen's desktop ⋮ menu SHALL offer the same action. Choosing it SHALL open a dialog titled "Clone collection" with a required Name input prefilled with the source name followed by " (copy)", and Cancel and "Clone" actions. Clone SHALL submit the clone command with the trimmed name; Cancel or dismissing the dialog SHALL send no command. A typed name error from Rust SHALL be shown inline on the Name input and the dialog SHALL stay open. On success the dialog SHALL close and the new collection SHALL appear in the list after the projection refreshes, without navigating into it.
 
 #### Scenario: Duplicate with default name
-- **WHEN** the user chooses Duplicate on "Headache" and presses Save without editing
+- **WHEN** the user chooses Clone on "Headache" and presses "Clone" without editing
 - **THEN** a new collection "Headache (copy)" appears in the list with the same fields, queries and widgets and no records
 
 #### Scenario: Duplicate with custom name
-- **WHEN** the user replaces the prefilled name with "Migraine" and presses Save
+- **WHEN** the user replaces the prefilled name with "Migraine" and presses "Clone"
 - **THEN** the new collection is named "Migraine"
 
 #### Scenario: Cancel
@@ -545,23 +575,39 @@ The collection list card menu SHALL offer a Duplicate action next to Rename and 
 - **THEN** no clone command is sent and the list is unchanged
 
 #### Scenario: Rust rejects the name
-- **WHEN** the user clears the name and presses Save
+- **WHEN** the user clears the name and presses "Clone"
 - **THEN** the dialog stays open and shows the typed name error under the Name input
 
 ### Requirement: Collection export and import actions
-The collections list SHALL offer, per collection, "Export CSV" and "Export JSON" actions and an "Import CSV" action, and SHALL offer an "Export all" action and a multi-select "Export selected" action that produce one JSON envelope. The collections list SHALL offer an "Import JSON" action that creates new collections. Each action SHALL open the platform file dialog, then show the outcome (file written, count imported, or the abort reason including row and column for CSV) in the same surface, without leaving the current screen.
+The collections list SHALL offer, per collection, "Export CSV" and "Export JSON" actions and an "Import CSV…" action, and SHALL offer an "Export all" action and an "Export selected…" action that produce one JSON envelope. The collections list SHALL offer an "Import JSON…" action that creates new collections. Each action SHALL open the platform file dialog, then show the outcome in the same surface, without leaving the current screen.
+
+"Export selected…" SHALL first open "Export collections" with the line "Choose what goes in the file" and one checkable row per active collection showing its name and "N records · N fields". Its primary action SHALL read "Export N collections" ("Export N" below 720px), pluralized, and SHALL be unavailable while nothing is checked. At 720px and wider it SHALL be a dialog; below 720px a bottom sheet.
+
+The outcome SHALL be shown as a toast with a status icon: a check for success, a warning for an abort. A success SHALL read "Exported to <file name>", "Imported N records into <collection>" for CSV, or "Imported N collections" for JSON, and SHALL hide on its own. An abort SHALL read "Import stopped at <place>: <reason> Nothing was imported.", where the place is "the header", "row N, column “<column>”", "row N", or "collection N" followed by ", item <item>" when known, and SHALL stay until the user presses "Dismiss". The reason SHALL be Rust's reason text unchanged.
 
 #### Scenario: Export CSV from list
-- **WHEN** the user chooses "Export CSV" on "Headache" and confirms a location
-- **THEN** the CSV is written there and a message names the file
+- **WHEN** the user chooses "Export CSV" on "pains" and confirms a location with the file name "pains.csv"
+- **THEN** the CSV is written there and a toast with a check icon reads "Exported to pains.csv"
+
+#### Scenario: CSV import success
+- **WHEN** the user imports a CSV of 42 valid rows into "pains"
+- **THEN** a toast reads "Imported 42 records into pains"
 
 #### Scenario: CSV import abort shown
-- **WHEN** the user imports a CSV whose row 12 has an invalid Date in column `Onset`
-- **THEN** a message states row 12, column `Onset`, and the reason, and the record list is unchanged
+- **WHEN** the user imports a CSV whose row 18 has the text "eleven" in the Integer column `Level`
+- **THEN** a toast with a warning icon reads "Import stopped at row 18, column “Level”: " followed by Rust's reason and " Nothing was imported.", stays until "Dismiss" is pressed, and the record list is unchanged
 
 #### Scenario: Import JSON adds collections
 - **WHEN** the user imports an envelope with two collections
-- **THEN** two new collections appear in the list and existing collections are unchanged
+- **THEN** two new collections appear in the list, existing collections are unchanged, and a toast reads "Imported 2 collections"
+
+#### Scenario: Export selected
+- **WHEN** the user chooses "Export selected…" on a 1240px-wide screen and checks "pains" and "pen"
+- **THEN** the dialog shows "Choose what goes in the file", the rows show their counts, the primary reads "Export 2 collections", and pressing it opens the save dialog for one JSON file holding both
+
+#### Scenario: Nothing checked
+- **WHEN** the "Export collections" picker is open with no collection checked
+- **THEN** the primary action is unavailable and nothing is exported
 
 ### Requirement: New-record editor seeds defaults
 When the record editor opens for a new record, every field that declares a default SHALL open with that default as its current value, shown in the field's input exactly as a stored value would be. A Date field whose default is relative SHALL open at the device's local date plus the declared number of days. Fields without a default SHALL open empty. Defaulted fields SHALL show the Default marker until the user changes them. Editing an existing record SHALL show the stored values only and MUST NOT substitute defaults for absent fields. The stored result of saving an untouched seeded form SHALL equal the result of saving the same form before this requirement, because Rust applies the same defaults on create.
