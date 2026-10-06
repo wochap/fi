@@ -1,4 +1,3 @@
-import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -151,20 +150,146 @@ void main() {
     );
   });
 
-  testWidgets('list menu Rename still opens the Rename dialog', (tester) async {
+  group('list rename', () {
+    final rowInput = find.byKey(const Key('collection-rename-collection-1'));
+
+    /// Shows the list at [size] and chooses Rename from the row menu.
+    Future<FakeCollectionBridge> chooseRename(
+      WidgetTester tester, {
+      Size size = const Size(1240, 800),
+    }) async {
+      await _useSize(tester, size);
+      final bridge = seeded(1);
+      await tester.pumpWidget(app(bridge));
+      await pumpUntilFound(tester, find.text('Headaches'));
+      await tester.tap(find.byTooltip('Collection actions'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Rename'));
+      await tester.pumpAndSettle();
+      return bridge;
+    }
+
+    String rowText(WidgetTester tester) => tester
+        .widget<EditableText>(
+          find.descendant(of: rowInput, matching: find.byType(EditableText)),
+        )
+        .controller
+        .text;
+
+    testWidgets('the row turns into an input with the hint, Cancel and Save', (
+      tester,
+    ) async {
+      await chooseRename(tester);
+      expect(rowInput, findsOneWidget);
+      expect(rowText(tester), 'Headaches');
+      expect(find.text('Enter to save · Esc to cancel'), findsOneWidget);
+      expect(find.byKey(const Key('collection-rename-cancel')), findsOneWidget);
+      expect(find.byKey(const Key('collection-rename-save')), findsOneWidget);
+      expect(find.text('Rename collection'), findsNothing);
+    });
+
+    testWidgets('Enter saves the trimmed name', (tester) async {
+      final bridge = await chooseRename(tester);
+      await tester.enterText(rowInput, '  pain log ');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(bridge.renames, ['pain log']);
+      expect(rowInput, findsNothing);
+      expect(find.text('pain log'), findsOneWidget);
+    });
+
+    testWidgets('Save saves', (tester) async {
+      final bridge = await chooseRename(tester);
+      await tester.enterText(rowInput, 'Gym');
+      await tester.tap(find.byKey(const Key('collection-rename-save')));
+      await tester.pumpAndSettle();
+      expect(bridge.renames, ['Gym']);
+      expect(rowInput, findsNothing);
+    });
+
+    testWidgets('Escape cancels', (tester) async {
+      final bridge = await chooseRename(tester);
+      await tester.enterText(rowInput, 'Gym');
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(bridge.renames, isEmpty);
+      expect(rowInput, findsNothing);
+      expect(find.text('Headaches'), findsOneWidget);
+    });
+
+    testWidgets('Cancel cancels', (tester) async {
+      final bridge = await chooseRename(tester);
+      await tester.enterText(rowInput, 'Gym');
+      await tester.tap(find.byKey(const Key('collection-rename-cancel')));
+      await tester.pumpAndSettle();
+      expect(bridge.renames, isEmpty);
+      expect(find.text('Headaches'), findsOneWidget);
+    });
+
+    for (final text in ['   ', ' Headaches ']) {
+      testWidgets('"$text" is a silent no-op', (tester) async {
+        final bridge = await chooseRename(tester);
+        await tester.enterText(rowInput, text);
+        await tester.testTextInput.receiveAction(TextInputAction.done);
+        await tester.pumpAndSettle();
+        expect(bridge.renames, isEmpty);
+        expect(rowInput, findsNothing);
+        expect(find.text('Headaches'), findsOneWidget);
+      });
+    }
+
+    testWidgets('a rejection keeps the input open with the error under it', (
+      tester,
+    ) async {
+      final bridge = await chooseRename(tester);
+      bridge.nextError = const BridgeError(
+        kind: BridgeErrorKind.validation,
+        issues: [],
+        message: 'Collection name is invalid.',
+        resetResolvable: false,
+      );
+      await tester.enterText(rowInput, 'Gym');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(bridge.renames, isEmpty);
+      expect(rowInput, findsOneWidget);
+      expect(
+        find.descendant(
+          of: rowInput,
+          matching: find.text('Collection name is invalid.'),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a phone keeps the Rename collection sheet', (tester) async {
+      final bridge = await chooseRename(tester, size: const Size(390, 844));
+      expect(rowInput, findsNothing);
+      expect(find.text('Rename collection'), findsOneWidget);
+      await tester.enterText(find.byKey(const Key('collection-name')), 'Gym');
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+      expect(bridge.renames, ['Gym']);
+    });
+  });
+
+  testWidgets('header ⋮ Rename starts the inline title editor', (tester) async {
+    await _useSize(tester, const Size(1240, 800));
     final bridge = seeded(1);
-    await tester.pumpWidget(app(bridge));
-    await pumpUntilFound(tester, find.text('Headaches'));
-    await tester.tap(find.byIcon(FiIcons.more));
+    await openCollection(tester, bridge);
+    await tester.tap(find.byKey(const Key('collection-desktop-more')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Rename'));
     await tester.pumpAndSettle();
-    expect(find.text('Rename collection'), findsOneWidget);
-    await tester.enterText(find.byKey(const Key('collection-name')), 'Gym');
-    await tester.tap(find.text('Save'));
-    await tester.pumpAndSettle();
-    expect(bridge.renames, ['Gym']);
-    expect(find.text('Gym'), findsWidgets);
+    expect(_input, findsOneWidget);
+    final field = tester.widget<EditableText>(
+      find.descendant(of: _input, matching: find.byType(EditableText)),
+    );
+    expect(
+      field.controller.selection,
+      const TextSelection(baseOffset: 0, extentOffset: 9),
+    );
+    expect(field.focusNode.hasFocus, isTrue);
   });
 
   testWidgets('wide layout: the record count stays put and the editor fits', (

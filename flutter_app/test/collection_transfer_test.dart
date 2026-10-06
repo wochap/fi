@@ -80,6 +80,7 @@ Future<void> _listAction(WidgetTester tester, String label) async {
 }
 
 final _en = lookupAppLocalizations(const Locale('en'));
+final _es = lookupAppLocalizations(const Locale('es'));
 
 void main() {
   group('controller', () {
@@ -159,72 +160,134 @@ void main() {
         expect(bridge.records[_collection], hasLength(2));
         expect(
           importOutcomeMessage(_en, outcome!, csv: true),
-          'Import stopped. Row 12, column Onset: '
-          '"yesterday" is not a date (YYYY-MM-DD)',
+          'Import stopped at row 12, column “Onset”: '
+          '"yesterday" is not a date (YYYY-MM-DD) Nothing was imported.',
         );
         controller.dispose();
       },
     );
 
-    test('outcome messages name counts and JSON abort locations', () {
-      expect(
-        importOutcomeMessage(
-          _en,
-          const ImportOutcomeDto(
-            imported: true,
-            recordCount: 120,
-            collectionIds: [],
-            message: '',
-          ),
-          csv: true,
-        ),
-        '120 records imported',
+    group('outcome messages', () {
+      ImportOutcomeDto abort({
+        int? row,
+        String? column,
+        int? collectionIndex,
+        String? item,
+      }) => ImportOutcomeDto(
+        imported: false,
+        recordCount: 0,
+        collectionIds: const [],
+        row: row,
+        column: column,
+        collectionIndex: collectionIndex,
+        item: item,
+        reason: 'Required',
+        message: '',
       );
-      expect(
-        importOutcomeMessage(
-          _en,
-          const ImportOutcomeDto(
-            imported: true,
-            recordCount: 9,
-            collectionIds: ['a', 'b'],
-            message: '',
-          ),
-          csv: false,
-        ),
-        '2 collections imported',
-      );
-      expect(
-        importOutcomeMessage(
-          _en,
-          const ImportOutcomeDto(
-            imported: false,
-            recordCount: 0,
-            collectionIds: [],
-            collectionIndex: 2,
-            item: 'record 1',
-            reason: 'Required',
-            message: '',
-          ),
-          csv: false,
-        ),
-        'Import stopped. Collection 3, record 1: Required',
-      );
-      expect(
-        importOutcomeMessage(
-          _en,
-          const ImportOutcomeDto(
-            imported: false,
-            recordCount: 0,
-            collectionIds: [],
-            row: 0,
-            column: 'Mood',
-            reason: 'no active field has this name',
-            message: '',
-          ),
-          csv: true,
-        ),
-        'Import stopped. Header, column Mood: no active field has this name',
-      );
+
+      test('successes name the count and the collection', () {
+        const csv = ImportOutcomeDto(
+          imported: true,
+          recordCount: 42,
+          collectionIds: [],
+          message: '',
+        );
+        expect(
+          importOutcomeMessage(_en, csv, csv: true, collection: 'pains'),
+          'Imported 42 records into pains',
+        );
+        expect(
+          importOutcomeMessage(_es, csv, csv: true, collection: 'pains'),
+          'Se importaron 42 registros en pains',
+        );
+        const json = ImportOutcomeDto(
+          imported: true,
+          recordCount: 9,
+          collectionIds: ['a', 'b'],
+          message: '',
+        );
+        expect(
+          importOutcomeMessage(_en, json, csv: false),
+          'Imported 2 collections',
+        );
+        expect(
+          importOutcomeMessage(_es, json, csv: false),
+          'Se importaron 2 colecciones',
+        );
+      });
+
+      test('the header', () {
+        expect(
+          importOutcomeMessage(_en, abort(row: 0), csv: true),
+          'Import stopped at the header: Required Nothing was imported.',
+        );
+        expect(
+          importOutcomeMessage(_es, abort(row: 0), csv: true),
+          'La importación se detuvo en el encabezado: Required '
+          'No se importó nada.',
+        );
+      });
+
+      test('a row', () {
+        expect(
+          importOutcomeMessage(_en, abort(row: 18), csv: true),
+          'Import stopped at row 18: Required Nothing was imported.',
+        );
+        expect(
+          importOutcomeMessage(_es, abort(row: 18), csv: true),
+          'La importación se detuvo en fila 18: Required No se importó nada.',
+        );
+      });
+
+      test('a row and column', () {
+        expect(
+          importOutcomeMessage(_en, abort(row: 18, column: 'Level'), csv: true),
+          'Import stopped at row 18, column “Level”: Required '
+          'Nothing was imported.',
+        );
+        expect(
+          importOutcomeMessage(_es, abort(row: 18, column: 'Level'), csv: true),
+          'La importación se detuvo en fila 18, columna “Level”: Required '
+          'No se importó nada.',
+        );
+      });
+
+      test('a collection', () {
+        expect(
+          importOutcomeMessage(_en, abort(collectionIndex: 1), csv: false),
+          'Import stopped at collection 2: Required Nothing was imported.',
+        );
+        expect(
+          importOutcomeMessage(_es, abort(collectionIndex: 1), csv: false),
+          'La importación se detuvo en colección 2: Required '
+          'No se importó nada.',
+        );
+      });
+
+      test('a collection and item', () {
+        final outcome = abort(collectionIndex: 1, item: 'record 5');
+        expect(
+          importOutcomeMessage(_en, outcome, csv: false),
+          'Import stopped at collection 2, record 5: Required '
+          'Nothing was imported.',
+        );
+        expect(
+          importOutcomeMessage(_es, outcome, csv: false),
+          'La importación se detuvo en colección 2, record 5: Required '
+          'No se importó nada.',
+        );
+      });
+
+      test('no place', () {
+        expect(
+          importOutcomeMessage(_en, abort(), csv: false),
+          'Import stopped: Required Nothing was imported.',
+        );
+        expect(
+          importOutcomeMessage(_es, abort(), csv: false),
+          'La importación se detuvo: Required No se importó nada.',
+        );
+      });
     });
 
     test('file stems drop characters file systems reject', () {
@@ -241,6 +304,7 @@ void main() {
       await _collectionAction(tester, 'Export CSV');
       expect(dialogs.written, [('Headaches.csv', 'csv of $_collection')]);
       expect(find.text('Exported to Headaches.csv'), findsOneWidget);
+      expect(find.byKey(const Key('outcome-check')), findsOneWidget);
     });
 
     testWidgets('Export JSON exports that one collection', (tester) async {
@@ -286,7 +350,8 @@ void main() {
       await _collectionAction(tester, 'Import CSV…');
       expect(bridge.imports, [(_collection, 'Title\na\nb\n')]);
       expect(bridge.records[_collection], hasLength(4));
-      expect(find.text('2 records imported'), findsOneWidget);
+      expect(find.text('Imported 2 records into Headaches'), findsOneWidget);
+      expect(find.byKey(const Key('outcome-check')), findsOneWidget);
     });
 
     testWidgets('a CSV abort states row, column and reason', (tester) async {
@@ -295,14 +360,20 @@ void main() {
       bridge.nextImportOutcome = _csvAbort;
       await _showList(tester, bridge, dialogs);
       await _collectionAction(tester, 'Import CSV…');
-      expect(
-        find.text(
-          'Import stopped. Row 12, column Onset: '
-          '"yesterday" is not a date (YYYY-MM-DD)',
-        ),
-        findsOneWidget,
+      final message = find.text(
+        'Import stopped at row 12, column “Onset”: '
+        '"yesterday" is not a date (YYYY-MM-DD) Nothing was imported.',
       );
+      expect(message, findsOneWidget);
+      expect(find.byKey(const Key('outcome-warning')), findsOneWidget);
       expect(bridge.records[_collection], hasLength(2));
+      // An abort stays until dismissed.
+      await tester.pump(const Duration(seconds: 30));
+      await tester.pumpAndSettle();
+      expect(message, findsOneWidget);
+      await tester.tap(find.text('Dismiss'));
+      await tester.pumpAndSettle();
+      expect(message, findsNothing);
     });
 
     testWidgets('Export all exports every collection', (tester) async {
@@ -320,15 +391,75 @@ void main() {
       final bridge = _bridge();
       final dialogs = FakeFileDialogs()..saveResult = 'collections.json';
       await _showList(tester, bridge, dialogs);
-      await _listAction(tester, 'Export selected');
+      await _listAction(tester, 'Export selected…');
       final confirm = find.byKey(const Key('confirm-export-selected'));
+      expect(find.text('Choose what goes in the file'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('export-pick-collection-2')),
+          matching: find.text('0 records · 0 fields'),
+        ),
+        findsOneWidget,
+      );
       expect(tester.widget<FilledButton>(confirm).onPressed, isNull);
       await tester.tap(find.byKey(const Key('export-pick-collection-2')));
       await tester.pumpAndSettle();
+      expect(
+        find.descendant(
+          of: confirm,
+          matching: find.text('Export 1 collection'),
+        ),
+        findsOneWidget,
+      );
       await tester.tap(confirm);
       await tester.pumpAndSettle();
       expect(bridge.exports, ['json collection-2']);
       expect(find.text('Exported to collections.json'), findsOneWidget);
+    });
+
+    testWidgets('a phone picks from a sheet with a short primary label', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final bridge = _bridge();
+      final dialogs = FakeFileDialogs()..saveResult = 'collections.json';
+      await _showList(tester, bridge, dialogs);
+      await _listAction(tester, 'Export selected…');
+      expect(find.text('Choose what goes in the file'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('export-pick-collection-1')));
+      await tester.tap(find.byKey(const Key('export-pick-collection-2')));
+      await tester.pumpAndSettle();
+      final confirm = find.byKey(const Key('confirm-export-selected'));
+      expect(
+        find.descendant(of: confirm, matching: find.text('Export 2')),
+        findsOneWidget,
+      );
+      await tester.tap(confirm);
+      await tester.pumpAndSettle();
+      expect(bridge.exports, ['json $_collection,collection-2']);
+      expect(find.text('Exported to collections.json'), findsOneWidget);
+    });
+
+    testWidgets('a wide picker names the count in full', (tester) async {
+      tester.view.physicalSize = const Size(1240, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final bridge = _bridge();
+      final dialogs = FakeFileDialogs()..saveResult = 'collections.json';
+      await _showList(tester, bridge, dialogs);
+      await _listAction(tester, 'Export selected…');
+      await tester.tap(find.byKey(const Key('export-pick-collection-1')));
+      await tester.tap(find.byKey(const Key('export-pick-collection-2')));
+      await tester.pumpAndSettle();
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('confirm-export-selected')),
+          matching: find.text('Export 2 collections'),
+        ),
+        findsOneWidget,
+      );
     });
 
     testWidgets('Import JSON adds collections and leaves others alone', (
@@ -337,8 +468,8 @@ void main() {
       final bridge = _bridge();
       final dialogs = FakeFileDialogs()..openResult = 'Mood\nSteps\n';
       await _showList(tester, bridge, dialogs);
-      await _listAction(tester, 'Import JSON');
-      expect(find.text('2 collections imported'), findsOneWidget);
+      await _listAction(tester, 'Import JSON…');
+      expect(find.text('Imported 2 collections'), findsOneWidget);
       await pumpUntilFound(tester, find.text('Steps'));
       expect(find.text('Mood'), findsOneWidget);
       expect(find.text('Headaches'), findsOneWidget);
@@ -349,7 +480,7 @@ void main() {
       final bridge = _bridge();
       final dialogs = FakeFileDialogs();
       await _showList(tester, bridge, dialogs);
-      await _listAction(tester, 'Import JSON');
+      await _listAction(tester, 'Import JSON…');
       expect(bridge.imports, isEmpty);
       expect(find.byType(SnackBar), findsNothing);
     });

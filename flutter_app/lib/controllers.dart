@@ -1391,31 +1391,38 @@ String exportFileStem(String name) {
   return stem.isEmpty ? 'collection' : stem;
 }
 
-/// What an import did, for a snackbar: the count on success, otherwise where and why it stopped.
+/// What an import did, for the outcome toast: the count on success, otherwise where and why it stopped.
 /// Rust's reason is shown as given.
 String importOutcomeMessage(
   AppLocalizations l,
   ImportOutcomeDto outcome, {
   required bool csv,
+  String collection = '',
 }) {
   if (outcome.imported) {
     return csv
-        ? l.importRecords(outcome.recordCount)
+        ? l.importRecords(outcome.recordCount, collection)
         : l.importCollections(outcome.collectionIds.length);
   }
   final reason = outcome.reason ?? outcome.message;
+  final String place;
   if (outcome.row case final row?) {
     final column = outcome.column ?? '';
-    final place = row == 0 ? l.importPlaceHeader : l.importPlaceRow(row);
-    return column.isEmpty
-        ? l.importStoppedAt(place, reason)
-        : l.importStoppedAtColumn(place, column, reason);
+    place = row == 0
+        ? (column.isEmpty
+              ? l.importPlaceHeader
+              : l.importPlaceHeaderColumn(column))
+        : column.isEmpty
+        ? l.importPlaceRow(row)
+        : l.importPlaceRowColumn(row, column);
+  } else {
+    // Rust's item already names what it is ("record 1"), so it follows the collection as is.
+    place = [
+      if (outcome.collectionIndex case final index?)
+        l.importPlaceCollection(index + 1),
+      ?outcome.item,
+    ].join(', ');
   }
-  final place = [
-    if (outcome.collectionIndex case final index?)
-      l.importPlaceCollection(index + 1),
-    ?outcome.item,
-  ].join(', ');
   return place.isEmpty
       ? l.importStopped(reason)
       : l.importStoppedAt(place, reason);

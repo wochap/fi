@@ -211,12 +211,12 @@ class AppLocalizationsEs extends AppLocalizations {
       'No se pudo ejecutar la consulta guardada.';
 
   @override
-  String importRecords(int count) {
+  String importRecords(int count, String name) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count registros importados',
-      one: '1 registro importado',
+      other: 'Se importaron $count registros en $name',
+      one: 'Se importó 1 registro en $name',
     );
     return '$_temp0';
   }
@@ -226,38 +226,33 @@ class AppLocalizationsEs extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count colecciones importadas',
-      one: '1 colección importada',
+      other: 'Se importaron $count colecciones',
+      one: 'Se importó 1 colección',
     );
     return '$_temp0';
   }
 
   @override
   String importStoppedAt(String place, String reason) {
-    return 'La importación se detuvo. $place: $reason';
-  }
-
-  @override
-  String importStoppedAtColumn(String place, String column, String reason) {
-    return 'La importación se detuvo. $place, columna $column: $reason';
+    return 'La importación se detuvo en $place: $reason No se importó nada.';
   }
 
   @override
   String importStopped(String reason) {
-    return 'La importación se detuvo: $reason';
+    return 'La importación se detuvo: $reason No se importó nada.';
   }
 
   @override
-  String get importPlaceHeader => 'Encabezado';
+  String get importPlaceHeader => 'el encabezado';
 
   @override
   String importPlaceRow(int row) {
-    return 'Fila $row';
+    return 'fila $row';
   }
 
   @override
   String importPlaceCollection(int index) {
-    return 'Colección $index';
+    return 'colección $index';
   }
 
   @override
@@ -1591,13 +1586,13 @@ class AppLocalizationsEs extends AppLocalizations {
   String get collectionsImportExport => 'Importar y exportar';
 
   @override
-  String get collectionsImportJson => 'Importar JSON';
+  String get collectionsImportJson => 'Importar JSON…';
 
   @override
   String get collectionsExportAll => 'Exportar todo';
 
   @override
-  String get collectionsExportSelected => 'Exportar selección';
+  String get collectionsExportSelected => 'Exportar selección…';
 
   @override
   String get collectionsNewCollection => 'Nueva colección';
@@ -1639,15 +1634,7 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String collectionsEdited(String time) {
-    return 'Editada $time';
-  }
-
-  @override
   String get collectionsActions => 'Acciones de la colección';
-
-  @override
-  String get collectionsData => 'Datos';
 
   @override
   String collectionsExportedTo(String name) {
@@ -1656,9 +1643,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get collectionsExportTitle => 'Exportar colecciones';
-
-  @override
-  String get collectionsExport => 'Exportar';
 
   @override
   String collectionsDeleteTitle(String name) {
@@ -1674,9 +1658,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get collectionsDescription => 'Descripción';
-
-  @override
-  String get collectionsDuplicateTitle => 'Duplicar colección';
 
   @override
   String collectionsCopyName(String name) {
@@ -1894,7 +1875,13 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String recordsDeletedSnack(int count) {
-    return '$count registros eliminados';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Se eliminaron $count registros',
+      one: 'Se eliminó 1 registro',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -1905,14 +1892,6 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get recordsBatchSetBody =>
       'Todos los registros seleccionados se actualizan en un solo paso.';
-
-  @override
-  String get recordsSet => 'Establecer';
-
-  @override
-  String recordsUpdatedSnack(int count) {
-    return '$count registros actualizados';
-  }
 
   @override
   String recordsBatchEditTitle(int count) {
@@ -3170,5 +3149,91 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String voiceListeningCap(int seconds) {
     return 'Se detiene solo tras $seconds segundos.';
+  }
+
+  @override
+  String get collectionsClone => 'Clonar';
+
+  @override
+  String get collectionsCloneTitle => 'Clonar colección';
+
+  @override
+  String get collectionsCloneAction => 'Clonar';
+
+  @override
+  String get collectionsExportLine => 'Elige qué va en el archivo';
+
+  @override
+  String collectionsExportCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Exportar $count colecciones',
+      one: 'Exportar 1 colección',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String collectionsExportCountShort(int count) {
+    return 'Exportar $count';
+  }
+
+  @override
+  String get collectionsImportGroup => 'Importar';
+
+  @override
+  String get collectionsRenameHint => 'Intro para guardar · Esc para cancelar';
+
+  @override
+  String importPlaceRowColumn(int row, String column) {
+    return 'fila $row, columna “$column”';
+  }
+
+  @override
+  String get outcomeDismiss => 'Descartar';
+
+  @override
+  String get recordsNewValue => 'Nuevo valor';
+
+  @override
+  String get recordsNewValueHelp =>
+      'Usa el mismo control que el formulario del registro.';
+
+  @override
+  String recordsSetField(String field) {
+    return 'Establecer $field';
+  }
+
+  @override
+  String get recordsKeepRecords => 'Mantener registros';
+
+  @override
+  String recordsSetSnack(String field, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Se estableció $field en $count registros',
+      one: 'Se estableció $field en 1 registro',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String issueDateMin(String date) {
+    return 'Debe ser el $date o posterior';
+  }
+
+  @override
+  String issueDateMax(String date) {
+    return 'Debe ser el $date o anterior';
+  }
+
+  @override
+  String get collectionsExport => 'Exportar';
+
+  @override
+  String importPlaceHeaderColumn(String column) {
+    return 'el encabezado, columna “$column”';
   }
 }

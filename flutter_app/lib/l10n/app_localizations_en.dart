@@ -205,12 +205,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get widgetErrorQueryFailed => 'The saved query could not run.';
 
   @override
-  String importRecords(int count) {
+  String importRecords(int count, String name) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count records imported',
-      one: '1 record imported',
+      other: 'Imported $count records into $name',
+      one: 'Imported 1 record into $name',
     );
     return '$_temp0';
   }
@@ -220,38 +220,33 @@ class AppLocalizationsEn extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count collections imported',
-      one: '1 collection imported',
+      other: 'Imported $count collections',
+      one: 'Imported 1 collection',
     );
     return '$_temp0';
   }
 
   @override
   String importStoppedAt(String place, String reason) {
-    return 'Import stopped. $place: $reason';
-  }
-
-  @override
-  String importStoppedAtColumn(String place, String column, String reason) {
-    return 'Import stopped. $place, column $column: $reason';
+    return 'Import stopped at $place: $reason Nothing was imported.';
   }
 
   @override
   String importStopped(String reason) {
-    return 'Import stopped: $reason';
+    return 'Import stopped: $reason Nothing was imported.';
   }
 
   @override
-  String get importPlaceHeader => 'Header';
+  String get importPlaceHeader => 'the header';
 
   @override
   String importPlaceRow(int row) {
-    return 'Row $row';
+    return 'row $row';
   }
 
   @override
   String importPlaceCollection(int index) {
-    return 'Collection $index';
+    return 'collection $index';
   }
 
   @override
@@ -1577,13 +1572,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get collectionsImportExport => 'Import and export';
 
   @override
-  String get collectionsImportJson => 'Import JSON';
+  String get collectionsImportJson => 'Import JSON…';
 
   @override
   String get collectionsExportAll => 'Export all';
 
   @override
-  String get collectionsExportSelected => 'Export selected';
+  String get collectionsExportSelected => 'Export selected…';
 
   @override
   String get collectionsNewCollection => 'New collection';
@@ -1625,15 +1620,7 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String collectionsEdited(String time) {
-    return 'Edited $time';
-  }
-
-  @override
   String get collectionsActions => 'Collection actions';
-
-  @override
-  String get collectionsData => 'Data';
 
   @override
   String collectionsExportedTo(String name) {
@@ -1642,9 +1629,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get collectionsExportTitle => 'Export collections';
-
-  @override
-  String get collectionsExport => 'Export';
 
   @override
   String collectionsDeleteTitle(String name) {
@@ -1660,9 +1644,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get collectionsDescription => 'Description';
-
-  @override
-  String get collectionsDuplicateTitle => 'Duplicate collection';
 
   @override
   String collectionsCopyName(String name) {
@@ -1878,7 +1859,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String recordsDeletedSnack(int count) {
-    return '$count records deleted';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Deleted $count records',
+      one: 'Deleted 1 record',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -1889,14 +1876,6 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get recordsBatchSetBody =>
       'Every selected record is updated in one step.';
-
-  @override
-  String get recordsSet => 'Set';
-
-  @override
-  String recordsUpdatedSnack(int count) {
-    return '$count records updated';
-  }
 
   @override
   String recordsBatchEditTitle(int count) {
@@ -3147,5 +3126,90 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String voiceListeningCap(int seconds) {
     return 'Stops on its own after $seconds seconds.';
+  }
+
+  @override
+  String get collectionsClone => 'Clone';
+
+  @override
+  String get collectionsCloneTitle => 'Clone collection';
+
+  @override
+  String get collectionsCloneAction => 'Clone';
+
+  @override
+  String get collectionsExportLine => 'Choose what goes in the file';
+
+  @override
+  String collectionsExportCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Export $count collections',
+      one: 'Export 1 collection',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String collectionsExportCountShort(int count) {
+    return 'Export $count';
+  }
+
+  @override
+  String get collectionsImportGroup => 'Import';
+
+  @override
+  String get collectionsRenameHint => 'Enter to save · Esc to cancel';
+
+  @override
+  String importPlaceRowColumn(int row, String column) {
+    return 'row $row, column “$column”';
+  }
+
+  @override
+  String get outcomeDismiss => 'Dismiss';
+
+  @override
+  String get recordsNewValue => 'New value';
+
+  @override
+  String get recordsNewValueHelp => 'Uses the same control as the record form.';
+
+  @override
+  String recordsSetField(String field) {
+    return 'Set $field';
+  }
+
+  @override
+  String get recordsKeepRecords => 'Keep records';
+
+  @override
+  String recordsSetSnack(String field, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Set $field on $count records',
+      one: 'Set $field on 1 record',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String issueDateMin(String date) {
+    return 'Must be on or after $date';
+  }
+
+  @override
+  String issueDateMax(String date) {
+    return 'Must be on or before $date';
+  }
+
+  @override
+  String get collectionsExport => 'Export';
+
+  @override
+  String importPlaceHeaderColumn(String column) {
+    return 'the header, column “$column”';
   }
 }

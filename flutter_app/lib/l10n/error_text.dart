@@ -61,8 +61,14 @@ String issueText(
     case 'out_of_range':
       String bound(int value) =>
           _formatBound(field!.fieldType, value, decimalSeparator);
+      final dated = switch (field?.fieldType.kind) {
+        FieldTypeKindDto.date || FieldTypeKindDto.dateTime => true,
+        _ => false,
+      };
       return switch ((validation?.minInteger, validation?.maxInteger)) {
         (final min?, final max?) => l.issueRangeBetween(bound(min), bound(max)),
+        (final min?, null) when dated => l.issueDateMin(bound(min)),
+        (null, final max?) when dated => l.issueDateMax(bound(max)),
         (final min?, null) => l.issueRangeMin(bound(min)),
         (null, final max?) => l.issueRangeMax(bound(max)),
         _ => l.issueRange,

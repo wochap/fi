@@ -63,14 +63,14 @@ FakeCollectionBridge _source() {
   return bridge;
 }
 
-/// Opens the collection list and chooses Duplicate from the collection's menu.
-Future<FakeCollectionBridge> _chooseDuplicate(WidgetTester tester) async {
+/// Opens the collection list and chooses Clone from the collection's menu.
+Future<FakeCollectionBridge> _chooseClone(WidgetTester tester) async {
   final bridge = _source();
   await tester.pumpWidget(app(bridge));
   await pumpUntilFound(tester, find.text('Headaches'));
   await tester.tap(find.byIcon(FiIcons.more));
   await tester.pumpAndSettle();
-  await tester.tap(find.text('Duplicate'));
+  await tester.tap(find.text('Clone'));
   await tester.pumpAndSettle();
   return bridge;
 }
@@ -108,44 +108,42 @@ void main() {
     controller.dispose();
   });
 
-  testWidgets('Save without editing duplicates as "<name> (copy)"', (
-    tester,
-  ) async {
-    final bridge = await _chooseDuplicate(tester);
-    expect(find.text('Duplicate collection'), findsOneWidget);
+  testWidgets('Clone without editing names it "<name> (copy)"', (tester) async {
+    final bridge = await _chooseClone(tester);
+    expect(find.text('Clone collection'), findsOneWidget);
     expect(_nameText(tester), 'Headaches (copy)');
 
-    await tester.tap(find.text('Save'));
+    await tester.tap(find.text('Clone'));
     await tester.pumpAndSettle();
     expect(bridge.clones, [(_collection, 'Headaches (copy)')]);
-    expect(find.text('Duplicate collection'), findsNothing);
+    expect(find.text('Clone collection'), findsNothing);
     await pumpUntilFound(tester, find.text('Headaches (copy)'));
     // The list stays in view: duplicating never opens the copy.
     expect(find.text('Headaches'), findsOneWidget);
   });
 
   testWidgets('a custom name is trimmed and used', (tester) async {
-    final bridge = await _chooseDuplicate(tester);
+    final bridge = await _chooseClone(tester);
     await tester.enterText(_name, '  Migraine ');
-    await tester.tap(find.text('Save'));
+    await tester.tap(find.text('Clone'));
     await tester.pumpAndSettle();
     expect(bridge.clones, [(_collection, 'Migraine')]);
     await pumpUntilFound(tester, find.text('Migraine'));
   });
 
   testWidgets('Cancel sends no command', (tester) async {
-    final bridge = await _chooseDuplicate(tester);
+    final bridge = await _chooseClone(tester);
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
     expect(bridge.clones, isEmpty);
     expect(bridge.collections, hasLength(1));
-    expect(find.text('Duplicate collection'), findsNothing);
+    expect(find.text('Clone collection'), findsNothing);
   });
 
   testWidgets('a Rust name error stays inline and keeps the dialog open', (
     tester,
   ) async {
-    final bridge = await _chooseDuplicate(tester);
+    final bridge = await _chooseClone(tester);
     await tester.enterText(_name, '');
     bridge.nextError = const BridgeError(
       kind: BridgeErrorKind.validation,
@@ -159,10 +157,10 @@ void main() {
       message: 'Name is required.',
       resetResolvable: false,
     );
-    await tester.tap(find.text('Save'));
+    await tester.tap(find.text('Clone'));
     await tester.pumpAndSettle();
     expect(bridge.clones, isEmpty);
-    expect(find.text('Duplicate collection'), findsOneWidget);
+    expect(find.text('Clone collection'), findsOneWidget);
     expect(
       find.descendant(of: _name, matching: find.text('Name is required.')),
       findsOneWidget,

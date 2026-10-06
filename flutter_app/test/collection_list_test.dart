@@ -114,8 +114,11 @@ void main() {
         );
         await tester.pumpWidget(app(bridge));
         await pumpUntilFound(tester, find.text('test'));
-        expect(find.text('6 records · 3 fields'), findsOneWidget);
-        expect(find.text('Edited 2 h ago'), findsOneWidget);
+        expect(
+          find.text('6 records · 3 fields · edited 2 h ago'),
+          findsOneWidget,
+        );
+        expect(find.text('Edited 2 h ago'), findsNothing);
         expect(find.byKey(const Key('collection-incomplete-c1')), findsNothing);
       });
     });
@@ -147,8 +150,7 @@ void main() {
       await tester.pumpWidget(app(bridge));
       await pumpUntilFound(tester, find.text('fresh'));
       expect(find.text('0 records · 0 fields'), findsOneWidget);
-      expect(find.byKey(const Key('collection-edited-c1')), findsNothing);
-      expect(find.textContaining('Edited'), findsNothing);
+      expect(find.textContaining('· edited'), findsNothing);
     });
 
     testWidgets('a phone row is 64px tall with one subtitle line', (
@@ -168,8 +170,15 @@ void main() {
         _addCollection(bridge, 'c2', 'tst', fields: 1, records: 1, invalid: 1);
         await tester.pumpWidget(app(bridge));
         await pumpUntilFound(tester, find.text('test'));
-        expect(find.text('6 records · edited 2 h ago'), findsOneWidget);
-        expect(find.text('1 record · 1 incomplete'), findsOneWidget);
+        expect(
+          find.text('6 records · 3 fields · edited 2 h ago'),
+          findsOneWidget,
+        );
+        expect(find.text('1 record · 1 field'), findsOneWidget);
+        expect(
+          find.byKey(const Key('collection-incomplete-c2')),
+          findsOneWidget,
+        );
         expect(
           tester.getSize(find.byKey(const ValueKey('c1'))).height,
           greaterThanOrEqualTo(64),
@@ -308,11 +317,39 @@ void main() {
       );
       expect((sort.dy - transfer.dy).abs(), lessThan(4));
       expect(transfer.dx, greaterThan(sort.dx));
+      expect(
+        transfer.dx,
+        lessThan(tester.getCenter(find.text('New collection')).dx),
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('collections-transfer-menu')),
+          matching: find.text('Import and export'),
+        ),
+        findsOneWidget,
+      );
       await tester.tap(find.byKey(const Key('collections-transfer-menu')));
       await tester.pumpAndSettle();
-      expect(find.text('Import JSON'), findsOneWidget);
+      expect(find.text('Import JSON…'), findsOneWidget);
       expect(find.text('Export all'), findsOneWidget);
-      expect(find.text('Export selected'), findsOneWidget);
+      expect(find.text('Export selected…'), findsOneWidget);
+    });
+
+    testWidgets('a phone opens the transfer actions as an action sheet', (
+      tester,
+    ) async {
+      _size(tester, const Size(390, 844));
+      final bridge = _ready();
+      _addCollection(bridge, 'c1', 'Headaches');
+      await tester.pumpWidget(app(bridge));
+      await pumpUntilFound(tester, find.text('Headaches'));
+      expect(find.text('Import and export'), findsNothing);
+      await tester.tap(find.byKey(const Key('collections-transfer-menu')));
+      await tester.pumpAndSettle();
+      expect(find.text('Import and export'), findsOneWidget);
+      expect(find.text('Import JSON…'), findsOneWidget);
+      expect(find.text('Export all'), findsOneWidget);
+      expect(find.text('Export selected…'), findsOneWidget);
     });
   });
 
@@ -329,11 +366,12 @@ void main() {
       await tester.pumpAndSettle();
       const labels = [
         'Rename',
-        'Duplicate',
-        'DATA',
-        'Import CSV…',
+        'Clone',
+        'EXPORT',
         'Export CSV',
         'Export JSON',
+        'IMPORT',
+        'Import CSV…',
         'Delete…',
       ];
       for (final label in labels) {
@@ -357,7 +395,7 @@ void main() {
       await tester.pump();
       await tester.sendKeyEvent(LogicalKeyboardKey.f2);
       await tester.pumpAndSettle();
-      expect(find.text('Rename collection'), findsOneWidget);
+      expect(find.byKey(const Key('collection-rename-c1')), findsOneWidget);
     });
 
     testWidgets('a phone opens an action sheet headed by the collection', (
@@ -371,14 +409,15 @@ void main() {
       await tester.tap(find.byTooltip('Collection actions'));
       await tester.pumpAndSettle();
       expect(find.text('Headaches'), findsNWidgets(2));
-      expect(find.text('6 records · 3 fields'), findsOneWidget);
+      expect(find.text('6 records · 3 fields'), findsNWidgets(2));
       for (final label in [
         'Rename',
-        'Duplicate',
-        'DATA',
-        'Import CSV…',
+        'Clone',
+        'EXPORT',
         'Export CSV',
         'Export JSON',
+        'IMPORT',
+        'Import CSV…',
         'Delete…',
       ]) {
         expect(find.text(label), findsOneWidget, reason: label);

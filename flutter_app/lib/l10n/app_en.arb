@@ -244,25 +244,28 @@
   "@widgetErrorQueryFailed": {
     "description": "Widget error: the query failed."
   },
-  "importRecords": "{count, plural, =1{1 record imported} other{{count} records imported}}",
+  "importRecords": "{count, plural, =1{Imported 1 record into {name}} other{Imported {count} records into {name}}}",
   "@importRecords": {
-    "description": "Snackbar after a CSV import.",
+    "description": "Toast after a CSV import.",
     "placeholders": {
       "count": {
         "type": "int"
+      },
+      "name": {
+        "type": "String"
       }
     }
   },
-  "importCollections": "{count, plural, =1{1 collection imported} other{{count} collections imported}}",
+  "importCollections": "{count, plural, =1{Imported 1 collection} other{Imported {count} collections}}",
   "@importCollections": {
-    "description": "Snackbar after a JSON import.",
+    "description": "Toast after a JSON import.",
     "placeholders": {
       "count": {
         "type": "int"
       }
     }
   },
-  "importStoppedAt": "Import stopped. {place}: {reason}",
+  "importStoppedAt": "Import stopped at {place}: {reason} Nothing was imported.",
   "@importStoppedAt": {
     "description": "Import failed at a place; reason is Rust's text.",
     "placeholders": {
@@ -274,22 +277,7 @@
       }
     }
   },
-  "importStoppedAtColumn": "Import stopped. {place}, column {column}: {reason}",
-  "@importStoppedAtColumn": {
-    "description": "Import failed at a place and column.",
-    "placeholders": {
-      "place": {
-        "type": "String"
-      },
-      "column": {
-        "type": "String"
-      },
-      "reason": {
-        "type": "String"
-      }
-    }
-  },
-  "importStopped": "Import stopped: {reason}",
+  "importStopped": "Import stopped: {reason} Nothing was imported.",
   "@importStopped": {
     "description": "Import failed without a place.",
     "placeholders": {
@@ -298,11 +286,11 @@
       }
     }
   },
-  "importPlaceHeader": "Header",
+  "importPlaceHeader": "the header",
   "@importPlaceHeader": {
     "description": "Import place: the CSV header row."
   },
-  "importPlaceRow": "Row {row}",
+  "importPlaceRow": "row {row}",
   "@importPlaceRow": {
     "description": "Import place: a CSV row.",
     "placeholders": {
@@ -311,7 +299,7 @@
       }
     }
   },
-  "importPlaceCollection": "Collection {index}",
+  "importPlaceCollection": "collection {index}",
   "@importPlaceCollection": {
     "description": "Import place: a collection in a JSON file.",
     "placeholders": {
@@ -2142,7 +2130,7 @@
   "@collectionsImportExport": {
     "description": "Transfer menu tooltip"
   },
-  "collectionsImportJson": "Import JSON",
+  "collectionsImportJson": "Import JSON…",
   "@collectionsImportJson": {
     "description": "Transfer menu item"
   },
@@ -2150,7 +2138,7 @@
   "@collectionsExportAll": {
     "description": "Transfer menu item"
   },
-  "collectionsExportSelected": "Export selected",
+  "collectionsExportSelected": "Export selected…",
   "@collectionsExportSelected": {
     "description": "Transfer menu item"
   },
@@ -2198,22 +2186,9 @@
       }
     }
   },
-  "collectionsEdited": "Edited {time}",
-  "@collectionsEdited": {
-    "description": "Last edited line",
-    "placeholders": {
-      "time": {
-        "type": "String"
-      }
-    }
-  },
   "collectionsActions": "Collection actions",
   "@collectionsActions": {
     "description": "Row menu tooltip"
-  },
-  "collectionsData": "Data",
-  "@collectionsData": {
-    "description": "Menu group label"
   },
   "collectionsExportedTo": "Exported to {name}",
   "@collectionsExportedTo": {
@@ -2227,10 +2202,6 @@
   "collectionsExportTitle": "Export collections",
   "@collectionsExportTitle": {
     "description": "Dialog title"
-  },
-  "collectionsExport": "Export",
-  "@collectionsExport": {
-    "description": "Button"
   },
   "collectionsDeleteTitle": "Delete \"{name}\"?",
   "@collectionsDeleteTitle": {
@@ -2252,10 +2223,6 @@
   "collectionsDescription": "Description",
   "@collectionsDescription": {
     "description": "Input label"
-  },
-  "collectionsDuplicateTitle": "Duplicate collection",
-  "@collectionsDuplicateTitle": {
-    "description": "Dialog title"
   },
   "collectionsCopyName": "{name} (copy)",
   "@collectionsCopyName": {
@@ -2519,9 +2486,9 @@
   "@recordsBatchDeleteBody": {
     "description": "Dialog body"
   },
-  "recordsDeletedSnack": "{count} records deleted",
+  "recordsDeletedSnack": "{count, plural, =1{Deleted 1 record} other{Deleted {count} records}}",
   "@recordsDeletedSnack": {
-    "description": "Snackbar",
+    "description": "Toast after a batch delete",
     "placeholders": {
       "count": {
         "type": "int"
@@ -2543,19 +2510,6 @@
   "recordsBatchSetBody": "Every selected record is updated in one step.",
   "@recordsBatchSetBody": {
     "description": "Dialog body"
-  },
-  "recordsSet": "Set",
-  "@recordsSet": {
-    "description": "Button"
-  },
-  "recordsUpdatedSnack": "{count} records updated",
-  "@recordsUpdatedSnack": {
-    "description": "Snackbar",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
   },
   "recordsBatchEditTitle": "Edit field on {count} records",
   "@recordsBatchEditTitle": {
@@ -4254,6 +4208,128 @@
     "placeholders": {
       "seconds": {
         "type": "int"
+      }
+    }
+  },
+  "collectionsClone": "Clone",
+  "@collectionsClone": {
+    "description": "Clone collection action"
+  },
+  "collectionsCloneTitle": "Clone collection",
+  "@collectionsCloneTitle": {
+    "description": "Dialog title"
+  },
+  "collectionsCloneAction": "Clone",
+  "@collectionsCloneAction": {
+    "description": "Clone dialog primary"
+  },
+  "collectionsExportLine": "Choose what goes in the file",
+  "@collectionsExportLine": {
+    "description": "Export picker line"
+  },
+  "collectionsExportCount": "{count, plural, =1{Export 1 collection} other{Export {count} collections}}",
+  "@collectionsExportCount": {
+    "description": "Export picker primary",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "collectionsExportCountShort": "Export {count}",
+  "@collectionsExportCountShort": {
+    "description": "Export picker primary on a phone",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "collectionsImportGroup": "Import",
+  "@collectionsImportGroup": {
+    "description": "Menu group label"
+  },
+  "collectionsRenameHint": "Enter to save · Esc to cancel",
+  "@collectionsRenameHint": {
+    "description": "Inline rename hint"
+  },
+  "importPlaceRowColumn": "row {row}, column “{column}”",
+  "@importPlaceRowColumn": {
+    "description": "Import place: a CSV row and column.",
+    "placeholders": {
+      "row": {
+        "type": "int"
+      },
+      "column": {
+        "type": "String"
+      }
+    }
+  },
+  "outcomeDismiss": "Dismiss",
+  "@outcomeDismiss": {
+    "description": "Toast action closing an abort"
+  },
+  "recordsNewValue": "New value",
+  "@recordsNewValue": {
+    "description": "Batch edit value label"
+  },
+  "recordsNewValueHelp": "Uses the same control as the record form.",
+  "@recordsNewValueHelp": {
+    "description": "Batch edit value helper"
+  },
+  "recordsSetField": "Set {field}",
+  "@recordsSetField": {
+    "description": "Batch set confirm primary",
+    "placeholders": {
+      "field": {
+        "type": "String"
+      }
+    }
+  },
+  "recordsKeepRecords": "Keep records",
+  "@recordsKeepRecords": {
+    "description": "Batch delete confirm primary"
+  },
+  "recordsSetSnack": "{count, plural, =1{Set {field} on 1 record} other{Set {field} on {count} records}}",
+  "@recordsSetSnack": {
+    "description": "Toast after a batch set",
+    "placeholders": {
+      "field": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "issueDateMin": "Must be on or after {date}",
+  "@issueDateMin": {
+    "description": "Date range error, minimum only",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "issueDateMax": "Must be on or before {date}",
+  "@issueDateMax": {
+    "description": "Date range error, maximum only",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "collectionsExport": "Export",
+  "@collectionsExport": {
+    "description": "Menu group label"
+  },
+  "importPlaceHeaderColumn": "the header, column “{column}”",
+  "@importPlaceHeaderColumn": {
+    "description": "Import place: a CSV header column.",
+    "placeholders": {
+      "column": {
+        "type": "String"
       }
     }
   }

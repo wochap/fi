@@ -332,7 +332,7 @@ void main() {
 
       await tester.tap(find.text('Collection actions…'));
       await tester.pumpAndSettle();
-      expect(find.text('Duplicate'), findsOneWidget);
+      expect(find.text('Clone'), findsOneWidget);
       expect(find.text('Delete…'), findsOneWidget);
       await tester.tapAt(const Offset(20, 20));
       await tester.pumpAndSettle();

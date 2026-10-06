@@ -1,4 +1,5 @@
 import 'package:fi/src/rust/api/models.dart';
+import 'package:fi/theme/nocturne.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -137,8 +138,18 @@ void main() {
     await tester.tap(find.byKey(const Key('batch-delete')));
     await tester.pumpAndSettle();
     expect(find.text('Delete 3 records?'), findsOneWidget);
+    // Delete is the secondary action at the leading edge; Keep records is the primary one.
+    final delete = find.byKey(const Key('confirm-batch-delete'));
+    final keep = find.byKey(const Key('dismiss-batch-delete'));
+    expect(tester.widget(delete), isA<TextButton>());
+    expect(tester.widget(keep), isA<FilledButton>());
+    expect(
+      find.descendant(of: keep, matching: find.text('Keep records')),
+      findsOneWidget,
+    );
+    expect(tester.getCenter(delete).dx, lessThan(tester.getCenter(keep).dx));
 
-    // Dismissing sends nothing and leaves the selection intact.
+    // Keep records sends nothing and leaves the selection intact.
     await tester.tap(find.byKey(const Key('dismiss-batch-delete')));
     await tester.pumpAndSettle();
     expect(bridge.batchDeleteCalls, isEmpty);
@@ -150,7 +161,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(bridge.batchDeleteCalls, hasLength(1), reason: 'one batch call');
     expect(bridge.batchDeleteCalls.single, hasLength(3));
-    expect(find.text('3 records deleted'), findsOneWidget);
+    expect(find.text('Deleted 3 records'), findsOneWidget);
     expect(find.text('No records yet.'), findsOneWidget);
   });
 
@@ -167,16 +178,28 @@ void main() {
     await tester.tap(find.byKey(const Key('batch-edit')));
     await tester.pumpAndSettle();
     expect(find.text('Edit field on 2 records'), findsOneWidget);
+    expect(find.text('New value'), findsOneWidget);
+    expect(
+      find.text('Uses the same control as the record form.'),
+      findsOneWidget,
+    );
     await tester.enterText(find.byType(TextFormField).last, 'triage');
     await tester.tap(find.byKey(const Key('batch-edit-continue')));
     await tester.pumpAndSettle();
     expect(find.text('Set Title on 2 records?'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('confirm-batch-edit')),
+        matching: find.text('Set Title'),
+      ),
+      findsOneWidget,
+    );
     await tester.tap(find.byKey(const Key('confirm-batch-edit')));
     await tester.pumpAndSettle();
 
     expect(bridge.batchFieldCalls, hasLength(1), reason: 'one batch call');
     expect(bridge.batchFieldCalls.single, hasLength(2));
-    expect(find.text('2 records updated'), findsOneWidget);
+    expect(find.text('Set Title on 2 records'), findsOneWidget);
     expect(find.text('triage'), findsNWidgets(2));
   });
 
@@ -213,6 +236,60 @@ void main() {
     );
     expect(find.text('2 selected'), findsOneWidget);
     expect(find.text('row 0'), findsOneWidget);
+  });
+
+  testWidgets('the desktop action bar reads Edit field', (tester) async {
+    tester.view.physicalSize = const Size(1240, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final bridge = seeded(2);
+    await openCollection(tester, bridge);
+    await tester.tap(find.byKey(const Key('select-records')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('row 0'));
+    await tester.tap(find.text('row 1'));
+    await tester.pumpAndSettle();
+    expect(find.text('2 selected'), findsOneWidget);
+    expect(find.text('in Headaches'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('batch-edit')),
+        matching: find.text('Edit field'),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('a selected phone card has the accent outline', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final bridge = seeded(2);
+    await openCollection(tester, bridge);
+    await tester.longPress(find.text('row 0'));
+    await tester.pumpAndSettle();
+    BorderSide side(String id) =>
+        (tester.widget<Material>(find.byKey(ValueKey(id))).shape!
+                as RoundedRectangleBorder)
+            .side;
+    expect(side('record-0').color, Nocturne.accent);
+    expect(side('record-0').width, 1);
+    expect(side('record-1').color, isNot(Nocturne.accent));
+    expect(
+      tester.widget<Material>(find.byKey(const ValueKey('record-0'))).color,
+      Nocturne.accent900,
+    );
+    expect(
+      tester
+          .widget<Checkbox>(
+            find.descendant(
+              of: find.byKey(const ValueKey('record-0')),
+              matching: find.byType(Checkbox),
+            ),
+          )
+          .value,
+      isTrue,
+    );
   });
 
   testWidgets('single delete outside selection mode has no dialog', (

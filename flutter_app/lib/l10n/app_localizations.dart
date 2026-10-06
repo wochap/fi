@@ -368,52 +368,46 @@ abstract class AppLocalizations {
   /// **'The saved query could not run.'**
   String get widgetErrorQueryFailed;
 
-  /// Snackbar after a CSV import.
+  /// Toast after a CSV import.
   ///
   /// In en, this message translates to:
-  /// **'{count, plural, =1{1 record imported} other{{count} records imported}}'**
-  String importRecords(int count);
+  /// **'{count, plural, =1{Imported 1 record into {name}} other{Imported {count} records into {name}}}'**
+  String importRecords(int count, String name);
 
-  /// Snackbar after a JSON import.
+  /// Toast after a JSON import.
   ///
   /// In en, this message translates to:
-  /// **'{count, plural, =1{1 collection imported} other{{count} collections imported}}'**
+  /// **'{count, plural, =1{Imported 1 collection} other{Imported {count} collections}}'**
   String importCollections(int count);
 
   /// Import failed at a place; reason is Rust's text.
   ///
   /// In en, this message translates to:
-  /// **'Import stopped. {place}: {reason}'**
+  /// **'Import stopped at {place}: {reason} Nothing was imported.'**
   String importStoppedAt(String place, String reason);
-
-  /// Import failed at a place and column.
-  ///
-  /// In en, this message translates to:
-  /// **'Import stopped. {place}, column {column}: {reason}'**
-  String importStoppedAtColumn(String place, String column, String reason);
 
   /// Import failed without a place.
   ///
   /// In en, this message translates to:
-  /// **'Import stopped: {reason}'**
+  /// **'Import stopped: {reason} Nothing was imported.'**
   String importStopped(String reason);
 
   /// Import place: the CSV header row.
   ///
   /// In en, this message translates to:
-  /// **'Header'**
+  /// **'the header'**
   String get importPlaceHeader;
 
   /// Import place: a CSV row.
   ///
   /// In en, this message translates to:
-  /// **'Row {row}'**
+  /// **'row {row}'**
   String importPlaceRow(int row);
 
   /// Import place: a collection in a JSON file.
   ///
   /// In en, this message translates to:
-  /// **'Collection {index}'**
+  /// **'collection {index}'**
   String importPlaceCollection(int index);
 
   /// Widget failure without a typed kind.
@@ -2669,7 +2663,7 @@ abstract class AppLocalizations {
   /// Transfer menu item
   ///
   /// In en, this message translates to:
-  /// **'Import JSON'**
+  /// **'Import JSON…'**
   String get collectionsImportJson;
 
   /// Transfer menu item
@@ -2681,7 +2675,7 @@ abstract class AppLocalizations {
   /// Transfer menu item
   ///
   /// In en, this message translates to:
-  /// **'Export selected'**
+  /// **'Export selected…'**
   String get collectionsExportSelected;
 
   /// Button and dialog title
@@ -2720,23 +2714,11 @@ abstract class AppLocalizations {
   /// **'edited {time}'**
   String collectionsEditedLower(String time);
 
-  /// Last edited line
-  ///
-  /// In en, this message translates to:
-  /// **'Edited {time}'**
-  String collectionsEdited(String time);
-
   /// Row menu tooltip
   ///
   /// In en, this message translates to:
   /// **'Collection actions'**
   String get collectionsActions;
-
-  /// Menu group label
-  ///
-  /// In en, this message translates to:
-  /// **'Data'**
-  String get collectionsData;
 
   /// Snackbar
   ///
@@ -2749,12 +2731,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Export collections'**
   String get collectionsExportTitle;
-
-  /// Button
-  ///
-  /// In en, this message translates to:
-  /// **'Export'**
-  String get collectionsExport;
 
   /// Dialog title
   ///
@@ -2779,12 +2755,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Description'**
   String get collectionsDescription;
-
-  /// Dialog title
-  ///
-  /// In en, this message translates to:
-  /// **'Duplicate collection'**
-  String get collectionsDuplicateTitle;
 
   /// Default name of a copy
   ///
@@ -3080,10 +3050,10 @@ abstract class AppLocalizations {
   /// **'Every selected record is deleted in one step.'**
   String get recordsBatchDeleteBody;
 
-  /// Snackbar
+  /// Toast after a batch delete
   ///
   /// In en, this message translates to:
-  /// **'{count} records deleted'**
+  /// **'{count, plural, =1{Deleted 1 record} other{Deleted {count} records}}'**
   String recordsDeletedSnack(int count);
 
   /// Dialog title
@@ -3097,18 +3067,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Every selected record is updated in one step.'**
   String get recordsBatchSetBody;
-
-  /// Button
-  ///
-  /// In en, this message translates to:
-  /// **'Set'**
-  String get recordsSet;
-
-  /// Snackbar
-  ///
-  /// In en, this message translates to:
-  /// **'{count} records updated'**
-  String recordsUpdatedSnack(int count);
 
   /// Form title
   ///
@@ -5023,6 +4981,120 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Stops on its own after {seconds} seconds.'**
   String voiceListeningCap(int seconds);
+
+  /// Clone collection action
+  ///
+  /// In en, this message translates to:
+  /// **'Clone'**
+  String get collectionsClone;
+
+  /// Dialog title
+  ///
+  /// In en, this message translates to:
+  /// **'Clone collection'**
+  String get collectionsCloneTitle;
+
+  /// Clone dialog primary
+  ///
+  /// In en, this message translates to:
+  /// **'Clone'**
+  String get collectionsCloneAction;
+
+  /// Export picker line
+  ///
+  /// In en, this message translates to:
+  /// **'Choose what goes in the file'**
+  String get collectionsExportLine;
+
+  /// Export picker primary
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Export 1 collection} other{Export {count} collections}}'**
+  String collectionsExportCount(int count);
+
+  /// Export picker primary on a phone
+  ///
+  /// In en, this message translates to:
+  /// **'Export {count}'**
+  String collectionsExportCountShort(int count);
+
+  /// Menu group label
+  ///
+  /// In en, this message translates to:
+  /// **'Import'**
+  String get collectionsImportGroup;
+
+  /// Inline rename hint
+  ///
+  /// In en, this message translates to:
+  /// **'Enter to save · Esc to cancel'**
+  String get collectionsRenameHint;
+
+  /// Import place: a CSV row and column.
+  ///
+  /// In en, this message translates to:
+  /// **'row {row}, column “{column}”'**
+  String importPlaceRowColumn(int row, String column);
+
+  /// Toast action closing an abort
+  ///
+  /// In en, this message translates to:
+  /// **'Dismiss'**
+  String get outcomeDismiss;
+
+  /// Batch edit value label
+  ///
+  /// In en, this message translates to:
+  /// **'New value'**
+  String get recordsNewValue;
+
+  /// Batch edit value helper
+  ///
+  /// In en, this message translates to:
+  /// **'Uses the same control as the record form.'**
+  String get recordsNewValueHelp;
+
+  /// Batch set confirm primary
+  ///
+  /// In en, this message translates to:
+  /// **'Set {field}'**
+  String recordsSetField(String field);
+
+  /// Batch delete confirm primary
+  ///
+  /// In en, this message translates to:
+  /// **'Keep records'**
+  String get recordsKeepRecords;
+
+  /// Toast after a batch set
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Set {field} on 1 record} other{Set {field} on {count} records}}'**
+  String recordsSetSnack(String field, int count);
+
+  /// Date range error, minimum only
+  ///
+  /// In en, this message translates to:
+  /// **'Must be on or after {date}'**
+  String issueDateMin(String date);
+
+  /// Date range error, maximum only
+  ///
+  /// In en, this message translates to:
+  /// **'Must be on or before {date}'**
+  String issueDateMax(String date);
+
+  /// Menu group label
+  ///
+  /// In en, this message translates to:
+  /// **'Export'**
+  String get collectionsExport;
+
+  /// Import place: a CSV header column.
+  ///
+  /// In en, this message translates to:
+  /// **'the header, column “{column}”'**
+  String importPlaceHeaderColumn(String column);
 }
 
 class _AppLocalizationsDelegate

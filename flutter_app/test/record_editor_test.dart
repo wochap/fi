@@ -19,11 +19,12 @@ FieldDefinitionDto _field(
   FieldTypeKindDto kind, {
   List<EnumOptionDto> options = const [],
   int order = 0,
+  bool required = false,
 }) => FieldDefinitionDto(
   id: id,
   name: name,
   fieldType: FieldTypeDto(kind: kind),
-  required_: false,
+  required_: required,
   validation: const ValidationMetadataDto(),
   display: const DisplayMetadataDto(multiline: false, slider: false),
   order: order,
@@ -49,7 +50,10 @@ const _held = RecordDto(
   createdAtMs: _createdMs,
 );
 
-FakeCollectionBridge _seeded({List<RecordDto> records = const []}) {
+FakeCollectionBridge _seeded({
+  List<RecordDto> records = const [],
+  bool requiredNote = false,
+}) {
   final bridge = FakeCollectionBridge()
     ..bootstrap = const BootstrapDto(
       kind: BootstrapKindDto.ready,
@@ -70,7 +74,7 @@ FakeCollectionBridge _seeded({List<RecordDto> records = const []}) {
     name: 'tst',
     description: '',
     fields: [
-      _field(_note, 'note', FieldTypeKindDto.text),
+      _field(_note, 'note', FieldTypeKindDto.text, required: requiredNote),
       _field(
         _kind,
         'kind',
@@ -176,6 +180,37 @@ void main() {
     await tester.tap(find.byTooltip('Close'));
     await tester.pumpAndSettle();
     expect(find.byType(BottomSheet), findsNothing);
+  });
+
+  group('the required legend', () {
+    testWidgets('a phone new-record sheet shows it once under the title', (
+      tester,
+    ) async {
+      await _open(tester, _seeded(requiredNote: true), _phone);
+      await _newRecord(tester);
+      final legend = find.byKey(const Key('required-legend'));
+      expect(legend, findsOneWidget);
+      expect(
+        tester.getTopLeft(legend).dy,
+        greaterThan(tester.getBottomLeft(find.text('New record')).dy),
+      );
+      expect(find.byKey(const Key('form-footer-hint')), findsNothing);
+    });
+
+    testWidgets('a phone sheet without required fields has none', (
+      tester,
+    ) async {
+      await _open(tester, _seeded(), _phone);
+      await _newRecord(tester);
+      expect(find.byKey(const Key('required-legend')), findsNothing);
+    });
+
+    testWidgets('desktop keeps the footer hint instead', (tester) async {
+      await _open(tester, _seeded(requiredNote: true), _desktop);
+      await _newRecord(tester);
+      expect(find.byKey(const Key('required-legend')), findsNothing);
+      expect(find.byKey(const Key('form-footer-hint')), findsOneWidget);
+    });
   });
 
   testWidgets('edit record on desktop: created date, Save changes, Delete…', (

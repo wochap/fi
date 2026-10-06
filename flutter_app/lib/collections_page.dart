@@ -20,6 +20,7 @@ import 'package:fi/theme/form_surface.dart';
 import 'package:fi/theme/inputs.dart';
 import 'package:fi/theme/nocturne.dart';
 import 'package:fi/theme/nocturne_widgets.dart';
+import 'package:fi/theme/outcome_toast.dart';
 import 'package:fi/theme/side_sheet.dart';
 import 'package:fi/widgets/computed_field_editor.dart';
 import 'package:fi/widgets/expression_builder.dart';
@@ -39,10 +40,14 @@ import 'package:two_dimensional_scrollables/two_dimensional_scrollables.dart';
 
 /// Below this content width the collection screen drops the table for a card list and the
 /// header actions collapse to icons.
-const double _wideContent = 760;
+const double _wideContent = 880;
 
 /// Below this screen width the app is laid out for a phone.
 const double _phoneScreen = 720;
+
+/// The open collection's title, so the header ⋮ Rename can start its inline editor. Only one
+/// collection screen is shown at a time.
+final _titleKey = GlobalKey<_EditableTitleState>();
 
 /// `6 records · 3 fields`.
 String _counts(AppLocalizations l, int records, int fields) =>
@@ -51,7 +56,7 @@ String _counts(AppLocalizations l, int records, int fields) =>
 /// What a collection row's menu can do.
 enum _CollectionAction {
   rename(FiIcons.edit),
-  duplicate(FiIcons.copy),
+  clone(FiIcons.copy),
   importCsv(FiIcons.importFile),
   exportCsv(FiIcons.exportFile),
   exportJson(FiIcons.exportFile),
@@ -63,15 +68,18 @@ enum _CollectionAction {
 
   String label(AppLocalizations l) => switch (this) {
     rename => l.commonRename,
-    duplicate => l.collectionsDuplicate,
+    clone => l.collectionsClone,
     importCsv => l.collectionsImportCsv,
     exportCsv => l.collectionsExportCsv,
     exportJson => l.collectionsExportJson,
     delete => l.collectionsDeleteEllipsis,
   };
 
-  /// The "Data" group.
-  static const data = [importCsv, exportCsv, exportJson];
+  /// The "Export" group.
+  static const exports = [exportCsv, exportJson];
+
+  /// The "Import" group.
+  static const imports = [importCsv];
 
   ActionSheetItem<_CollectionAction> sheetItem(AppLocalizations l) =>
       ActionSheetItem(value: this, label: label(l), icon: icon);
@@ -186,35 +194,11 @@ class CollectionsPage extends StatelessWidget {
                     onSelected: controller.setCollectionSort,
                   ),
                   const SizedBox(width: 4),
-                  PopupMenuButton<String>(
-                    key: const Key('collections-transfer-menu'),
-                    tooltip: l.collectionsImportExport,
-                    icon: Icon(
-                      FiIcons.importExport,
-                      size: 18,
-                      color: Nocturne.muted(.7),
-                    ),
-                    onSelected: (action) => unawaited(switch (action) {
-                      'import-json' => _importJson(context),
-                      'export-all' => _exportAll(context),
-                      _ => _exportSelected(context),
-                    }),
-                    itemBuilder: (_) => [
-                      PopupMenuItem(
-                        value: 'import-json',
-                        child: Text(l.collectionsImportJson),
-                      ),
-                      PopupMenuItem(
-                        value: 'export-all',
-                        enabled: controller.collections.isNotEmpty,
-                        child: Text(l.collectionsExportAll),
-                      ),
-                      PopupMenuItem(
-                        value: 'export-selected',
-                        enabled: controller.collections.isNotEmpty,
-                        child: Text(l.collectionsExportSelected),
-                      ),
-                    ],
+                  _transferMenu(
+                    context,
+                    phone: phone,
+                    // A narrow desktop window has no room for the label beside "New collection".
+                    labelled: constraints.maxWidth >= 800,
                   ),
                   const SizedBox(width: 8),
                   FilledButton.icon(
@@ -272,144 +256,130 @@ class CollectionsPage extends StatelessWidget {
     );
   }
 
-  /// One collection (mock collections): icon tile, name with an incomplete tag, its size,
-  /// when it was last edited, and its menu. F2 on a focused row renames it.
+  /// One collection (mock collections): icon tile, name with an incomplete tag, one subtitle
+  /// with its size and when it was last edited, and its menu. F2 on a focused row renames it.
   Widget _collectionCard(
     BuildContext context,
     CollectionDto item,
     DateTime now, {
     required bool phone,
+  }) => _CollectionRow(
+    key: ValueKey(item.id),
+    item: item,
+    now: now,
+    phone: phone,
+    menuItems: _collectionMenuItems,
+    onOpen: () => unawaited(controller.selectCollection(item.id)),
+    onRename: (name) => controller.renameCollection(item.id, name),
+    onMore: () => unawaited(_collectionActionSheet(context, item)),
+    onAction: (action) => _runCollectionAction(context, item, action),
+  );
+
+  /// The whole-dataset import/export menu (mock collections-import-export): a labelled button
+  /// opening a popup menu on wide screens, an icon button opening an action sheet on a phone.
+  Widget _transferMenu(
+    BuildContext context, {
+    required bool phone,
+    required bool labelled,
   }) {
-    final muted = TextStyle(
-      fontSize: 12,
-      fontFeatures: Nocturne.tabular,
-      color: Nocturne.muted(.55),
-    );
     final l = context.l10n;
-    final edited = item.lastEditedMs == null
-        ? null
-        : formatStatusTime(l, item.lastEditedMs, now: now);
-    final Widget details;
+    final any = controller.collections.isNotEmpty;
+    void run(String action) => unawaited(switch (action) {
+      'import-json' => _importJson(context),
+      'export-all' => _exportAll(context),
+      _ => _exportSelected(context),
+    });
     if (phone) {
-      details = Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            item.name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            [
-              l.collectionsRecordCount(item.recordCount),
-              if (item.incompleteCount > 0)
-                l.collectionsIncomplete(item.incompleteCount)
-              else if (edited != null)
-                l.collectionsEditedLower(edited),
-            ].join(' · '),
-            key: Key('collection-subtitle-${item.id}'),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: muted,
-          ),
-        ],
-      );
-    } else {
-      details = Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        item.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                    if (item.incompleteCount > 0) ...[
-                      const SizedBox(width: 8),
-                      Tag.outline(
-                        l.collectionsIncomplete(item.incompleteCount),
-                        key: Key('collection-incomplete-${item.id}'),
-                        leading: FiIcons.warning,
-                      ),
-                    ],
-                  ],
+      return FiIconButton(
+        key: const Key('collections-transfer-menu'),
+        icon: FiIcons.importExport,
+        tooltip: l.collectionsImportExport,
+        color: Nocturne.muted(.7),
+        onPressed: () async {
+          final chosen = await showActionSheet<String>(
+            context,
+            icon: FiIcons.importExport,
+            title: l.collectionsImportExport,
+            groups: [
+              ActionSheetGroup([
+                ActionSheetItem(
+                  value: 'import-json',
+                  label: l.collectionsImportJson,
+                  icon: FiIcons.importFile,
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  _counts(l, item.recordCount, item.fieldCount),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: muted,
-                ),
-              ],
-            ),
-          ),
-          if (edited != null) ...[
-            const SizedBox(width: 12),
-            Text(
-              l.collectionsEdited(edited),
-              key: Key('collection-edited-${item.id}'),
-              style: muted,
-            ),
-          ],
-        ],
+                if (any) ...[
+                  ActionSheetItem(
+                    value: 'export-all',
+                    label: l.collectionsExportAll,
+                    icon: FiIcons.exportFile,
+                  ),
+                  ActionSheetItem(
+                    value: 'export-selected',
+                    label: l.collectionsExportSelected,
+                    icon: FiIcons.exportFile,
+                  ),
+                ],
+              ]),
+            ],
+          );
+          if (chosen != null && context.mounted) run(chosen);
+        },
       );
     }
-    return CallbackShortcuts(
-      bindings: {
-        const SingleActivator(LogicalKeyboardKey.f2): () =>
-            unawaited(_editCollection(context, item)),
-      },
-      child: CardListRow(
-        key: ValueKey(item.id),
-        child: NocturneCard(
-          padding: const EdgeInsets.fromLTRB(14, 12, 4, 12),
-          onTap: () => unawaited(controller.selectCollection(item.id)),
-          child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: phone ? 40 : 36),
-            child: Row(
-              children: [
-                const IconTile(FiIcons.collection),
-                const SizedBox(width: 12),
-                Expanded(child: details),
-                if (phone)
-                  FiIconButton(
-                    icon: FiIcons.more,
-                    tooltip: l.collectionsActions,
-                    color: Nocturne.muted(.7),
-                    onPressed: () =>
-                        unawaited(_collectionActionSheet(context, item)),
-                  )
-                else
-                  PopupMenuButton<_CollectionAction>(
-                    tooltip: l.collectionsActions,
-                    icon: Icon(FiIcons.more, color: Nocturne.muted(.7)),
-                    onSelected: (action) =>
-                        _runCollectionAction(context, item, action),
-                    itemBuilder: (_) => _collectionMenuItems(l),
-                  ),
-              ],
-            ),
-          ),
+    return PopupMenuButton<String>(
+      key: const Key('collections-transfer-menu'),
+      tooltip: labelled ? '' : l.collectionsImportExport,
+      icon: labelled
+          ? null
+          : Icon(FiIcons.importExport, size: 18, color: Nocturne.muted(.7)),
+      onSelected: run,
+      itemBuilder: (_) => [
+        PopupMenuItem(
+          value: 'import-json',
+          child: Text(l.collectionsImportJson),
         ),
-      ),
+        PopupMenuItem(
+          value: 'export-all',
+          enabled: any,
+          child: Text(l.collectionsExportAll),
+        ),
+        PopupMenuItem(
+          value: 'export-selected',
+          enabled: any,
+          child: Text(l.collectionsExportSelected),
+        ),
+      ],
+      // Drawn as an outlined button; the menu button handles the press.
+      child: !labelled
+          ? null
+          : Container(
+              height: 36,
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(Nocturne.radius),
+                border: Border.all(color: Nocturne.neutral700),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(FiIcons.importExport, size: 16),
+                  const SizedBox(width: 8),
+                  Text(
+                    l.collectionsImportExport,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
     );
   }
 
-  /// The row menu on wide screens: Rename (F2), Duplicate, the "Data" group, then Delete….
-  List<PopupMenuEntry<_CollectionAction>> _collectionMenuItems(
+  /// The row menu on wide screens: Rename (F2), Clone, the "Export" and "Import" groups, then
+  /// Delete….
+  static List<PopupMenuEntry<_CollectionAction>> _collectionMenuItems(
     AppLocalizations l,
   ) => [
     PopupMenuItem(
@@ -430,22 +400,27 @@ class CollectionsPage extends StatelessWidget {
       ),
     ),
     PopupMenuItem(
-      value: _CollectionAction.duplicate,
-      child: Text(l.collectionsDuplicate),
+      value: _CollectionAction.clone,
+      child: Text(l.collectionsClone),
     ),
     const PopupMenuDivider(),
-    PopupMenuItem(
-      enabled: false,
-      height: 28,
-      child: SectionLabel(l.collectionsData),
-    ),
-    for (final action in _CollectionAction.data)
-      PopupMenuItem(value: action, child: Text(action.label(l))),
+    ..._menuGroup(l.collectionsExport, _CollectionAction.exports, l),
+    ..._menuGroup(l.collectionsImportGroup, _CollectionAction.imports, l),
     const PopupMenuDivider(),
     PopupMenuItem(
       value: _CollectionAction.delete,
       child: Text(_CollectionAction.delete.label(l)),
     ),
+  ];
+
+  static List<PopupMenuEntry<_CollectionAction>> _menuGroup(
+    String label,
+    List<_CollectionAction> actions,
+    AppLocalizations l,
+  ) => [
+    PopupMenuItem(enabled: false, height: 28, child: SectionLabel(label)),
+    for (final action in actions)
+      PopupMenuItem(value: action, child: Text(action.label(l))),
   ];
 
   void _runCollectionAction(
@@ -456,8 +431,8 @@ class CollectionsPage extends StatelessWidget {
     switch (action) {
       case _CollectionAction.rename:
         unawaited(_editCollection(context, item));
-      case _CollectionAction.duplicate:
-        unawaited(_duplicateCollection(context, item));
+      case _CollectionAction.clone:
+        unawaited(_cloneCollection(context, item));
       case _CollectionAction.importCsv:
         unawaited(_importCsv(context, item));
       case _CollectionAction.exportCsv:
@@ -485,13 +460,16 @@ class CollectionsPage extends StatelessWidget {
         ActionSheetGroup([
           for (final action in [
             _CollectionAction.rename,
-            _CollectionAction.duplicate,
+            _CollectionAction.clone,
           ])
             action.sheetItem(l),
         ]),
         ActionSheetGroup([
-          for (final action in _CollectionAction.data) action.sheetItem(l),
-        ], label: l.collectionsData),
+          for (final action in _CollectionAction.exports) action.sheetItem(l),
+        ], label: l.collectionsExport),
+        ActionSheetGroup([
+          for (final action in _CollectionAction.imports) action.sheetItem(l),
+        ], label: l.collectionsImportGroup),
         ActionSheetGroup([_CollectionAction.delete.sheetItem(l)]),
       ],
     );
@@ -507,16 +485,25 @@ class CollectionsPage extends StatelessWidget {
   ) async {
     final messenger = ScaffoldMessenger.of(context);
     final l = context.l10n;
+    final width = MediaQuery.sizeOf(context).width;
     try {
       final name = await export();
       if (name != null) {
-        messenger.showSnackBar(
-          SnackBar(content: Text(l.collectionsExportedTo(name))),
+        showOutcomeToastOn(
+          messenger,
+          l,
+          width,
+          l.collectionsExportedTo(name),
+          success: true,
         );
       }
     } catch (failure) {
-      messenger.showSnackBar(
-        SnackBar(content: Text(bridgeMessage(l, failure))),
+      showOutcomeToastOn(
+        messenger,
+        l,
+        width,
+        bridgeMessage(l, failure),
+        success: false,
       );
     }
   }
@@ -524,62 +511,81 @@ class CollectionsPage extends StatelessWidget {
   Future<void> _exportAll(BuildContext context) =>
       _export(context, controller.exportAll);
 
-  /// Picks several collections, then exports them as one JSON document. Dismissing the picker
-  /// or choosing none exports nothing.
+  /// Picks several collections (mock collections-import-export), then exports them as one JSON
+  /// document: a dialog on wide screens, a bottom sheet on a phone. Dismissing the picker exports
+  /// nothing, and the primary action is unavailable while nothing is checked.
   Future<void> _exportSelected(BuildContext context) async {
     final chosen = <String>{};
     final l = context.l10n;
-    final picked = await showDialog<List<CollectionDto>>(
-      context: context,
-      builder: (dialog) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: Text(l.collectionsExportTitle),
-          content: SizedBox(
-            width: 360,
-            child: ListView(
-              shrinkWrap: true,
-              children: [
-                for (final item in controller.collections)
-                  CheckboxListTile(
-                    key: Key('export-pick-${item.id}'),
-                    value: chosen.contains(item.id),
-                    title: Text(item.name),
-                    onChanged: (value) => setState(
-                      () => value == true
-                          ? chosen.add(item.id)
-                          : chosen.remove(item.id),
+    final phone = MediaQuery.sizeOf(context).width < _phoneScreen;
+    List<CollectionDto>? picked;
+    await showFormSurface<void>(
+      context,
+      builder: (route) => StatefulBuilder(
+        builder: (context, setState) => FormSurface(
+          title: l.collectionsExportTitle,
+          width: 440,
+          body: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                l.collectionsExportLine,
+                style: TextStyle(fontSize: 13, color: Nocturne.muted(.6)),
+              ),
+              const SizedBox(height: 8),
+              for (final item in controller.collections)
+                CheckboxListTile(
+                  key: Key('export-pick-${item.id}'),
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  value: chosen.contains(item.id),
+                  title: Text(item.name),
+                  subtitle: Text(
+                    _counts(l, item.recordCount, item.fieldCount),
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontFeatures: Nocturne.tabular,
+                      color: Nocturne.muted(.55),
                     ),
                   ),
-              ],
-            ),
+                  onChanged: (value) => setState(
+                    () => value == true
+                        ? chosen.add(item.id)
+                        : chosen.remove(item.id),
+                  ),
+                ),
+            ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialog),
-              child: Text(l.commonCancel),
-            ),
-            FilledButton(
-              key: const Key('confirm-export-selected'),
-              onPressed: chosen.isEmpty
-                  ? null
-                  : () => Navigator.pop(dialog, [
-                      for (final item in controller.collections)
-                        if (chosen.contains(item.id)) item,
-                    ]),
-              child: Text(l.collectionsExport),
-            ),
-          ],
+          primaryKey: const Key('confirm-export-selected'),
+          primaryLabel: phone
+              ? l.collectionsExportCountShort(chosen.length)
+              : l.collectionsExportCount(chosen.length),
+          onPrimary: chosen.isEmpty
+              ? null
+              : () {
+                  picked = [
+                    for (final item in controller.collections)
+                      if (chosen.contains(item.id)) item,
+                  ];
+                  Navigator.pop(route);
+                },
         ),
       ),
     );
-    if (picked == null || picked.isEmpty || !context.mounted) return;
-    await _export(context, () => controller.exportJson(picked));
+    final selection = picked;
+    if (selection == null || selection.isEmpty || !context.mounted) return;
+    await _export(context, () => controller.exportJson(selection));
   }
 
   /// Imports a CSV file into [item] and reports the count, or the row, column and reason that
   /// stopped it. A dismissed open dialog reports nothing.
-  Future<void> _importCsv(BuildContext context, CollectionDto item) =>
-      _import(context, () => controller.importCsv(item.id), csv: true);
+  Future<void> _importCsv(BuildContext context, CollectionDto item) => _import(
+    context,
+    () => controller.importCsv(item.id),
+    csv: true,
+    collection: item.name,
+  );
 
   Future<void> _importJson(BuildContext context) =>
       _import(context, controller.importJson, csv: false);
@@ -588,18 +594,28 @@ class CollectionsPage extends StatelessWidget {
     BuildContext context,
     Future<ImportOutcomeDto?> Function() run, {
     required bool csv,
+    String collection = '',
   }) async {
     final messenger = ScaffoldMessenger.of(context);
     final l = context.l10n;
+    final width = MediaQuery.sizeOf(context).width;
     try {
       final outcome = await run();
       if (outcome == null) return;
-      messenger.showSnackBar(
-        SnackBar(content: Text(importOutcomeMessage(l, outcome, csv: csv))),
+      showOutcomeToastOn(
+        messenger,
+        l,
+        width,
+        importOutcomeMessage(l, outcome, csv: csv, collection: collection),
+        success: outcome.imported,
       );
     } catch (failure) {
-      messenger.showSnackBar(
-        SnackBar(content: Text(bridgeMessage(l, failure))),
+      showOutcomeToastOn(
+        messenger,
+        l,
+        width,
+        bridgeMessage(l, failure),
+        success: false,
       );
     }
   }
@@ -921,7 +937,9 @@ class CollectionsPage extends StatelessWidget {
                 textBaseline: TextBaseline.alphabetic,
                 children: [
                   Flexible(
+                    flex: 2,
                     child: _EditableTitle(
+                      key: _titleKey,
                       name: schema.name,
                       style: theme.textTheme.headlineMedium,
                       onRename: (name) =>
@@ -929,12 +947,16 @@ class CollectionsPage extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  Text(
-                    _countLine(l, schema, fields),
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontFeatures: Nocturne.tabular,
-                      color: Nocturne.muted(.55),
+                  Flexible(
+                    child: Text(
+                      _countLine(l, schema, fields),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontFeatures: Nocturne.tabular,
+                        color: Nocturne.muted(.55),
+                      ),
                     ),
                   ),
                 ],
@@ -963,12 +985,66 @@ class CollectionsPage extends StatelessWidget {
           icon: const Icon(FiIcons.select),
           label: Text(l.recordsSelect),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: 4),
+        _desktopMore(context, schema, fields),
+        const SizedBox(width: 4),
         FilledButton.icon(
           onPressed: () => _recordEditor(context, schema),
           icon: const Icon(FiIcons.add),
           label: Text(l.recordsNewRecord),
         ),
+      ],
+    );
+  }
+
+  /// The collection ⋮ at 720px and wider (mock collection-dashboard): Queries and Select records,
+  /// the export and import actions, then Rename (the inline title editor), Clone and Delete….
+  Widget _desktopMore(
+    BuildContext context,
+    CollectionSchemaDto schema,
+    List<FieldDefinitionDto> fields,
+  ) {
+    final l = context.l10n;
+    return PopupMenuButton<Object>(
+      key: const Key('collection-desktop-more'),
+      tooltip: l.recordsMoreActions,
+      icon: const Icon(FiIcons.more, size: 20),
+      onSelected: (action) {
+        switch (action) {
+          case 'queries':
+            unawaited(_queryEditor(context, schema));
+          case 'select':
+            controller.startSelection();
+          case _CollectionAction.rename:
+            _titleKey.currentState?.start();
+          case final _CollectionAction action:
+            _runCollectionAction(
+              context,
+              _openCollectionEntry(schema, fields),
+              action,
+            );
+        }
+      },
+      itemBuilder: (_) => [
+        PopupMenuItem(value: 'queries', child: Text(l.recordsQueries)),
+        PopupMenuItem(
+          value: 'select',
+          enabled: controller.records.isNotEmpty,
+          child: Text(l.recordsSelectRecords),
+        ),
+        const PopupMenuDivider(),
+        for (final action in [
+          ..._CollectionAction.exports,
+          ..._CollectionAction.imports,
+        ])
+          PopupMenuItem(value: action, child: Text(action.label(l))),
+        const PopupMenuDivider(),
+        for (final action in [
+          _CollectionAction.rename,
+          _CollectionAction.clone,
+          _CollectionAction.delete,
+        ])
+          PopupMenuItem(value: action, child: Text(action.label(l))),
       ],
     );
   }
@@ -1010,6 +1086,7 @@ class CollectionsPage extends StatelessWidget {
             ? null
             : controller.startSelection,
       ),
+      _desktopMore(context, schema, fields),
       FiIconButton(
         icon: FiIcons.add,
         tooltip: context.l10n.recordsNewRecord,
@@ -1093,6 +1170,7 @@ class CollectionsPage extends StatelessWidget {
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       _EditableTitle(
+        key: _titleKey,
         name: schema.name,
         style: const TextStyle(
           fontSize: 18,
@@ -1150,7 +1228,7 @@ class CollectionsPage extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(Nocturne.radius),
         side: BorderSide(
-          color: selected ? Nocturne.accent700 : Nocturne.neutral800,
+          color: selected ? Nocturne.accent : Nocturne.neutral800,
         ),
       ),
       child: InkWell(
@@ -1336,9 +1414,9 @@ class CollectionsPage extends StatelessWidget {
     );
   }
 
-  /// Names the copy of [source] (fields, queries and widgets; no records). The list refreshes
+  /// Names the clone of [source] (fields, queries and widgets; no records). The list refreshes
   /// on success and the selection stays put; dismissing sends no command.
-  Future<void> _duplicateCollection(
+  Future<void> _cloneCollection(
     BuildContext context,
     CollectionDto source,
   ) async {
@@ -1351,7 +1429,7 @@ class CollectionsPage extends StatelessWidget {
       context,
       builder: (route) => StatefulBuilder(
         builder: (context, setState) => FormSurface(
-          title: context.l10n.collectionsDuplicateTitle,
+          title: context.l10n.collectionsCloneTitle,
           width: 420,
           showRequiredLegend: true,
           body: FiTextInput(
@@ -1367,7 +1445,7 @@ class CollectionsPage extends StatelessWidget {
             },
           ),
           errors: issues.formLines(context.l10n),
-          primaryLabel: context.l10n.commonSave,
+          primaryLabel: context.l10n.collectionsCloneAction,
           onPrimary: () async {
             try {
               await controller.cloneCollection(source.id, name.text.trim());
@@ -1874,7 +1952,7 @@ class CollectionsPage extends StatelessWidget {
               style: outlined,
               onPressed: count == 0 ? null : edit,
               icon: const Icon(FiIcons.edit),
-              label: Text(l.commonEdit),
+              label: Text(l.recordsEditField),
             ),
             const SizedBox(width: 8),
             OutlinedButton.icon(
@@ -1917,21 +1995,24 @@ class CollectionsPage extends StatelessWidget {
     final count = controller.selectedRecordIds.length;
     final messenger = ScaffoldMessenger.of(context);
     final l = context.l10n;
+    final width = MediaQuery.sizeOf(context).width;
+    // The destructive action is secondary and leading; keeping the records is the primary one.
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialog) => AlertDialog(
         title: Text(l.recordsBatchDeleteTitle(count)),
         content: Text(l.recordsBatchDeleteBody),
+        actionsAlignment: MainAxisAlignment.spaceBetween,
         actions: [
           TextButton(
-            key: const Key('dismiss-batch-delete'),
-            onPressed: () => Navigator.pop(dialog, false),
-            child: Text(l.commonCancel),
-          ),
-          FilledButton(
             key: const Key('confirm-batch-delete'),
             onPressed: () => Navigator.pop(dialog, true),
             child: Text(l.commonDelete),
+          ),
+          FilledButton(
+            key: const Key('dismiss-batch-delete'),
+            onPressed: () => Navigator.pop(dialog, false),
+            child: Text(l.recordsKeepRecords),
           ),
         ],
       ),
@@ -1939,8 +2020,12 @@ class CollectionsPage extends StatelessWidget {
     if (confirmed != true) return;
     try {
       final affected = await controller.deleteSelected();
-      messenger.showSnackBar(
-        SnackBar(content: Text(l.recordsDeletedSnack(affected))),
+      showOutcomeToastOn(
+        messenger,
+        l,
+        width,
+        l.recordsDeletedSnack(affected),
+        success: true,
       );
     } catch (_) {
       // The typed error is already on the controller's banner and the
@@ -1960,6 +2045,7 @@ class CollectionsPage extends StatelessWidget {
     final count = controller.selectedRecordIds.length;
     final messenger = ScaffoldMessenger.of(context);
     final l = context.l10n;
+    final width = MediaQuery.sizeOf(context).width;
     var field = fields.first;
     FieldValueDto? value;
     var issues = FormIssues.none;
@@ -1988,7 +2074,7 @@ class CollectionsPage extends StatelessWidget {
             FilledButton(
               key: const Key('confirm-batch-edit'),
               onPressed: () => Navigator.pop(dialog, true),
-              child: Text(l.recordsSet),
+              child: Text(l.recordsSetField(field.name)),
             ),
           ],
         ),
@@ -2000,8 +2086,12 @@ class CollectionsPage extends StatelessWidget {
           value ?? const FieldValueDto(kind: FieldValueKindDto.null_),
         );
         if (route.mounted) Navigator.pop(route);
-        messenger.showSnackBar(
-          SnackBar(content: Text(l.recordsUpdatedSnack(affected))),
+        showOutcomeToastOn(
+          messenger,
+          l,
+          width,
+          l.recordsSetSnack(field.name, affected),
+          success: true,
         );
       } catch (failure) {
         if (route.mounted) {
@@ -2044,6 +2134,7 @@ class CollectionsPage extends StatelessWidget {
                   value = updated;
                   issues = issues.without(field.id);
                 }),
+                label: l.recordsNewValue,
                 errors: [
                   ...issues.fieldLines(
                     context.l10n,
@@ -2054,6 +2145,10 @@ class CollectionsPage extends StatelessWidget {
                   if (attempted) ?blocker(),
                 ],
                 quickFill: true,
+              ),
+              Text(
+                l.recordsNewValueHelp,
+                style: TextStyle(fontSize: 12, color: Nocturne.muted(.55)),
               ),
             ],
           ),
@@ -2107,9 +2202,227 @@ const _draftValidationDelay = Duration(milliseconds: 200);
 /// The collection title, renamed in place: a double tap swaps the text for an input with the
 /// name selected. Enter or losing focus submits; Escape cancels. The trimmed name goes to
 /// [onRename] at most once per edit, and only when it is non-empty and differs from [name].
+/// The name a rename submits: [typed] trimmed, or null when that is empty or equal to
+/// [current], which counts as a cancel (no command, no error).
+String? normalizedRename(String current, String typed) {
+  final name = typed.trim();
+  return name.isEmpty || name == current ? null : name;
+}
+
+/// One collections list row. On wide screens Rename (menu or F2) turns the row in place into a
+/// name input with Cancel and Save; on a phone it goes to [onAction] like every other action.
+class _CollectionRow extends StatefulWidget {
+  const _CollectionRow({
+    required this.item,
+    required this.now,
+    required this.phone,
+    required this.menuItems,
+    required this.onOpen,
+    required this.onRename,
+    required this.onMore,
+    required this.onAction,
+    super.key,
+  });
+
+  final CollectionDto item;
+  final DateTime now;
+  final bool phone;
+  final List<PopupMenuEntry<_CollectionAction>> Function(AppLocalizations)
+  menuItems;
+  final VoidCallback onOpen;
+  final Future<void> Function(String name) onRename;
+  final VoidCallback onMore;
+  final ValueChanged<_CollectionAction> onAction;
+
+  @override
+  State<_CollectionRow> createState() => _CollectionRowState();
+}
+
+class _CollectionRowState extends State<_CollectionRow> {
+  final _name = TextEditingController();
+  var _renaming = false;
+  List<String> _errors = const [];
+
+  @override
+  void dispose() {
+    _name.dispose();
+    super.dispose();
+  }
+
+  void _action(_CollectionAction action) {
+    if (action == _CollectionAction.rename && !widget.phone) {
+      _startRename();
+    } else {
+      widget.onAction(action);
+    }
+  }
+
+  void _startRename() {
+    final current = widget.item.name;
+    _name.value = TextEditingValue(
+      text: current,
+      selection: TextSelection(baseOffset: 0, extentOffset: current.length),
+    );
+    setState(() {
+      _renaming = true;
+      _errors = const [];
+    });
+  }
+
+  void _cancel() => setState(() {
+    _renaming = false;
+    _errors = const [];
+  });
+
+  Future<void> _save() async {
+    final name = normalizedRename(widget.item.name, _name.text);
+    if (name == null) {
+      _cancel();
+      return;
+    }
+    final l = context.l10n;
+    try {
+      await widget.onRename(name);
+      if (mounted) _cancel();
+    } catch (failure) {
+      if (mounted) setState(() => _errors = [bridgeMessage(l, failure)]);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final item = widget.item;
+    final phone = widget.phone;
+    final l = context.l10n;
+    final edited = item.lastEditedMs == null
+        ? null
+        : formatStatusTime(l, item.lastEditedMs, now: widget.now);
+    final Widget details;
+    final List<Widget> trailing;
+    if (_renaming) {
+      details = CallbackShortcuts(
+        bindings: {const SingleActivator(LogicalKeyboardKey.escape): _cancel},
+        child: FiTextInput(
+          key: Key('collection-rename-${item.id}'),
+          controller: _name,
+          autofocus: true,
+          hint: l.collectionsRenameHint,
+          errors: _errors,
+          onChanged: (_) {
+            if (_errors.isNotEmpty) setState(() => _errors = const []);
+          },
+          onSubmitted: (_) => unawaited(_save()),
+        ),
+      );
+      trailing = [
+        const SizedBox(width: 8),
+        TextButton(
+          key: const Key('collection-rename-cancel'),
+          onPressed: _cancel,
+          child: Text(l.commonCancel),
+        ),
+        const SizedBox(width: 4),
+        FilledButton(
+          key: const Key('collection-rename-save'),
+          onPressed: () => unawaited(_save()),
+          child: Text(l.commonSave),
+        ),
+        const SizedBox(width: 8),
+      ];
+    } else {
+      details = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Flexible(
+                child: Text(
+                  item.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+              if (item.incompleteCount > 0) ...[
+                const SizedBox(width: 8),
+                Tag.outline(
+                  l.collectionsIncomplete(item.incompleteCount),
+                  key: Key('collection-incomplete-${item.id}'),
+                  leading: FiIcons.warning,
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 2),
+          Text(
+            [
+              _counts(l, item.recordCount, item.fieldCount),
+              if (edited != null) l.collectionsEditedLower(edited),
+            ].join(' · '),
+            key: Key('collection-subtitle-${item.id}'),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 12,
+              fontFeatures: Nocturne.tabular,
+              color: Nocturne.muted(.55),
+            ),
+          ),
+        ],
+      );
+      trailing = [
+        if (phone)
+          FiIconButton(
+            icon: FiIcons.more,
+            tooltip: l.collectionsActions,
+            color: Nocturne.muted(.7),
+            onPressed: widget.onMore,
+          )
+        else
+          PopupMenuButton<_CollectionAction>(
+            tooltip: l.collectionsActions,
+            icon: Icon(FiIcons.more, color: Nocturne.muted(.7)),
+            onSelected: _action,
+            itemBuilder: (_) => widget.menuItems(l),
+          ),
+      ];
+    }
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.f2): () =>
+            _action(_CollectionAction.rename),
+      },
+      child: CardListRow(
+        child: NocturneCard(
+          padding: const EdgeInsets.fromLTRB(14, 12, 4, 12),
+          onTap: _renaming ? null : widget.onOpen,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: phone ? 40 : 36),
+            child: Row(
+              crossAxisAlignment: _renaming
+                  ? CrossAxisAlignment.start
+                  : CrossAxisAlignment.center,
+              children: [
+                const IconTile(FiIcons.collection),
+                const SizedBox(width: 12),
+                Expanded(child: details),
+                ...trailing,
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _EditableTitle extends StatefulWidget {
   const _EditableTitle({
     required this.name,
+    super.key,
     required this.style,
     required this.onRename,
   });
@@ -2150,6 +2463,9 @@ class _EditableTitleState extends State<_EditableTitle> {
     if (!_focus.hasFocus) _submit();
   }
 
+  /// Turns the title into its editor, as a double tap does.
+  void start() => _start();
+
   void _start() {
     _text.value = TextEditingValue(
       text: widget.name,
@@ -2174,11 +2490,9 @@ class _EditableTitleState extends State<_EditableTitle> {
   }
 
   void _submit() {
-    final name = _text.text.trim();
+    final name = normalizedRename(widget.name, _text.text);
     if (!_close()) return;
-    // Empty or unchanged is a cancel: nothing is sent and no error is shown.
-    if (name.isEmpty || name == widget.name) return;
-    widget.onRename(name);
+    if (name != null) widget.onRename(name);
   }
 
   void _cancel() => _close();
@@ -2677,6 +2991,11 @@ class _RecordEditorFormState extends State<_RecordEditorForm> {
       top: voice == null ? null : VoicePanel(controller: voice),
       submitOnCtrlEnter: true,
       footerHint: existing == null ? l.recordFooterHint : null,
+      // A phone has no footer hint, so a new record's sheet carries the "* required" legend.
+      showRequiredLegend:
+          !dialog &&
+          existing == null &&
+          fields.any(FieldRendererRegistry.marksRequired),
       leadingFooterAction: existing == null
           ? null
           : FormHeaderAction(
