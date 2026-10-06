@@ -1790,9 +1790,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get recordsAddField => 'Add field';
 
   @override
-  String get recordsNewField => 'New field';
-
-  @override
   String recordsComputedNewer(String version) {
     return 'Made by a newer version (expression v$version); not editable here';
   }
@@ -2479,8 +2476,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get fieldEditorStepPositive => 'Step must be a positive whole number';
 
   @override
-  String get fieldEditorStepDivides =>
-      'Step must divide the range from minimum to maximum exactly';
+  String get fieldEditorStepDivides => 'Step must divide the range.';
+
+  @override
+  String get helpGotIt => 'Got it';
+
+  @override
+  String get fieldSummarySlider => 'slider';
 
   @override
   String fieldEditorDefaultExactLength(int min) {
@@ -2518,17 +2520,17 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get fieldEditorMakeRequiredTitle => 'Make this field required?';
+  String fieldEditorMakeRequiredTitle(String name) {
+    return 'Make “$name” required?';
+  }
 
   @override
   String fieldEditorMakeRequiredBody(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other:
-          '$count records have no value for this field. They will be marked invalid until you fill the field in. Nothing is deleted.',
-      one:
-          '1 record has no value for this field. It will be marked invalid until you fill the field in. Nothing is deleted.',
+      other: '$count records have no value and will be marked incomplete.',
+      one: '1 record has no value and will be marked incomplete.',
     );
     return '$_temp0';
   }
@@ -2537,22 +2539,28 @@ class AppLocalizationsEn extends AppLocalizations {
   String get fieldEditorMakeRequired => 'Make required';
 
   @override
+  String get fieldEditorKeepOptional => 'Keep optional';
+
+  @override
   String fieldEditorDeleteOptionTitle(String label) {
-    return 'Delete “$label”?';
+    return 'Delete option “$label”?';
   }
 
   @override
-  String fieldEditorDeleteOptionBody(int count, String label) {
+  String fieldEditorDeleteOptionBody(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
       other:
-          '$count records use this option and keep it, shown as “$label (deleted)”. It can\'t be picked for new records.',
+          '$count records use it and keep it. It can\'t be picked for new records.',
       one:
-          '1 record uses this option and keeps it, shown as “$label (deleted)”. It can\'t be picked for new records.',
+          '1 record uses it and keeps it. It can\'t be picked for new records.',
     );
     return '$_temp0';
   }
+
+  @override
+  String get fieldEditorKeepOption => 'Keep option';
 
   @override
   String get fieldEditorNewField => 'New field';
@@ -2583,14 +2591,41 @@ class AppLocalizationsEn extends AppLocalizations {
   String get fieldEditorDeleteField => 'Delete field';
 
   @override
+  String fieldEditorDeleteFieldTitle(String name) {
+    return 'Delete field “$name”?';
+  }
+
+  @override
+  String fieldEditorDeleteFieldBody(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Removes the field from the schema. $count records lose their value for it.',
+      one:
+          'Removes the field from the schema. 1 record loses its value for it.',
+      zero: 'Removes the field from the schema.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get fieldEditorKeepField => 'Keep field';
+
+  @override
+  String fieldEditorDeleteFieldNamed(String name) {
+    return 'Delete field $name';
+  }
+
+  @override
   String fieldEditorRequiredWarning(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
       other:
-          '$count records have no value for this field and will be marked invalid until you fill them in. Add a default to avoid this.',
+          '$count records have no value for this field and will be marked incomplete.',
       one:
-          '1 record has no value for this field and will be marked invalid until you fill them in. Add a default to avoid this.',
+          '1 record has no value for this field and will be marked incomplete.',
     );
     return '$_temp0';
   }

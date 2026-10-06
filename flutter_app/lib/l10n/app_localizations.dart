@@ -2948,12 +2948,6 @@ abstract class AppLocalizations {
   /// **'Add field'**
   String get recordsAddField;
 
-  /// Button
-  ///
-  /// In en, this message translates to:
-  /// **'New field'**
-  String get recordsNewField;
-
   /// Computed field note
   ///
   /// In en, this message translates to:
@@ -4055,8 +4049,20 @@ abstract class AppLocalizations {
   /// Slider step error
   ///
   /// In en, this message translates to:
-  /// **'Step must divide the range from minimum to maximum exactly'**
+  /// **'Step must divide the range.'**
   String get fieldEditorStepDivides;
+
+  /// Closes a help popup
+  ///
+  /// In en, this message translates to:
+  /// **'Got it'**
+  String get helpGotIt;
+
+  /// Field summary suffix for an Integer shown as a slider
+  ///
+  /// In en, this message translates to:
+  /// **'slider'**
+  String get fieldSummarySlider;
 
   /// Default length error
   ///
@@ -4103,13 +4109,13 @@ abstract class AppLocalizations {
   /// Confirmation dialog title
   ///
   /// In en, this message translates to:
-  /// **'Make this field required?'**
-  String get fieldEditorMakeRequiredTitle;
+  /// **'Make “{name}” required?'**
+  String fieldEditorMakeRequiredTitle(String name);
 
   /// Confirmation dialog body
   ///
   /// In en, this message translates to:
-  /// **'{count, plural, =1{1 record has no value for this field. It will be marked invalid until you fill the field in. Nothing is deleted.} other{{count} records have no value for this field. They will be marked invalid until you fill the field in. Nothing is deleted.}}'**
+  /// **'{count, plural, =1{1 record has no value and will be marked incomplete.} other{{count} records have no value and will be marked incomplete.}}'**
   String fieldEditorMakeRequiredBody(int count);
 
   /// Confirm button
@@ -4118,17 +4124,29 @@ abstract class AppLocalizations {
   /// **'Make required'**
   String get fieldEditorMakeRequired;
 
+  /// Safe button of the make-required confirm
+  ///
+  /// In en, this message translates to:
+  /// **'Keep optional'**
+  String get fieldEditorKeepOptional;
+
   /// Dialog title deleting a used option
   ///
   /// In en, this message translates to:
-  /// **'Delete “{label}”?'**
+  /// **'Delete option “{label}”?'**
   String fieldEditorDeleteOptionTitle(String label);
 
   /// Dialog body deleting a used option
   ///
   /// In en, this message translates to:
-  /// **'{count, plural, =1{1 record uses this option and keeps it, shown as “{label} (deleted)”. It can\'t be picked for new records.} other{{count} records use this option and keep it, shown as “{label} (deleted)”. It can\'t be picked for new records.}}'**
-  String fieldEditorDeleteOptionBody(int count, String label);
+  /// **'{count, plural, =1{1 record uses it and keeps it. It can\'t be picked for new records.} other{{count} records use it and keep it. It can\'t be picked for new records.}}'**
+  String fieldEditorDeleteOptionBody(int count);
+
+  /// Safe button of the delete-option confirm
+  ///
+  /// In en, this message translates to:
+  /// **'Keep option'**
+  String get fieldEditorKeepOption;
 
   /// Field editor header
   ///
@@ -4184,10 +4202,34 @@ abstract class AppLocalizations {
   /// **'Delete field'**
   String get fieldEditorDeleteField;
 
+  /// Delete-field confirm title
+  ///
+  /// In en, this message translates to:
+  /// **'Delete field “{name}”?'**
+  String fieldEditorDeleteFieldTitle(String name);
+
+  /// Delete-field confirm body; count is records holding a value
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =0{Removes the field from the schema.} =1{Removes the field from the schema. 1 record loses its value for it.} other{Removes the field from the schema. {count} records lose their value for it.}}'**
+  String fieldEditorDeleteFieldBody(int count);
+
+  /// Safe button of the delete-field confirm
+  ///
+  /// In en, this message translates to:
+  /// **'Keep field'**
+  String get fieldEditorKeepField;
+
+  /// Tooltip of a schema row delete icon
+  ///
+  /// In en, this message translates to:
+  /// **'Delete field {name}'**
+  String fieldEditorDeleteFieldNamed(String name);
+
   /// Warning when turning Required on
   ///
   /// In en, this message translates to:
-  /// **'{count, plural, =1{1 record has no value for this field and will be marked invalid until you fill them in. Add a default to avoid this.} other{{count} records have no value for this field and will be marked invalid until you fill them in. Add a default to avoid this.}}'**
+  /// **'{count, plural, =1{1 record has no value for this field and will be marked incomplete.} other{{count} records have no value for this field and will be marked incomplete.}}'**
   String fieldEditorRequiredWarning(int count);
 
   /// Input label

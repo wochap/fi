@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:fi/l10n/l10n.dart';
+import 'package:fi/theme/confirm_dialog.dart';
 import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/theme/nocturne.dart';
 import 'package:fi/theme/nocturne_widgets.dart';
@@ -84,7 +85,7 @@ String modelLanguageName(AppLocalizations l, String? code) =>
 
 /// Asks before cancelling (mock settings-confirm-dialogs). Destructive action left, safe right.
 Future<bool> showCancelDownloadDialog(BuildContext context, int doneBytes) =>
-    _confirm(
+    showConfirmDialog(
       context,
       title: context.l10n.modelCancelDialogTitle,
       body: context.l10n.modelCancelDialogBody(formatBytes(doneBytes)),
@@ -95,7 +96,7 @@ Future<bool> showCancelDownloadDialog(BuildContext context, int doneBytes) =>
 
 /// Asks before deleting the models (mock settings-confirm-dialogs).
 Future<bool> showDeleteModelsDialog(BuildContext context, int sizeBytes) =>
-    _confirm(
+    showConfirmDialog(
       context,
       title: context.l10n.modelDeleteDialogTitle,
       body: context.l10n.modelDeleteDialogBody(formatBytes(sizeBytes)),
@@ -109,7 +110,7 @@ Future<bool> showDeleteSpeechModelDialog(
   BuildContext context,
   int sizeBytes,
   String languageName,
-) => _confirm(
+) => showConfirmDialog(
   context,
   title: context.l10n.modelDeleteSpeechTitle,
   body: context.l10n.modelDeleteSpeechBody(
@@ -123,7 +124,7 @@ Future<bool> showDeleteSpeechModelDialog(
 
 /// Asks before re-downloading the models.
 Future<bool> showRedownloadModelsDialog(BuildContext context, int sizeBytes) =>
-    _confirm(
+    showConfirmDialog(
       context,
       title: context.l10n.modelRedownloadDialogTitle,
       body: context.l10n.modelRedownloadDialogBody(formatBytes(sizeBytes)),
@@ -131,34 +132,6 @@ Future<bool> showRedownloadModelsDialog(BuildContext context, int sizeBytes) =>
       destructiveKey: const Key('confirm-redownload'),
       safe: context.l10n.modelKeepModels,
     );
-
-Future<bool> _confirm(
-  BuildContext context, {
-  required String title,
-  required String body,
-  required String destructive,
-  required Key destructiveKey,
-  required String safe,
-}) async =>
-    await showDialog<bool>(
-      context: context,
-      builder: (dialog) => AlertDialog(
-        title: Text(title),
-        content: Text(body),
-        actions: [
-          TextButton(
-            key: destructiveKey,
-            onPressed: () => Navigator.pop(dialog, true),
-            child: Text(destructive),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialog, false),
-            child: Text(safe),
-          ),
-        ],
-      ),
-    ) ??
-    false;
 
 /// The Settings voice models card content (mocks settings, settings-model-states): header, one row
 /// per model, and the body of the current state.

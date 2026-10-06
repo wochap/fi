@@ -6,6 +6,7 @@ import 'package:fi/field_registry.dart';
 import 'package:fi/help_button.dart';
 import 'package:fi/help_copy.dart';
 import 'package:fi/src/rust/api/models.dart';
+import 'package:fi/theme/confirm_dialog.dart';
 import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/theme/form_errors.dart';
 import 'package:fi/theme/inputs.dart';
@@ -79,7 +80,8 @@ const _typeGrid = [
 ];
 
 /// A field's kind and its main settings in a few words, for the schema sheet's rows: "Integer ·
-/// 5–30", "Text · multiline", "Decimal · 2 dp", and for a Choice field its option labels in order.
+/// 5–30", "Integer · 0–10 · slider", "Text · multiline", "Decimal · 2 dp", and for a Choice field
+/// its option labels in order.
 String fieldSummary(AppLocalizations l, FieldDefinitionDto field) {
   final kind = field.fieldType.kind;
   final label = fieldKindLabel(l, kind);
@@ -97,7 +99,10 @@ String fieldSummary(AppLocalizations l, FieldDefinitionDto field) {
     FieldTypeKindDto.fixedDecimal => l.fieldEditorSummaryScale(
       field.fieldType.scale ?? 0,
     ),
-    FieldTypeKindDto.integer when min != null && max != null => '$min–$max',
+    FieldTypeKindDto.integer when min != null && max != null =>
+      field.display.slider
+          ? '$min–$max · ${l.fieldSummarySlider}'
+          : '$min–$max',
     _ => null,
   };
   return detail == null ? label : '$label · $detail';
@@ -131,6 +136,32 @@ FieldValueDto? _valueOf(RecordDto record, String fieldId) {
     if (item.fieldId == fieldId) return item.value;
   }
   return null;
+}
+
+/// Asks before removing [field], naming how many loaded records lose their value, and removes it
+/// on confirm. Returns whether it was removed.
+Future<bool> confirmDeleteField(
+  BuildContext context,
+  CollectionsController controller,
+  FieldDefinitionDto field,
+) async {
+  final holding = controller.records
+      .where((record) => _valueOf(record, field.id) != null)
+      .length;
+  final l = context.l10n;
+  final confirmed = await showConfirmDialog(
+    context,
+    dialogKey: const Key('field-delete-confirmation'),
+    title: l.fieldEditorDeleteFieldTitle(field.name),
+    body: l.fieldEditorDeleteFieldBody(holding),
+    destructive: l.fieldEditorDeleteField,
+    destructiveKey: const Key('field-delete-confirm'),
+    safe: l.fieldEditorKeepField,
+    safeKey: const Key('field-delete-keep'),
+  );
+  if (!confirmed) return false;
+  await controller.removeField(field.id);
+  return true;
 }
 
 /// Today in the device's local calendar, as a timezone-free epoch day.
@@ -243,7 +274,6 @@ class _SettingsBlock extends StatelessWidget {
         Row(
           children: [
             Expanded(child: SectionLabel(chip.label(context.l10n))),
-            HelpButton(chip.help),
             FiIconButton(
               key: Key('close-${chip.key}'),
               icon: FiIcons.close,
@@ -572,29 +602,16 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
     );
   }
 
-  Future<bool> _confirmInvalidating(int missing) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialog) => AlertDialog(
-        key: const Key('required-confirmation'),
-        title: Text(dialog.l10n.fieldEditorMakeRequiredTitle),
-        content: Text(dialog.l10n.fieldEditorMakeRequiredBody(missing)),
-        actions: [
-          TextButton(
-            key: const Key('required-cancel'),
-            onPressed: () => Navigator.pop(dialog, false),
-            child: Text(context.l10n.commonCancel),
-          ),
-          FilledButton(
-            key: const Key('required-confirm'),
-            onPressed: () => Navigator.pop(dialog, true),
-            child: Text(dialog.l10n.fieldEditorMakeRequired),
-          ),
-        ],
-      ),
-    );
-    return confirmed ?? false;
-  }
+  Future<bool> _confirmInvalidating(int missing) => showConfirmDialog(
+    context,
+    dialogKey: const Key('required-confirmation'),
+    title: context.l10n.fieldEditorMakeRequiredTitle(name.text),
+    body: context.l10n.fieldEditorMakeRequiredBody(missing),
+    destructive: context.l10n.fieldEditorMakeRequired,
+    destructiveKey: const Key('required-confirm'),
+    safe: context.l10n.fieldEditorKeepOptional,
+    safeKey: const Key('required-cancel'),
+  );
 
   Future<void> _save() async {
     final stepIssue = _sliderStepIssue();
@@ -660,27 +677,17 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
         .length;
     if (used > 0) {
       final label = option.label.text;
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (dialog) => AlertDialog(
-          key: const Key('option-delete-confirmation'),
-          title: Text(dialog.l10n.fieldEditorDeleteOptionTitle(label)),
-          content: Text(dialog.l10n.fieldEditorDeleteOptionBody(used, label)),
-          actions: [
-            TextButton(
-              key: const Key('option-delete-cancel'),
-              onPressed: () => Navigator.pop(dialog, false),
-              child: Text(context.l10n.commonCancel),
-            ),
-            FilledButton(
-              key: const Key('option-delete-confirm'),
-              onPressed: () => Navigator.pop(dialog, true),
-              child: Text(dialog.l10n.commonDelete),
-            ),
-          ],
-        ),
+      final confirmed = await showConfirmDialog(
+        context,
+        dialogKey: const Key('option-delete-confirmation'),
+        title: context.l10n.fieldEditorDeleteOptionTitle(label),
+        body: context.l10n.fieldEditorDeleteOptionBody(used),
+        destructive: context.l10n.fieldEditorDeleteOption,
+        destructiveKey: const Key('option-delete-confirm'),
+        safe: context.l10n.fieldEditorKeepOption,
+        safeKey: const Key('option-delete-cancel'),
       );
-      if (confirmed != true || !mounted) return;
+      if (!confirmed || !mounted) return;
     }
     setState(() {
       options.remove(option);
@@ -758,13 +765,19 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
             runSpacing: 8,
             children: [
               for (final chip in _chipsFor(kind))
-                FieldOptionChip(
-                  key: Key(chip.key),
-                  label: chip.label(context.l10n),
-                  selected: _chipOn(chip),
-                  onTap: chip == _Chip.slider && !_sliderAvailable
-                      ? null
-                      : () => setState(() => _toggle(chip)),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    FieldOptionChip(
+                      key: Key(chip.key),
+                      label: chip.label(context.l10n),
+                      selected: _chipOn(chip),
+                      onTap: chip == _Chip.slider && !_sliderAvailable
+                          ? null
+                          : () => setState(() => _toggle(chip)),
+                    ),
+                    HelpButton(chip.help),
+                  ],
                 ),
             ],
           ),
@@ -837,8 +850,9 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
                   tooltip: context.l10n.fieldEditorDeleteField,
                   color: Nocturne.muted(.6),
                   onPressed: () async {
-                    await controller.removeField(field.id);
-                    widget.onClosed();
+                    if (await confirmDeleteField(context, controller, field)) {
+                      widget.onClosed();
+                    }
                   },
                 ),
               const Spacer(),
@@ -1401,8 +1415,14 @@ class FieldEditorScreen extends StatelessWidget {
                         PopupMenuItem<void>(
                           key: const Key('field-delete'),
                           onTap: () async {
-                            await controller.removeField(existing.id);
-                            if (context.mounted) Navigator.pop(context);
+                            final removed = await confirmDeleteField(
+                              context,
+                              controller,
+                              existing,
+                            );
+                            if (removed && context.mounted) {
+                              Navigator.pop(context);
+                            }
                           },
                           child: Row(
                             children: [

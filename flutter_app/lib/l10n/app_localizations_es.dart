@@ -1805,9 +1805,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get recordsAddField => 'Agregar campo';
 
   @override
-  String get recordsNewField => 'Nuevo campo';
-
-  @override
   String recordsComputedNewer(String version) {
     return 'Creado por una versión más nueva (expresión v$version); no se puede editar aquí';
   }
@@ -2500,8 +2497,13 @@ class AppLocalizationsEs extends AppLocalizations {
       'El paso debe ser un número entero positivo';
 
   @override
-  String get fieldEditorStepDivides =>
-      'El paso debe dividir exactamente el rango del mínimo al máximo';
+  String get fieldEditorStepDivides => 'El paso debe dividir el rango.';
+
+  @override
+  String get helpGotIt => 'Entendido';
+
+  @override
+  String get fieldSummarySlider => 'control deslizante';
 
   @override
   String fieldEditorDefaultExactLength(int min) {
@@ -2539,17 +2541,17 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get fieldEditorMakeRequiredTitle => '¿Hacer obligatorio este campo?';
+  String fieldEditorMakeRequiredTitle(String name) {
+    return '¿Hacer obligatorio “$name”?';
+  }
 
   @override
   String fieldEditorMakeRequiredBody(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other:
-          '$count registros no tienen valor en este campo. Se marcarán como no válidos hasta que completes el campo. No se elimina nada.',
-      one:
-          '1 registro no tiene valor en este campo. Se marcará como no válido hasta que completes el campo. No se elimina nada.',
+      other: '$count registros no tienen valor y se marcarán como incompletos.',
+      one: '1 registro no tiene valor y se marcará como incompleto.',
     );
     return '$_temp0';
   }
@@ -2558,22 +2560,28 @@ class AppLocalizationsEs extends AppLocalizations {
   String get fieldEditorMakeRequired => 'Hacer obligatorio';
 
   @override
+  String get fieldEditorKeepOptional => 'Dejar opcional';
+
+  @override
   String fieldEditorDeleteOptionTitle(String label) {
-    return '¿Eliminar “$label”?';
+    return '¿Eliminar la opción “$label”?';
   }
 
   @override
-  String fieldEditorDeleteOptionBody(int count, String label) {
+  String fieldEditorDeleteOptionBody(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
       other:
-          '$count registros usan esta opción y la conservan, mostrada como “$label (eliminada)”. No se puede elegir en registros nuevos.',
+          '$count registros la usan y la conservan. No se puede elegir en registros nuevos.',
       one:
-          '1 registro usa esta opción y la conserva, mostrada como “$label (eliminada)”. No se puede elegir en registros nuevos.',
+          '1 registro la usa y la conserva. No se puede elegir en registros nuevos.',
     );
     return '$_temp0';
   }
+
+  @override
+  String get fieldEditorKeepOption => 'Conservar opción';
 
   @override
   String get fieldEditorNewField => 'Nuevo campo';
@@ -2604,14 +2612,39 @@ class AppLocalizationsEs extends AppLocalizations {
   String get fieldEditorDeleteField => 'Eliminar campo';
 
   @override
+  String fieldEditorDeleteFieldTitle(String name) {
+    return '¿Eliminar el campo “$name”?';
+  }
+
+  @override
+  String fieldEditorDeleteFieldBody(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Quita el campo del esquema. $count registros pierden su valor.',
+      one: 'Quita el campo del esquema. 1 registro pierde su valor.',
+      zero: 'Quita el campo del esquema.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get fieldEditorKeepField => 'Conservar campo';
+
+  @override
+  String fieldEditorDeleteFieldNamed(String name) {
+    return 'Eliminar campo $name';
+  }
+
+  @override
   String fieldEditorRequiredWarning(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
       other:
-          '$count registros no tienen valor en este campo y se marcarán como no válidos hasta que los completes. Agrega un valor predeterminado para evitarlo.',
+          '$count registros no tienen valor en este campo y se marcarán como incompletos.',
       one:
-          '1 registro no tiene valor en este campo y se marcará como no válido hasta que lo completes. Agrega un valor predeterminado para evitarlo.',
+          '1 registro no tiene valor en este campo y se marcará como incompleto.',
     );
     return '$_temp0';
   }

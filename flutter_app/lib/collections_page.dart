@@ -1494,6 +1494,7 @@ class CollectionsPage extends StatelessWidget {
                             onClosed: () => setState(() => editing = null),
                           )
                         : _schemaRow(
+                            context,
                             fields[index],
                             index,
                             () => setState(() => editing = fields[index].id),
@@ -1507,13 +1508,19 @@ class CollectionsPage extends StatelessWidget {
                     onClosed: () => setState(() => editing = null),
                   )
                 else
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: TextButton.icon(
+                  SizedBox(
+                    height: 40,
+                    child: DashedSlot(
                       key: const Key('new-field'),
-                      onPressed: () => setState(() => editing = ''),
-                      icon: const Icon(FiIcons.add),
-                      label: Text(l.recordsNewField),
+                      onTap: () => setState(() => editing = ''),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(FiIcons.add),
+                          const SizedBox(width: 8),
+                          Text(l.recordsAddField),
+                        ],
+                      ),
                     ),
                   ),
               ],
@@ -1524,37 +1531,22 @@ class CollectionsPage extends StatelessWidget {
     );
   }
 
-  /// A desktop schema row: drag handle, type icon, name with the required mark, and summary.
-  Widget _schemaRow(FieldDefinitionDto field, int index, VoidCallback onTap) =>
-      Material(
-        color: Nocturne.bg,
-        borderRadius: BorderRadius.circular(Nocturne.radius),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(Nocturne.radius),
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(4, 6, 12, 6),
-            child: Row(
-              children: [
-                ReorderableDragStartListener(
-                  index: index,
-                  child: Padding(
-                    padding: const EdgeInsets.all(8),
-                    child: Icon(
-                      FiIcons.dragHandle,
-                      size: 18,
-                      color: Nocturne.muted(.45),
-                    ),
-                  ),
-                ),
-                IconTile(fieldTypeIcon(field.fieldType.kind)),
-                const SizedBox(width: 12),
-                Expanded(child: _schemaRowText(field)),
-              ],
-            ),
-          ),
-        ),
-      );
+  /// A desktop schema row: drag handle, type icon, name with the required mark, summary, a
+  /// delete icon shown on hover or focus, and a chevron.
+  Widget _schemaRow(
+    BuildContext context,
+    FieldDefinitionDto field,
+    int index,
+    VoidCallback onTap,
+  ) => _DesktopSchemaRow(
+    index: index,
+    icon: fieldTypeIcon(field.fieldType.kind),
+    text: _schemaRowText(field),
+    deleteTooltip: context.l10n.fieldEditorDeleteFieldNamed(field.name),
+    deleteKey: Key('field-row-delete-${field.id}'),
+    onTap: onTap,
+    onDelete: () => unawaited(confirmDeleteField(context, controller, field)),
+  );
 
   Widget _schemaRowText(FieldDefinitionDto field) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1591,11 +1583,7 @@ class CollectionsPage extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               child: Row(
                 children: [
-                  Icon(
-                    fieldTypeIcon(field.fieldType.kind),
-                    size: 18,
-                    color: Nocturne.muted(.6),
-                  ),
+                  IconTile(fieldTypeIcon(field.fieldType.kind)),
                   const SizedBox(width: 12),
                   Expanded(child: _schemaRowText(field)),
                   Icon(
@@ -3223,4 +3211,89 @@ String collectionContentsSentence(
         );
   final total = contents.records + contents.widgets + contents.savedQueries;
   return l.collectionsContentsDeleted(total, list);
+}
+
+/// The desktop schema row body. The delete icon stays in the tree so the keyboard reaches it, and
+/// shows while the row is hovered or holds focus.
+final class _DesktopSchemaRow extends StatefulWidget {
+  const _DesktopSchemaRow({
+    required this.index,
+    required this.icon,
+    required this.text,
+    required this.deleteTooltip,
+    required this.deleteKey,
+    required this.onTap,
+    required this.onDelete,
+  });
+
+  final int index;
+  final IconData icon;
+  final Widget text;
+  final String deleteTooltip;
+  final Key deleteKey;
+  final VoidCallback onTap;
+  final VoidCallback onDelete;
+
+  @override
+  State<_DesktopSchemaRow> createState() => _DesktopSchemaRowState();
+}
+
+final class _DesktopSchemaRowState extends State<_DesktopSchemaRow> {
+  bool hovered = false;
+  bool focused = false;
+
+  @override
+  Widget build(BuildContext context) => MouseRegion(
+    onEnter: (_) => setState(() => hovered = true),
+    onExit: (_) => setState(() => hovered = false),
+    child: Focus(
+      skipTraversal: true,
+      onFocusChange: (value) => setState(() => focused = value),
+      child: Material(
+        color: Nocturne.bg,
+        borderRadius: BorderRadius.circular(Nocturne.radius),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(Nocturne.radius),
+          onTap: widget.onTap,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(4, 6, 12, 6),
+            child: Row(
+              children: [
+                ReorderableDragStartListener(
+                  index: widget.index,
+                  child: Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: Icon(
+                      FiIcons.dragHandle,
+                      size: 18,
+                      color: Nocturne.muted(.45),
+                    ),
+                  ),
+                ),
+                IconTile(widget.icon),
+                const SizedBox(width: 12),
+                Expanded(child: widget.text),
+                Opacity(
+                  opacity: hovered || focused ? 1 : 0,
+                  child: FiIconButton(
+                    key: widget.deleteKey,
+                    icon: FiIcons.delete,
+                    tooltip: widget.deleteTooltip,
+                    color: Nocturne.muted(.6),
+                    onPressed: widget.onDelete,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Icon(
+                  FiIcons.chevronRight,
+                  size: 16,
+                  color: Nocturne.muted(.45),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
 }

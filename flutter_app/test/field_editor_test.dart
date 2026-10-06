@@ -1,4 +1,4 @@
-import 'dart:ui' show Tristate;
+import 'dart:ui' show PointerDeviceKind, Tristate;
 
 import 'package:clock/clock.dart';
 import 'package:fi/theme/nocturne_widgets.dart';
@@ -276,7 +276,12 @@ void main() {
 
     await save(tester);
     expect(find.byKey(const Key('required-confirmation')), findsOneWidget);
-    expect(find.textContaining('1 record has no value'), findsWidgets);
+    expect(find.text('Make “Remarks” required?'), findsOneWidget);
+    expect(
+      find.text('1 record has no value and will be marked incomplete.'),
+      findsOneWidget,
+    );
+    expect(find.text('Keep optional'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('required-cancel')));
     await tester.pumpAndSettle();
@@ -903,10 +908,7 @@ void main() {
       await tester.enterText(stepInput, '30');
       await tester.pumpAndSettle();
       await save(tester);
-      expect(
-        stepError(tester),
-        'Step must divide the range from minimum to maximum exactly',
-      );
+      expect(stepError(tester), 'Step must divide the range.');
       expect(seeded.bridge.schemaCalls.length, calls);
 
       await tester.enterText(stepInput, '0');
@@ -1118,8 +1120,14 @@ void main() {
     await tester.tap(find.byKey(ValueKey('remove-option-${ids['Low']}')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('option-delete-confirmation')), findsOneWidget);
-    expect(find.textContaining('2 records use this option'), findsOneWidget);
-    expect(find.textContaining('“Low (deleted)”'), findsOneWidget);
+    expect(find.text('Delete option “Low”?'), findsOneWidget);
+    expect(
+      find.text(
+        "2 records use it and keep it. It can't be picked for new records.",
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Keep option'), findsOneWidget);
     await tester.tap(find.byKey(const Key('option-delete-cancel')));
     await tester.pumpAndSettle();
     expect(find.byKey(ValueKey('option-label-${ids['Low']}')), findsOneWidget);
@@ -1180,6 +1188,13 @@ void main() {
         .first;
     expect(tester.getSize(row).height, greaterThanOrEqualTo(52));
     expect(find.byIcon(FiIcons.chevronRight), findsNWidgets(2));
+    expect(
+      find.ancestor(
+        of: find.byIcon(FiIcons.text),
+        matching: find.byType(IconTile),
+      ),
+      findsOneWidget,
+    );
 
     await tester.tap(find.text('Notes').last);
     await tester.pumpAndSettle();
@@ -1207,6 +1222,167 @@ void main() {
       seeded.controller.schema!.fields.any((field) => field.name == 'Mood'),
       isTrue,
     );
+  });
+
+  group('help beside the chips', () {
+    testWidgets('each chip has one help button, on or off', (tester) async {
+      final seeded = await seed(tester);
+      await pumpPage(tester, seeded.controller);
+      await openFieldEditor(tester, 'Notes');
+      const helps = [
+        'help-fieldRequired',
+        'help-fieldMultiline',
+        'help-fieldMinMaxLength',
+        'help-fieldDefault',
+      ];
+      for (final help in helps) {
+        expect(find.byKey(Key(help)), findsOneWidget, reason: help);
+      }
+
+      await tester.tap(find.byKey(const Key('help-fieldRequired')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('help-dialog')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('help-close')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('required-warning')), findsNothing);
+
+      await tapChip(tester, 'multiline');
+      await tapChip(tester, 'length');
+      await tapChip(tester, 'default');
+      for (final help in helps) {
+        expect(find.byKey(Key(help)), findsOneWidget, reason: help);
+      }
+    });
+  });
+
+  group('deleting a field', () {
+    testWidgets('the row delete icon shows on hover and asks first', (
+      tester,
+    ) async {
+      final seeded = await seed(tester);
+      await pumpPage(tester, seeded.controller);
+      await tester.tap(find.text('Schema'));
+      await tester.pumpAndSettle();
+      final intensity = seeded.controller.schema!.fields.firstWhere(
+        (field) => field.name == 'Intensity',
+      );
+      final delete = find.byKey(Key('field-row-delete-${intensity.id}'));
+      double opacity() => tester
+          .widget<Opacity>(
+            find.ancestor(of: delete, matching: find.byType(Opacity)).first,
+          )
+          .opacity;
+      expect(opacity(), 0);
+
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      addTearDown(mouse.removePointer);
+      await mouse.addPointer(location: Offset.zero);
+      await mouse.moveTo(tester.getCenter(find.text('Intensity').last));
+      await tester.pumpAndSettle();
+      expect(opacity(), 1);
+      expect(find.byTooltip('Delete field Intensity'), findsOneWidget);
+
+      seeded.bridge.schemaCalls.clear();
+      await tester.tap(delete);
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('field-delete-confirmation')),
+        findsOneWidget,
+      );
+      expect(find.text('Delete field “Intensity”?'), findsOneWidget);
+      expect(
+        find.text(
+          'Removes the field from the schema. 1 record loses its value for it.',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        tester.getCenter(find.byKey(const Key('field-delete-confirm'))).dx,
+        lessThan(
+          tester.getCenter(find.byKey(const Key('field-delete-keep'))).dx,
+        ),
+      );
+
+      await tester.tap(find.byKey(const Key('field-delete-keep')));
+      await tester.pumpAndSettle();
+      expect(seeded.bridge.schemaCalls, isEmpty);
+      expect(find.text('Intensity'), findsWidgets);
+
+      await tester.tap(delete);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('field-delete-confirm')));
+      await tester.pumpAndSettle();
+      expect(
+        seeded.controller.schema!.fields.any(
+          (field) => field.name == 'Intensity' && !field.deleted,
+        ),
+        isFalse,
+      );
+    });
+
+    testWidgets('the panel delete asks and Keep field submits nothing', (
+      tester,
+    ) async {
+      final seeded = await seed(tester);
+      await pumpPage(tester, seeded.controller);
+      await openFieldEditor(tester, 'Notes');
+      seeded.bridge.schemaCalls.clear();
+      await tester.tap(find.byKey(const Key('field-delete')));
+      await tester.pumpAndSettle();
+      expect(find.text('Delete field “Notes”?'), findsOneWidget);
+      expect(find.text('Removes the field from the schema.'), findsOneWidget);
+      await tester.tap(find.text('Keep field'));
+      await tester.pumpAndSettle();
+      expect(seeded.bridge.schemaCalls, isEmpty);
+      expect(find.byType(FieldEditorBody), findsOneWidget);
+    });
+
+    testWidgets('the phone ⋮ delete removes the field and closes the screen', (
+      tester,
+    ) async {
+      final seeded = await seed(tester);
+      tester.view.physicalSize = const Size(390, 844);
+      await pumpPage(tester, seeded.controller);
+      await tester.tap(find.byTooltip('Schema').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Notes').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('More'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('field-delete')));
+      await tester.pumpAndSettle();
+      expect(find.text('Removes the field from the schema.'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('field-delete-confirm')));
+      await tester.pumpAndSettle();
+      expect(find.byType(FieldEditorScreen), findsNothing);
+      expect(
+        seeded.controller.schema!.fields.any(
+          (field) => field.name == 'Notes' && !field.deleted,
+        ),
+        isFalse,
+      );
+    });
+  });
+
+  test('an Integer slider names itself in the summary', () {
+    final l = lookupAppLocalizations(const Locale('en'));
+    FieldDefinitionDto integer({required bool slider}) => FieldDefinitionDto(
+      id: 'f',
+      name: 'Pain',
+      fieldType: const FieldTypeDto(kind: FieldTypeKindDto.integer),
+      required_: false,
+      validation: const ValidationMetadataDto(minInteger: 0, maxInteger: 10),
+      display: DisplayMetadataDto(
+        multiline: false,
+        slider: slider,
+        sliderStep: null,
+      ),
+      order: 0,
+      deleted: false,
+      enumOptions: const [],
+    );
+    expect(fieldSummary(l, integer(slider: true)), 'Integer · 0–10 · slider');
+    expect(fieldSummary(l, integer(slider: false)), 'Integer · 0–10');
   });
 }
 

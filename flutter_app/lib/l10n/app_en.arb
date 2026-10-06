@@ -2406,10 +2406,6 @@
   "@recordsAddField": {
     "description": "Button"
   },
-  "recordsNewField": "New field",
-  "@recordsNewField": {
-    "description": "Button"
-  },
   "recordsComputedNewer": "Made by a newer version (expression v{version}); not editable here",
   "@recordsComputedNewer": {
     "description": "Computed field note",
@@ -3322,9 +3318,17 @@
   "@fieldEditorStepPositive": {
     "description": "Slider step error"
   },
-  "fieldEditorStepDivides": "Step must divide the range from minimum to maximum exactly",
+  "fieldEditorStepDivides": "Step must divide the range.",
   "@fieldEditorStepDivides": {
     "description": "Slider step error"
+  },
+  "helpGotIt": "Got it",
+  "@helpGotIt": {
+    "description": "Closes a help popup"
+  },
+  "fieldSummarySlider": "slider",
+  "@fieldSummarySlider": {
+    "description": "Field summary suffix for an Integer shown as a slider"
   },
   "fieldEditorDefaultExactLength": "Default must be exactly {min} characters.",
   "@fieldEditorDefaultExactLength": {
@@ -3395,11 +3399,16 @@
       }
     }
   },
-  "fieldEditorMakeRequiredTitle": "Make this field required?",
+  "fieldEditorMakeRequiredTitle": "Make “{name}” required?",
   "@fieldEditorMakeRequiredTitle": {
-    "description": "Confirmation dialog title"
+    "description": "Confirmation dialog title",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
   },
-  "fieldEditorMakeRequiredBody": "{count, plural, =1{1 record has no value for this field. It will be marked invalid until you fill the field in. Nothing is deleted.} other{{count} records have no value for this field. They will be marked invalid until you fill the field in. Nothing is deleted.}}",
+  "fieldEditorMakeRequiredBody": "{count, plural, =1{1 record has no value and will be marked incomplete.} other{{count} records have no value and will be marked incomplete.}}",
   "@fieldEditorMakeRequiredBody": {
     "description": "Confirmation dialog body",
     "placeholders": {
@@ -3412,7 +3421,11 @@
   "@fieldEditorMakeRequired": {
     "description": "Confirm button"
   },
-  "fieldEditorDeleteOptionTitle": "Delete “{label}”?",
+  "fieldEditorKeepOptional": "Keep optional",
+  "@fieldEditorKeepOptional": {
+    "description": "Safe button of the make-required confirm"
+  },
+  "fieldEditorDeleteOptionTitle": "Delete option “{label}”?",
   "@fieldEditorDeleteOptionTitle": {
     "description": "Dialog title deleting a used option",
     "placeholders": {
@@ -3421,17 +3434,18 @@
       }
     }
   },
-  "fieldEditorDeleteOptionBody": "{count, plural, =1{1 record uses this option and keeps it, shown as “{label} (deleted)”. It can't be picked for new records.} other{{count} records use this option and keep it, shown as “{label} (deleted)”. It can't be picked for new records.}}",
+  "fieldEditorDeleteOptionBody": "{count, plural, =1{1 record uses it and keeps it. It can't be picked for new records.} other{{count} records use it and keep it. It can't be picked for new records.}}",
   "@fieldEditorDeleteOptionBody": {
     "description": "Dialog body deleting a used option",
     "placeholders": {
       "count": {
         "type": "int"
-      },
-      "label": {
-        "type": "String"
       }
     }
+  },
+  "fieldEditorKeepOption": "Keep option",
+  "@fieldEditorKeepOption": {
+    "description": "Safe button of the delete-option confirm"
   },
   "fieldEditorNewField": "New field",
   "@fieldEditorNewField": {
@@ -3469,7 +3483,38 @@
   "@fieldEditorDeleteField": {
     "description": "Delete field action"
   },
-  "fieldEditorRequiredWarning": "{count, plural, =1{1 record has no value for this field and will be marked invalid until you fill them in. Add a default to avoid this.} other{{count} records have no value for this field and will be marked invalid until you fill them in. Add a default to avoid this.}}",
+  "fieldEditorDeleteFieldTitle": "Delete field “{name}”?",
+  "@fieldEditorDeleteFieldTitle": {
+    "description": "Delete-field confirm title",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "fieldEditorDeleteFieldBody": "{count, plural, =0{Removes the field from the schema.} =1{Removes the field from the schema. 1 record loses its value for it.} other{Removes the field from the schema. {count} records lose their value for it.}}",
+  "@fieldEditorDeleteFieldBody": {
+    "description": "Delete-field confirm body; count is records holding a value",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "fieldEditorKeepField": "Keep field",
+  "@fieldEditorKeepField": {
+    "description": "Safe button of the delete-field confirm"
+  },
+  "fieldEditorDeleteFieldNamed": "Delete field {name}",
+  "@fieldEditorDeleteFieldNamed": {
+    "description": "Tooltip of a schema row delete icon",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "fieldEditorRequiredWarning": "{count, plural, =1{1 record has no value for this field and will be marked incomplete.} other{{count} records have no value for this field and will be marked incomplete.}}",
   "@fieldEditorRequiredWarning": {
     "description": "Warning when turning Required on",
     "placeholders": {
