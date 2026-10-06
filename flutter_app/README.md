@@ -39,6 +39,7 @@ code generation. It does not include an Android emulator.
 
 ```sh
 GDK_BACKEND=wayland flutter run -d linux
+dart devtools   # optional, in a second terminal
 ```
 
 Build without launching:
@@ -46,6 +47,15 @@ Build without launching:
 ```sh
 flutter build linux --debug
 ./build/linux/x64/debug/bundle/fi
+```
+
+Run two isolated instances (for example, to test sync) with separate data
+directories:
+
+```sh
+BIN=build/linux/x64/debug/bundle/fi
+FI_DATA_DIR=/tmp/fi-a $BIN
+FI_DATA_DIR=/tmp/fi-b $BIN
 ```
 
 ### Android
@@ -61,7 +71,17 @@ Build-only output:
 
 ```sh
 flutter build apk --debug
-# build/app/outputs/flutter-apk/app-debug.apk
+adb install -r build/app/outputs/flutter-apk/app-debug.apk
+```
+
+### Clean rebuild
+
+After plugin or bridge changes, reset generated plugin registration:
+
+```sh
+flutter clean
+rm -f android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java .flutter-plugins-dependencies
+flutter pub get
 ```
 
 ## Release builds and installation
@@ -92,6 +112,8 @@ uncommitted edit between two runs may not update it.
 ```sh
 flutter build linux --release
 ./build/linux/x64/release/bundle/fi
+# or with an isolated data directory:
+FI_DATA_DIR=/tmp/fi-a build/linux/x64/release/bundle/fi
 ```
 
 Keep the complete `build/linux/x64/release/bundle/` directory together. To
@@ -112,6 +134,7 @@ is not yet distributed as a flake package, AppImage, Flatpak, or distro package.
 ```sh
 flutter run --release -d <device-id>
 flutter build apk --release
+flutter build apk --release --target-platform android-arm64   # smaller, arm64 only
 flutter build appbundle --release
 ```
 
@@ -124,6 +147,12 @@ Install the APK with:
 
 ```sh
 adb install -r build/app/outputs/flutter-apk/app-release.apk
+```
+
+Follow native and voice logs from the installed build:
+
+```sh
+adb logcat -s flutter fi_rust | grep -iE "voice|whisper|llama|ggml"
 ```
 
 Release artifacts currently use the debug signing key for alpha testing. Add a
