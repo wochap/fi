@@ -22,7 +22,7 @@ String networkSummary(AppLocalizations l) =>
 
 typedef _Section = ({String label, Widget child});
 
-/// Settings (mocks 8a, 8b): sections chosen by platform capability.
+/// Settings (mock settings): sections chosen by platform capability.
 class SettingsPage extends StatefulWidget {
   const SettingsPage({
     required this.buildInfo,
@@ -270,9 +270,9 @@ class _SettingsPageState extends State<SettingsPage>
   }
 }
 
-/// The interface language (mocks 8a, 8b): a dropdown on desktop, a radio list
+/// The interface language (mock settings): a dropdown on desktop, a radio list
 /// on Android. With on-device voice, a line or offer about voice input
-/// follows the choices (mocks 8b, 8c).
+/// follows the choices (mocks settings, settings-language).
 class _LanguageSection extends StatefulWidget {
   const _LanguageSection();
 

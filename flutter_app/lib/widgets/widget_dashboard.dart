@@ -509,7 +509,7 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
         ),
       ],
     );
-    // Wide screens get the form beside a live preview of the tile (mock 2d); narrower ones pin
+    // Wide screens get the form beside a live preview of the tile (mock widget-editor); narrower ones pin
     // a compact preview above the buttons.
     return FormSurface(
       title: existing == null ? l.widgetAdd : l.widgetEdit,

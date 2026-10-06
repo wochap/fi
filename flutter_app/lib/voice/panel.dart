@@ -914,7 +914,7 @@ class _VoicePanelState extends State<VoicePanel> {
   }
 }
 
-/// Title, line and icon of each voice error panel (mock 7j).
+/// Title, line and icon of each voice error panel (mock voice-errors).
 ({IconData icon, String title, String line}) voiceErrorCopy(
   AppLocalizations l,
   VoiceFailureKind kind,

@@ -4,7 +4,7 @@ import 'package:fi/l10n/l10n.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:flutter/material.dart';
 
-/// Opens Connect by address for [device] (mock 8h): a dialog at 720px and wider, a bottom sheet
+/// Opens Connect by address for [device] (mock devices-connect-address): a dialog at 720px and wider, a bottom sheet
 /// below.
 Future<void> showConnectByAddress(
   BuildContext context,

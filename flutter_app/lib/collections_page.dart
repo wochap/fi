@@ -272,7 +272,7 @@ class CollectionsPage extends StatelessWidget {
     );
   }
 
-  /// One collection (mock 4a; 4f on a phone): icon tile, name with an incomplete tag, its size,
+  /// One collection (mock collections): icon tile, name with an incomplete tag, its size,
   /// when it was last edited, and its menu. F2 on a focused row renames it.
   Widget _collectionCard(
     BuildContext context,
@@ -469,7 +469,7 @@ class CollectionsPage extends StatelessWidget {
     }
   }
 
-  /// The row menu on a phone (mock 4f): an action sheet headed by the collection, with the same
+  /// The row menu on a phone (mock collections): an action sheet headed by the collection, with the same
   /// actions in the same groups as the wide popup.
   Future<void> _collectionActionSheet(
     BuildContext context,
@@ -872,7 +872,7 @@ class CollectionsPage extends StatelessWidget {
     }
   }
 
-  /// Breadcrumb over the title, and the collection's actions as labelled buttons (mock 1a).
+  /// Breadcrumb over the title, and the collection's actions as labelled buttons (mock collection-records).
   Widget _wideHeader(
     BuildContext context,
     CollectionSchemaDto schema,
@@ -1019,7 +1019,7 @@ class CollectionsPage extends StatelessWidget {
     ],
   );
 
-  /// The phone top bar (mock 7f): back, title with the counts, Schema, and a ⋮ menu holding
+  /// The phone top bar (mock collection-records): back, title with the counts, Schema, and a ⋮ menu holding
   /// Queries, Select records and Collection actions…. New record is the floating button below.
   Widget _phoneHeader(
     BuildContext context,
@@ -1114,7 +1114,7 @@ class CollectionsPage extends StatelessWidget {
     ],
   );
 
-  /// One phone record card (mock 7f): the first three fields with their type icons, then how
+  /// One phone record card (mock collection-records): the first three fields with their type icons, then how
   /// many more there are and when the record was created. Long press starts selection; while
   /// selecting a tap toggles.
   Widget _recordCard(
@@ -1385,9 +1385,9 @@ class CollectionsPage extends StatelessWidget {
     );
   }
 
-  /// The schema as a side sheet (mock 1c): reorderable field rows, and a new field added inline
+  /// The schema as a side sheet (mock schema-sheet): reorderable field rows, and a new field added inline
   /// below them rather than in a second, stacked dialog.
-  /// The collection schema (mocks 5b, 5c, 4h): a side sheet of field rows on desktop, where a
+  /// The collection schema (mocks schema-sheet, schema-field-editor): a side sheet of field rows on desktop, where a
   /// new field and an edited one open as inline panels; a bottom sheet of rows on a phone, where
   /// each field opens as its own pushed screen.
   Future<void> _schemaEditor(
@@ -1670,7 +1670,7 @@ class CollectionsPage extends StatelessWidget {
     );
   }
 
-  /// Computed fields and saved queries as a side sheet, the same pattern as the schema (mock 2a).
+  /// Computed fields and saved queries as a side sheet, the same pattern as the schema (mock queries).
   Future<void> _queryEditor(
     BuildContext context,
     CollectionSchemaDto schema,
@@ -1809,7 +1809,7 @@ class CollectionsPage extends StatelessWidget {
     );
   }
 
-  /// Replaces the collection header while records are being selected (mock 2e).
+  /// Replaces the collection header while records are being selected (mock collection-selection).
   Widget _selectionBar(
     BuildContext context,
     CollectionSchemaDto schema, {
@@ -2078,7 +2078,7 @@ class CollectionsPage extends StatelessWidget {
     );
   }
 
-  /// A dialog on a wide screen; on a phone, a bottom sheet with large inputs (mocks 7a–7e).
+  /// A dialog on a wide screen; on a phone, a bottom sheet with large inputs (mocks record-form-empty, record-form-errors, record-form-edit).
   /// [prefill] opens a new record holding those values instead of the defaults (Duplicate).
   Future<void> _recordEditor(
     BuildContext context,
@@ -2778,7 +2778,7 @@ FormIssues _diagnosticIssues(RecordDto record) => FormIssues.fromIssues([
     ),
 ]);
 
-/// The desktop records table (mock 4c): a pinned header row and first column, fixed-width
+/// The desktop records table (mock collection-records): a pinned header row and first column, fixed-width
 /// columns that scroll sideways, incomplete rows marked by an accent edge, a warning icon and
 /// "Required" cells, and a hint while columns are hidden past the trailing edge.
 class _RecordTable extends StatefulWidget {

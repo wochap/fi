@@ -101,7 +101,7 @@ Future<void> copyWithConfirmation(
   messenger?.showSnackBar(SnackBar(content: Text(message)));
 }
 
-/// A trusted device's Details (mocks 5e, 5f): the state grid, the failure, the full DeviceId
+/// A trusted device's Details (mock devices-details): the state grid, the failure, the full DeviceId
 /// with copy, the categorized connection log, and Reconnect / Copy log.
 ///
 /// Inline under the row at 720px and wider ([compact] false); the body of
@@ -479,7 +479,7 @@ class LogLineRow extends StatelessWidget {
   );
 }
 
-/// Details as a pushed screen on a phone (mock 5f): titled with the friendly name, with back
+/// Details as a pushed screen on a phone (mock devices-details): titled with the friendly name, with back
 /// and the row's ⋮ menu. It follows the device as Rust updates it and closes when it is gone.
 class DeviceDetailsScreen extends StatefulWidget {
   const DeviceDetailsScreen({

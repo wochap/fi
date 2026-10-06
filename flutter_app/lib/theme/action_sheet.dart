@@ -24,7 +24,7 @@ final class ActionSheetGroup<T> {
   final List<ActionSheetItem<T>> items;
 }
 
-/// A phone row menu as a bottom sheet (mock 4f): a header naming what the actions apply to, then
+/// A phone row menu as a bottom sheet (mock collections): a header naming what the actions apply to, then
 /// 48px action rows in groups separated by rules. Picking a row pops the sheet with its value.
 class ActionSheet<T> extends StatelessWidget {
   const ActionSheet({

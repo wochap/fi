@@ -538,7 +538,7 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
   );
 
   /// The whole expression as one line of formula, so the tree of cards below reads as an edit of
-  /// something visible (mock 2b). Unfinished leaves show as dashed slots.
+  /// something visible (mock computed-field-editor). Unfinished leaves show as dashed slots.
   Widget _formulaStrip() {
     const paren = TextStyle(color: Nocturne.accent300);
     Widget symbol(String text, [TextStyle? style]) => Text(text, style: style);
@@ -680,7 +680,7 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
       AbsNode() => _abs(context, node, path),
     };
     // A term hangs off a single accent line rather than sitting in a box, so nesting reads as
-    // indentation (mock 2b); an error thickens the line in the error color.
+    // indentation (mock computed-field-editor); an error thickens the line in the error color.
     return Container(
       key: Key('expr-node-$path'),
       margin: const EdgeInsets.symmetric(vertical: 3),

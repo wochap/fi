@@ -14,7 +14,7 @@ import 'package:fi/theme/nocturne_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-/// The schema field editor (mocks 5b, 5c, 7g, 7h): name, a 4×2 type grid, option chips for the
+/// The schema field editor (mocks schema-field-editor, schema-add-field): name, a 4×2 type grid, option chips for the
 /// type, a settings block per chip that is on, the Choice options, and the default. One body,
 /// hosted as an inline panel in the desktop schema sheet or as a pushed phone screen.
 
@@ -1336,7 +1336,7 @@ FieldValueDto? _boundValue(int? bound, FieldTypeKindDto kind, int scale) {
   );
 }
 
-/// A field opened as its own phone screen (mocks 7g, 7h): back, the field name (or "New field")
+/// A field opened as its own phone screen (mocks schema-field-editor, schema-add-field): back, the field name (or "New field")
 /// over "Field in `collection`", a ⋮ holding Delete field for an existing field, and the
 /// [FieldEditorBody] with its full-width Save field / Add field.
 class FieldEditorScreen extends StatelessWidget {

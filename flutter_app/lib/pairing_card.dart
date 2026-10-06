@@ -96,7 +96,7 @@ class PairingCard extends StatelessWidget {
       ? l.pairingIdleBody
       : '${l.pairingIdleBody} ${discoveryOffNote(l)}';
 
-  /// Idle is the card's resting state (mocks 1b, 2i): a row on a wide screen, a stack on a phone.
+  /// Idle is the card's resting state (mock devices-pairing): a row on a wide screen, a stack on a phone.
   Widget _idle(BuildContext context, bool compact) => compact
       ? Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,

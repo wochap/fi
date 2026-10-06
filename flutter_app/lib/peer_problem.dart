@@ -3,7 +3,7 @@ import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/theme/nocturne.dart';
 import 'package:flutter/material.dart';
 
-/// Why a trusted device cannot be reached, in the terms the row shows (mock 8g).
+/// Why a trusted device cannot be reached, in the terms the row shows (mock devices-unreachable).
 enum PeerProblem { notFound, noAnswer, notVerified }
 
 /// The problem a non-revoked row whose last attempt failed presents; null

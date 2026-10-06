@@ -1227,7 +1227,7 @@ class _DevicesPageState extends State<DevicesPage> {
     );
   }
 
-  /// One trusted device (mocks 4b, 4g): icon tile, name with its state tag, when it was last
+  /// One trusted device (mock devices): icon tile, name with its state tag, when it was last
   /// seen and synced, Details, and the ⋮ menu. Details expand inline on wide screens and open as
   /// a pushed screen on a phone.
   Widget _deviceRow(
@@ -1393,7 +1393,7 @@ class _DevicesPageState extends State<DevicesPage> {
     }
   }
 
-  /// Details as a pushed screen on a phone (mock 5f).
+  /// Details as a pushed screen on a phone (mock devices-details).
   Future<void> _pushDetails(
     BuildContext context,
     TrustedDeviceDto device,
@@ -1613,7 +1613,7 @@ class _ErrorBanner extends StatelessWidget {
   );
 }
 
-/// The dashed "Trusted devices" empty state (mocks 4b, 4g) with the one way into pairing.
+/// The dashed "Trusted devices" empty state (mock devices) with the one way into pairing.
 class _NoDevices extends StatelessWidget {
   const _NoDevices({
     required this.phone,
@@ -1720,7 +1720,7 @@ class _PairedBanner extends StatelessWidget {
   );
 }
 
-/// The "This device" section (mocks 4b, 4g): pairing name, the DeviceId grouped (shortened on a
+/// The "This device" section (mock devices): pairing name, the DeviceId grouped (shortened on a
 /// phone) with Copy ID, and the reset entry. Without an identity it says networking is not set
 /// up.
 class _LocalIdentity extends StatelessWidget {

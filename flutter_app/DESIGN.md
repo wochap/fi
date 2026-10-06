@@ -6,9 +6,14 @@ glow, never as a flood of color. Follow these rules so new screens match the exi
 
 ## Design source
 
-The redesign mocks and their notes live in `docs/design/fi-redesign/` (start at
-[`README.md`](../docs/design/fi-redesign/README.md)). When a mock and this guide disagree, the mock
-is the target and this guide should be updated to match.
+The redesign mocks live in one canvas, `design/project/Fi Redesign.dc.html` (it imports
+`Voice Record Sheet.dc.html`; design tokens are in `design/project/_ds/`). Each mock is anchored by a
+screen-based id, and code, specs and this guide cite it as `mock <id>`, for example
+`mock devices-unreachable` or `mocks settings, settings-language`.
+
+The specs and the built app describe current behaviour. The canvas is ahead of the build in places,
+so a mock is the target only for the screens a change explicitly takes on; when such a mock and this
+guide disagree, update this guide to match.
 
 ## Where things live
 
@@ -23,12 +28,12 @@ is the target and this guide should be updated to match.
 | `lib/theme/choice_input.dart` | `FiChoiceInput`: a Choice picked by option count (segmented up to 4, select or phone picker sheet up to 10, search above that), with `showChoicePickerSheet()` and the full-height `showChoiceSearchSheet()` |
 | `lib/record_form.dart` | `RecordFormBody`: the record editor's fields, labels in a 140px column beside the controls at ≥720 and above them below, with the Default / Needed markers in the label row |
 | `lib/field_editor.dart` | `FieldEditorBody` (name, 4×2 type grid, option chips with a settings block per chip, Choice options, default checks), hosted as a desktop inline panel or by `FieldEditorScreen` (the pushed phone screen); `fieldSummary()` for schema rows |
-| `lib/theme/action_sheet.dart` | `showActionSheet()` + `ActionSheet`: a phone row menu as a bottom sheet, headed by what it acts on (icon tile, title, subtitle), with 48px action rows in optionally labelled groups (mock 4f) |
-| `lib/device_details.dart` | A trusted device's Details: `DeviceDetails` (state grid, failure, DeviceId with copy, categorized connection log with the All / Pairing / Peer filter, Reconnect and Copy log), `DeviceDetailsScreen` (the pushed phone screen, mock 5f), `DeviceStateTag`, `LogLineRow`, `seenSyncedLine()`, `shortDeviceId()` / `groupedDeviceId()`, `copyWithConfirmation()` |
+| `lib/theme/action_sheet.dart` | `showActionSheet()` + `ActionSheet`: a phone row menu as a bottom sheet, headed by what it acts on (icon tile, title, subtitle), with 48px action rows in optionally labelled groups (mock collections) |
+| `lib/device_details.dart` | A trusted device's Details: `DeviceDetails` (state grid, failure, DeviceId with copy, categorized connection log with the All / Pairing / Peer filter, Reconnect and Copy log), `DeviceDetailsScreen` (the pushed phone screen, mock devices-details), `DeviceStateTag`, `LogLineRow`, `seenSyncedLine()`, `shortDeviceId()` / `groupedDeviceId()`, `copyWithConfirmation()` |
 | `lib/ui_prefs.dart` | `UiPrefs` and its stores: device-local presentation choices (the collections sort, the voice tip dismissal, hands-free spoken feedback) in `ui_prefs.json` in the app support directory; never sent to Rust or synced. Write with `UiPrefsStore.update` so writers of different fields don't undo each other |
-| `lib/voice/` | Voice fill in the phone New record sheet (mocks 6a–6l, 7j): `engine.dart` (`VoiceEngine` boundary, `FakeVoiceEngine`, `UnavailableVoiceEngine`, `selectVoiceEngine()`), `patch.dart` (`applyPatch` rules, `VoiceDraftState` field origins), `controller.dart` (`VoiceFillController`, the sheet's flow), `panel.dart` (`VoicePanel`, `VoiceEvidencePopover`, `VoiceFieldMark`, `voiceErrorCopy()`), `mic_button.dart` (`VoiceMicButton`, `VoiceProgressRing`), `example.dart` (`exampleUtterance()`), `services.dart` (permission, network, TTS and model services, `VoicePrefs`, `VoiceScope`, `formatBytes()`), `fakes.dart` (test fakes) |
-| `lib/settings_page.dart` | `SettingsPage`, the third phone tab (mock 7i): Voice input (model row, hands-free, re-download, delete), Microphone and About (the build label) |
-| `lib/collections_page.dart` `_RecordTable` | The desktop records table (mock 4c): a `two_dimensional_scrollables` `TableView` with a pinned header row and first column (170px, others 150px), typed headers with the required mark, incomplete-row marks, and the "Scroll for more columns →" hint with a trailing fade |
+| `lib/voice/` | Voice fill in the phone New record sheet (voice-* mocks): `engine.dart` (`VoiceEngine` boundary, `FakeVoiceEngine`, `UnavailableVoiceEngine`, `selectVoiceEngine()`), `patch.dart` (`applyPatch` rules, `VoiceDraftState` field origins), `controller.dart` (`VoiceFillController`, the sheet's flow), `panel.dart` (`VoicePanel`, `VoiceEvidencePopover`, `VoiceFieldMark`, `voiceErrorCopy()`), `mic_button.dart` (`VoiceMicButton`, `VoiceProgressRing`), `example.dart` (`exampleUtterance()`), `services.dart` (permission, network, TTS and model services, `VoicePrefs`, `VoiceScope`, `formatBytes()`), `fakes.dart` (test fakes) |
+| `lib/settings_page.dart` | `SettingsPage`, the third phone tab (mock settings): Voice input (model row, hands-free, re-download, delete), Microphone and About (the build label) |
+| `lib/collections_page.dart` `_RecordTable` | The desktop records table (mock collection-records): a `two_dimensional_scrollables` `TableView` with a pinned header row and first column (170px, others 150px), typed headers with the required mark, incomplete-row marks, and the "Scroll for more columns →" hint with a trailing fade |
 | `lib/theme/form_errors.dart` | `FieldErrorMessage` / `FieldErrorLines` (warning icon + message under a control), `FormErrorLines`, `FormErrorSummary` ("Couldn't save. N fields need attention." + Show), `RequiredLegend`, `requiredLabel()`, `errorOf()` / `decorationErrorText()`: how forms show errors and required inputs |
 | `assets/fonts/` | Inter (400, 500) and JetBrains Mono (400), with OFL licences |
 

@@ -82,7 +82,7 @@ String modelLanguageName(AppLocalizations l, String? code) =>
   };
 }
 
-/// Asks before cancelling (mock 8e). Destructive action left, safe right.
+/// Asks before cancelling (mock settings-confirm-dialogs). Destructive action left, safe right.
 Future<bool> showCancelDownloadDialog(BuildContext context, int doneBytes) =>
     _confirm(
       context,
@@ -93,7 +93,7 @@ Future<bool> showCancelDownloadDialog(BuildContext context, int doneBytes) =>
       safe: context.l10n.modelCancelDialogKeep,
     );
 
-/// Asks before deleting the models (mock 8e).
+/// Asks before deleting the models (mock settings-confirm-dialogs).
 Future<bool> showDeleteModelsDialog(BuildContext context, int sizeBytes) =>
     _confirm(
       context,
@@ -160,7 +160,7 @@ Future<bool> _confirm(
     ) ??
     false;
 
-/// The Settings voice models card content (mocks 8b, 8d): header, one row
+/// The Settings voice models card content (mocks settings, settings-model-states): header, one row
 /// per model, and the body of the current state.
 class VoiceModelsCard extends StatefulWidget {
   const VoiceModelsCard({required this.models, required this.run, super.key});
