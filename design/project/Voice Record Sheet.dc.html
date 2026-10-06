@@ -35,7 +35,7 @@
       <sc-if value="{{ p.primer }}" hint-placeholder-val="{{ false }}">
         <div style="display:flex;flex-direction:column;gap:12px;padding:16px;border-radius:var(--radius-md);background:radial-gradient(100% 140% at 0% 0%,var(--color-accent-900),var(--color-bg) 60%);box-shadow:inset 0 0 0 1px var(--color-accent-700)">
           <div style="width:44px;height:44px;border-radius:50%;box-shadow:inset 0 0 0 1px var(--color-accent);display:grid;place-items:center;color:var(--color-accent);font-size:22px"><i class="ph ph-microphone"></i></div>
-          <div><div style="font-size:16px;font-weight:500">Speak to fill records</div><div style="font-size:13px;line-height:1.45;margin-top:4px;color:color-mix(in srgb,var(--color-text) 70%,transparent)">Audio is processed on this device and never saved. English only for now.</div></div>
+          <div><div style="font-size:16px;font-weight:500">Speak to fill records</div><div style="font-size:13px;line-height:1.45;margin-top:4px;color:color-mix(in srgb,var(--color-text) 70%,transparent)">Audio is processed on this device and never saved.</div></div>
           <div style="font-size:12px;color:color-mix(in srgb,var(--color-text) 55%,transparent)">Next, Android will ask for microphone access.</div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><button class="btn btn-secondary" style="min-height:48px">Not now</button><button class="btn btn-primary" style="min-height:48px">Continue</button></div>
         </div>
@@ -43,26 +43,38 @@
       <sc-if value="{{ p.offer }}" hint-placeholder-val="{{ false }}">
         <div style="display:flex;flex-direction:column;gap:12px;padding:16px;border-radius:var(--radius-md);background:var(--color-bg);box-shadow:inset 0 0 0 1px var(--color-accent-700)">
           <div style="display:flex;align-items:center;gap:10px"><i class="ph ph-download-simple" style="font-size:22px;color:var(--color-accent)"></i><span style="flex:1;font-size:16px;font-weight:500">Download voice models</span></div>
-          <div style="font-size:13px;line-height:1.45;color:color-mix(in srgb,var(--color-text) 70%,transparent)">English · 1.45 GB total, one time. Everything runs on this phone.</div>
+          <div style="font-size:13px;line-height:1.45;color:color-mix(in srgb,var(--color-text) 70%,transparent)">English · 1.43 GB total, one time. Everything runs on this phone.</div>
           <div style="display:flex;flex-direction:column;border-radius:var(--radius-sm);background:var(--color-surface);padding:2px 12px">
             <div style="display:flex;align-items:center;gap:10px;padding:8px 0"><i class="ph ph-waveform" style="font-size:16px;color:var(--color-accent)"></i><div style="flex:1;min-width:0"><div style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:color-mix(in srgb,var(--color-text) 50%,transparent)">Speech recognition</div><div style="font-size:14px;margin-top:1px">Whisper Base (English)</div></div><span style="font-size:12px;color:color-mix(in srgb,var(--color-text) 60%,transparent)">148 MB</span></div>
             <div style="height:1px;background:color-mix(in srgb,var(--color-text) 8%,transparent)"></div>
-            <div style="display:flex;align-items:center;gap:10px;padding:8px 0"><i class="ph ph-brain" style="font-size:16px;color:var(--color-accent)"></i><div style="flex:1;min-width:0"><div style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:color-mix(in srgb,var(--color-text) 50%,transparent)">Understanding</div><div style="font-size:14px;margin-top:1px">Qwen2.5 1.5B Instruct</div></div><span style="font-size:12px;color:color-mix(in srgb,var(--color-text) 60%,transparent)">1.3 GB</span></div>
+            <div style="display:flex;align-items:center;gap:10px;padding:8px 0"><i class="ph ph-brain" style="font-size:16px;color:var(--color-accent)"></i><div style="flex:1;min-width:0"><div style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:color-mix(in srgb,var(--color-text) 50%,transparent)">Understanding</div><div style="font-size:14px;margin-top:1px">Qwen2.5 1.5B Instruct</div></div><span style="font-size:12px;color:color-mix(in srgb,var(--color-text) 60%,transparent)">1.29 GB</span></div>
           </div>
           <div style="display:flex;flex-direction:column;gap:6px;font-size:13px">
             <div style="display:flex;align-items:center;gap:8px"><i class="ph ph-wifi-slash" style="color:var(--color-accent-300)"></i><span style="flex:1">You're on mobile data</span><span style="font-size:12px;color:var(--color-accent-300)">Wi-Fi recommended</span></div>
             <div style="display:flex;align-items:center;gap:8px"><i class="ph ph-hard-drives" style="opacity:.7"></i><span style="flex:1">Storage</span><span style="font-size:12px;color:color-mix(in srgb,var(--color-text) 60%,transparent)">12.4 GB free</span></div>
           </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><button class="btn btn-secondary" style="min-height:48px">Later</button><button class="btn btn-primary" style="min-height:48px"><i class="ph ph-download-simple"></i>Download 1.45 GB</button></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><button class="btn btn-secondary" style="min-height:48px">Later</button><button class="btn btn-primary" style="min-height:48px"><i class="ph ph-download-simple"></i>Download 1.43 GB</button></div>
         </div>
       </sc-if>
       <sc-if value="{{ p.downloading }}" hint-placeholder-val="{{ false }}">
         <div style="display:flex;flex-direction:column;gap:10px;padding:12px 14px;border-radius:var(--radius-md);background:var(--color-bg)">
           <div style="display:flex;align-items:center;gap:10px"><i class="ph ph-download-simple" style="font-size:18px;color:var(--color-accent)"></i><span style="flex:1;font-size:14px;font-weight:500">Downloading voice models</span><button class="btn btn-ghost" aria-label="Pause download" style="width:44px;height:44px;margin:-10px -4px;color:var(--color-text)"><i class="ph ph-pause" style="font-size:18px"></i></button><button class="btn btn-ghost" aria-label="Hide" style="width:44px;height:44px;margin:-10px -10px -10px -4px;color:color-mix(in srgb,var(--color-text) 60%,transparent)"><i class="ph ph-caret-up" style="font-size:18px"></i></button></div>
           <div role="progressbar" aria-valuenow="42" aria-valuemin="0" aria-valuemax="100" style="height:4px;border-radius:2px;background:var(--color-neutral-700);overflow:hidden"><div style="width:42%;height:100%;background:var(--color-accent)"></div></div>
-          <div style="display:flex;font-size:12px;color:color-mix(in srgb,var(--color-text) 60%,transparent);font-variant-numeric:tabular-nums"><span style="flex:1">612 MB of 1.45 GB · 42%</span><span>about 4 min</span></div>
+          <div style="display:flex;font-size:12px;color:color-mix(in srgb,var(--color-text) 60%,transparent);font-variant-numeric:tabular-nums"><span style="flex:1">612 MB of 1.43 GB · 42%</span><span>about 4 min</span></div>
           <div style="font-size:12px;color:color-mix(in srgb,var(--color-text) 55%,transparent)">Keep filling by hand. The mic turns on when it's ready.</div>
         </div>
+      </sc-if>
+      <sc-if value="{{ p.reconnecting }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:10px;padding:12px 14px;border-radius:var(--radius-md);background:var(--color-bg)"><div style="display:flex;align-items:center;gap:10px"><i class="ph ph-wifi-slash" style="font-size:18px;color:var(--color-accent)"></i><span style="flex:1;font-size:14px;font-weight:500">Reconnecting…</span><button class="btn btn-ghost" aria-label="Pause download" style="width:44px;height:44px;margin:-10px -4px;color:var(--color-text)"><i class="ph ph-pause" style="font-size:18px"></i></button><button class="btn btn-ghost" aria-label="Hide" style="width:44px;height:44px;margin:-10px -10px -10px -4px;color:color-mix(in srgb,var(--color-text) 60%,transparent)"><i class="ph ph-caret-up" style="font-size:18px"></i></button></div><div role="progressbar" aria-valuenow="42" aria-valuemin="0" aria-valuemax="100" style="height:4px;border-radius:2px;background:var(--color-neutral-700);overflow:hidden"><div style="width:42%;height:100%;background:var(--color-accent);opacity:.45"></div></div><div style="font-size:12px;line-height:1.45;color:color-mix(in srgb,var(--color-text) 60%,transparent)">Connection lost — the download resumes where it stopped.</div></div>
+      </sc-if>
+      <sc-if value="{{ p.verifying }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:10px;padding:12px 14px;border-radius:var(--radius-md);background:var(--color-bg)"><div style="display:flex;align-items:center;gap:10px"><span role="progressbar" aria-label="Checking" style="width:18px;height:18px;flex:none;border-radius:50%;background:conic-gradient(var(--color-accent) 0 30%,var(--color-neutral-700) 30% 100%);-webkit-mask:radial-gradient(circle,transparent 6px,#000 7px);mask:radial-gradient(circle,transparent 6px,#000 7px)"></span><span style="flex:1;font-size:14px;font-weight:500">Checking downloaded data…</span><button class="btn btn-ghost" aria-label="Hide" style="width:44px;height:44px;margin:-10px -10px -10px -4px;color:color-mix(in srgb,var(--color-text) 60%,transparent)"><i class="ph ph-caret-up" style="font-size:18px"></i></button></div><div role="progressbar" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100" style="height:4px;border-radius:2px;background:var(--color-neutral-700);overflow:hidden"><div style="width:100%;height:100%;background:var(--color-accent)"></div></div></div>
+      </sc-if>
+      <sc-if value="{{ p.paused }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:10px;padding:12px 14px;border-radius:var(--radius-md);background:var(--color-bg)"><div style="display:flex;align-items:center;gap:10px"><i class="ph ph-pause-circle" style="font-size:18px;color:var(--color-accent)"></i><span style="flex:1;font-size:14px;font-weight:500">Download paused</span><button class="btn btn-secondary" style="min-height:44px"><i class="ph ph-play"></i>Resume</button></div><div role="progressbar" aria-valuenow="42" aria-valuemin="0" aria-valuemax="100" style="height:4px;border-radius:2px;background:var(--color-neutral-700);overflow:hidden"><div style="width:42%;height:100%;background:var(--color-accent);opacity:.45"></div></div><div style="font-size:12px;line-height:1.45;color:color-mix(in srgb,var(--color-text) 60%,transparent)">612 MB of 1.43 GB kept</div></div>
+      </sc-if>
+      <sc-if value="{{ p.failed }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:10px;padding:12px 14px;border-radius:var(--radius-md);background:var(--color-bg)"><div style="display:flex;align-items:center;gap:10px"><i class="ph ph-warning-circle" style="font-size:18px;color:var(--color-accent)"></i><span style="flex:1;font-size:14px;font-weight:500">Download failed</span><button class="btn btn-secondary" style="min-height:44px"><i class="ph ph-arrow-clockwise"></i>Retry</button></div><div role="progressbar" aria-valuenow="42" aria-valuemin="0" aria-valuemax="100" style="height:4px;border-radius:2px;background:var(--color-neutral-700);overflow:hidden"><div style="width:42%;height:100%;background:var(--color-accent);opacity:.45"></div></div><div style="font-size:12px;line-height:1.45;color:color-mix(in srgb,var(--color-text) 60%,transparent)">Couldn't reach the download server. Downloaded data is kept.</div></div>
       </sc-if>
       <sc-if value="{{ p.listening }}" hint-placeholder-val="{{ false }}">
         <div style="display:flex;flex-direction:column;gap:12px;padding:14px;border-radius:var(--radius-md);background:radial-gradient(100% 160% at 50% 0%,var(--color-accent-900),var(--color-bg) 70%);box-shadow:inset 0 0 0 1px var(--color-accent-700)">
@@ -71,7 +83,7 @@
             <sc-for list="{{ bars }}" as="b" hint-placeholder-count="28"><span style="width:4px;border-radius:2px;background:var(--color-accent);height:{{ b }}px"></span></sc-for>
           </div>
           <div style="font-size:13px;line-height:1.45;color:color-mix(in srgb,var(--color-text) 70%,transparent)">Try: <span style="color:var(--color-accent-100)">“Lunch, 12.50, category food, yesterday”</span></div>
-          <div style="display:flex;align-items:center;gap:8px"><span style="flex:1;font-size:12px;color:color-mix(in srgb,var(--color-text) 55%,transparent)">Tap stop when done, or hold the mic to talk</span><button class="btn btn-ghost" style="min-height:44px;color:var(--color-text)">Cancel</button></div>
+          <div style="display:flex;align-items:center;gap:8px"><span style="flex:1;display:flex;flex-direction:column;gap:2px;font-size:12px;color:color-mix(in srgb,var(--color-text) 55%,transparent)"><span>Tap stop when done, or hold the mic to talk</span><span>Stops on its own after 30 seconds.</span></span><button class="btn btn-ghost" style="min-height:44px;color:var(--color-text)">Cancel</button></div>
         </div>
       </sc-if>
       <sc-if value="{{ p.processing }}" hint-placeholder-val="{{ false }}">
@@ -181,14 +193,14 @@
   </sc-if>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:390,&quot;height&quot;:844},&quot;state&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;idle&quot;,&quot;primer&quot;,&quot;offer&quot;,&quot;downloading&quot;,&quot;listening&quot;,&quot;processing&quot;,&quot;filled&quot;,&quot;need&quot;,&quot;exhausted&quot;,&quot;followup&quot;,&quot;speaking&quot;,&quot;discard&quot;],&quot;default&quot;:&quot;idle&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:390,&quot;height&quot;:844},&quot;state&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;idle&quot;,&quot;primer&quot;,&quot;offer&quot;,&quot;downloading&quot;,&quot;reconnecting&quot;,&quot;verifying&quot;,&quot;paused&quot;,&quot;failed&quot;,&quot;listening&quot;,&quot;processing&quot;,&quot;filled&quot;,&quot;need&quot;,&quot;exhausted&quot;,&quot;followup&quot;,&quot;speaking&quot;,&quot;discard&quot;],&quot;default&quot;:&quot;idle&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
 class Component extends DCLogic {
   renderVals() {
     const s = this.props.state ?? 'idle';
-    const P = ['idle','primer','offer','downloading','listening','processing','filled','need','exhausted','followup','speaking','discard'];
+    const P = ['idle','primer','offer','downloading','reconnecting','verifying','paused','failed','listening','processing','filled','need','exhausted','followup','speaking','discard'];
     const p = {}; P.forEach(k => p[k] = k === s);
     if (s === 'discard') p.processing = true;
-    const micMap = { downloading:'downloading', listening:'listening', processing:'processing', discard:'processing', need:'ready' };
+    const micMap = { downloading:'downloading', reconnecting:'downloading', verifying:'downloading', paused:'downloading', failed:'downloading', listening:'listening', processing:'processing', discard:'processing', need:'ready' };
     const mk = micMap[s] || 'idle';
     const m = { idle: mk==='idle', ready: mk==='ready', listening: mk==='listening', processing: mk==='processing', downloading: mk==='downloading' };
     const Y = 'Yesterday · Sep 27';
@@ -196,7 +208,7 @@ class Component extends DCLogic {
       description:['empty'], amount:['empty'], category:['empty'], date:['default','Today · Sep 28'], reimb:['empty']
     };
     const ai = (v) => ['ai', v];
-    if (s === 'downloading') st.description = ['user','Lunch'];
+    if (['downloading','reconnecting','verifying','paused','failed'].includes(s)) st.description = ['user','Lunch'];
     if (s === 'filled' || s === 'speaking') Object.assign(st, { description: ai("Lunch at Nando's"), amount: ai('12.50'), category: ai('food'), date: ai(Y) });
     if (s === 'need') Object.assign(st, { description: ai('Taxi home'), date: ai(Y), amount:['need'], category:['need'] });
     if (s === 'exhausted') Object.assign(st, { description: ai('Taxi home'), date: ai(Y), amount:['need'], category: ai('transport') });
