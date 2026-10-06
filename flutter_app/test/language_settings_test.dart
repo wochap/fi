@@ -221,4 +221,43 @@ void main() {
       expect(find.byKey(const Key('language-voice-line')), findsNothing);
     });
   });
+
+  testWidgets('deleting another language asks with its name and size', (
+    tester,
+  ) async {
+    const english = ModelFileDto(
+      name: 'ggml-base.en.bin',
+      label: 'Whisper Base (English)',
+      role: ModelRoleDto.speech,
+      language: 'en',
+      sizeBytes: 147964211,
+      storedBytes: 147964211,
+      state: ModelFileStateDto.ready,
+    );
+    final spanishReady = modelStatusOf(
+      ModelStatusKindDto.ready,
+      language: 'es',
+      otherSpeech: const [english],
+    );
+    final models = FakeVoiceModels(spanishReady)
+      ..statusByLanguage['en'] = spanishReady;
+    await _openSettings(
+      tester,
+      capabilities: PlatformCapabilities.androidPhone,
+      size: const Size(390, 2400),
+      voice: fakeVoiceServices(models: models),
+    );
+    final delete = find.byKey(const Key('settings-model-delete-speech-en'));
+    await tester.ensureVisible(delete);
+    await tester.tap(delete);
+    await tester.pumpAndSettle();
+    expect(find.text('Delete this speech model?'), findsOneWidget);
+    expect(
+      find.text(
+        "Frees 148 MB. English voice input won't work until you download it again.",
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Keep model'), findsOneWidget);
+  });
 }

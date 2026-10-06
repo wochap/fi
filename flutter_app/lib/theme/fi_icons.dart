@@ -49,6 +49,8 @@ abstract final class FiIcons {
   static const IconData locked = PhosphorIconsRegular.lockSimple;
   static const IconData verified = PhosphorIconsRegular.sealCheck;
   static const IconData blocked = PhosphorIconsRegular.prohibit;
+  static const IconData allowed = PhosphorIconsRegular.checkCircle;
+  static const IconData notAllowedYet = PhosphorIconsRegular.circleDashed;
   static const IconData paused = PhosphorIconsRegular.pauseCircle;
   static const IconData rule = PhosphorIconsRegular.listChecks;
   static const IconData voice = PhosphorIconsFill.sparkle;
@@ -64,6 +66,7 @@ abstract final class FiIcons {
   static const IconData storage = PhosphorIconsRegular.hardDrives;
   static const IconData mute = PhosphorIconsRegular.speakerSimpleSlash;
   static const IconData settings = PhosphorIconsRegular.gear;
+  static const IconData systemSettings = PhosphorIconsRegular.gearSix;
   static const IconData waveform = PhosphorIconsRegular.waveform;
   static const IconData noSpeech = PhosphorIconsRegular.microphoneSlash;
   static const IconData nothingMatched = PhosphorIconsRegular.chatSlash;

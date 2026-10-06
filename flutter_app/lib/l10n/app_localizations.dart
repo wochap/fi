@@ -1322,24 +1322,6 @@ abstract class AppLocalizations {
   /// **'Storage error. Retry; downloaded data is kept.'**
   String get modelIoLine;
 
-  /// Re-download action
-  ///
-  /// In en, this message translates to:
-  /// **'Re-download models'**
-  String get modelRedownload;
-
-  /// Delete action
-  ///
-  /// In en, this message translates to:
-  /// **'Delete models'**
-  String get modelDelete;
-
-  /// Space freed
-  ///
-  /// In en, this message translates to:
-  /// **'frees {size}'**
-  String modelFrees(String size);
-
   /// Cancel dialog title
   ///
   /// In en, this message translates to:
@@ -1477,12 +1459,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Pause download'**
   String get modelPauseDownload;
-
-  /// Resume tooltip
-  ///
-  /// In en, this message translates to:
-  /// **'Resume download'**
-  String get modelResumeDownload;
 
   /// Hide tooltip
   ///
@@ -4739,7 +4715,7 @@ abstract class AppLocalizations {
   /// Delete speech model dialog body.
   ///
   /// In en, this message translates to:
-  /// **'Frees {size}. Voice fill in {language} needs it again.'**
+  /// **'Frees {size}. {language} voice input won\'t work until you download it again.'**
   String modelDeleteSpeechBody(String size, String language);
 
   /// Button that keeps the speech model.
@@ -4957,6 +4933,54 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Failure code'**
   String get devicesFailureCode;
+
+  /// Label of a local-network address in About.
+  ///
+  /// In en, this message translates to:
+  /// **'LAN'**
+  String get aboutNetworkLan;
+
+  /// Label of a tailnet address in About.
+  ///
+  /// In en, this message translates to:
+  /// **'Tailnet'**
+  String get aboutNetworkTailnet;
+
+  /// Button in the ready voice models card that re-downloads the models.
+  ///
+  /// In en, this message translates to:
+  /// **'Re-download'**
+  String get modelRedownloadShort;
+
+  /// Button in the ready voice models card that deletes the models.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get modelDeleteShort;
+
+  /// Voice sheet download card title after a failure.
+  ///
+  /// In en, this message translates to:
+  /// **'Download failed'**
+  String get modelFailedTitle;
+
+  /// Progress line of a paused or failed download.
+  ///
+  /// In en, this message translates to:
+  /// **'{done} of {total} kept'**
+  String modelKeptLine(String done, String total);
+
+  /// Voice sheet download card line while reconnecting.
+  ///
+  /// In en, this message translates to:
+  /// **'Connection lost — the download resumes where it stopped.'**
+  String get modelReconnectingResumesLong;
+
+  /// Muted line under the listening hint stating the recording cap.
+  ///
+  /// In en, this message translates to:
+  /// **'Stops on its own after {seconds} seconds.'**
+  String voiceListeningCap(int seconds);
 }
 
 class _AppLocalizationsDelegate

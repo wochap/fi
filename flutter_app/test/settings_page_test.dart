@@ -1,5 +1,6 @@
 import 'package:fi/platform_capabilities.dart';
 import 'package:fi/src/rust/api/models.dart';
+import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/ui_prefs.dart';
 import 'package:fi/voice/engine.dart';
 import 'package:fi/voice/fakes.dart';
@@ -318,7 +319,22 @@ void main() {
       );
       await tester.pump();
       expect(copied, ['192.168.0.165:47380']);
-      expect(find.text('Address copied'), findsOneWidget);
+      final row = find.byKey(const Key('settings-address-192.168.0.165:47380'));
+      expect(
+        find.descendant(of: row, matching: find.text('Address copied')),
+        findsOneWidget,
+      );
+      expect(find.byType(SnackBar), findsNothing);
+      expect(
+        find.byKey(const Key('settings-copy-address-192.168.0.165:47380')),
+        findsNothing,
+      );
+      await tester.pump(const Duration(seconds: 3));
+      expect(find.text('Address copied'), findsNothing);
+      expect(
+        find.byKey(const Key('settings-copy-address-192.168.0.165:47380')),
+        findsOneWidget,
+      );
     });
 
     testWidgets('reads Not on a local network or tailnet without addresses', (
@@ -339,6 +355,22 @@ void main() {
           ],
       );
       expect(find.byTooltip('Copy address'), findsNWidgets(2));
+    });
+
+    testWidgets('labels LAN then Tailnet', (tester) async {
+      await openDesktop(
+        tester,
+        _ready()
+          ..localAddresses = const ['192.168.0.165:47380', '100.71.3.9:47380'],
+      );
+      final lan = find.text('LAN');
+      final tailnet = find.text('Tailnet');
+      expect(lan, findsOneWidget);
+      expect(tailnet, findsOneWidget);
+      expect(
+        tester.getTopLeft(lan).dy,
+        lessThan(tester.getTopLeft(tailnet).dy),
+      );
     });
 
     testWidgets('re-reads the addresses on resume', (tester) async {
@@ -587,8 +619,8 @@ void main() {
       find.text('Speaks the “still need” question and a short confirmation'),
       findsOneWidget,
     );
-    expect(find.text('Re-download models'), findsOneWidget);
-    expect(find.text('frees 1.43 GB'), findsOneWidget);
+    expect(find.text('Re-download'), findsOneWidget);
+    expect(find.text('Delete'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('settings-hands-free')));
     await tester.pump();
@@ -616,6 +648,80 @@ void main() {
     expect(find.text('Download 1.43 GB'), findsOneWidget);
     expect(find.byKey(const Key('settings-hands-free')), findsNothing);
   });
+
+  testWidgets('ready layout: card actions, privacy line, hands-free card', (
+    tester,
+  ) async {
+    await _openSettings(
+      tester,
+      voice: fakeVoiceServices(
+        models: FakeVoiceModels(modelStatusOf(ModelStatusKindDto.ready)),
+      ),
+    );
+    final card = find.byKey(const Key('settings-voice-models'));
+    for (final key in ['settings-redownload', 'settings-delete-model']) {
+      expect(
+        find.descendant(of: card, matching: find.byKey(Key(key))),
+        findsOneWidget,
+        reason: key,
+      );
+    }
+    double top(Finder finder) => tester.getTopLeft(finder).dy;
+    final privacy = find.byKey(const Key('settings-voice-privacy'));
+    final handsFree = find.byKey(const Key('settings-hands-free-card'));
+    expect(
+      top(find.byKey(const Key('settings-delete-model'))),
+      lessThan(top(privacy)),
+    );
+    expect(tester.getBottomLeft(card).dy, lessThanOrEqualTo(top(privacy)));
+    expect(top(privacy), lessThan(top(handsFree)));
+  });
+
+  testWidgets('hands-free is absent while downloading', (tester) async {
+    await _openSettings(
+      tester,
+      voice: fakeVoiceServices(
+        models: FakeVoiceModels(
+          modelStatusOf(ModelStatusKindDto.downloading, done: 612000000),
+        ),
+      ),
+    );
+    expect(find.byKey(const Key('settings-voice-privacy')), findsOneWidget);
+    expect(find.byKey(const Key('settings-hands-free-card')), findsNothing);
+  });
+
+  for (final (permission, icon, text) in [
+    (MicPermission.granted, FiIcons.allowed, 'Allowed'),
+    (MicPermission.notGranted, FiIcons.notAllowedYet, 'Not allowed yet'),
+    (MicPermission.permanentlyDenied, FiIcons.blocked, 'Off'),
+  ]) {
+    testWidgets('Microphone $text carries its icon', (tester) async {
+      await _openSettings(
+        tester,
+        voice: fakeVoiceServices(
+          permission: FakeMicrophonePermission(permission),
+        ),
+      );
+      final mic = find.byKey(const Key('settings-microphone'));
+      expect(
+        find.descendant(of: mic, matching: find.byIcon(icon)),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: mic, matching: find.text(text)),
+        findsOneWidget,
+      );
+      final button = find.byKey(const Key('settings-android-settings'));
+      expect(
+        find.descendant(
+          of: button,
+          matching: find.byIcon(FiIcons.systemSettings),
+        ),
+        findsOneWidget,
+      );
+      expect(tester.getSize(button).height, greaterThanOrEqualTo(44));
+    });
+  }
 
   testWidgets('re-download asks first, then starts over', (tester) async {
     final models = FakeVoiceModels(modelStatusOf(ModelStatusKindDto.ready));

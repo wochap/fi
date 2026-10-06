@@ -6,6 +6,7 @@ import 'package:fi/voice/engine.dart';
 import 'package:fi/voice/example.dart';
 import 'package:fi/voice/mic_button.dart';
 import 'package:fi/voice/models_card.dart';
+import 'package:fi/voice/rust_engine.dart' show maxTurnDuration;
 import 'package:fi/voice/services.dart';
 import 'package:flutter/material.dart';
 
@@ -345,6 +346,21 @@ class _VoicePanelState extends State<VoicePanel> {
     );
   }
 
+  /// The failure reason alone, under the "Download failed" title.
+  Widget _failureReasonLine(ModelErrorDto error) {
+    final (_, line) = modelFailureText(
+      context.l10n,
+      c.services.models.status.error == error
+          ? c.services.models.status
+          : modelStatusOf(ModelStatusKindDto.failed, error: error),
+    );
+    return Text(
+      line,
+      key: const Key('voice-download-error'),
+      style: const TextStyle(fontSize: 12, color: Nocturne.error),
+    );
+  }
+
   Widget _infoRow({
     required Key key,
     required IconData icon,
@@ -376,8 +392,10 @@ class _VoicePanelState extends State<VoicePanel> {
       ModelStatusKindDto.reconnecting => context.l10n.modelReconnectingShort,
       ModelStatusKindDto.verifying => context.l10n.modelVerifyingTitle,
       ModelStatusKindDto.paused => context.l10n.modelPausedTitle,
+      ModelStatusKindDto.failed => context.l10n.modelFailedTitle,
       _ => context.l10n.modelDownloadingTitle,
     };
+    final failed = status.kind == ModelStatusKindDto.failed;
     final error = c.downloadError;
     return Container(
       key: const Key('voice-downloading'),
@@ -392,17 +410,26 @@ class _VoicePanelState extends State<VoicePanel> {
               const Icon(FiIcons.download, size: 18, color: Nocturne.accent),
               const SizedBox(width: 10),
               Expanded(child: _announced(title)),
-              if (!verifying)
+              if (stopped)
+                OutlinedButton.icon(
+                  key: const Key('voice-download-resume'),
+                  onPressed: c.resumeDownload,
+                  icon: Icon(
+                    failed ? FiIcons.refresh : FiIcons.download,
+                    size: 16,
+                  ),
+                  label: Text(
+                    failed
+                        ? context.l10n.commonRetry
+                        : context.l10n.modelResume,
+                  ),
+                )
+              else if (!verifying)
                 IconButton(
                   key: const Key('voice-download-pause'),
-                  tooltip: stopped
-                      ? context.l10n.modelResumeDownload
-                      : context.l10n.modelPauseDownload,
-                  onPressed: stopped ? c.resumeDownload : c.pauseDownload,
-                  icon: Icon(
-                    stopped ? FiIcons.download : FiIcons.pause,
-                    size: 18,
-                  ),
+                  tooltip: context.l10n.modelPauseDownload,
+                  onPressed: c.pauseDownload,
+                  icon: const Icon(FiIcons.pause, size: 18),
                 ),
               IconButton(
                 key: const Key('voice-download-hide'),
@@ -435,11 +462,16 @@ class _VoicePanelState extends State<VoicePanel> {
             children: [
               Expanded(
                 child: Text(
-                  context.l10n.modelProgressLine(
-                    formatBytes(status.doneBytes),
-                    formatBytes(status.totalBytes),
-                    percent,
-                  ),
+                  stopped
+                      ? context.l10n.modelKeptLine(
+                          formatBytes(status.doneBytes),
+                          formatBytes(status.totalBytes),
+                        )
+                      : context.l10n.modelProgressLine(
+                          formatBytes(status.doneBytes),
+                          formatBytes(status.totalBytes),
+                          percent,
+                        ),
                   key: const Key('voice-download-progress'),
                   style: _muted(.6).copyWith(fontFeatures: Nocturne.tabular),
                 ),
@@ -448,7 +480,14 @@ class _VoicePanelState extends State<VoicePanel> {
                 Text(formatTimeLeft(context.l10n, seconds), style: _muted(.6)),
             ],
           ),
-          if (error != null) _downloadErrorLine(error),
+          if (status.kind == ModelStatusKindDto.reconnecting)
+            Text(
+              context.l10n.modelReconnectingResumesLong,
+              key: const Key('voice-download-reconnecting'),
+              style: _muted(.6),
+            ),
+          if (error != null)
+            failed ? _failureReasonLine(error) : _downloadErrorLine(error),
           Text(context.l10n.modelKeepFilling, style: _muted(.55)),
         ],
       ),
@@ -522,9 +561,17 @@ class _VoicePanelState extends State<VoicePanel> {
           Row(
             children: [
               Expanded(
-                child: Text(
-                  context.l10n.voiceListeningHint,
-                  style: _muted(.55),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  spacing: 2,
+                  children: [
+                    Text(context.l10n.voiceListeningHint, style: _muted(.55)),
+                    Text(
+                      context.l10n.voiceListeningCap(maxTurnDuration.inSeconds),
+                      key: const Key('voice-listening-cap'),
+                      style: _muted(.45, 11),
+                    ),
+                  ],
                 ),
               ),
               TextButton(

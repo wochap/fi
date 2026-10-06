@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:fi/build_label.dart';
-import 'package:fi/device_details.dart';
 import 'package:fi/l10n/l10n.dart';
 import 'package:fi/l10n/language.dart';
 import 'package:fi/platform_capabilities.dart';
@@ -14,6 +13,7 @@ import 'package:fi/ui_prefs.dart';
 import 'package:fi/voice/models_card.dart';
 import 'package:fi/voice/services.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 /// The Network row of About; mirrors `DEFAULT_SYNC_PORT_RANGE` in
 /// `crates/app_core/src/application.rs` and mDNS on 5353.
@@ -154,84 +154,67 @@ class _SettingsPageState extends State<SettingsPage>
     );
   }
 
-  Widget _about() => NocturneCard(
-    key: const Key('settings-about'),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (widget.buildInfo case final info?) ...[
-          _AboutRow(
-            label: context.l10n.settingsVersion,
-            value: BuildLabel(info),
-          ),
+  Widget _about() {
+    final wide = MediaQuery.sizeOf(context).width >= 720;
+    final thisDevice = _ThisDeviceAddresses(addresses: widget.localAddresses);
+    return NocturneCard(
+      key: const Key('settings-about'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (widget.buildInfo case final info?) ...[
+            _AboutRow(
+              label: context.l10n.settingsVersion,
+              value: BuildLabel(info),
+            ),
+            const FadedRule(),
+          ],
+          if (wide)
+            _AboutRow(
+              key: const Key('settings-this-device'),
+              label: context.l10n.aboutThisDevice,
+              value: thisDevice,
+            )
+          else
+            Padding(
+              key: const Key('settings-this-device'),
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                spacing: 6,
+                children: [Text(context.l10n.aboutThisDevice), thisDevice],
+              ),
+            ),
           const FadedRule(),
-        ],
-        _AboutRow(
-          key: const Key('settings-this-device'),
-          label: context.l10n.aboutThisDevice,
-          value: _thisDevice(),
-        ),
-        const FadedRule(),
-        _AboutRow(
-          key: const Key('settings-network'),
-          label: context.l10n.settingsNetwork,
-          detail: networkSummary(context.l10n),
-        ),
-      ],
-    ),
-  );
-
-  Widget _thisDevice() {
-    final l = context.l10n;
-    if (widget.localAddresses.isEmpty) {
-      return Text(
-        l.aboutNotOnLocalNetwork,
-        style: TextStyle(fontSize: 13, color: Nocturne.muted(.55)),
-      );
-    }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        for (final addr in widget.localAddresses)
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Flexible(
-                child: SelectableText(
-                  addr,
-                  style: const TextStyle(
-                    fontFamily: Nocturne.monoFamily,
-                    fontSize: 13,
-                  ),
-                ),
-              ),
-              IconButton(
-                key: Key('settings-copy-address-$addr'),
-                tooltip: l.aboutCopyAddress,
-                icon: const Icon(FiIcons.copy, size: 16),
-                onPressed: () => unawaited(
-                  copyWithConfirmation(context, addr, l.aboutAddressCopied),
-                ),
-              ),
-            ],
+          _AboutRow(
+            key: const Key('settings-network'),
+            label: context.l10n.settingsNetwork,
+            detail: networkSummary(context.l10n),
           ),
-      ],
+        ],
+      ),
     );
   }
 
   Widget _microphone(VoiceServices services) {
     final l = context.l10n;
-    final (text, detail) = switch (_permission) {
-      MicPermission.granted => (l.settingsMicAllowed, null),
+    final (text, detail, icon) = switch (_permission) {
+      MicPermission.granted => (
+        l.settingsMicAllowed,
+        null,
+        const Icon(FiIcons.allowed, size: 16, color: Nocturne.accent200),
+      ),
       MicPermission.notGranted => (
         l.settingsMicNotAllowed,
         l.settingsMicAsksFirst,
+        Icon(FiIcons.notAllowedYet, size: 16, color: Nocturne.muted(.7)),
       ),
       MicPermission.permanentlyDenied => (
         l.settingsMicOff,
         l.settingsMicTurnOn,
+        Icon(FiIcons.blocked, size: 16, color: Nocturne.muted(.7)),
       ),
-      null => (_permissionKnown ? l.settingsMicUnknown : '…', null),
+      null => (_permissionKnown ? l.settingsMicUnknown : '…', null, null),
     };
     return NocturneCard(
       key: const Key('settings-microphone'),
@@ -244,6 +227,7 @@ class _SettingsPageState extends State<SettingsPage>
               Icon(FiIcons.microphone, size: 18, color: Nocturne.muted(.7)),
               const SizedBox(width: 10),
               Expanded(child: Text(l.settingsMicAccess)),
+              if (icon != null) ...[icon, const SizedBox(width: 6)],
               Text(
                 text,
                 key: const Key('settings-microphone-status'),
@@ -258,10 +242,14 @@ class _SettingsPageState extends State<SettingsPage>
             ),
           Align(
             alignment: AlignmentDirectional.centerStart,
-            child: TextButton(
+            child: OutlinedButton.icon(
               key: const Key('settings-android-settings'),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(0, Nocturne.touchTarget),
+              ),
               onPressed: () => unawaited(services.permission.openSettings()),
-              child: Text(l.settingsAndroidSettings),
+              icon: const Icon(FiIcons.systemSettings, size: 16),
+              label: Text(l.settingsAndroidSettings),
             ),
           ),
         ],
@@ -357,7 +345,10 @@ class _LanguageSectionState extends State<_LanguageSection> {
                       SizedBox(width: 280, child: dropdown),
                     ],
                   )
-                else ...[label, dropdown],
+                else ...[
+                  label,
+                  dropdown,
+                ],
                 if (voice != null) ...[const FadedRule(), voice],
               ],
             );
@@ -501,6 +492,121 @@ Future<void> _runModelAction(
   }
 }
 
+/// The network an About address belongs to: "Tailnet" for 100.64.0.0/10,
+/// "LAN" for anything else, including a host that is not IPv4.
+String addressNetwork(AppLocalizations l, String address) {
+  final octets = address.split(':').first.split('.');
+  final a = octets.length == 4 ? int.tryParse(octets[0]) : null;
+  final b = octets.length == 4 ? int.tryParse(octets[1]) : null;
+  final tailnet = a == 100 && b != null && b >= 64 && b <= 127;
+  return tailnet ? l.aboutNetworkTailnet : l.aboutNetworkLan;
+}
+
+/// About › This device (mock settings-about): one line per address with its
+/// network label and a copy action that confirms inline.
+class _ThisDeviceAddresses extends StatefulWidget {
+  const _ThisDeviceAddresses({required this.addresses});
+
+  final List<String> addresses;
+
+  @override
+  State<_ThisDeviceAddresses> createState() => _ThisDeviceAddressesState();
+}
+
+class _ThisDeviceAddressesState extends State<_ThisDeviceAddresses> {
+  static const _confirmFor = Duration(seconds: 2);
+
+  String? _copied;
+  Timer? _timer;
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _copy(String address) async {
+    await Clipboard.setData(ClipboardData(text: address));
+    if (!mounted) return;
+    _timer?.cancel();
+    setState(() => _copied = address);
+    _timer = Timer(_confirmFor, () {
+      if (mounted) setState(() => _copied = null);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = context.l10n;
+    final muted = TextStyle(fontSize: 12, color: Nocturne.muted(.55));
+    if (widget.addresses.isEmpty) {
+      return Text(
+        l.aboutNotOnLocalNetwork,
+        style: TextStyle(fontSize: 13, color: Nocturne.muted(.55)),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final addr in widget.addresses)
+          ConstrainedBox(
+            key: Key('settings-address-$addr'),
+            constraints: const BoxConstraints(minHeight: Nocturne.touchTarget),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: 64,
+                  child: Text(addressNetwork(l, addr), style: muted),
+                ),
+                Flexible(
+                  child: SelectableText(
+                    addr,
+                    maxLines: 1,
+                    style: const TextStyle(
+                      fontFamily: Nocturne.monoFamily,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                if (_copied == addr)
+                  Semantics(
+                    liveRegion: true,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      spacing: 4,
+                      children: [
+                        const Icon(
+                          FiIcons.check,
+                          size: 16,
+                          color: Nocturne.accent200,
+                        ),
+                        Text(
+                          l.aboutAddressCopied,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Nocturne.accent200,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                else
+                  IconButton(
+                    key: Key('settings-copy-address-$addr'),
+                    tooltip: l.aboutCopyAddress,
+                    icon: const Icon(FiIcons.copy, size: 16),
+                    onPressed: () => unawaited(_copy(addr)),
+                  ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 /// One About row: label with an optional value, low-emphasis detail line and trailing widget.
 class _AboutRow extends StatelessWidget {
   const _AboutRow({
@@ -559,147 +665,71 @@ class _VoiceInputSection extends StatelessWidget {
     listenable: Listenable.merge([models, services.prefs]),
     builder: (context, _) {
       final status = models.status;
-      final size = formatBytes(status.totalBytes);
-      final ready = models.ready;
-      return NocturneCard(
+      final muted = TextStyle(fontSize: 12, color: Nocturne.muted(.55));
+      return Column(
         key: const Key('settings-voice'),
-        padding: EdgeInsets.zero,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (speechModelMissing(status))
-              if (status.files
-                      .where((file) => file.role == ModelRoleDto.speech)
-                      .firstOrNull
-                  case final speech?)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                  child: Text(
-                    context.l10n.voiceNeedsSpeechModel(
-                      languageEndonym(status.language),
-                      status.language,
-                      formatBytes(speech.sizeBytes),
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: 12,
+        children: [
+          if (speechModelMissing(status))
+            if (status.files
+                    .where((file) => file.role == ModelRoleDto.speech)
+                    .firstOrNull
+                case final speech?)
+              Text(
+                context.l10n.voiceNeedsSpeechModel(
+                  languageEndonym(status.language),
+                  status.language,
+                  formatBytes(speech.sizeBytes),
+                ),
+                key: const Key('settings-voice-needs-model'),
+                style: TextStyle(fontSize: 13, color: Nocturne.muted(.7)),
+              ),
+          NocturneCard(
+            key: const Key('settings-voice-models'),
+            child: VoiceModelsCard(
+              models: models,
+              run: (action) => _run(context, action),
+            ),
+          ),
+          Text(
+            context.l10n.voicePrivacyLine,
+            key: const Key('settings-voice-privacy'),
+            style: muted,
+          ),
+          if (models.ready)
+            NocturneCard(
+              key: const Key('settings-hands-free-card'),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      spacing: 2,
+                      children: [
+                        Text(context.l10n.settingsHandsFree),
+                        Text(
+                          context.l10n.settingsHandsFreeDetail,
+                          style: muted,
+                        ),
+                      ],
                     ),
-                    key: const Key('settings-voice-needs-model'),
-                    style: TextStyle(fontSize: 13, color: Nocturne.muted(.7)),
                   ),
-                ),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: VoiceModelsCard(
-                models: models,
-                run: (action) => _run(context, action),
+                  const SizedBox(width: 12),
+                  Semantics(
+                    label: context.l10n.settingsHandsFree,
+                    child: FiSwitch(
+                      key: const Key('settings-hands-free'),
+                      value: services.prefs.handsFree,
+                      onChanged: (on) =>
+                          unawaited(services.prefs.setHandsFree(on)),
+                    ),
+                  ),
+                ],
               ),
             ),
-            if (ready) ...[
-              const FadedRule(indent: 16),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        spacing: 2,
-                        children: [
-                          Text(context.l10n.settingsHandsFree),
-                          Text(
-                            context.l10n.settingsHandsFreeDetail,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Nocturne.muted(.55),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Semantics(
-                      label: context.l10n.settingsHandsFree,
-                      child: FiSwitch(
-                        key: const Key('settings-hands-free'),
-                        value: services.prefs.handsFree,
-                        onChanged: (on) =>
-                            unawaited(services.prefs.setHandsFree(on)),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const FadedRule(indent: 16),
-              _actionRow(
-                key: const Key('settings-redownload'),
-                icon: FiIcons.refresh,
-                label: context.l10n.modelRedownload,
-                detail: size,
-                onTap: () async {
-                  if (!await showRedownloadModelsDialog(
-                    context,
-                    status.totalBytes,
-                  )) {
-                    return;
-                  }
-                  if (context.mounted) await _run(context, models.redownload);
-                },
-              ),
-              const FadedRule(indent: 16),
-              _actionRow(
-                key: const Key('settings-delete-model'),
-                icon: FiIcons.delete,
-                label: context.l10n.modelDelete,
-                detail: context.l10n.modelFrees(size),
-                onTap: () async {
-                  if (!await showDeleteModelsDialog(
-                    context,
-                    modelDeleteBytes(status),
-                  )) {
-                    return;
-                  }
-                  if (context.mounted) {
-                    await _run(context, () async => models.delete());
-                  }
-                },
-              ),
-            ],
-            const FadedRule(indent: 16),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text(
-                context.l10n.voicePrivacyLine,
-                style: TextStyle(fontSize: 12, color: Nocturne.muted(.55)),
-              ),
-            ),
-          ],
-        ),
+        ],
       );
     },
-  );
-
-  Widget _actionRow({
-    required Key key,
-    required IconData icon,
-    required String label,
-    required String detail,
-    required VoidCallback onTap,
-  }) => InkWell(
-    key: key,
-    onTap: onTap,
-    child: ConstrainedBox(
-      constraints: const BoxConstraints(minHeight: Nocturne.touchTarget + 4),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        child: Row(
-          children: [
-            Icon(icon, size: 18, color: Nocturne.muted(.7)),
-            const SizedBox(width: 10),
-            Expanded(child: Text(label)),
-            Text(
-              detail,
-              style: TextStyle(fontSize: 12, color: Nocturne.muted(.55)),
-            ),
-          ],
-        ),
-      ),
-    ),
   );
 }

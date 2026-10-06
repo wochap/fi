@@ -794,17 +794,6 @@ class AppLocalizationsEs extends AppLocalizations {
       'Error de almacenamiento. Reintenta; los datos descargados se conservan.';
 
   @override
-  String get modelRedownload => 'Volver a descargar';
-
-  @override
-  String get modelDelete => 'Eliminar';
-
-  @override
-  String modelFrees(String size) {
-    return 'libera $size';
-  }
-
-  @override
   String get modelCancelDialogTitle => '¿Cancelar la descarga?';
 
   @override
@@ -886,9 +875,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get modelPauseDownload => 'Pausar descarga';
-
-  @override
-  String get modelResumeDownload => 'Reanudar descarga';
 
   @override
   String get modelHide => 'Ocultar';
@@ -2975,7 +2961,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String modelDeleteSpeechBody(String size, String language) {
-    return 'Libera $size. El llenado por voz en $language lo necesitará de nuevo.';
+    return 'Libera $size. La entrada de voz en $language no funcionará hasta que lo descargues de nuevo.';
   }
 
   @override
@@ -3123,4 +3109,33 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get devicesFailureCode => 'Código de error';
+
+  @override
+  String get aboutNetworkLan => 'LAN';
+
+  @override
+  String get aboutNetworkTailnet => 'Tailnet';
+
+  @override
+  String get modelRedownloadShort => 'Volver a descargar';
+
+  @override
+  String get modelDeleteShort => 'Eliminar';
+
+  @override
+  String get modelFailedTitle => 'Descarga fallida';
+
+  @override
+  String modelKeptLine(String done, String total) {
+    return '$done de $total guardados';
+  }
+
+  @override
+  String get modelReconnectingResumesLong =>
+      'Se perdió la conexión: la descarga sigue donde se quedó.';
+
+  @override
+  String voiceListeningCap(int seconds) {
+    return 'Se detiene solo tras $seconds segundos.';
+  }
 }

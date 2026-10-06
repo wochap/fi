@@ -1126,23 +1126,6 @@
   "@modelIoLine": {
     "description": "IO failure line"
   },
-  "modelRedownload": "Re-download models",
-  "@modelRedownload": {
-    "description": "Re-download action"
-  },
-  "modelDelete": "Delete models",
-  "@modelDelete": {
-    "description": "Delete action"
-  },
-  "modelFrees": "frees {size}",
-  "@modelFrees": {
-    "description": "Space freed",
-    "placeholders": {
-      "size": {
-        "type": "String"
-      }
-    }
-  },
   "modelCancelDialogTitle": "Cancel download?",
   "@modelCancelDialogTitle": {
     "description": "Cancel dialog title"
@@ -1273,10 +1256,6 @@
   "modelPauseDownload": "Pause download",
   "@modelPauseDownload": {
     "description": "Pause tooltip"
-  },
-  "modelResumeDownload": "Resume download",
-  "@modelResumeDownload": {
-    "description": "Resume tooltip"
   },
   "modelHide": "Hide",
   "@modelHide": {
@@ -3967,7 +3946,7 @@
   "@modelDeleteSpeechTitle": {
     "description": "Delete speech model dialog title."
   },
-  "modelDeleteSpeechBody": "Frees {size}. Voice fill in {language} needs it again.",
+  "modelDeleteSpeechBody": "Frees {size}. {language} voice input won't work until you download it again.",
   "@modelDeleteSpeechBody": {
     "description": "Delete speech model dialog body.",
     "placeholders": {
@@ -4187,5 +4166,50 @@
   "devicesFailureCode": "Failure code",
   "@devicesFailureCode": {
     "description": "Details label of the failure code."
+  },
+  "aboutNetworkLan": "LAN",
+  "@aboutNetworkLan": {
+    "description": "Label of a local-network address in About."
+  },
+  "aboutNetworkTailnet": "Tailnet",
+  "@aboutNetworkTailnet": {
+    "description": "Label of a tailnet address in About."
+  },
+  "modelRedownloadShort": "Re-download",
+  "@modelRedownloadShort": {
+    "description": "Button in the ready voice models card that re-downloads the models."
+  },
+  "modelDeleteShort": "Delete",
+  "@modelDeleteShort": {
+    "description": "Button in the ready voice models card that deletes the models."
+  },
+  "modelFailedTitle": "Download failed",
+  "@modelFailedTitle": {
+    "description": "Voice sheet download card title after a failure."
+  },
+  "modelKeptLine": "{done} of {total} kept",
+  "@modelKeptLine": {
+    "description": "Progress line of a paused or failed download.",
+    "placeholders": {
+      "done": {
+        "type": "String"
+      },
+      "total": {
+        "type": "String"
+      }
+    }
+  },
+  "modelReconnectingResumesLong": "Connection lost — the download resumes where it stopped.",
+  "@modelReconnectingResumesLong": {
+    "description": "Voice sheet download card line while reconnecting."
+  },
+  "voiceListeningCap": "Stops on its own after {seconds} seconds.",
+  "@voiceListeningCap": {
+    "description": "Muted line under the listening hint stating the recording cap.",
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
   }
 }

@@ -497,8 +497,71 @@ void main() {
       );
       await tester.pump();
       expect(find.text('Reconnecting…'), findsOneWidget);
+      expect(
+        find.text('Connection lost — the download resumes where it stopped.'),
+        findsOneWidget,
+      );
       expect(find.byKey(const Key('voice-download-pause')), findsOneWidget);
       expect(_micLabel(tester), 'Voice model downloading, 42 percent');
+    });
+
+    Future<_Harness> openDownload(WidgetTester tester) async {
+      final harness = _Harness(
+        status: modelStatusOf(ModelStatusKindDto.notDownloaded),
+      );
+      await _openNewRecord(tester, harness);
+      await tester.tap(_mic());
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('voice-offer-download')));
+      await tester.pump();
+      return harness;
+    }
+
+    testWidgets('paused shows what is kept and a Resume button', (
+      tester,
+    ) async {
+      final harness = await openDownload(tester);
+      harness.models.status = modelStatusOf(
+        ModelStatusKindDto.paused,
+        done: 612000000,
+        secondsLeft: 240,
+      );
+      await tester.pump();
+      expect(find.text('Download paused'), findsOneWidget);
+      expect(find.text('612 MB of 1.43 GB kept'), findsOneWidget);
+      expect(find.text('about 4 min left'), findsNothing);
+      expect(find.byKey(const Key('voice-download-pause')), findsNothing);
+      harness.models.calls.clear();
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Resume'));
+      await tester.pump();
+      expect(harness.models.calls, ['start']);
+    });
+
+    testWidgets('failed shows the reason and Retry resumes', (tester) async {
+      final harness = await openDownload(tester);
+      harness.models.status = modelStatusOf(
+        ModelStatusKindDto.failed,
+        done: 612000000,
+        error: const ModelErrorDto(
+          kind: ModelErrorKindDto.network,
+          message: 'network error',
+        ),
+      );
+      await tester.pump();
+      expect(find.text('Download failed'), findsOneWidget);
+      expect(
+        find.text(
+          "Couldn't reach the download server. Check your Wi-Fi, then retry. "
+          'Downloaded data is kept.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('612 MB of 1.43 GB kept'), findsOneWidget);
+      harness.models.calls.clear();
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Retry'));
+      await tester.pump();
+      expect(harness.models.calls, ['start']);
+      expect(harness.models.status.doneBytes, 612000000);
     });
   });
 
@@ -515,6 +578,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 1100));
       expect(find.text('Listening'), findsOneWidget);
       expect(find.byKey(const Key('voice-timer')), findsOneWidget);
+      expect(find.text('Stops on its own after 30 seconds.'), findsOneWidget);
       expect(find.text('0:01'), findsOneWidget);
       expect(
         find.textContaining('Lunch, 12.50, category food, yesterday'),
@@ -962,6 +1026,7 @@ void main() {
         ),
         findsOneWidget,
       );
+      expect(find.text('Se detiene solo tras 30 segundos.'), findsOneWidget);
       await tester.tap(find.byKey(const Key('voice-cancel')));
       await tester.pumpAndSettle();
     });

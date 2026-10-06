@@ -203,6 +203,18 @@ class _VoiceModelsCardState extends State<VoiceModelsCard> {
     await widget.run(models.cancel);
   }
 
+  Future<void> _redownload(ModelStatusDto status) async {
+    if (!await showRedownloadModelsDialog(context, status.totalBytes)) return;
+    await widget.run(models.redownload);
+  }
+
+  Future<void> _delete(ModelStatusDto status) async {
+    if (!await showDeleteModelsDialog(context, modelDeleteBytes(status))) {
+      return;
+    }
+    await widget.run(() async => models.delete());
+  }
+
   Future<void> _deleteSpeech(ModelFileDto file) async {
     final language = file.language ?? 'en';
     if (!await showDeleteSpeechModelDialog(
@@ -612,7 +624,35 @@ class _VoiceModelsCardState extends State<VoiceModelsCard> {
           ]),
         ];
       case ModelStatusKindDto.ready:
-        return const [];
+        return [
+          Row(
+            spacing: 12,
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  key: const Key('settings-redownload'),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(0, Nocturne.touchTarget),
+                  ),
+                  onPressed: () => unawaited(_redownload(status)),
+                  icon: const Icon(FiIcons.refresh, size: 18),
+                  label: Text(context.l10n.modelRedownloadShort),
+                ),
+              ),
+              Expanded(
+                child: TextButton.icon(
+                  key: const Key('settings-delete-model'),
+                  style: TextButton.styleFrom(
+                    minimumSize: const Size(0, Nocturne.touchTarget),
+                  ),
+                  onPressed: () => unawaited(_delete(status)),
+                  icon: const Icon(FiIcons.delete, size: 18),
+                  label: Text(context.l10n.modelDeleteShort),
+                ),
+              ),
+            ],
+          ),
+        ];
     }
   }
 }

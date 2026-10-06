@@ -786,17 +786,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get modelIoLine => 'Storage error. Retry; downloaded data is kept.';
 
   @override
-  String get modelRedownload => 'Re-download models';
-
-  @override
-  String get modelDelete => 'Delete models';
-
-  @override
-  String modelFrees(String size) {
-    return 'frees $size';
-  }
-
-  @override
   String get modelCancelDialogTitle => 'Cancel download?';
 
   @override
@@ -877,9 +866,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get modelPauseDownload => 'Pause download';
-
-  @override
-  String get modelResumeDownload => 'Resume download';
 
   @override
   String get modelHide => 'Hide';
@@ -2950,7 +2936,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String modelDeleteSpeechBody(String size, String language) {
-    return 'Frees $size. Voice fill in $language needs it again.';
+    return 'Frees $size. $language voice input won\'t work until you download it again.';
   }
 
   @override
@@ -3098,4 +3084,33 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get devicesFailureCode => 'Failure code';
+
+  @override
+  String get aboutNetworkLan => 'LAN';
+
+  @override
+  String get aboutNetworkTailnet => 'Tailnet';
+
+  @override
+  String get modelRedownloadShort => 'Re-download';
+
+  @override
+  String get modelDeleteShort => 'Delete';
+
+  @override
+  String get modelFailedTitle => 'Download failed';
+
+  @override
+  String modelKeptLine(String done, String total) {
+    return '$done of $total kept';
+  }
+
+  @override
+  String get modelReconnectingResumesLong =>
+      'Connection lost — the download resumes where it stopped.';
+
+  @override
+  String voiceListeningCap(int seconds) {
+    return 'Stops on its own after $seconds seconds.';
+  }
 }
