@@ -883,6 +883,10 @@ pub enum PairingFailureKindDto {
     /// The commit failed because this device's secure key store is locked.
     /// Recoverable: unlock the keyring and retry, never an expiry.
     SecureStoreLocked,
+    /// The pairing window closed before the devices finished pairing.
+    Expired,
+    /// One of the devices rejected the code.
+    Rejected,
     Other,
 }
 
@@ -1154,6 +1158,8 @@ impl From<app_core::PairingState> for PairingStateDto {
                     app_core::PairingError::SecureStoreLocked => {
                         PairingFailureKindDto::SecureStoreLocked
                     }
+                    app_core::PairingError::Expired => PairingFailureKindDto::Expired,
+                    app_core::PairingError::Rejected => PairingFailureKindDto::Rejected,
                     _ => PairingFailureKindDto::Other,
                 });
             }
@@ -1758,6 +1764,19 @@ mod tests {
         BootstrapDto, BootstrapKindDto, BridgeError, BridgeErrorKind, RecoveryOutcomeDto,
         RecoveryReasonDto,
     };
+
+    #[test]
+    fn expiry_and_rejection_are_typed_failures() {
+        use super::{PairingFailureKindDto, PairingStateDto};
+        let expired = PairingStateDto::from(app_core::PairingState::Failed {
+            error: PairingError::Expired,
+        });
+        assert_eq!(expired.failure, Some(PairingFailureKindDto::Expired));
+        let rejected = PairingStateDto::from(app_core::PairingState::Failed {
+            error: PairingError::Rejected,
+        });
+        assert_eq!(rejected.failure, Some(PairingFailureKindDto::Rejected));
+    }
 
     #[test]
     fn creation_time_comes_from_a_v7_id_only() {

@@ -21,6 +21,7 @@ import 'package:fi/platform_capabilities.dart';
 import 'package:fi/reset_dialog.dart';
 import 'package:fi/settings_page.dart';
 import 'package:fi/status_time.dart';
+import 'package:fi/theme/confirm_dialog.dart';
 import 'package:fi/theme/inputs.dart';
 import 'package:fi/theme/nocturne.dart';
 import 'package:fi/theme/nocturne_widgets.dart';
@@ -916,12 +917,17 @@ class _SidebarStatus extends StatelessWidget {
                   style: const TextStyle(fontSize: 12, height: 1.35),
                 ),
                 Text(
-                  context.l10n.sidebarPairedSummary(
-                    trusted.length,
-                    reachable == 0
-                        ? context.l10n.sidebarNoneNearby
-                        : context.l10n.sidebarConnectedCount(reachable),
-                  ),
+                  key: const Key('sidebar-status-context'),
+                  devices.syncStatus == SyncStatusDto.paused
+                      ? context.l10n.sidebarSyncOff
+                      : _pairingOpen(devices.pairing.kind)
+                      ? context.l10n.sidebarPairingOpen
+                      : context.l10n.sidebarPairedSummary(
+                          trusted.length,
+                          reachable == 0
+                              ? context.l10n.sidebarNoneNearby
+                              : context.l10n.sidebarConnectedCount(reachable),
+                        ),
                   style: TextStyle(
                     fontSize: 12,
                     height: 1.35,
@@ -936,6 +942,17 @@ class _SidebarStatus extends StatelessWidget {
     );
   }
 }
+
+/// True while pairing mode runs: from discoverable until it is trusted, failed or stopped.
+bool _pairingOpen(PairingKindDto kind) => switch (kind) {
+  PairingKindDto.discoverable ||
+  PairingKindDto.connecting ||
+  PairingKindDto.awaitingConfirmation ||
+  PairingKindDto.committing => true,
+  PairingKindDto.idle ||
+  PairingKindDto.trusted ||
+  PairingKindDto.failed => false,
+};
 
 /// The aggregate status as a dot: lit while the device is reaching peers, dim when offline.
 class _StatusDot extends StatelessWidget {
@@ -1100,7 +1117,7 @@ class _DevicesPageState extends State<DevicesPage> {
                       style: TextStyle(fontSize: 13, color: Nocturne.muted(.6)),
                     ),
                   ),
-                _SyncChip(status: controller.syncStatus),
+                _SyncChip(status: controller.syncStatus, phone: phone),
                 const SizedBox(height: 22),
                 if (controller.failure case final failure?)
                   _ErrorBanner(bridgeMessage(context.l10n, failure)),
@@ -1118,8 +1135,6 @@ class _DevicesPageState extends State<DevicesPage> {
                       ),
                     ],
                   ),
-                _ConnectionSwitches(controller: controller),
-                const SizedBox(height: 26),
                 if (_pairedBanner) ...[
                   _PairedBanner(
                     name: controller.peerName ?? l.devicesOtherDevice,
@@ -1219,6 +1234,8 @@ class _DevicesPageState extends State<DevicesPage> {
                       : () => _resetDataset(context),
                   showReset: onResetDataset != null,
                 ),
+                const SizedBox(height: 26),
+                _ConnectionSwitches(controller: controller),
               ],
             ),
           ),
@@ -1237,81 +1254,97 @@ class _DevicesPageState extends State<DevicesPage> {
     required bool phone,
   }) {
     final open = _openDetails.contains(device.deviceId);
+    final summary = Row(
+      children: [
+        IconTile(
+          device.revoked ? FiIcons.blocked : FiIcons.devices,
+          fill: Nocturne.neutral800,
+          color: Nocturne.text,
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // The state tag wraps under the name rather than being cut short.
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(
+                    device.friendlyName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  DeviceStateTag(device: device),
+                ],
+              ),
+              const SizedBox(height: 2),
+              Text(
+                _timesLine(context.l10n, device, now),
+                key: Key('device-times-${device.deviceId}'),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontFeatures: Nocturne.tabular,
+                  color: Nocturne.muted(.55),
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (phone)
+          Icon(
+            FiIcons.chevronRight,
+            key: Key('device-chevron-${device.deviceId}'),
+            size: 18,
+            color: Nocturne.muted(.5),
+          )
+        else ...[
+          TextButton.icon(
+            key: Key('device-details-${device.deviceId}'),
+            onPressed: () => _toggleDetails(device),
+            icon: Icon(open ? FiIcons.collapse : FiIcons.expand, size: 16),
+            label: Text(context.l10n.commonDetails),
+          ),
+          _deviceMenu(context, device),
+        ],
+      ],
+    );
     return Padding(
       key: Key('device-${device.deviceId}'),
-      padding: const EdgeInsets.fromLTRB(16, 12, 6, 12),
+      padding: phone
+          ? const EdgeInsets.symmetric(vertical: 4)
+          : const EdgeInsets.fromLTRB(16, 12, 6, 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          ConstrainedBox(
-            constraints: BoxConstraints(minHeight: phone ? 40 : 0),
-            child: Row(
-              children: [
-                IconTile(
-                  device.revoked ? FiIcons.blocked : FiIcons.devices,
-                  fill: Nocturne.neutral800,
-                  color: Nocturne.text,
+          if (phone)
+            // On a phone the whole row is the Details action (mock devices).
+            InkWell(
+              key: Key('device-details-${device.deviceId}'),
+              onTap: () => unawaited(_pushDetails(context, device)),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 64),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 14, 8),
+                  child: summary,
                 ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // The state tag wraps under the name rather than being cut short.
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 4,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          Text(
-                            device.friendlyName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          DeviceStateTag(device: device),
-                        ],
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        _timesLine(context.l10n, device, now),
-                        key: Key('device-times-${device.deviceId}'),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontFeatures: Nocturne.tabular,
-                          color: Nocturne.muted(.55),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                TextButton.icon(
-                  key: Key('device-details-${device.deviceId}'),
-                  onPressed: () => phone
-                      ? unawaited(_pushDetails(context, device))
-                      : _toggleDetails(device),
-                  icon: Icon(
-                    phone
-                        ? FiIcons.chevronRight
-                        : open
-                        ? FiIcons.collapse
-                        : FiIcons.expand,
-                    size: 16,
-                  ),
-                  label: Text(context.l10n.commonDetails),
-                ),
-                _deviceMenu(context, device),
-              ],
-            ),
-          ),
+              ),
+            )
+          else
+            summary,
           if (peerProblemOf(device) case final problem?)
             Padding(
-              padding: const EdgeInsets.fromLTRB(50, 10, 10, 0),
+              padding: phone
+                  ? const EdgeInsets.fromLTRB(16, 0, 14, 10)
+                  : const EdgeInsets.fromLTRB(50, 10, 10, 0),
               child: PeerGuidanceBox(
                 key: Key('device-problem-${device.deviceId}'),
                 deviceId: device.deviceId,
@@ -1431,7 +1464,6 @@ class _DevicesPageState extends State<DevicesPage> {
         .length;
     final confirmed = await ResetDatasetDialog.show(
       context,
-      lead: context.l10n.devicesResetLead,
       trustedDeviceCount: trusted,
     );
     if (confirmed) await action();
@@ -1447,12 +1479,24 @@ class _DevicesPageState extends State<DevicesPage> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text(l.devicesRenameTitle),
-        content: FiTextInput(
-          key: const Key('device-name'),
-          initialValue: name,
-          onChanged: (value) => name = value,
-          autofocus: true,
-          label: l.devicesFriendlyName,
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              l.devicesRenameSubtitle,
+              style: TextStyle(fontSize: 13, color: Nocturne.muted(.6)),
+            ),
+            const SizedBox(height: 14),
+            FiTextInput(
+              key: const Key('device-name'),
+              initialValue: name,
+              onChanged: (value) => name = value,
+              autofocus: true,
+              label: l.devicesNameLabel,
+              required: true,
+            ),
+          ],
         ),
         actions: [
           TextButton(
@@ -1476,24 +1520,17 @@ class _DevicesPageState extends State<DevicesPage> {
     TrustedDeviceDto device,
   ) async {
     final l = context.l10n;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(l.devicesRevokeTitle(device.friendlyName)),
-        content: Text(l.devicesRevokeBody),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: Text(l.commonCancel),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: Text(l.devicesRevoke),
-          ),
-        ],
-      ),
+    final confirmed = await showConfirmDialog(
+      context,
+      title: l.devicesRevokeTitle(device.friendlyName),
+      body: l.devicesRevokeBody,
+      destructive: l.devicesRevoke,
+      safe: l.devicesKeepDevice,
+      dialogKey: const Key('revoke-dialog'),
+      destructiveKey: const Key('revoke-confirm'),
+      safeKey: const Key('revoke-keep'),
     );
-    if (confirmed == true) await controller.revoke(device);
+    if (confirmed) await controller.revoke(device);
   }
 
   Future<void> _deleteDevice(
@@ -1501,29 +1538,22 @@ class _DevicesPageState extends State<DevicesPage> {
     TrustedDeviceDto device,
   ) async {
     final l = context.l10n;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(l.devicesDeleteTitle(device.friendlyName)),
-        content: Text(l.devicesDeleteBody),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: Text(l.commonCancel),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: Text(l.commonDelete),
-          ),
-        ],
-      ),
+    final confirmed = await showConfirmDialog(
+      context,
+      title: l.devicesDeleteTitle,
+      body: l.devicesDeleteBody(device.friendlyName),
+      destructive: l.commonDelete,
+      safe: l.devicesKeep,
+      dialogKey: const Key('delete-dialog'),
+      destructiveKey: const Key('delete-confirm'),
+      safeKey: const Key('delete-keep'),
     );
-    if (confirmed == true) await controller.delete(device);
+    if (confirmed) await controller.delete(device);
   }
 }
 
 /// The two installation-level networking switches. Each shows the value Rust
-/// stored; a failed toggle leaves it unchanged and the error banner explains.
+/// stored; a failed toggle leaves it unchanged with an error line under it.
 class _ConnectionSwitches extends StatelessWidget {
   const _ConnectionSwitches({required this.controller});
   final DevicesController controller;
@@ -1551,6 +1581,8 @@ class _ConnectionSwitches extends StatelessWidget {
                 title: _SwitchTitle(l.devicesDiscoverable, HelpId.discoverable),
                 subtitle: Text(l.devicesDiscoverableSubtitle),
               ),
+              if (controller.discoverableError)
+                const _SwitchError(Key('pref-discoverable-error')),
               const FadedRule(indent: 16),
               FiSwitchTile(
                 key: const Key('pref-sync'),
@@ -1560,12 +1592,36 @@ class _ConnectionSwitches extends StatelessWidget {
                 title: _SwitchTitle(l.devicesSyncEnabled, HelpId.syncEnabled),
                 subtitle: Text(l.devicesSyncEnabledSubtitle),
               ),
+              if (controller.syncError)
+                const _SwitchError(Key('pref-sync-error')),
             ],
           ),
         ),
       ],
     );
   }
+}
+
+/// "Couldn't change this. Try again." under the switch whose toggle failed.
+class _SwitchError extends StatelessWidget {
+  const _SwitchError(Key key) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(60, 0, 16, 12),
+    child: Row(
+      children: [
+        const Icon(FiIcons.error, size: 14, color: Nocturne.error),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            context.l10n.devicesSwitchError,
+            style: const TextStyle(fontSize: 12, color: Nocturne.error),
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 class _SwitchTitle extends StatelessWidget {
@@ -1583,8 +1639,9 @@ class _SwitchTitle extends StatelessWidget {
 }
 
 class _SyncChip extends StatelessWidget {
-  const _SyncChip({required this.status});
+  const _SyncChip({required this.status, required this.phone});
   final SyncStatusDto status;
+  final bool phone;
   @override
   Widget build(BuildContext context) => Row(
     key: const Key('sync-status'),
@@ -1593,10 +1650,12 @@ class _SyncChip extends StatelessWidget {
       Icon(_statusIcon(status), size: 14, color: Nocturne.accent),
       const SizedBox(width: 6),
       Flexible(
-        child: Text(
-          _statusText(context.l10n, status),
-          style: TextStyle(fontSize: 12, color: Nocturne.muted(.6)),
-        ),
+        child: Text(switch (status) {
+          SyncStatusDto.paused when phone =>
+            context.l10n.devicesChipPausedShort,
+          SyncStatusDto.paused => context.l10n.devicesChipPaused,
+          _ => _statusText(context.l10n, status),
+        }, style: TextStyle(fontSize: 12, color: Nocturne.muted(.6))),
       ),
     ],
   );
@@ -1723,7 +1782,7 @@ class _PairedBanner extends StatelessWidget {
 /// The "This device" section (mock devices): pairing name, the DeviceId grouped (shortened on a
 /// phone) with Copy ID, and the reset entry. Without an identity it says networking is not set
 /// up.
-class _LocalIdentity extends StatelessWidget {
+class _LocalIdentity extends StatefulWidget {
   const _LocalIdentity({
     required this.device,
     required this.phone,
@@ -1736,8 +1795,36 @@ class _LocalIdentity extends StatelessWidget {
   final VoidCallback? onReset;
 
   @override
+  State<_LocalIdentity> createState() => _LocalIdentityState();
+}
+
+class _LocalIdentityState extends State<_LocalIdentity> {
+  /// "ID copied" stands in for Copy ID until this fires.
+  Timer? _copied;
+
+  @override
+  void dispose() {
+    _copied?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _copy(String id) async {
+    await Clipboard.setData(ClipboardData(text: id));
+    if (!mounted) return;
+    _copied?.cancel();
+    setState(
+      () => _copied = Timer(const Duration(seconds: 2), () {
+        if (mounted) setState(() => _copied = null);
+      }),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final device = this.device;
+    final device = widget.device;
+    final phone = widget.phone;
+    final showReset = widget.showReset;
+    final onReset = widget.onReset;
     return NocturneCard(
       padding: EdgeInsets.zero,
       child: Column(
@@ -1746,10 +1833,39 @@ class _LocalIdentity extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
             child: device == null
-                ? Text(
-                    context.l10n.devicesNetworkingMissing,
+                ? Row(
                     key: const Key('local-device-missing'),
-                    style: TextStyle(fontSize: 13, color: Nocturne.muted(.6)),
+                    children: [
+                      const IconTile(
+                        FiIcons.offline,
+                        size: 32,
+                        fill: Nocturne.neutral800,
+                        color: Nocturne.text,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              context.l10n.devicesNetworkingMissing,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              context.l10n.devicesNetworkingMissingBody,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Nocturne.muted(.6),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   )
                 : Row(
                     children: [
@@ -1765,6 +1881,14 @@ class _LocalIdentity extends StatelessWidget {
                               style: const TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            Text(
+                              context.l10n.devicesLocalNameHint,
+                              key: const Key('local-device-name-hint'),
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Nocturne.muted(.55),
                               ),
                             ),
                             const SizedBox(height: 2),
@@ -1784,18 +1908,36 @@ class _LocalIdentity extends StatelessWidget {
                           ],
                         ),
                       ),
-                      TextButton.icon(
-                        key: const Key('copy-local-id'),
-                        onPressed: () => unawaited(
-                          copyWithConfirmation(
-                            context,
-                            device.deviceId,
-                            context.l10n.devicesIdCopied,
+                      if (_copied != null)
+                        Padding(
+                          key: const Key('local-id-copied'),
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                FiIcons.check,
+                                size: 16,
+                                color: Nocturne.accent,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                context.l10n.devicesIdCopied,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: Nocturne.accent200,
+                                ),
+                              ),
+                            ],
                           ),
+                        )
+                      else
+                        TextButton.icon(
+                          key: const Key('copy-local-id'),
+                          onPressed: () => unawaited(_copy(device.deviceId)),
+                          icon: const Icon(FiIcons.copy, size: 16),
+                          label: Text(context.l10n.devicesCopyId),
                         ),
-                        icon: const Icon(FiIcons.copy, size: 16),
-                        label: Text(context.l10n.devicesCopyId),
-                      ),
                     ],
                   ),
           ),

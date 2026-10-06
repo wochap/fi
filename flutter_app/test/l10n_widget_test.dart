@@ -179,6 +179,35 @@ void main() {
       _expectFits(tester);
     });
 
+    testWidgets('Spanish pairing card fits at $width', (tester) async {
+      final bridge = _bridge();
+      await _pump(tester, size, bridge: bridge);
+      await _open(tester, size, 'devices');
+      bridge.pairingController.add(
+        PairingStateDto(
+          kind: PairingKindDto.discoverable,
+          deadlineMs: DateTime.now().millisecondsSinceEpoch + 120000,
+          localConfirmed: false,
+          remoteConfirmed: false,
+          alreadyPaired: false,
+        ),
+      );
+      bridge.candidateController.add([
+        PairingCandidateDto(
+          instanceId: List.filled(16, '01').join(),
+          endpoint: '192.168.0.165:47380',
+          expiresAtMs: DateTime.now().millisecondsSinceEpoch + 10000,
+          alreadyPaired: false,
+        ),
+      ]);
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('El emparejamiento está abierto'), findsOneWidget);
+      expect(find.text('192.168.0.165:47380'), findsOneWidget);
+      _expectFits(tester);
+      await tester.pumpWidget(const SizedBox());
+    });
+
     testWidgets('Spanish pairing confirmation fits at $width', (tester) async {
       final bridge = _bridge();
       await _pump(tester, size, bridge: bridge);
@@ -196,6 +225,8 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('pairing-sas')), findsOneWidget);
+      expect(find.text('Confirmar el código'), findsOneWidget);
+      expect(find.text('Rechazar'), findsOneWidget);
       _expectFits(tester);
     });
   }

@@ -1143,6 +1143,12 @@ enum PairingFailureKindDto {
   /// The commit failed because this device's secure key store is locked.
   /// Recoverable: unlock the keyring and retry, never an expiry.
   secureStoreLocked,
+
+  /// The pairing window closed before the devices finished pairing.
+  expired,
+
+  /// One of the devices rejected the code.
+  rejected,
   other,
 }
 

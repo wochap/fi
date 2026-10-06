@@ -119,7 +119,7 @@ void main() {
     expect(find.textContaining('must already have a dataset'), findsOneWidget);
     await tester.tap(find.byKey(const Key('start-pairing')));
     await tester.pump();
-    expect(find.textContaining('Searching for nearby devices'), findsOneWidget);
+    expect(find.text('Pairing is open'), findsOneWidget);
     expect(bridge.bootstrap.kind, BootstrapKindDto.needsDecision);
     expect(find.text('Collections'), findsNothing);
 
@@ -133,7 +133,7 @@ void main() {
     bridge.candidateController.add([candidate]);
     await tester.pump();
     expect(find.byKey(const Key('single-initiator-hint')), findsOneWidget);
-    expect(find.textContaining('one device only'), findsWidgets);
+    expect(find.text('192.0.2.7:4400'), findsOneWidget);
     // Candidates are anonymous: the list shows the endpoint, not an id.
     expect(find.byKey(const Key('pairing-peer-id')), findsNothing);
     expect(find.textContaining(peerId), findsNothing);
@@ -147,14 +147,15 @@ void main() {
       ),
     );
     await tester.pump();
-    expect(find.text('000042'), findsOneWidget);
+    expect(findSas('000042'), findsOneWidget);
     expect(
       tester
           .widget<SelectableText>(find.byKey(const Key('pairing-peer-id')))
-          .textSpan
-          ?.toPlainText(),
-      'Other device: $peerId',
+          .data
+          ?.replaceAll(' ', ''),
+      peerId,
     );
+    expect(find.text('Device ID of the other device'), findsOneWidget);
   });
 
   testWidgets('pairing blocks create with a reason until stopped', (
@@ -258,7 +259,7 @@ void main() {
         ),
       );
       await tester.pump();
-      expect(find.text('000042'), findsOneWidget);
+      expect(findSas('000042'), findsOneWidget);
 
       // Advance bootstrap while `confirm` is still awaiting the bridge.
       bridge.confirmDelay = () async {
@@ -270,8 +271,8 @@ void main() {
           const BootstrapDto(kind: BootstrapKindDto.ready, rootId: 'root'),
         );
       };
-      await tester.ensureVisible(find.text('Codes match'));
-      await tester.tap(find.text('Codes match'));
+      await tester.ensureVisible(find.byKey(const Key('pairing-confirm')));
+      await tester.tap(find.byKey(const Key('pairing-confirm')));
       await pumpUntilFound(tester, find.byKey(const Key('joining-surface')));
       await pumpUntilFound(tester, find.text('Collections'));
       await tester.pumpAndSettle();

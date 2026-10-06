@@ -48,8 +48,10 @@ class PairingCard extends StatelessWidget {
               : Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _heading(context, compact),
-                    const SizedBox(height: 12),
+                    if (!_ownHeading) ...[
+                      _heading(context, compact),
+                      const SizedBox(height: 12),
+                    ],
                     ..._content(context),
                   ],
                 ),
@@ -138,108 +140,40 @@ class PairingCard extends StatelessWidget {
           ],
         );
 
+  /// The states that draw their own heading rather than "Pair a device".
+  bool get _ownHeading => switch (controller.pairing.kind) {
+    PairingKindDto.discoverable ||
+    PairingKindDto.awaitingConfirmation ||
+    PairingKindDto.committing => true,
+    PairingKindDto.failed => switch (controller.pairing.failure) {
+      PairingFailureKindDto.secureStoreLocked ||
+      PairingFailureKindDto.expired ||
+      PairingFailureKindDto.rejected => true,
+      _ => false,
+    },
+    _ => false,
+  };
+
   List<Widget> _content(BuildContext context) =>
       switch (controller.pairing.kind) {
         // Rendered by [_idle].
         PairingKindDto.idle => const [],
-        PairingKindDto.discoverable => [
-          Text(context.l10n.pairingSearching(controller.remainingSeconds)),
-          const LinearProgressIndicator(),
-          const SizedBox(height: 8),
-          if (controller.allCandidatesAlreadyPaired)
-            Text(
-              context.l10n.pairingAlreadyPaired,
-              key: const Key('candidates-already-paired'),
-            )
-          else if (controller.candidates.isEmpty)
-            Text(context.l10n.pairingNoCandidates)
-          else ...[
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    context.l10n.pairingSingleInitiator,
-                    key: const Key('single-initiator-hint'),
-                  ),
-                ),
-                const HelpButton(HelpId.pairingSingleInitiator),
-              ],
-            ),
-            ...controller.candidates.map(
-              (candidate) => ListTile(
-                key: Key('candidate-${candidate.instanceId}'),
-                leading: const Icon(FiIcons.phone),
-                title: Text(candidate.endpoint),
-                subtitle: Text(context.l10n.pairingNearbyDevice),
-                trailing: Text(context.l10n.pairingConnect),
-                onTap: controller.busy
-                    ? null
-                    : () => controller.selectCandidate(candidate),
-              ),
-            ),
-          ],
-          OutlinedButton(
-            key: const Key('stop-pairing'),
-            onPressed: controller.busy ? null : controller.stopPairing,
-            child: Text(context.l10n.pairingStop),
-          ),
-        ],
+        PairingKindDto.discoverable => _discoverable(context),
         PairingKindDto.connecting => [
           const LinearProgressIndicator(),
           const SizedBox(height: 8),
           Text(context.l10n.pairingConnecting),
         ],
-        PairingKindDto.awaitingConfirmation => [
-          Text(context.l10n.pairingConfirmCode),
-          const SizedBox(height: 8),
-          SelectableText(
-            controller.pairing.sas?.padLeft(6, '0') ?? '------',
-            key: const Key('pairing-sas'),
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontFamily: Nocturne.monoFamily,
-              fontSize: 36,
-              letterSpacing: 6,
-              color: Nocturne.accent200,
-            ),
-          ),
-          if (controller.pairing.peerDeviceId case final peerId?) ...[
-            const SizedBox(height: 8),
-            SelectableText.rich(
-              TextSpan(
-                children: [
-                  TextSpan(text: context.l10n.pairingOtherDevice),
-                  TextSpan(
-                    text: peerId,
-                    style: const TextStyle(fontFamily: Nocturne.monoFamily),
-                  ),
-                ],
-              ),
-              key: const Key('pairing-peer-id'),
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 12, color: Nocturne.muted(.6)),
-            ),
-            Text(
-              context.l10n.pairingReferenceOnly,
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 11, color: Nocturne.muted(.45)),
-            ),
-          ],
-          const SizedBox(height: 12),
-          FilledButton(
-            onPressed: controller.busy ? null : controller.confirm,
-            child: Text(context.l10n.pairingCodesMatch),
-          ),
-          TextButton(
-            onPressed: controller.busy ? null : controller.reject,
-            child: Text(context.l10n.pairingCodesDiffer),
-          ),
-        ],
-        PairingKindDto.committing => [
-          const LinearProgressIndicator(),
-          const SizedBox(height: 8),
-          Text(context.l10n.pairingCommitting),
-        ],
+        PairingKindDto.awaitingConfirmation => _codeConfirmation(
+          context,
+          committing: false,
+          locked: false,
+        ),
+        PairingKindDto.committing => _codeConfirmation(
+          context,
+          committing: true,
+          locked: false,
+        ),
         PairingKindDto.trusted => [
           const Icon(FiIcons.verified, color: Nocturne.accent, size: 40),
           Text(context.l10n.pairingSuccess, textAlign: TextAlign.center),
@@ -250,6 +184,292 @@ class PairingCard extends StatelessWidget {
         ],
         PairingKindDto.failed => _failure(context),
       };
+
+  /// `m:ss` for [seconds].
+  static String _clock(int seconds) =>
+      '${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')}';
+
+  /// The pairing window the app requests in [DevicesController.beginPairing].
+  static const _windowSeconds = 120;
+
+  /// Pairing is open (mock devices-pairing): countdown ring, time left, Stop, and the nearby
+  /// candidates by endpoint.
+  List<Widget> _discoverable(BuildContext context) {
+    final l = context.l10n;
+    final remaining = controller.remainingSeconds;
+    final candidates = controller.candidates;
+    return [
+      Row(
+        children: [
+          SizedBox.square(
+            dimension: 36,
+            child: CircularProgressIndicator(
+              key: const Key('pairing-countdown-ring'),
+              value: (remaining / _windowSeconds).clamp(0.0, 1.0),
+              strokeWidth: 3,
+              color: Nocturne.accent,
+              backgroundColor: Nocturne.neutral800,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(l.pairingOpen, style: _title),
+                const SizedBox(height: 3),
+                Text(
+                  l.pairingTimeLeft(_clock(remaining)),
+                  key: const Key('pairing-time-left'),
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontFeatures: Nocturne.tabular,
+                    color: Nocturne.muted(.6),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          OutlinedButton(
+            key: const Key('stop-pairing'),
+            onPressed: controller.busy ? null : controller.stopPairing,
+            child: Text(l.pairingStop),
+          ),
+        ],
+      ),
+      const SizedBox(height: 16),
+      Row(
+        children: [
+          Expanded(
+            child: Text(
+              l.pairingNearby(candidates.length),
+              key: const Key('pairing-nearby-heading'),
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+            ),
+          ),
+          const HelpButton(
+            HelpId.pairingSingleInitiator,
+            key: Key('single-initiator-hint'),
+          ),
+        ],
+      ),
+      const SizedBox(height: 4),
+      for (final candidate in candidates)
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Row(
+            children: [
+              Icon(FiIcons.devices, size: 16, color: Nocturne.muted(.6)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  candidate.endpoint,
+                  key: Key('candidate-endpoint-${candidate.instanceId}'),
+                  style: const TextStyle(
+                    fontFamily: Nocturne.monoFamily,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+              TextButton(
+                key: Key('candidate-${candidate.instanceId}'),
+                onPressed: controller.busy
+                    ? null
+                    : () => controller.selectCandidate(candidate),
+                child: Text(l.pairingConnect),
+              ),
+            ],
+          ),
+        ),
+      if (controller.allCandidatesAlreadyPaired)
+        Text(
+          l.pairingAlreadyPaired,
+          key: const Key('candidates-already-paired'),
+        )
+      else ...[
+        if (candidates.isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Text(l.pairingNoCandidates),
+          ),
+        Text(
+          l.pairingHiddenPaired,
+          key: const Key('candidates-hidden-note'),
+          style: TextStyle(fontSize: 12, color: Nocturne.muted(.5)),
+        ),
+      ],
+    ];
+  }
+
+  /// A DeviceId in groups of eight hex characters, none elided.
+  static String _idGroups(String id) => [
+    for (var start = 0; start < id.length; start += 8)
+      id.substring(start, start + 8 > id.length ? id.length : start + 8),
+  ].join(' ');
+
+  /// Confirm the code (mock devices-code-confirm). While [committing] the title reads "Saving
+  /// trust…" and both actions wait; when [locked] the keyring line replaces the instruction and
+  /// Retry replaces Confirm. The code and id stay from the session after Rust drops them.
+  List<Widget> _codeConfirmation(
+    BuildContext context, {
+    required bool committing,
+    required bool locked,
+  }) {
+    final l = context.l10n;
+    final sas = (controller.pairing.sas ?? controller.sessionSas)?.padLeft(
+      6,
+      '0',
+    );
+    final peerId = controller.pairing.peerDeviceId ?? controller.sessionPeerId;
+    final name = controller.peerName;
+    final waiting = committing || controller.busy;
+    return [
+      Row(
+        children: [
+          if (committing) ...[
+            const SizedBox.square(
+              dimension: 18,
+              child: CircularProgressIndicator(
+                key: Key('pairing-saving-ring'),
+                strokeWidth: 2,
+              ),
+            ),
+            const SizedBox(width: 10),
+          ],
+          Expanded(
+            child: Text(
+              committing ? l.pairingSavingTrust : l.pairingConfirmTitle,
+              key: const Key('pairing-confirm-title'),
+              style: _title,
+            ),
+          ),
+        ],
+      ),
+      if (name != null) ...[
+        const SizedBox(height: 2),
+        Text(
+          l.pairingWith(name),
+          style: TextStyle(fontSize: 12, color: Nocturne.muted(.6)),
+        ),
+      ],
+      const SizedBox(height: 8),
+      Text(
+        locked ? l.pairingKeyringLine : l.pairingConfirmInstruction,
+        key: Key(
+          locked ? 'pairing-secure-store-locked' : 'pairing-instruction',
+        ),
+      ),
+      if (sas != null) ...[
+        const SizedBox(height: 14),
+        Semantics(
+          label: sas,
+          child: Row(
+            key: const Key('pairing-sas'),
+            mainAxisAlignment: MainAxisAlignment.center,
+            spacing: 6,
+            children: [
+              for (final (index, digit) in sas.split('').indexed)
+                Container(
+                  key: Key('pairing-sas-digit-$index'),
+                  width: 38,
+                  height: 48,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: Nocturne.bg,
+                    borderRadius: BorderRadius.circular(Nocturne.radius),
+                    border: Border.all(color: Nocturne.accent700),
+                  ),
+                  child: Text(
+                    digit,
+                    style: const TextStyle(
+                      fontFamily: Nocturne.monoFamily,
+                      fontSize: 24,
+                      color: Nocturne.accent200,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+      if (peerId != null) ...[
+        const SizedBox(height: 14),
+        Text(
+          l.pairingPeerIdOf(name ?? l.devicesOtherDevice),
+          key: const Key('pairing-peer-id-label'),
+          style: TextStyle(fontSize: 12, color: Nocturne.muted(.6)),
+        ),
+        const SizedBox(height: 4),
+        SelectableText(
+          _idGroups(peerId),
+          key: const Key('pairing-peer-id'),
+          style: const TextStyle(fontFamily: Nocturne.monoFamily, fontSize: 12),
+        ),
+      ],
+      const SizedBox(height: 16),
+      Row(
+        children: [
+          Expanded(
+            child: OutlinedButton(
+              key: const Key('pairing-reject'),
+              onPressed: waiting
+                  ? null
+                  : locked
+                  ? controller.stopPairing
+                  : controller.reject,
+              child: Text(l.pairingReject),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: locked
+                ? FilledButton.icon(
+                    key: const Key('pairing-retry-after-unlock'),
+                    onPressed: waiting ? null : controller.retryAfterUnlock,
+                    icon: const Icon(FiIcons.refresh),
+                    label: Text(l.commonRetry),
+                  )
+                : FilledButton(
+                    key: const Key('pairing-confirm'),
+                    onPressed: waiting ? null : controller.confirm,
+                    child: Text(l.pairingConfirm),
+                  ),
+          ),
+        ],
+      ),
+    ];
+  }
+
+  /// "Pairing expired" / "Pairing rejected" with "Start pairing".
+  List<Widget> _ended(
+    BuildContext context, {
+    required Key key,
+    required IconData icon,
+    required String title,
+    required String body,
+  }) => [
+    Row(
+      key: key,
+      children: [
+        Icon(icon, size: 22, color: Nocturne.muted(.7)),
+        const SizedBox(width: 10),
+        Expanded(child: Text(title, style: _title)),
+      ],
+    ),
+    const SizedBox(height: 6),
+    Text(body),
+    const SizedBox(height: 14),
+    Align(
+      alignment: Alignment.centerLeft,
+      child: FilledButton.icon(
+        key: const Key('pairing-start-again'),
+        onPressed: controller.busy ? null : controller.beginPairing,
+        icon: const Icon(FiIcons.link),
+        label: Text(context.l10n.pairingStart),
+      ),
+    ),
+  ];
 
   List<Widget> _failure(BuildContext context) =>
       switch (controller.pairing.failure) {
@@ -284,20 +504,25 @@ class PairingCard extends StatelessWidget {
             child: Text(context.l10n.pairingDifferentDevice),
           ),
         ],
-        PairingFailureKindDto.secureStoreLocked => [
-          const Icon(FiIcons.locked, size: 40),
-          Text(
-            context.l10n.pairingKeyringLocked,
-            key: const Key('pairing-secure-store-locked'),
-            textAlign: TextAlign.center,
-          ),
-          FilledButton.icon(
-            key: const Key('pairing-retry-after-unlock'),
-            onPressed: controller.busy ? null : controller.retryAfterUnlock,
-            icon: const Icon(FiIcons.refresh),
-            label: Text(context.l10n.commonRetry),
-          ),
-        ],
+        PairingFailureKindDto.secureStoreLocked => _codeConfirmation(
+          context,
+          committing: false,
+          locked: true,
+        ),
+        PairingFailureKindDto.expired => _ended(
+          context,
+          key: const Key('pairing-expired'),
+          icon: FiIcons.duration,
+          title: context.l10n.pairingExpiredTitle,
+          body: context.l10n.pairingExpiredBody,
+        ),
+        PairingFailureKindDto.rejected => _ended(
+          context,
+          key: const Key('pairing-rejected'),
+          icon: FiIcons.blocked,
+          title: context.l10n.pairingRejectedTitle,
+          body: context.l10n.pairingRejectedBody,
+        ),
         PairingFailureKindDto.other || null => [
           const Icon(FiIcons.error, color: Nocturne.error, size: 40),
           Text(context.l10n.pairingDidNotComplete, textAlign: TextAlign.center),

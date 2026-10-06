@@ -46,14 +46,14 @@ void main() {
   });
 
   test('twenty-four hours or older reads a short local date', () {
-    expect(ago(const Duration(hours: 24)), 'Wed, Sep 23 13:00');
+    expect(ago(const Duration(hours: 24)), 'Wed 23 Sep 13:00');
     expect(
       formatStatusTime(
         en,
         DateTime(2026, 9, 22, 13, 0).millisecondsSinceEpoch,
         now: now,
       ),
-      'Tue, Sep 22 13:00',
+      'Tue 22 Sep 13:00',
     );
   });
 
@@ -64,7 +64,7 @@ void main() {
         DateTime(2025, 12, 31, 23, 5).millisecondsSinceEpoch,
         now: DateTime(2026, 1, 2, 9, 0),
       ),
-      'Wed, Dec 31, 2025 23:05',
+      'Wed 31 Dec 2025 23:05',
     );
   });
 
@@ -79,6 +79,13 @@ void main() {
     expect(ago(Duration.zero), 'justo ahora');
     expect(ago(const Duration(minutes: 5)), 'hace 5 min');
     expect(ago(const Duration(hours: 3)), 'hace 3 h');
-    expect(ago(const Duration(hours: 24)), contains('sept'));
+    expect(
+      formatStatusTime(
+        es,
+        DateTime(2026, 9, 22, 13, 0).millisecondsSinceEpoch,
+        now: now,
+      ),
+      'mar 22 sept 13:00',
+    );
   });
 }

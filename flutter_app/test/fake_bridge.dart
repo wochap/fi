@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:fi/bridge/collection_bridge.dart';
 import 'package:fi/file_dialogs.dart';
 import 'package:fi/src/rust/api/models.dart';
+import 'package:flutter/widgets.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 final class FakeCollectionBridge implements CollectionBridge {
   BootstrapDto bootstrap = const BootstrapDto(
@@ -1562,3 +1564,12 @@ final class FakeFileDialogs implements FileDialogs {
     return name;
   }
 }
+
+/// The pairing card's code boxes reading [code].
+Finder findSas(String code) => find.byWidgetPredicate(
+  (widget) =>
+      widget is Semantics &&
+      widget.properties.label == code &&
+      widget.child is Row &&
+      (widget.child! as Row).key == const Key('pairing-sas'),
+);

@@ -103,7 +103,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('reset-dataset-dialog')), findsOneWidget);
       expect(bridge.pairingCalls, isNot(contains('resetDataset')));
-      await tester.tap(find.text('Cancel'));
+      await tester.tap(find.text('Keep data'));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('recovery-no-peer')), findsOneWidget);
 

@@ -1254,14 +1254,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get devicesLogCopied => 'Registro copiado';
 
   @override
-  String get devicesResetLead =>
-      'Estás a punto de abandonar el conjunto de datos de este dispositivo y volver al inicio.';
-
-  @override
   String get devicesRenameTitle => 'Renombrar dispositivo';
-
-  @override
-  String get devicesFriendlyName => 'Nombre visible';
 
   @override
   String devicesRevokeTitle(String name) {
@@ -1270,19 +1263,18 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get devicesRevokeBody =>
-      'Este dispositivo se desconectará y dejará de ser de confianza. Su registro se conserva como revocado.';
+      'Deja de sincronizar con este dispositivo de inmediato. Queda en la lista como revocado y puedes emparejarlo de nuevo más tarde.';
 
   @override
   String get devicesRevoke => 'Revocar';
 
   @override
-  String devicesDeleteTitle(String name) {
-    return '¿Eliminar $name?';
-  }
+  String get devicesDeleteTitle => '¿Eliminar el dispositivo revocado?';
 
   @override
-  String get devicesDeleteBody =>
-      'El registro revocado se eliminará de este dispositivo. Podrás volver a emparejar el dispositivo más tarde.';
+  String devicesDeleteBody(String name) {
+    return 'Quita $name de esta lista. Se puede emparejar de nuevo.';
+  }
 
   @override
   String get devicesConnections => 'Conexiones';
@@ -1324,8 +1316,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get devicesDismiss => 'Descartar';
 
   @override
-  String get devicesNetworkingMissing =>
-      'La red no está configurada en este dispositivo.';
+  String get devicesNetworkingMissing => 'La red no está configurada';
 
   @override
   String get devicesIdCopied => 'ID copiado';
@@ -1393,57 +1384,24 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get pairingDiscoveryOffNote =>
-      'La visibilidad está desactivada, pero el emparejamiento funciona igual: usa su propio anuncio breve.';
-
-  @override
-  String pairingSearching(int seconds) {
-    return 'Buscando dispositivos cercanos · quedan $seconds s';
-  }
+      'La visibilidad está desactivada — el emparejamiento sigue funcionando.';
 
   @override
   String get pairingAlreadyPaired =>
-      'Los dispositivos encontrados aquí ya están emparejados con este.';
+      'Todos los dispositivos cercanos ya están emparejados.';
 
   @override
   String get pairingNoCandidates =>
       'Aún no hay dispositivos cercanos para emparejar.';
 
   @override
-  String get pairingSingleInitiator =>
-      'Toca Conectar en un solo dispositivo; el otro solo espera.';
-
-  @override
-  String get pairingNearbyDevice => 'Dispositivo cercano';
-
-  @override
   String get pairingConnect => 'Conectar';
 
   @override
-  String get pairingStop => 'Detener emparejamiento';
+  String get pairingStop => 'Detener';
 
   @override
   String get pairingConnecting => 'Conectando de forma segura…';
-
-  @override
-  String get pairingConfirmCode =>
-      'Confirma que este código coincide en ambos dispositivos:';
-
-  @override
-  String get pairingOtherDevice => 'Otro dispositivo: ';
-
-  @override
-  String get pairingReferenceOnly =>
-      'Solo como referencia; lo que debe coincidir es el código de arriba.';
-
-  @override
-  String get pairingCodesMatch => 'Los códigos coinciden';
-
-  @override
-  String get pairingCodesDiffer => 'Los códigos no coinciden';
-
-  @override
-  String get pairingCommitting =>
-      'Guardando la confianza y sincronizando el conjunto de datos…';
 
   @override
   String get pairingSuccess => 'Dispositivo emparejado correctamente.';
@@ -1477,35 +1435,21 @@ class AppLocalizationsEs extends AppLocalizations {
   String get resetTitle => '¿Restablecer los datos de este dispositivo?';
 
   @override
-  String get resetOnlyCopy =>
-      'Esto elimina la única copia del conjunto de datos en este dispositivo.';
-
-  @override
-  String get resetOthersKeep => 'Tus otros dispositivos conservan sus copias.';
-
-  @override
-  String get resetLostIfOnly =>
-      'Si este es el único dispositivo, los datos se pierden para siempre.';
-
-  @override
-  String get resetNotTold =>
-      'Los otros dispositivos no reciben aviso de este restablecimiento.';
-
-  @override
   String resetTrustedCount(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Este dispositivo confía actualmente en $count dispositivos más.',
-      one: 'Este dispositivo confía actualmente en 1 dispositivo más.',
-      zero:
-          'Este dispositivo no confía actualmente en ningún otro dispositivo.',
+      other:
+          'Se conservan $count dispositivos de confianza y se pueden emparejar de nuevo.',
+      one:
+          'Se conserva 1 dispositivo de confianza y se puede emparejar de nuevo.',
+      zero: 'No hay dispositivos de confianza registrados.',
     );
     return '$_temp0';
   }
 
   @override
-  String get resetConfirm => 'Restablecer los datos de este dispositivo';
+  String get resetConfirm => 'Restablecer datos';
 
   @override
   String get fieldTypeText => 'Texto';
@@ -3310,4 +3254,129 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get queryKeep => 'Conservar consulta';
+
+  @override
+  String get devicesNetworkingMissingBody =>
+      'Este dispositivo aún no tiene identidad para emparejar.';
+
+  @override
+  String get devicesLocalNameHint =>
+      'Nombre que ven otros dispositivos al emparejar';
+
+  @override
+  String get devicesRenameSubtitle =>
+      'Solo cambia el nombre en este dispositivo';
+
+  @override
+  String get devicesNameLabel => 'Nombre';
+
+  @override
+  String get devicesKeepDevice => 'Conservar dispositivo';
+
+  @override
+  String get devicesKeep => 'Conservar';
+
+  @override
+  String get devicesSwitchError => 'No se pudo cambiar. Inténtalo de nuevo.';
+
+  @override
+  String devicesPausedSynced(String time) {
+    return 'En pausa en este dispositivo · última sincronización $time';
+  }
+
+  @override
+  String get devicesPausedNever =>
+      'En pausa en este dispositivo · nunca sincronizado';
+
+  @override
+  String get sidebarSyncOff => 'sincronización desactivada';
+
+  @override
+  String get sidebarPairingOpen => 'emparejamiento abierto';
+
+  @override
+  String get devicesChipPaused =>
+      'En pausa · la sincronización con dispositivos emparejados está desactivada';
+
+  @override
+  String get devicesChipPausedShort => 'En pausa · sincronización desactivada';
+
+  @override
+  String get devicesFactLastEndpoint => 'Último punto de conexión';
+
+  @override
+  String devicesUdpPort(int port) {
+    return 'UDP $port';
+  }
+
+  @override
+  String get pairingOpen => 'El emparejamiento está abierto';
+
+  @override
+  String pairingTimeLeft(String time) {
+    return 'Quedan $time de 2:00 · inícialo también en el otro dispositivo';
+  }
+
+  @override
+  String pairingNearby(int count) {
+    return 'Cerca · $count';
+  }
+
+  @override
+  String get pairingHiddenPaired =>
+      'Los dispositivos que ya emparejaste están ocultos.';
+
+  @override
+  String get pairingExpiredTitle => 'El emparejamiento caducó';
+
+  @override
+  String get pairingExpiredBody =>
+      'El emparejamiento se cerró tras 2 minutos. Inícialo de nuevo en ambos dispositivos cuando estén cerca.';
+
+  @override
+  String get pairingRejectedTitle => 'Emparejamiento rechazado';
+
+  @override
+  String get pairingRejectedBody =>
+      'Se rechazó el código. No se emparejó nada.';
+
+  @override
+  String get pairingConfirmTitle => 'Confirmar el código';
+
+  @override
+  String get pairingConfirmInstruction =>
+      'Comprueba que el otro dispositivo muestra el mismo código y confirma en ambos.';
+
+  @override
+  String pairingWith(String name) {
+    return 'Emparejando con $name';
+  }
+
+  @override
+  String pairingPeerIdOf(String name) {
+    return 'ID del dispositivo de $name';
+  }
+
+  @override
+  String get pairingReject => 'Rechazar';
+
+  @override
+  String get pairingConfirm => 'Confirmar';
+
+  @override
+  String get pairingSavingTrust => 'Guardando la confianza…';
+
+  @override
+  String get pairingKeyringLine =>
+      'Desbloquea el llavero del escritorio y vuelve a intentarlo.';
+
+  @override
+  String get resetParagraph =>
+      'Esto borra la única copia del conjunto de datos en este dispositivo. Los demás dispositivos conservan sus copias y no reciben aviso del restablecimiento. Si es el único dispositivo, los datos se pierden para siempre.';
+
+  @override
+  String get resetAcknowledge => 'Entiendo que no se puede deshacer';
+
+  @override
+  String get resetKeep => 'Conservar datos';
 }

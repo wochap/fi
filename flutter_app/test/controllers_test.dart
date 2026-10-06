@@ -549,10 +549,9 @@ void main() {
     );
     await controller.setDiscoverable(true);
     expect(controller.preferences.discoverable, isFalse);
-    expect(
-      (controller.failure as BridgeError).kind,
-      BridgeErrorKind.persistence,
-    );
+    expect(controller.discoverableError, isTrue);
+    expect(controller.syncError, isFalse);
+    expect(controller.failure, isNull);
 
     bridge.nextError = const BridgeError(
       kind: BridgeErrorKind.persistence,
@@ -562,10 +561,8 @@ void main() {
     );
     await controller.setSyncEnabled(true);
     expect(controller.preferences.syncEnabled, isFalse);
-    expect(
-      (controller.failure as BridgeError).kind,
-      BridgeErrorKind.persistence,
-    );
+    expect(controller.syncError, isTrue);
+    expect(controller.failure, isNull);
 
     bridge.preferences = const NetworkPreferencesDto(
       discoverable: true,

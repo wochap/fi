@@ -1244,14 +1244,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get devicesLogCopied => 'Log copied';
 
   @override
-  String get devicesResetLead =>
-      'You are about to abandon the dataset on this device and return to onboarding.';
-
-  @override
   String get devicesRenameTitle => 'Rename device';
-
-  @override
-  String get devicesFriendlyName => 'Friendly name';
 
   @override
   String devicesRevokeTitle(String name) {
@@ -1260,19 +1253,18 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get devicesRevokeBody =>
-      'This device will be disconnected and will no longer be trusted. Its record is retained as revoked.';
+      'It stops syncing with this device right away. It stays in the list as revoked, and you can pair it again later.';
 
   @override
   String get devicesRevoke => 'Revoke';
 
   @override
-  String devicesDeleteTitle(String name) {
-    return 'Delete $name?';
-  }
+  String get devicesDeleteTitle => 'Delete revoked device?';
 
   @override
-  String get devicesDeleteBody =>
-      'The revoked record will be removed from this device. The device can be paired again later.';
+  String devicesDeleteBody(String name) {
+    return 'Removes $name from this list. It can be paired again.';
+  }
 
   @override
   String get devicesConnections => 'Connections';
@@ -1314,8 +1306,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get devicesDismiss => 'Dismiss';
 
   @override
-  String get devicesNetworkingMissing =>
-      'Networking is not set up on this device.';
+  String get devicesNetworkingMissing => 'Networking is not set up';
 
   @override
   String get devicesIdCopied => 'ID copied';
@@ -1383,55 +1374,22 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get pairingDiscoveryOffNote =>
-      'Discovery is off, but pairing still works: it uses its own short announcement.';
+      'Discovery is off — pairing still works.';
 
   @override
-  String pairingSearching(int seconds) {
-    return 'Searching for nearby devices · ${seconds}s remaining';
-  }
-
-  @override
-  String get pairingAlreadyPaired =>
-      'The devices found here are already paired with this one.';
+  String get pairingAlreadyPaired => 'All nearby devices are already paired.';
 
   @override
   String get pairingNoCandidates => 'No nearby pairing candidates yet.';
 
   @override
-  String get pairingSingleInitiator =>
-      'Tap Connect on one device only; the other device just waits.';
-
-  @override
-  String get pairingNearbyDevice => 'Nearby device';
-
-  @override
   String get pairingConnect => 'Connect';
 
   @override
-  String get pairingStop => 'Stop pairing';
+  String get pairingStop => 'Stop';
 
   @override
   String get pairingConnecting => 'Connecting securely…';
-
-  @override
-  String get pairingConfirmCode =>
-      'Confirm that this code matches on both devices:';
-
-  @override
-  String get pairingOtherDevice => 'Other device: ';
-
-  @override
-  String get pairingReferenceOnly =>
-      'For reference only; the code above is what must match.';
-
-  @override
-  String get pairingCodesMatch => 'Codes match';
-
-  @override
-  String get pairingCodesDiffer => 'Codes do not match';
-
-  @override
-  String get pairingCommitting => 'Saving trust and synchronizing the dataset…';
 
   @override
   String get pairingSuccess => 'Device paired successfully.';
@@ -1465,33 +1423,19 @@ class AppLocalizationsEn extends AppLocalizations {
   String get resetTitle => 'Reset this device\'s data?';
 
   @override
-  String get resetOnlyCopy =>
-      'This deletes the only copy of the dataset on this device.';
-
-  @override
-  String get resetOthersKeep => 'Your other devices keep their copies.';
-
-  @override
-  String get resetLostIfOnly =>
-      'If this is the only device, the data is permanently lost.';
-
-  @override
-  String get resetNotTold => 'Other devices are not told about this reset.';
-
-  @override
   String resetTrustedCount(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'This device currently trusts $count other devices.',
-      one: 'This device currently trusts 1 other device.',
-      zero: 'This device currently trusts no other devices.',
+      other: '$count trusted devices are kept and can be paired again.',
+      one: '1 trusted device is kept and can be paired again.',
+      zero: 'No trusted devices are recorded.',
     );
     return '$_temp0';
   }
 
   @override
-  String get resetConfirm => 'Reset this device\'s data';
+  String get resetConfirm => 'Reset data';
 
   @override
   String get fieldTypeText => 'Text';
@@ -3288,4 +3232,124 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get queryKeep => 'Keep query';
+
+  @override
+  String get devicesNetworkingMissingBody =>
+      'This device has no identity for pairing yet.';
+
+  @override
+  String get devicesLocalNameHint => 'Name other devices see when pairing';
+
+  @override
+  String get devicesRenameSubtitle => 'Only changes the name on this device';
+
+  @override
+  String get devicesNameLabel => 'Name';
+
+  @override
+  String get devicesKeepDevice => 'Keep device';
+
+  @override
+  String get devicesKeep => 'Keep';
+
+  @override
+  String get devicesSwitchError => 'Couldn\'t change this. Try again.';
+
+  @override
+  String devicesPausedSynced(String time) {
+    return 'Paused on this device · last synced $time';
+  }
+
+  @override
+  String get devicesPausedNever => 'Paused on this device · never synced';
+
+  @override
+  String get sidebarSyncOff => 'sync is off';
+
+  @override
+  String get sidebarPairingOpen => 'pairing open';
+
+  @override
+  String get devicesChipPaused => 'Paused · sync with paired devices is off';
+
+  @override
+  String get devicesChipPausedShort => 'Paused · sync is off';
+
+  @override
+  String get devicesFactLastEndpoint => 'Last endpoint';
+
+  @override
+  String devicesUdpPort(int port) {
+    return 'UDP $port';
+  }
+
+  @override
+  String get pairingOpen => 'Pairing is open';
+
+  @override
+  String pairingTimeLeft(String time) {
+    return '$time left of 2:00 · start it on the other device too';
+  }
+
+  @override
+  String pairingNearby(int count) {
+    return 'Nearby · $count';
+  }
+
+  @override
+  String get pairingHiddenPaired =>
+      'Devices you\'ve already paired are hidden.';
+
+  @override
+  String get pairingExpiredTitle => 'Pairing expired';
+
+  @override
+  String get pairingExpiredBody =>
+      'Pairing closed after 2 minutes. Start it again on both devices when they\'re nearby.';
+
+  @override
+  String get pairingRejectedTitle => 'Pairing rejected';
+
+  @override
+  String get pairingRejectedBody =>
+      'The code was rejected. Nothing was paired.';
+
+  @override
+  String get pairingConfirmTitle => 'Confirm the code';
+
+  @override
+  String get pairingConfirmInstruction =>
+      'Check the same code shows on the other device, then confirm on both.';
+
+  @override
+  String pairingWith(String name) {
+    return 'Pairing with $name';
+  }
+
+  @override
+  String pairingPeerIdOf(String name) {
+    return 'Device ID of $name';
+  }
+
+  @override
+  String get pairingReject => 'Reject';
+
+  @override
+  String get pairingConfirm => 'Confirm';
+
+  @override
+  String get pairingSavingTrust => 'Saving trust…';
+
+  @override
+  String get pairingKeyringLine => 'Unlock your desktop keyring, then retry.';
+
+  @override
+  String get resetParagraph =>
+      'This deletes the only copy of the dataset on this device. Other devices keep their copies and are not told about the reset. If this is the only device, the data is permanently lost.';
+
+  @override
+  String get resetAcknowledge => 'I understand this can\'t be undone';
+
+  @override
+  String get resetKeep => 'Keep data';
 }

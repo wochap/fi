@@ -56,22 +56,26 @@ void main() {
     await tester.tap(find.byKey(const Key('reset-dataset')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('reset-dataset-dialog')), findsOneWidget);
+    expect(find.text("Reset this device's data?"), findsOneWidget);
     expect(
-      find.text('This deletes the only copy of the dataset on this device.'),
-      findsOneWidget,
-    );
-    expect(find.text('Your other devices keep their copies.'), findsOneWidget);
-    expect(
-      find.text('If this is the only device, the data is permanently lost.'),
+      find.textContaining('This deletes the only copy of the dataset'),
       findsOneWidget,
     );
     expect(
-      find.text('Other devices are not told about this reset.'),
+      find.text('1 trusted device is kept and can be paired again.'),
       findsOneWidget,
     );
+    expect(find.text('Keep data'), findsOneWidget);
+    // "Reset data" waits for the acknowledgement.
+    final reset = find.byKey(const Key('reset-confirm'));
+    expect(tester.widget<TextButton>(reset).onPressed, isNull);
+    await tester.tap(find.text("I understand this can't be undone"));
+    await tester.pump();
+    expect(tester.widget<TextButton>(reset).onPressed, isNotNull);
+    // Destructive secondary on the left, safe primary on the right.
     expect(
-      find.text('This device currently trusts 1 other device.'),
-      findsOneWidget,
+      tester.getCenter(reset).dx,
+      lessThan(tester.getCenter(find.byKey(const Key('reset-cancel'))).dx),
     );
     await tester.tap(find.byKey(const Key('reset-cancel')));
     await tester.pumpAndSettle();
@@ -89,6 +93,8 @@ void main() {
     await openDevices(tester, bridge);
     await tester.tap(find.byKey(const Key('reset-dataset')));
     await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('reset-acknowledge')));
+    await tester.pump();
     await tester.tap(find.byKey(const Key('reset-confirm')));
     await pumpUntilFound(tester, find.byKey(const Key('create-dataset')));
     expect(bridge.pairingCalls, contains('resetDataset'));
@@ -126,10 +132,36 @@ void main() {
     await tester.tap(find.byKey(const Key('reset-dataset')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('reset-dataset-dialog')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('reset-acknowledge')));
+    await tester.pump();
     await tester.tap(find.byKey(const Key('reset-confirm')));
     await pumpUntilFound(tester, find.byKey(const Key('create-dataset')));
     expect(bridge.pairingCalls, contains('resetDataset'));
     expect(find.byKey(const Key('bootstrap-error')), findsNothing);
+  });
+
+  testWidgets('the count line has singular, plural and zero forms', (
+    tester,
+  ) async {
+    final bridge = FakeCollectionBridge()
+      ..devices.addAll([
+        tablet,
+        for (final n in [1, 2])
+          TrustedDeviceDto(
+            deviceId: '$n' * 64,
+            friendlyName: 'Peer $n',
+            pairedAtMs: 1,
+            revoked: false,
+            connection: PeerConnectionKindDto.offline,
+          ),
+      ]);
+    await openDevices(tester, bridge);
+    await tester.tap(find.byKey(const Key('reset-dataset')));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('3 trusted devices are kept and can be paired again.'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('the root-mismatch outcome exposes the reset action', (

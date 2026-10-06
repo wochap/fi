@@ -41,7 +41,18 @@ String connectionLabel(AppLocalizations l, PeerConnectionKindDto state) =>
       PeerConnectionKindDto.paused => l.devicesStatusPaused,
     };
 
-/// A trusted row's state: accent with a dot while connected, syncing or synced; the error tag
+/// One icon per peer connection state, so a tag is never told by colour alone.
+IconData connectionIcon(PeerConnectionKindDto state) => switch (state) {
+  PeerConnectionKindDto.offline => FiIcons.offline,
+  PeerConnectionKindDto.searching => FiIcons.searching,
+  PeerConnectionKindDto.connected => FiIcons.link,
+  PeerConnectionKindDto.syncing => FiIcons.syncing,
+  PeerConnectionKindDto.synced => FiIcons.synced,
+  PeerConnectionKindDto.error => FiIcons.error,
+  PeerConnectionKindDto.paused => FiIcons.paused,
+};
+
+/// A trusted row's state with its icon: accent while connected, syncing or synced; the error tag
 /// for an unreachable or unverifiable device; neutral otherwise.
 class DeviceStateTag extends StatelessWidget {
   const DeviceStateTag({required this.device, super.key});
@@ -57,7 +68,10 @@ class DeviceStateTag extends StatelessWidget {
       );
     }
     return switch ((device.revoked, device.connection)) {
-      (true, _) => Tag.neutral(context.l10n.devicesStatusRevoked),
+      (true, _) => Tag.neutral(
+        context.l10n.devicesStatusRevoked,
+        leading: FiIcons.blocked,
+      ),
       (
         _,
         PeerConnectionKindDto.connected ||
@@ -66,26 +80,36 @@ class DeviceStateTag extends StatelessWidget {
       ) =>
         Tag(
           connectionLabel(context.l10n, device.connection),
-          leading: FiIcons.dot,
+          leading: connectionIcon(device.connection),
         ),
-      _ => Tag.neutral(connectionLabel(context.l10n, device.connection)),
+      _ => Tag.neutral(
+        connectionLabel(context.l10n, device.connection),
+        leading: connectionIcon(device.connection),
+      ),
     };
   }
 }
 
-/// "Seen <time> · Synced <time>", with "Never seen" / "Never synced" for absent values.
+/// "Seen <time> · Synced <time>", with "Never seen" / "Never synced" for absent values; a paused
+/// row reads "Paused on this device · last synced <time>".
 String seenSyncedLine(
   AppLocalizations l,
   TrustedDeviceDto device,
   DateTime now,
-) => [
-  device.lastSeenMs == null
-      ? l.devicesNeverSeen
-      : l.devicesSeen(formatStatusTime(l, device.lastSeenMs, now: now)),
-  device.lastSyncMs == null
-      ? l.devicesNeverSynced
-      : l.devicesSynced(formatStatusTime(l, device.lastSyncMs, now: now)),
-].join(' · ');
+) => !device.revoked && device.connection == PeerConnectionKindDto.paused
+    ? device.lastSyncMs == null
+          ? l.devicesPausedNever
+          : l.devicesPausedSynced(
+              formatStatusTime(l, device.lastSyncMs, now: now),
+            )
+    : [
+        device.lastSeenMs == null
+            ? l.devicesNeverSeen
+            : l.devicesSeen(formatStatusTime(l, device.lastSeenMs, now: now)),
+        device.lastSyncMs == null
+            ? l.devicesNeverSynced
+            : l.devicesSynced(formatStatusTime(l, device.lastSyncMs, now: now)),
+      ].join(' · ');
 
 /// Which connection log lines Details shows.
 enum LogFilter { all, pairing, peer }
@@ -150,7 +174,7 @@ class _DeviceDetailsState extends State<DeviceDetails> {
         ? const <LogEventDto>[]
         : ([...logs.peer, ...logs.local]
             ..sort((a, b) => a.atMs.compareTo(b.atMs)));
-    final shown = compact ? events : events.where(_shown).toList();
+    final shown = events.where(_shown).toList();
     final l = context.l10n;
     // The first field keys the widget and stays English.
     final facts = [
@@ -161,7 +185,13 @@ class _DeviceDetailsState extends State<DeviceDetails> {
             ? l.devicesStatusRevoked
             : connectionLabel(l, device.connection),
       ),
-      ('Endpoint', l.devicesFactEndpoint, device.attemptEndpoint ?? '—'),
+      (
+        'Endpoint',
+        device.failure == null
+            ? l.devicesFactEndpoint
+            : l.devicesFactLastEndpoint,
+        device.attemptEndpoint ?? '—',
+      ),
       (
         'Last attempt',
         l.devicesFactLastAttempt,
@@ -176,7 +206,10 @@ class _DeviceDetailsState extends State<DeviceDetails> {
       (
         'Sync port',
         l.devicesFactSyncPort,
-        '${controller.syncPort ?? l.devicesNotBound}',
+        switch (controller.syncPort) {
+          final port? => l.devicesUdpPort(port),
+          null => l.devicesNotBound,
+        },
       ),
     ];
     final label = TextStyle(
@@ -238,11 +271,31 @@ class _DeviceDetailsState extends State<DeviceDetails> {
             icon: const Icon(FiIcons.copy, size: 18),
             label: Text(l.devicesCopyLog),
           );
+    final revoked = device.revoked;
+    final filter = SegmentedButton<LogFilter>(
+      key: Key('device-log-filter-$id'),
+      showSelectedIcon: false,
+      style: compact
+          ? const ButtonStyle(visualDensity: VisualDensity.compact)
+          : null,
+      segments: [
+        ButtonSegment(value: LogFilter.all, label: Text(l.devicesLogAll)),
+        ButtonSegment(
+          value: LogFilter.pairing,
+          label: Text(l.devicesLogPairing),
+        ),
+        ButtonSegment(value: LogFilter.peer, label: Text(l.devicesLogPeer)),
+      ],
+      selected: {_filter},
+      onSelectionChanged: (value) => setState(() => _filter = value.single),
+    );
     return Column(
       key: Key('device-details-panel-$id'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (compact)
+        if (revoked)
+          const SizedBox.shrink()
+        else if (compact)
           for (final (key, name, text) in facts)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 6),
@@ -283,7 +336,7 @@ class _DeviceDetailsState extends State<DeviceDetails> {
                 ),
             ],
           ),
-        if (device.failure case final failure?) ...[
+        if (device.failure case final failure? when !revoked) ...[
           const SizedBox(height: 10),
           if (compact && device.failureKind != null)
             Padding(
@@ -328,32 +381,34 @@ class _DeviceDetailsState extends State<DeviceDetails> {
             ],
           ),
         ],
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            SizedBox(
-              width: compact ? 110 : 90,
-              child: Text('ID', style: label),
-            ),
-            Expanded(
-              child: SelectableText(
-                compact ? shortDeviceId(id) : id,
-                key: Key('device-id-$id'),
-                maxLines: 1,
-                style: mono,
+        if (!revoked) ...[
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              SizedBox(
+                width: compact ? 110 : 90,
+                child: Text('ID', style: label),
               ),
-            ),
-            FiIconButton(
-              key: Key('device-copy-id-$id'),
-              icon: FiIcons.copy,
-              tooltip: l.devicesCopyId,
-              onPressed: () => unawaited(
-                copyWithConfirmation(context, id, l.devicesIdCopied),
+              Expanded(
+                child: SelectableText(
+                  compact ? shortDeviceId(id) : id,
+                  key: Key('device-id-$id'),
+                  maxLines: 1,
+                  style: mono,
+                ),
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 14),
+              FiIconButton(
+                key: Key('device-copy-id-$id'),
+                icon: FiIcons.copy,
+                tooltip: l.devicesCopyId,
+                onPressed: () => unawaited(
+                  copyWithConfirmation(context, id, l.devicesIdCopied),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+        ],
         Row(
           children: [
             Expanded(
@@ -366,32 +421,13 @@ class _DeviceDetailsState extends State<DeviceDetails> {
                 ),
               ),
             ),
-            if (compact)
-              copyLog
-            else
-              SegmentedButton<LogFilter>(
-                key: Key('device-log-filter-$id'),
-                showSelectedIcon: false,
-                segments: [
-                  ButtonSegment(
-                    value: LogFilter.all,
-                    label: Text(l.devicesLogAll),
-                  ),
-                  ButtonSegment(
-                    value: LogFilter.pairing,
-                    label: Text(l.devicesLogPairing),
-                  ),
-                  ButtonSegment(
-                    value: LogFilter.peer,
-                    label: Text(l.devicesLogPeer),
-                  ),
-                ],
-                selected: {_filter},
-                onSelectionChanged: (value) =>
-                    setState(() => _filter = value.single),
-              ),
+            if (compact) copyLog else filter,
           ],
         ),
+        if (compact) ...[
+          const SizedBox(height: 8),
+          Align(alignment: Alignment.centerLeft, child: filter),
+        ],
         const SizedBox(height: 8),
         Container(
           key: Key('device-log-$id'),

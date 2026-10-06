@@ -134,6 +134,12 @@ void diagnosticsTests() {
     await tapVisible(tester, find.byKey(const Key('copy-local-id')));
     expect(copied, [id]);
     expect(find.text('ID copied'), findsOneWidget);
+    // "ID copied" stands in for the action, then Copy ID returns.
+    expect(find.byKey(const Key('copy-local-id')), findsNothing);
+    expect(find.text('Name other devices see when pairing'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 3));
+    expect(find.byKey(const Key('copy-local-id')), findsOneWidget);
+    expect(find.text('ID copied'), findsNothing);
   });
 
   testWidgets('this device says networking is not set up without an id', (
@@ -142,11 +148,14 @@ void diagnosticsTests() {
     final bridge = FakeCollectionBridge()..localIdentity = null;
     await openDevices(tester, bridge);
     await pumpUntilFound(tester, find.byKey(const Key('local-device-missing')));
+    expect(find.text('Networking is not set up'), findsOneWidget);
     expect(
-      find.text('Networking is not set up on this device.'),
+      find.text('This device has no identity for pairing yet.'),
       findsOneWidget,
     );
     expect(find.byKey(const Key('local-device-id')), findsNothing);
+    expect(find.byKey(const Key('copy-local-id')), findsNothing);
+    expect(find.byKey(const Key('reset-dataset')), findsOneWidget);
   });
 
   testWidgets('details stay hidden until opened and explain a failure', (
@@ -186,9 +195,11 @@ void diagnosticsTests() {
     String fact(String name) =>
         tester.widget<Text>(find.byKey(Key('device-fact-$name'))).data!;
     expect(fact('Endpoint'), '192.168.1.20:47380');
+    // The endpoint of a failed attempt is the last one tried.
+    expect(find.text('LAST ENDPOINT'), findsOneWidget);
     expect(fact('State'), 'Error');
     expect(find.text('LAST ATTEMPT'), findsOneWidget);
-    expect(fact('Sync port'), '${bridge.ports.syncPort}');
+    expect(fact('Sync port'), 'UDP ${bridge.ports.syncPort}');
     expect(find.text('Connection log · 1 event'), findsOneWidget);
     final log = find.byKey(const Key('device-log-$failedPeerId'));
     expect(
@@ -263,6 +274,14 @@ void diagnosticsTests() {
       find.byKey(const Key('device-details-connect-address-$failedPeerId')),
       findsNothing,
     );
+    // Only the log, its filter and Copy log.
+    expect(find.byKey(const Key('device-fact-State')), findsNothing);
+    expect(find.byKey(const Key('device-fact-Endpoint')), findsNothing);
+    expect(
+      find.byKey(const Key('device-log-filter-$failedPeerId')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('device-log-$failedPeerId')), findsOneWidget);
   });
 
   testWidgets('the confirmation step shows the other device id', (
@@ -281,6 +300,7 @@ void diagnosticsTests() {
       ),
     ]);
     await tester.pump();
+    await tester.pump();
     expect(find.byKey(const Key('pairing-peer-id')), findsNothing);
     expect(find.textContaining(failedPeerId), findsNothing);
 
@@ -293,12 +313,33 @@ void diagnosticsTests() {
       ),
     );
     await tester.pump();
+    await tester.pump();
+    final groups = [
+      for (var i = 0; i < failedPeerId.length; i += 8)
+        failedPeerId.substring(i, i + 8),
+    ].join(' ');
     expect(
       tester
           .widget<SelectableText>(find.byKey(const Key('pairing-peer-id')))
-          .textSpan
-          ?.toPlainText(),
-      'Other device: $failedPeerId',
+          .data,
+      groups,
+    );
+    expect(find.text('Device ID of the other device'), findsOneWidget);
+    expect(find.text('Confirm the code'), findsOneWidget);
+    expect(
+      find.text(
+        'Check the same code shows on the other device, then confirm on both.',
+      ),
+      findsOneWidget,
+    );
+    expect(findSas('000042'), findsOneWidget);
+    for (var i = 0; i < 6; i++) {
+      expect(find.byKey(Key('pairing-sas-digit-$i')), findsOneWidget);
+    }
+    // Reject is on the left, Confirm on the right.
+    expect(
+      tester.getCenter(find.byKey(const Key('pairing-reject'))).dx,
+      lessThan(tester.getCenter(find.byKey(const Key('pairing-confirm'))).dx),
     );
   });
 }
@@ -312,7 +353,9 @@ void main() {
     await openDevices(tester, bridge);
     await tester.tap(find.byKey(const Key('start-pairing')));
     await tester.pump();
-    expect(find.textContaining('Searching for nearby devices'), findsOneWidget);
+    expect(find.text('Pairing is open'), findsOneWidget);
+    expect(find.textContaining('left of 2:00'), findsOneWidget);
+    expect(find.byKey(const Key('pairing-countdown-ring')), findsOneWidget);
 
     final candidate = PairingCandidateDto(
       instanceId: List.filled(16, '01').join(),
@@ -322,8 +365,18 @@ void main() {
     );
     bridge.candidateController.add([candidate]);
     await tester.pump();
+    await tester.pump();
     expect(find.text('192.0.2.1:4400'), findsOneWidget);
+    expect(find.text('Nearby · 1'), findsOneWidget);
+    expect(find.text('Connect'), findsOneWidget);
+    expect(
+      find.text("Devices you've already paired are hidden."),
+      findsOneWidget,
+    );
+    // Candidates show the endpoint only, never a device name.
+    expect(find.text('Nearby device'), findsNothing);
     bridge.candidateController.add(const []);
+    await tester.pump();
     await tester.pump();
     expect(find.text('192.0.2.1:4400'), findsNothing);
 
@@ -335,11 +388,12 @@ void main() {
       ),
     );
     await tester.pump();
-    expect(find.text('000042'), findsOneWidget);
-    await tester.tap(find.text('Codes match'));
+    await tester.pump();
+    expect(findSas('000042'), findsOneWidget);
+    await tester.tap(find.text('Confirm'));
     await tester.pump();
     expect(bridge.confirmedSessions, ['session']);
-    await tester.tap(find.text('Codes do not match'));
+    await tester.tap(find.text('Reject'));
     await tester.pump();
     expect(bridge.rejectedSessions, ['session']);
 
@@ -398,7 +452,27 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Revoke / unpair'));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, 'Revoke'));
+    expect(find.text('Revoke Kitchen tablet?'), findsOneWidget);
+    expect(
+      find.text(
+        'It stops syncing with this device right away. It stays in the list '
+        'as revoked, and you can pair it again later.',
+      ),
+      findsOneWidget,
+    );
+    await tester.tap(find.byKey(const Key('revoke-keep')));
+    await tester.pumpAndSettle();
+    expect(bridge.revokedDevices, isEmpty);
+
+    await tester.tap(find.byType(PopupMenuButton<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Revoke / unpair'));
+    await tester.pumpAndSettle();
+    expect(
+      tester.getCenter(find.byKey(const Key('revoke-confirm'))).dx,
+      lessThan(tester.getCenter(find.byKey(const Key('revoke-keep'))).dx),
+    );
+    await tester.tap(find.byKey(const Key('revoke-confirm')));
     await tester.pumpAndSettle();
     expect(bridge.revokedDevices, isNotEmpty);
     expect(find.textContaining('Revoked'), findsOneWidget);
@@ -446,7 +520,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Revoke / unpair'));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, 'Revoke'));
+    await tester.tap(find.byKey(const Key('revoke-confirm')));
     await tester.pumpAndSettle();
     expect(find.textContaining('Revoked'), findsOneWidget);
     expect(find.byKey(const Key('rotation-error')), findsOneWidget);
@@ -476,7 +550,8 @@ void main() {
         SyncStatusDto.syncing: 'Syncing',
         SyncStatusDto.synced: 'Synced',
         SyncStatusDto.error: 'Error',
-        SyncStatusDto.paused: 'Paused',
+        // At 720px and wider the paused chip says what is off.
+        SyncStatusDto.paused: 'Paused · sync with paired devices is off',
       };
       final icons = <IconData>{};
       for (final entry in expected.entries) {
@@ -550,9 +625,13 @@ void main() {
     expect(switchValue('pref-sync'), isFalse);
     final chip = find.byKey(const Key('sync-status'));
     expect(
-      find.descendant(of: chip, matching: find.text('Paused')),
+      find.descendant(
+        of: chip,
+        matching: find.text('Paused · sync with paired devices is off'),
+      ),
       findsOneWidget,
     );
+    expect(find.text('Paused on this device · never synced'), findsOneWidget);
     final row = find.ancestor(
       of: find.text('Peer'),
       matching: find.byType(Row),
@@ -571,10 +650,27 @@ void main() {
     await tester.tap(switchOf('pref-discoverable'));
     await tester.pumpAndSettle();
     expect(switchValue('pref-discoverable'), isFalse);
+    // The error sits under that switch, not in a page banner.
+    expect(find.byKey(const Key('pref-discoverable-error')), findsOneWidget);
+    expect(find.text("Couldn't change this. Try again."), findsOneWidget);
+    expect(find.byKey(const Key('pref-sync-error')), findsNothing);
+    expect(find.text('Local data could not be saved or loaded.'), findsNothing);
+    expect(find.byType(MaterialBanner), findsNothing);
     expect(
-      find.text('Local data could not be saved or loaded.'),
-      findsOneWidget,
+      tester.getTopLeft(find.byKey(const Key('pref-discoverable-error'))).dy,
+      greaterThan(
+        tester.getTopLeft(find.byKey(const Key('pref-discoverable'))).dy,
+      ),
     );
+    expect(
+      tester.getTopLeft(find.byKey(const Key('pref-discoverable-error'))).dy,
+      lessThan(tester.getTopLeft(find.byKey(const Key('pref-sync'))).dy),
+    );
+
+    // The next toggle of that switch clears it.
+    await tester.tap(switchOf('pref-discoverable'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('pref-discoverable-error')), findsNothing);
   });
 
   testWidgets('the connection switches show with no paired device', (
@@ -628,12 +724,38 @@ void main() {
     await tester.tap(find.byKey(const Key('start-pairing')));
     await tester.pump();
     bridge.pairingController.add(
-      pairingState(PairingKindDto.committing, session: 'session'),
+      pairingState(
+        PairingKindDto.awaitingConfirmation,
+        session: 'session',
+        sas: '42',
+        peer: failedPeerId,
+      ),
     );
     await tester.pump();
+    await tester.pump();
+    bridge.pairingController.add(
+      pairingState(
+        PairingKindDto.committing,
+        session: 'session',
+        peer: failedPeerId,
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    // Saving keeps the code with both actions unavailable.
+    expect(find.text('Saving trust…'), findsOneWidget);
+    expect(findSas('000042'), findsOneWidget);
     expect(
-      find.text('Saving trust and synchronizing the dataset\u2026'),
-      findsOneWidget,
+      tester
+          .widget<ButtonStyleButton>(find.byKey(const Key('pairing-confirm')))
+          .onPressed,
+      isNull,
+    );
+    expect(
+      tester
+          .widget<ButtonStyleButton>(find.byKey(const Key('pairing-reject')))
+          .onPressed,
+      isNull,
     );
 
     bridge.pairingController.add(
@@ -644,17 +766,23 @@ void main() {
       ),
     );
     await tester.pump();
-    // The spinner is gone at once, and the copy names the keyring, never an
-    // expiry.
-    expect(
-      find.text('Saving trust and synchronizing the dataset\u2026'),
-      findsNothing,
-    );
+    await tester.pump();
+    // The spinner is gone at once, the code and id stay, and the copy names
+    // the keyring, never an expiry.
+    expect(find.text('Saving trust…'), findsNothing);
     expect(
       find.byKey(const Key('pairing-secure-store-locked')),
       findsOneWidget,
     );
+    expect(
+      find.text('Unlock your desktop keyring, then retry.'),
+      findsOneWidget,
+    );
+    expect(findSas('000042'), findsOneWidget);
+    expect(find.byKey(const Key('pairing-peer-id')), findsOneWidget);
+    expect(find.byKey(const Key('pairing-confirm')), findsNothing);
     expect(find.textContaining('expired'), findsNothing);
+    expect(find.textContaining('left of'), findsNothing);
 
     await tester.tap(find.byKey(const Key('pairing-retry-after-unlock')));
     await tester.pump();
@@ -678,8 +806,10 @@ void main() {
     );
     bridge.candidateController.add([paired]);
     await tester.pump();
+    await tester.pump();
     expect(find.text('192.0.2.9:4400'), findsNothing);
     expect(find.byKey(const Key('candidates-already-paired')), findsOneWidget);
+    expect(find.text('All nearby devices are already paired.'), findsOneWidget);
     expect(find.text('No nearby pairing candidates yet.'), findsNothing);
 
     final fresh = PairingCandidateDto(
@@ -689,6 +819,7 @@ void main() {
       alreadyPaired: false,
     );
     bridge.candidateController.add([paired, fresh]);
+    await tester.pump();
     await tester.pump();
     expect(find.text('192.0.2.10:4400'), findsOneWidget);
     expect(find.text('192.0.2.9:4400'), findsNothing);
@@ -733,9 +864,16 @@ void main() {
     expect(find.text('Revoke / unpair'), findsNothing);
     await tester.tap(find.text('Delete'));
     await tester.pumpAndSettle();
-    expect(find.text('Delete Old phone?'), findsOneWidget);
-    expect(find.textContaining('paired again'), findsOneWidget);
-    await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+    expect(find.text('Delete revoked device?'), findsOneWidget);
+    expect(
+      find.text('Removes Old phone from this list. It can be paired again.'),
+      findsOneWidget,
+    );
+    expect(
+      tester.getCenter(find.byKey(const Key('delete-confirm'))).dx,
+      lessThan(tester.getCenter(find.byKey(const Key('delete-keep'))).dx),
+    );
+    await tester.tap(find.byKey(const Key('delete-keep')));
     await tester.pumpAndSettle();
     expect(bridge.deletedDevices, isEmpty);
     expect(find.text('Old phone'), findsOneWidget);
@@ -745,7 +883,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Delete'));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+    await tester.tap(find.byKey(const Key('delete-confirm')));
     await tester.pumpAndSettle();
     expect(bridge.deletedDevices, [
       'fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210',

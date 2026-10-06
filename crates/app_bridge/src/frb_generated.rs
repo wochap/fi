@@ -6532,7 +6532,9 @@ impl SseDecode for crate::api::models::PairingFailureKindDto {
             0 => crate::api::models::PairingFailureKindDto::BothRootless,
             1 => crate::api::models::PairingFailureKindDto::RootMismatch,
             2 => crate::api::models::PairingFailureKindDto::SecureStoreLocked,
-            3 => crate::api::models::PairingFailureKindDto::Other,
+            3 => crate::api::models::PairingFailureKindDto::Expired,
+            4 => crate::api::models::PairingFailureKindDto::Rejected,
+            5 => crate::api::models::PairingFailureKindDto::Other,
             _ => unreachable!("Invalid variant for PairingFailureKindDto: {}", inner),
         };
     }
@@ -9177,7 +9179,9 @@ impl flutter_rust_bridge::IntoDart for crate::api::models::PairingFailureKindDto
             Self::BothRootless => 0.into_dart(),
             Self::RootMismatch => 1.into_dart(),
             Self::SecureStoreLocked => 2.into_dart(),
-            Self::Other => 3.into_dart(),
+            Self::Expired => 3.into_dart(),
+            Self::Rejected => 4.into_dart(),
+            Self::Other => 5.into_dart(),
             _ => unreachable!(),
         }
     }
@@ -12117,7 +12121,9 @@ impl SseEncode for crate::api::models::PairingFailureKindDto {
                 crate::api::models::PairingFailureKindDto::BothRootless => 0,
                 crate::api::models::PairingFailureKindDto::RootMismatch => 1,
                 crate::api::models::PairingFailureKindDto::SecureStoreLocked => 2,
-                crate::api::models::PairingFailureKindDto::Other => 3,
+                crate::api::models::PairingFailureKindDto::Expired => 3,
+                crate::api::models::PairingFailureKindDto::Rejected => 4,
+                crate::api::models::PairingFailureKindDto::Other => 5,
                 _ => {
                     unimplemented!("");
                 }

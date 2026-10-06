@@ -1724,17 +1724,9 @@
   "@devicesLogCopied": {
     "description": "Snackbar."
   },
-  "devicesResetLead": "You are about to abandon the dataset on this device and return to onboarding.",
-  "@devicesResetLead": {
-    "description": "Reset lead from devices page."
-  },
   "devicesRenameTitle": "Rename device",
   "@devicesRenameTitle": {
     "description": "Dialog title."
-  },
-  "devicesFriendlyName": "Friendly name",
-  "@devicesFriendlyName": {
-    "description": "Field label."
   },
   "devicesRevokeTitle": "Revoke {name}?",
   "@devicesRevokeTitle": {
@@ -1745,7 +1737,7 @@
       }
     }
   },
-  "devicesRevokeBody": "This device will be disconnected and will no longer be trusted. Its record is retained as revoked.",
+  "devicesRevokeBody": "It stops syncing with this device right away. It stays in the list as revoked, and you can pair it again later.",
   "@devicesRevokeBody": {
     "description": "Dialog body."
   },
@@ -1753,18 +1745,18 @@
   "@devicesRevoke": {
     "description": "Button."
   },
-  "devicesDeleteTitle": "Delete {name}?",
+  "devicesDeleteTitle": "Delete revoked device?",
   "@devicesDeleteTitle": {
-    "description": "Dialog title.",
+    "description": "Dialog title."
+  },
+  "devicesDeleteBody": "Removes {name} from this list. It can be paired again.",
+  "@devicesDeleteBody": {
+    "description": "Dialog body.",
     "placeholders": {
       "name": {
         "type": "String"
       }
     }
-  },
-  "devicesDeleteBody": "The revoked record will be removed from this device. The device can be paired again later.",
-  "@devicesDeleteBody": {
-    "description": "Dialog body."
   },
   "devicesConnections": "Connections",
   "@devicesConnections": {
@@ -1815,9 +1807,9 @@
   "@devicesDismiss": {
     "description": "Tooltip."
   },
-  "devicesNetworkingMissing": "Networking is not set up on this device.",
+  "devicesNetworkingMissing": "Networking is not set up",
   "@devicesNetworkingMissing": {
-    "description": "No local identity."
+    "description": "Title of This device without an identity."
   },
   "devicesIdCopied": "ID copied",
   "@devicesIdCopied": {
@@ -1896,69 +1888,28 @@
   "@pairingStart": {
     "description": "Button."
   },
-  "pairingDiscoveryOffNote": "Discovery is off, but pairing still works: it uses its own short announcement.",
+  "pairingDiscoveryOffNote": "Discovery is off — pairing still works.",
   "@pairingDiscoveryOffNote": {
-    "description": "Note when Discoverable is off."
+    "description": "Note shown while Discoverable is off."
   },
-  "pairingSearching": "Searching for nearby devices · {seconds}s remaining",
-  "@pairingSearching": {
-    "description": "Discovery progress.",
-    "placeholders": {
-      "seconds": {
-        "type": "int"
-      }
-    }
-  },
-  "pairingAlreadyPaired": "The devices found here are already paired with this one.",
+  "pairingAlreadyPaired": "All nearby devices are already paired.",
   "@pairingAlreadyPaired": {
-    "description": "All candidates paired."
+    "description": "Shown when every candidate is already paired."
   },
   "pairingNoCandidates": "No nearby pairing candidates yet.",
   "@pairingNoCandidates": {
     "description": "No candidates."
   },
-  "pairingSingleInitiator": "Tap Connect on one device only; the other device just waits.",
-  "@pairingSingleInitiator": {
-    "description": "Hint."
-  },
-  "pairingNearbyDevice": "Nearby device",
-  "@pairingNearbyDevice": {
-    "description": "Candidate subtitle."
-  },
   "pairingConnect": "Connect",
   "@pairingConnect": {
     "description": "Candidate action."
   },
-  "pairingStop": "Stop pairing",
+  "pairingStop": "Stop",
   "@pairingStop": {
-    "description": "Button."
+    "description": "Button that leaves pairing mode."
   },
   "pairingConnecting": "Connecting securely…",
   "@pairingConnecting": {
-    "description": "State."
-  },
-  "pairingConfirmCode": "Confirm that this code matches on both devices:",
-  "@pairingConfirmCode": {
-    "description": "SAS prompt."
-  },
-  "pairingOtherDevice": "Other device: ",
-  "@pairingOtherDevice": {
-    "description": "Prefix before peer id (keep trailing space)."
-  },
-  "pairingReferenceOnly": "For reference only; the code above is what must match.",
-  "@pairingReferenceOnly": {
-    "description": "Peer id note."
-  },
-  "pairingCodesMatch": "Codes match",
-  "@pairingCodesMatch": {
-    "description": "Confirm."
-  },
-  "pairingCodesDiffer": "Codes do not match",
-  "@pairingCodesDiffer": {
-    "description": "Reject."
-  },
-  "pairingCommitting": "Saving trust and synchronizing the dataset…",
-  "@pairingCommitting": {
     "description": "State."
   },
   "pairingSuccess": "Device paired successfully.",
@@ -1997,34 +1948,18 @@
   "@resetTitle": {
     "description": "Dialog title."
   },
-  "resetOnlyCopy": "This deletes the only copy of the dataset on this device.",
-  "@resetOnlyCopy": {
-    "description": "Consequence."
-  },
-  "resetOthersKeep": "Your other devices keep their copies.",
-  "@resetOthersKeep": {
-    "description": "Consequence."
-  },
-  "resetLostIfOnly": "If this is the only device, the data is permanently lost.",
-  "@resetLostIfOnly": {
-    "description": "Consequence."
-  },
-  "resetNotTold": "Other devices are not told about this reset.",
-  "@resetNotTold": {
-    "description": "Consequence."
-  },
-  "resetTrustedCount": "{count, plural, =0{This device currently trusts no other devices.} =1{This device currently trusts 1 other device.} other{This device currently trusts {count} other devices.}}",
+  "resetTrustedCount": "{count, plural, =0{No trusted devices are recorded.} =1{1 trusted device is kept and can be paired again.} other{{count} trusted devices are kept and can be paired again.}}",
   "@resetTrustedCount": {
-    "description": "Trusted count.",
+    "description": "Trusted-device count in the reset confirmation.",
     "placeholders": {
       "count": {
         "type": "int"
       }
     }
   },
-  "resetConfirm": "Reset this device's data",
+  "resetConfirm": "Reset data",
   "@resetConfirm": {
-    "description": "Confirm button."
+    "description": "Destructive reset action."
   },
   "fieldTypeText": "Text",
   "@fieldTypeText": {
@@ -4451,5 +4386,171 @@
   "queryKeep": "Keep query",
   "@queryKeep": {
     "description": "Confirm safe action"
+  },
+  "devicesNetworkingMissingBody": "This device has no identity for pairing yet.",
+  "@devicesNetworkingMissingBody": {
+    "description": "Line under the no-identity title."
+  },
+  "devicesLocalNameHint": "Name other devices see when pairing",
+  "@devicesLocalNameHint": {
+    "description": "Muted line under this device's pairing name."
+  },
+  "devicesRenameSubtitle": "Only changes the name on this device",
+  "@devicesRenameSubtitle": {
+    "description": "Rename dialog line."
+  },
+  "devicesNameLabel": "Name",
+  "@devicesNameLabel": {
+    "description": "Field label."
+  },
+  "devicesKeepDevice": "Keep device",
+  "@devicesKeepDevice": {
+    "description": "Safe action of the revoke dialog."
+  },
+  "devicesKeep": "Keep",
+  "@devicesKeep": {
+    "description": "Safe action of the delete dialog."
+  },
+  "devicesSwitchError": "Couldn't change this. Try again.",
+  "@devicesSwitchError": {
+    "description": "Shown under a switch whose toggle failed."
+  },
+  "devicesPausedSynced": "Paused on this device · last synced {time}",
+  "@devicesPausedSynced": {
+    "description": "Row line while sync is paused.",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "devicesPausedNever": "Paused on this device · never synced",
+  "@devicesPausedNever": {
+    "description": "Row line while sync is paused and the peer never synced."
+  },
+  "sidebarSyncOff": "sync is off",
+  "@sidebarSyncOff": {
+    "description": "Sidebar line under the Paused status."
+  },
+  "sidebarPairingOpen": "pairing open",
+  "@sidebarPairingOpen": {
+    "description": "Sidebar line while pairing mode is active."
+  },
+  "devicesChipPaused": "Paused · sync with paired devices is off",
+  "@devicesChipPaused": {
+    "description": "Devices status chip while paused, wide."
+  },
+  "devicesChipPausedShort": "Paused · sync is off",
+  "@devicesChipPausedShort": {
+    "description": "Devices status chip while paused, phone."
+  },
+  "devicesFactLastEndpoint": "Last endpoint",
+  "@devicesFactLastEndpoint": {
+    "description": "Details label after a failed attempt."
+  },
+  "devicesUdpPort": "UDP {port}",
+  "@devicesUdpPort": {
+    "description": "Sync port value.",
+    "placeholders": {
+      "port": {
+        "type": "int"
+      }
+    }
+  },
+  "pairingOpen": "Pairing is open",
+  "@pairingOpen": {
+    "description": "Pairing card title while discoverable."
+  },
+  "pairingTimeLeft": "{time} left of 2:00 · start it on the other device too",
+  "@pairingTimeLeft": {
+    "description": "Countdown line; time is m:ss.",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "pairingNearby": "Nearby · {count}",
+  "@pairingNearby": {
+    "description": "Candidate list heading.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "pairingHiddenPaired": "Devices you've already paired are hidden.",
+  "@pairingHiddenPaired": {
+    "description": "Muted line under the candidates."
+  },
+  "pairingExpiredTitle": "Pairing expired",
+  "@pairingExpiredTitle": {
+    "description": "End card title."
+  },
+  "pairingExpiredBody": "Pairing closed after 2 minutes. Start it again on both devices when they're nearby.",
+  "@pairingExpiredBody": {
+    "description": "End card body."
+  },
+  "pairingRejectedTitle": "Pairing rejected",
+  "@pairingRejectedTitle": {
+    "description": "End card title."
+  },
+  "pairingRejectedBody": "The code was rejected. Nothing was paired.",
+  "@pairingRejectedBody": {
+    "description": "End card body."
+  },
+  "pairingConfirmTitle": "Confirm the code",
+  "@pairingConfirmTitle": {
+    "description": "Code confirmation title."
+  },
+  "pairingConfirmInstruction": "Check the same code shows on the other device, then confirm on both.",
+  "@pairingConfirmInstruction": {
+    "description": "Code confirmation instruction."
+  },
+  "pairingWith": "Pairing with {name}",
+  "@pairingWith": {
+    "description": "Code confirmation subtitle when the peer name is known.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "pairingPeerIdOf": "Device ID of {name}",
+  "@pairingPeerIdOf": {
+    "description": "Label over the peer DeviceId.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "pairingReject": "Reject",
+  "@pairingReject": {
+    "description": "Secondary action of the code confirmation."
+  },
+  "pairingConfirm": "Confirm",
+  "@pairingConfirm": {
+    "description": "Primary action of the code confirmation."
+  },
+  "pairingSavingTrust": "Saving trust…",
+  "@pairingSavingTrust": {
+    "description": "Title while committing."
+  },
+  "pairingKeyringLine": "Unlock your desktop keyring, then retry.",
+  "@pairingKeyringLine": {
+    "description": "Instruction when the keyring is locked at commit."
+  },
+  "resetParagraph": "This deletes the only copy of the dataset on this device. Other devices keep their copies and are not told about the reset. If this is the only device, the data is permanently lost.",
+  "@resetParagraph": {
+    "description": "Reset consequences."
+  },
+  "resetAcknowledge": "I understand this can't be undone",
+  "@resetAcknowledge": {
+    "description": "Reset checkbox."
+  },
+  "resetKeep": "Keep data",
+  "@resetKeep": {
+    "description": "Safe reset action."
   }
 }

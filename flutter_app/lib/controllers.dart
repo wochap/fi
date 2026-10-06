@@ -993,6 +993,20 @@ final class DevicesController extends ChangeNotifier {
   /// every connection-state emission.
   final Map<String, DeviceLogs> details = {};
 
+  /// True after the last Discoverable toggle failed; cleared on the next one.
+  bool discoverableError = false;
+
+  /// True after the last Sync with paired devices toggle failed; cleared on
+  /// the next one.
+  bool syncError = false;
+
+  /// The code and peer id of the current pairing session, kept so the
+  /// confirmation stays readable while committing and after a commit failure
+  /// (Rust drops both once the state is `Failed`). Cleared when a new session
+  /// starts or pairing stops.
+  String? sessionSas;
+  String? sessionPeerId;
+
   /// Locally bound sync port, read when Details opens; null when unbound.
   int? syncPort;
 
@@ -1151,17 +1165,42 @@ final class DevicesController extends ChangeNotifier {
 
   /// Asks Rust to change Discoverable and shows what Rust stored. A failure
   /// leaves [preferences] unchanged and reports the error inline.
-  Future<void> setDiscoverable(bool value) => _run(() async {
-    preferences = await bridge.setDiscoverable(value);
-  });
+  Future<void> setDiscoverable(bool value) async {
+    discoverableError = false;
+    await _runSwitch(() async {
+      preferences = await bridge.setDiscoverable(value);
+    }, onError: () => discoverableError = true);
+  }
 
   /// Asks Rust to pause or resume sync and shows what Rust stored. The status
   /// is re-read because a pause with no live session emits no stream event.
-  Future<void> setSyncEnabled(bool value) => _run(() async {
-    preferences = await bridge.setSyncEnabled(value);
-    syncStatus = await bridge.syncStatus();
-    devices = await bridge.trustedDevices();
-  });
+  Future<void> setSyncEnabled(bool value) async {
+    syncError = false;
+    await _runSwitch(() async {
+      preferences = await bridge.setSyncEnabled(value);
+      syncStatus = await bridge.syncStatus();
+      devices = await bridge.trustedDevices();
+    }, onError: () => syncError = true);
+  }
+
+  /// Like [_run], but a failure marks the switch through [onError] instead of
+  /// the page-level [failure].
+  Future<void> _runSwitch(
+    Future<void> Function() operation, {
+    required void Function() onError,
+  }) async {
+    busy = true;
+    failure = null;
+    notifyListeners();
+    try {
+      await operation();
+    } catch (_) {
+      onError();
+    } finally {
+      busy = false;
+      if (!_disposed) notifyListeners();
+    }
+  }
 
   Future<void> _loadBuildInfo() async {
     try {
@@ -1251,6 +1290,10 @@ final class DevicesController extends ChangeNotifier {
     syncPort = null;
     localAddresses = const [];
     failure = null;
+    discoverableError = false;
+    syncError = false;
+    sessionSas = null;
+    sessionPeerId = null;
     rotationError = null;
     busy = false;
     await start();
@@ -1278,7 +1321,7 @@ final class DevicesController extends ChangeNotifier {
   /// Friendly name of the peer in the current pairing session, resolved from
   /// the trusted-device list; null when no peer is known yet.
   String? get peerName {
-    final peerId = pairing.peerDeviceId;
+    final peerId = pairing.peerDeviceId ?? sessionPeerId;
     if (peerId == null) return null;
     for (final device in devices) {
       if (device.deviceId == peerId) return device.friendlyName;
@@ -1362,6 +1405,14 @@ final class DevicesController extends ChangeNotifier {
 
   void _setPairing(PairingStateDto value) {
     pairing = value;
+    switch (value.kind) {
+      case PairingKindDto.idle || PairingKindDto.discoverable:
+        sessionSas = null;
+        sessionPeerId = null;
+      case _:
+        sessionSas = value.sas ?? sessionSas;
+        sessionPeerId = value.peerDeviceId ?? sessionPeerId;
+    }
     _clock?.cancel();
     if (value.deadlineMs != null) {
       _clock = Timer.periodic(const Duration(seconds: 1), (timer) {

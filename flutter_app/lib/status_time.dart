@@ -21,8 +21,10 @@ String formatStatusTime(
   }
   if (delta < const Duration(days: 1)) return l.timeHoursAgo(delta.inHours);
   final local = value.toLocal();
-  final format = local.year == now.toLocal().year
-      ? DateFormat.MMMEd().add_Hm()
-      : DateFormat.yMMMEd().add_Hm();
+  // Weekday, day, month, hour:minute, no commas: "Tue 22 Sep 13:00".
+  final format = DateFormat(
+    local.year == now.toLocal().year ? 'EEE d MMM HH:mm' : 'EEE d MMM y HH:mm',
+    l.localeName,
+  );
   return format.format(local);
 }

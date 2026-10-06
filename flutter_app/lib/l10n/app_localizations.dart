@@ -2096,23 +2096,11 @@ abstract class AppLocalizations {
   /// **'Log copied'**
   String get devicesLogCopied;
 
-  /// Reset lead from devices page.
-  ///
-  /// In en, this message translates to:
-  /// **'You are about to abandon the dataset on this device and return to onboarding.'**
-  String get devicesResetLead;
-
   /// Dialog title.
   ///
   /// In en, this message translates to:
   /// **'Rename device'**
   String get devicesRenameTitle;
-
-  /// Field label.
-  ///
-  /// In en, this message translates to:
-  /// **'Friendly name'**
-  String get devicesFriendlyName;
 
   /// Dialog title.
   ///
@@ -2123,7 +2111,7 @@ abstract class AppLocalizations {
   /// Dialog body.
   ///
   /// In en, this message translates to:
-  /// **'This device will be disconnected and will no longer be trusted. Its record is retained as revoked.'**
+  /// **'It stops syncing with this device right away. It stays in the list as revoked, and you can pair it again later.'**
   String get devicesRevokeBody;
 
   /// Button.
@@ -2135,14 +2123,14 @@ abstract class AppLocalizations {
   /// Dialog title.
   ///
   /// In en, this message translates to:
-  /// **'Delete {name}?'**
-  String devicesDeleteTitle(String name);
+  /// **'Delete revoked device?'**
+  String get devicesDeleteTitle;
 
   /// Dialog body.
   ///
   /// In en, this message translates to:
-  /// **'The revoked record will be removed from this device. The device can be paired again later.'**
-  String get devicesDeleteBody;
+  /// **'Removes {name} from this list. It can be paired again.'**
+  String devicesDeleteBody(String name);
 
   /// Section label.
   ///
@@ -2210,10 +2198,10 @@ abstract class AppLocalizations {
   /// **'Dismiss'**
   String get devicesDismiss;
 
-  /// No local identity.
+  /// Title of This device without an identity.
   ///
   /// In en, this message translates to:
-  /// **'Networking is not set up on this device.'**
+  /// **'Networking is not set up'**
   String get devicesNetworkingMissing;
 
   /// Snackbar.
@@ -2324,22 +2312,16 @@ abstract class AppLocalizations {
   /// **'Start pairing'**
   String get pairingStart;
 
-  /// Note when Discoverable is off.
+  /// Note shown while Discoverable is off.
   ///
   /// In en, this message translates to:
-  /// **'Discovery is off, but pairing still works: it uses its own short announcement.'**
+  /// **'Discovery is off — pairing still works.'**
   String get pairingDiscoveryOffNote;
 
-  /// Discovery progress.
+  /// Shown when every candidate is already paired.
   ///
   /// In en, this message translates to:
-  /// **'Searching for nearby devices · {seconds}s remaining'**
-  String pairingSearching(int seconds);
-
-  /// All candidates paired.
-  ///
-  /// In en, this message translates to:
-  /// **'The devices found here are already paired with this one.'**
+  /// **'All nearby devices are already paired.'**
   String get pairingAlreadyPaired;
 
   /// No candidates.
@@ -2348,28 +2330,16 @@ abstract class AppLocalizations {
   /// **'No nearby pairing candidates yet.'**
   String get pairingNoCandidates;
 
-  /// Hint.
-  ///
-  /// In en, this message translates to:
-  /// **'Tap Connect on one device only; the other device just waits.'**
-  String get pairingSingleInitiator;
-
-  /// Candidate subtitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Nearby device'**
-  String get pairingNearbyDevice;
-
   /// Candidate action.
   ///
   /// In en, this message translates to:
   /// **'Connect'**
   String get pairingConnect;
 
-  /// Button.
+  /// Button that leaves pairing mode.
   ///
   /// In en, this message translates to:
-  /// **'Stop pairing'**
+  /// **'Stop'**
   String get pairingStop;
 
   /// State.
@@ -2377,42 +2347,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Connecting securely…'**
   String get pairingConnecting;
-
-  /// SAS prompt.
-  ///
-  /// In en, this message translates to:
-  /// **'Confirm that this code matches on both devices:'**
-  String get pairingConfirmCode;
-
-  /// Prefix before peer id (keep trailing space).
-  ///
-  /// In en, this message translates to:
-  /// **'Other device: '**
-  String get pairingOtherDevice;
-
-  /// Peer id note.
-  ///
-  /// In en, this message translates to:
-  /// **'For reference only; the code above is what must match.'**
-  String get pairingReferenceOnly;
-
-  /// Confirm.
-  ///
-  /// In en, this message translates to:
-  /// **'Codes match'**
-  String get pairingCodesMatch;
-
-  /// Reject.
-  ///
-  /// In en, this message translates to:
-  /// **'Codes do not match'**
-  String get pairingCodesDiffer;
-
-  /// State.
-  ///
-  /// In en, this message translates to:
-  /// **'Saving trust and synchronizing the dataset…'**
-  String get pairingCommitting;
 
   /// State.
   ///
@@ -2468,40 +2402,16 @@ abstract class AppLocalizations {
   /// **'Reset this device\'s data?'**
   String get resetTitle;
 
-  /// Consequence.
+  /// Trusted-device count in the reset confirmation.
   ///
   /// In en, this message translates to:
-  /// **'This deletes the only copy of the dataset on this device.'**
-  String get resetOnlyCopy;
-
-  /// Consequence.
-  ///
-  /// In en, this message translates to:
-  /// **'Your other devices keep their copies.'**
-  String get resetOthersKeep;
-
-  /// Consequence.
-  ///
-  /// In en, this message translates to:
-  /// **'If this is the only device, the data is permanently lost.'**
-  String get resetLostIfOnly;
-
-  /// Consequence.
-  ///
-  /// In en, this message translates to:
-  /// **'Other devices are not told about this reset.'**
-  String get resetNotTold;
-
-  /// Trusted count.
-  ///
-  /// In en, this message translates to:
-  /// **'{count, plural, =0{This device currently trusts no other devices.} =1{This device currently trusts 1 other device.} other{This device currently trusts {count} other devices.}}'**
+  /// **'{count, plural, =0{No trusted devices are recorded.} =1{1 trusted device is kept and can be paired again.} other{{count} trusted devices are kept and can be paired again.}}'**
   String resetTrustedCount(int count);
 
-  /// Confirm button.
+  /// Destructive reset action.
   ///
   /// In en, this message translates to:
-  /// **'Reset this device\'s data'**
+  /// **'Reset data'**
   String get resetConfirm;
 
   /// Field kind name
@@ -5197,6 +5107,210 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Keep query'**
   String get queryKeep;
+
+  /// Line under the no-identity title.
+  ///
+  /// In en, this message translates to:
+  /// **'This device has no identity for pairing yet.'**
+  String get devicesNetworkingMissingBody;
+
+  /// Muted line under this device's pairing name.
+  ///
+  /// In en, this message translates to:
+  /// **'Name other devices see when pairing'**
+  String get devicesLocalNameHint;
+
+  /// Rename dialog line.
+  ///
+  /// In en, this message translates to:
+  /// **'Only changes the name on this device'**
+  String get devicesRenameSubtitle;
+
+  /// Field label.
+  ///
+  /// In en, this message translates to:
+  /// **'Name'**
+  String get devicesNameLabel;
+
+  /// Safe action of the revoke dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep device'**
+  String get devicesKeepDevice;
+
+  /// Safe action of the delete dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep'**
+  String get devicesKeep;
+
+  /// Shown under a switch whose toggle failed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t change this. Try again.'**
+  String get devicesSwitchError;
+
+  /// Row line while sync is paused.
+  ///
+  /// In en, this message translates to:
+  /// **'Paused on this device · last synced {time}'**
+  String devicesPausedSynced(String time);
+
+  /// Row line while sync is paused and the peer never synced.
+  ///
+  /// In en, this message translates to:
+  /// **'Paused on this device · never synced'**
+  String get devicesPausedNever;
+
+  /// Sidebar line under the Paused status.
+  ///
+  /// In en, this message translates to:
+  /// **'sync is off'**
+  String get sidebarSyncOff;
+
+  /// Sidebar line while pairing mode is active.
+  ///
+  /// In en, this message translates to:
+  /// **'pairing open'**
+  String get sidebarPairingOpen;
+
+  /// Devices status chip while paused, wide.
+  ///
+  /// In en, this message translates to:
+  /// **'Paused · sync with paired devices is off'**
+  String get devicesChipPaused;
+
+  /// Devices status chip while paused, phone.
+  ///
+  /// In en, this message translates to:
+  /// **'Paused · sync is off'**
+  String get devicesChipPausedShort;
+
+  /// Details label after a failed attempt.
+  ///
+  /// In en, this message translates to:
+  /// **'Last endpoint'**
+  String get devicesFactLastEndpoint;
+
+  /// Sync port value.
+  ///
+  /// In en, this message translates to:
+  /// **'UDP {port}'**
+  String devicesUdpPort(int port);
+
+  /// Pairing card title while discoverable.
+  ///
+  /// In en, this message translates to:
+  /// **'Pairing is open'**
+  String get pairingOpen;
+
+  /// Countdown line; time is m:ss.
+  ///
+  /// In en, this message translates to:
+  /// **'{time} left of 2:00 · start it on the other device too'**
+  String pairingTimeLeft(String time);
+
+  /// Candidate list heading.
+  ///
+  /// In en, this message translates to:
+  /// **'Nearby · {count}'**
+  String pairingNearby(int count);
+
+  /// Muted line under the candidates.
+  ///
+  /// In en, this message translates to:
+  /// **'Devices you\'ve already paired are hidden.'**
+  String get pairingHiddenPaired;
+
+  /// End card title.
+  ///
+  /// In en, this message translates to:
+  /// **'Pairing expired'**
+  String get pairingExpiredTitle;
+
+  /// End card body.
+  ///
+  /// In en, this message translates to:
+  /// **'Pairing closed after 2 minutes. Start it again on both devices when they\'re nearby.'**
+  String get pairingExpiredBody;
+
+  /// End card title.
+  ///
+  /// In en, this message translates to:
+  /// **'Pairing rejected'**
+  String get pairingRejectedTitle;
+
+  /// End card body.
+  ///
+  /// In en, this message translates to:
+  /// **'The code was rejected. Nothing was paired.'**
+  String get pairingRejectedBody;
+
+  /// Code confirmation title.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm the code'**
+  String get pairingConfirmTitle;
+
+  /// Code confirmation instruction.
+  ///
+  /// In en, this message translates to:
+  /// **'Check the same code shows on the other device, then confirm on both.'**
+  String get pairingConfirmInstruction;
+
+  /// Code confirmation subtitle when the peer name is known.
+  ///
+  /// In en, this message translates to:
+  /// **'Pairing with {name}'**
+  String pairingWith(String name);
+
+  /// Label over the peer DeviceId.
+  ///
+  /// In en, this message translates to:
+  /// **'Device ID of {name}'**
+  String pairingPeerIdOf(String name);
+
+  /// Secondary action of the code confirmation.
+  ///
+  /// In en, this message translates to:
+  /// **'Reject'**
+  String get pairingReject;
+
+  /// Primary action of the code confirmation.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm'**
+  String get pairingConfirm;
+
+  /// Title while committing.
+  ///
+  /// In en, this message translates to:
+  /// **'Saving trust…'**
+  String get pairingSavingTrust;
+
+  /// Instruction when the keyring is locked at commit.
+  ///
+  /// In en, this message translates to:
+  /// **'Unlock your desktop keyring, then retry.'**
+  String get pairingKeyringLine;
+
+  /// Reset consequences.
+  ///
+  /// In en, this message translates to:
+  /// **'This deletes the only copy of the dataset on this device. Other devices keep their copies and are not told about the reset. If this is the only device, the data is permanently lost.'**
+  String get resetParagraph;
+
+  /// Reset checkbox.
+  ///
+  /// In en, this message translates to:
+  /// **'I understand this can\'t be undone'**
+  String get resetAcknowledge;
+
+  /// Safe reset action.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep data'**
+  String get resetKeep;
 }
 
 class _AppLocalizationsDelegate
