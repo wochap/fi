@@ -75,7 +75,9 @@ Deleting a collection from the collection list SHALL require confirmation in a d
 - **THEN** Flutter sends the collection delete command and the collection leaves the list after the projection refreshes
 
 ### Requirement: Functional schema editor
-Flutter SHALL provide create, rename, logical-delete, add-field, edit-field, remove-field, and reorder workflows for supported schema metadata, while Rust remains the authoritative validator. Enum option maintenance SHALL be part of the field editor rather than a separate workflow. When the field editor has Required on, no default, and the collection contains active records lacking the field, the editor SHALL show an inline warning stating how many records will become invalid, and the save action SHALL open a confirmation dialog stating that count before the schema command is submitted. The count SHALL be derived from the projected record list already loaded for the collection.
+Flutter SHALL provide create, rename, logical-delete, add-field, edit-field, remove-field, and reorder workflows for supported schema metadata, while Rust remains the authoritative validator. Enum option maintenance SHALL be part of the field editor rather than a separate workflow. When the field editor has Required on, no default, and the collection contains active records lacking the field, the editor SHALL show an inline warning reading "<N> records have no value for this field and will be marked incomplete.", and the save action SHALL open a confirmation titled "Make “<field>” required?" with the body "<N> records have no value and will be marked incomplete.", a secondary "Make required" action on the left and a primary "Keep optional" action on the right, before the schema command is submitted. The count SHALL be derived from the projected record list already loaded for the collection.
+
+Removing a field SHALL always ask first, from every entry point: the delete icon on a desktop schema row, the delete action of the desktop inline panel, and Delete field in the phone field screen's ⋮ menu. The confirmation SHALL be titled "Delete field “<field>”?" with the body "Removes the field from the schema. <N> records lose their value for it.", where N is the number of loaded active records holding a value for the field, or "Removes the field from the schema." alone when no record holds one. It SHALL offer a secondary "Delete field" action on the left and a primary "Keep field" action on the right. Confirming SHALL submit the logical field removal; keeping SHALL leave the schema unchanged and the editor or sheet as it was.
 
 Schema metadata that holds a value of the field's own type — the default and the minimum and maximum bounds — SHALL be edited with the same typed control the record editor uses for that type, never as the raw stored integer, and each such control SHALL offer an explicit unset state because the slot is optional whatever the field requires of records. Changing the field type or the decimal scale SHALL clear those slots rather than reinterpret them.
 
@@ -85,15 +87,15 @@ When the kind is Choice, the field editor SHALL show an inline options section l
 
 On Save the editor SHALL submit the field definition, then the option changes as individual option commands (create, rename or reorder, remove), then, when the chosen default is an option created by this save, a second field update carrying the option ID returned for it. Options left unchanged SHALL NOT be resubmitted.
 
-At 720px and wider the schema editor SHALL be the side sheet headed by "<collection> · N fields" and "Collection schema". It SHALL list fields as rows with a drag handle, the field-type icon, the name with the required mark, and a short summary (for example "Integer · 5–30", "Text · multiline", "Choice · 3 options"). "New field" and editing an existing field SHALL open as an inline panel in the sheet. The footer SHALL read "Drag to reorder · click a field to edit" with Done. Below 720px the schema editor SHALL be a sheet of rows at least 52px tall ending in a chevron, followed by a dashed "Add field" button and a footer reading "Long-press to reorder" with Done. Tapping a row SHALL push a field screen titled with the field name and "Field in <collection>", with a back action, a ⋮ menu holding Delete field, and a "Save field" footer. "Add field" SHALL push the same screen titled "New field" with an "Add field" footer.
+At 720px and wider the schema editor SHALL be the side sheet headed by "<collection> · N fields" and "Collection schema". It SHALL list fields as rows with a drag handle, the field-type icon in a tile, the name with the required mark, a short summary (for example "Integer · 5–30", "Integer · 0–10 · slider" for an Integer shown as a slider, "Text · multiline", "Choice · stomachache, headache"), and a trailing chevron; hovering a row SHALL reveal a delete icon before the chevron. Below the rows a dashed secondary "Add field" button SHALL open the "New field" inline panel; editing an existing field SHALL open as an inline panel in the sheet. The footer SHALL read "Drag to reorder · click a field to edit" with Done. Below 720px the schema editor SHALL be a sheet of rows at least 52px tall, each with the field-type icon in a tile and ending in a chevron, followed by a dashed "Add field" button and a footer reading "Long-press to reorder" with Done. Tapping a row SHALL push a field screen titled with the field name and "Field in <collection>", with a back action, a ⋮ menu holding Delete field, and a "Save field" footer. "Add field" SHALL push the same screen titled "New field" with an "Add field" footer.
 
-The field editor SHALL present the type as a grid of eight tiles in two rows of four, each with the type icon and human label. The type SHALL be fixed once the field exists, and the other tiles SHALL be shown disabled. Below the type the editor SHALL show option chips for the chosen type: Required for every type; Multiline and Length limits for Text; Range for Integer, Decimal and Duration; Show as slider for Integer; Date range for Date and Date & time; Default value for every type. A chip that is on SHALL show a check and open its settings block under the chips, headed by the chip's name with a ✕ that turns the chip off and clears its settings. Length limits SHALL show Min characters and Max characters side by side. Range and Date range SHALL show their two bounds side by side, labelled Earliest and Latest for dates. A Choice field SHALL always show its options section.
+The field editor SHALL present the type as a grid of eight tiles in two rows of four, each with the type icon and human label. The type SHALL be fixed once the field exists, and the other tiles SHALL be shown disabled. Below the type the editor SHALL show option chips for the chosen type: Required for every type; Multiline and Length limits for Text; Range for Integer, Decimal and Duration; Show as slider for Integer; Date range for Date and Date & time; Default value for every type. Each chip SHALL have its `?` help button directly beside it in the chip row, whether the chip is on or off. A chip that is on SHALL show a check and open its settings block under the chips, headed by the chip's name with a ✕ that turns the chip off and clears its settings. Length limits SHALL show Min characters and Max characters side by side. Range and Date range SHALL show their two bounds side by side, labelled Earliest and Latest for dates. A Choice field SHALL always show its options section.
 
 The editor SHALL check the default against the other settings while the user types: a Text default outside the length limits SHALL show a counter such as "2 / 4–8" and the line "Default must be 4–8 characters." under it, a default outside the range SHALL show the range it must fall in, and the save action SHALL be disabled while such a line is shown.
 
 For a Date field the Default value block SHALL offer "Day of creation" or "Fixed date". "Day of creation" SHALL take a +/− sign and a whole number of days and SHALL show the date it resolves to today (for example "→ Oct 5, 2026").
 
-Each option row SHALL have a drag handle, the label as an editable input, and a delete action. Deleting an option that active records use SHALL first ask for confirmation stating how many records use it and that they keep it. Under the options the editor SHALL note that records using a deleted option keep it, shown as "<label> (deleted)", and that it can't be picked for new records.
+Each option row SHALL have a drag handle, the label as an editable input, and a delete action. Deleting an option that active records use SHALL first ask for confirmation titled "Delete option “<label>”?" with the body "<N> records use it and keep it. It can't be picked for new records.", a secondary "Delete option" action on the left and a primary "Keep option" action on the right. Under the options the editor SHALL note that records using a deleted option keep it, shown as "<label> (deleted)", and that it can't be picked for new records.
 
 #### Scenario: Rust rejects schema edit
 - **WHEN** a submitted field definition violates a core validation rule
@@ -105,7 +107,7 @@ Each option row SHALL have a drag handle, the label as an editable input, and a 
 
 #### Scenario: Confirm before making records invalid
 - **WHEN** the user taps Save while the inline warning is showing
-- **THEN** a confirmation dialog states the number of records that will be marked invalid; confirming submits the schema command and cancelling returns to the editor with values intact
+- **THEN** a confirmation titled "Make “code” required?" states "2 records have no value and will be marked incomplete."; "Make required" submits the schema command and "Keep optional" returns to the editor with values intact
 
 #### Scenario: Default and bounds are typed, not raw
 - **WHEN** the user edits the default, minimum, or maximum of a Date, DateTime, or FixedDecimal field
@@ -149,7 +151,7 @@ Each option row SHALL have a drag handle, the label as an editable input, and a 
 
 #### Scenario: Deleting a used option asks first
 - **WHEN** the user deletes the option "option 3" that two active records use
-- **THEN** a confirmation states that 2 records use it and keep it, and confirming removes it from the options list
+- **THEN** a confirmation titled "Delete option “option 3”?" states "2 records use it and keep it. It can't be picked for new records.", and "Delete option" removes it from the options list
 
 #### Scenario: Create a Choice field with options and a default in one save
 - **WHEN** the user picks Choice, adds options "Low", "Medium", "High", chooses "Medium" as the default, and taps Save
@@ -174,6 +176,30 @@ Each option row SHALL have a drag handle, the label as an editable input, and a 
 #### Scenario: Single entry point for options
 - **WHEN** the user looks for a way to edit a Choice field's options
 - **THEN** the only path is opening the field in the field editor; there is no separate options dialog or icon on the field row
+
+#### Scenario: Deleting a field asks first
+- **WHEN** the user hovers the "End at" row in the desktop schema sheet, two loaded records hold a value for it, and the user clicks its delete icon
+- **THEN** a confirmation titled "Delete field “End at”?" reads "Removes the field from the schema. 2 records lose their value for it." with "Delete field" on the left and "Keep field" on the right, and no schema command has been submitted
+
+#### Scenario: Keeping the field
+- **WHEN** the delete-field confirmation is open and the user chooses "Keep field"
+- **THEN** the confirmation closes, no command is submitted, and the field is still listed
+
+#### Scenario: Deleting a field from the phone screen
+- **WHEN** the user opens the "End at" field screen on a 390px-wide screen and picks ⋮ › Delete field, then "Delete field"
+- **THEN** the field is removed logically, the field screen closes, and the sheet no longer lists "End at"
+
+#### Scenario: Deleting a field no record uses
+- **WHEN** the user deletes a field for which no loaded record holds a value
+- **THEN** the confirmation body reads "Removes the field from the schema."
+
+#### Scenario: Slider summary
+- **WHEN** the schema sheet lists an Integer field with bounds 0 and 10 shown as a slider
+- **THEN** its summary reads "Integer · 0–10 · slider"
+
+#### Scenario: Help beside the Required chip
+- **WHEN** the user opens the field editor for a Text field
+- **THEN** a `?` button sits beside each of the Required, Multiline, Length limits and Default value chips, and tapping the one beside Required opens the Required help without turning the chip on
 
 ### Requirement: Registry-driven field rendering
 A Flutter field renderer registry SHALL map supported field kinds to editor and display components, and generic forms MUST NOT use domain-specific Headache or Money implementations.
