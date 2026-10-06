@@ -124,7 +124,7 @@ void main() {
   });
 
   test('exhausted ports name the range', () {
-    final text = networkingDeferredText(
+    final text = networkingDeferredTitle(
       _es,
       const NetworkingDeferredDto(
         kind: NetworkingDeferredKindDto.portsExhausted,
@@ -136,7 +136,30 @@ void main() {
         mdnsPort: 5353,
       ),
     );
-    expect(text, allOf(contains('47380'), contains('47389')));
+    expect(text, 'Sincronización desactivada: UDP 47380–47389 están en uso');
+  });
+
+  test('each deferred kind has a title, body and cause', () {
+    for (final kind in NetworkingDeferredKindDto.values) {
+      final deferred = NetworkingDeferredDto(kind: kind, message: '');
+      expect(
+        networkingDeferredTitle(_en, deferred, null),
+        startsWith('Sync is off: '),
+      );
+      expect(networkingDeferredBody(_en, deferred), isNotEmpty);
+    }
+    expect(
+      deferredCause(_en, NetworkingDeferredKindDto.secureStoreLocked),
+      'keyring locked',
+    );
+    expect(
+      deferredCause(_en, NetworkingDeferredKindDto.secureStoreUnavailable),
+      'no keyring',
+    );
+    expect(
+      deferredCause(_en, NetworkingDeferredKindDto.portsExhausted),
+      'ports in use',
+    );
   });
 
   test('a failure that is not a BridgeError is unexpected', () {

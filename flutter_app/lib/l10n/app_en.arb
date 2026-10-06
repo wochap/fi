@@ -184,26 +184,6 @@
   "@issueRange": {
     "description": "Validation issue: range problem without known bounds."
   },
-  "networkingKeyringLocked": "Your login keyring is locked, so this device cannot reach your other devices. Unlock the keyring, then retry. Everything stored here still works.",
-  "@networkingKeyringLocked": {
-    "description": "Networking banner when the keyring is locked."
-  },
-  "networkingUnavailable": "Secure device networking is unavailable on this device, so it cannot reach your other devices. Everything stored here still works.",
-  "@networkingUnavailable": {
-    "description": "Networking banner when the secure store is unavailable."
-  },
-  "networkingPortsExhausted": "Every network port Fi uses (UDP {first}–{last}) is already in use, so this device cannot reach your other devices. Close the other program or instance holding them, then retry.",
-  "@networkingPortsExhausted": {
-    "description": "Networking banner when every sync port is taken.",
-    "placeholders": {
-      "first": {
-        "type": "int"
-      },
-      "last": {
-        "type": "int"
-      }
-    }
-  },
   "pairingDidNotComplete": "Pairing did not complete.",
   "@pairingDidNotComplete": {
     "description": "Pairing failed for an unspecified reason."
@@ -1538,57 +1518,6 @@
   "@recoveryNeedsDevice": {
     "description": "Recovery title."
   },
-  "recoveryNoPeerBody": "This device lost its local copy of your dataset{root}. None of your other devices is reachable right now. Bring one of them online and recovery continues automatically; no pairing is needed.",
-  "@recoveryNoPeerBody": {
-    "description": "root is empty or ' (abc…)'.",
-    "placeholders": {
-      "root": {
-        "type": "String"
-      }
-    }
-  },
-  "recoveryResetInstead": "Reset this device's data instead",
-  "@recoveryResetInstead": {
-    "description": "Recovery reset button."
-  },
-  "recoveryRecovering": "Recovering your dataset from your other devices{root}…",
-  "@recoveryRecovering": {
-    "description": "root is empty or ' (abc…)'.",
-    "placeholders": {
-      "root": {
-        "type": "String"
-      }
-    }
-  },
-  "recoveryCorrupt": "The local copy could not be read and was set aside. Nothing was deleted.",
-  "@recoveryCorrupt": {
-    "description": "Recovery reason."
-  },
-  "recoveryMissing": "The local copy was missing. Nothing was deleted.",
-  "@recoveryMissing": {
-    "description": "Recovery reason."
-  },
-  "bootJoiningFrom": "Joining dataset from {name}…",
-  "@bootJoiningFrom": {
-    "description": "Joining surface.",
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
-  },
-  "bootWaitingDataset": "Waiting for this local dataset to become available.",
-  "@bootWaitingDataset": {
-    "description": "Joining surface without a peer name."
-  },
-  "onboardTitle": "Your private collection space",
-  "@onboardTitle": {
-    "description": "Onboarding title."
-  },
-  "onboardIntro": "Create a new local dataset, or join the dataset on one of your other devices. Nothing is sent to a server.",
-  "@onboardIntro": {
-    "description": "Onboarding intro."
-  },
   "onboardQuarantined": "Data found on this device was set aside because its dataset record was missing. Nothing was deleted: joining the same dataset from another device restores it.",
   "@onboardQuarantined": {
     "description": "Quarantine banner."
@@ -1596,22 +1525,6 @@
   "onboardCreating": "Creating…",
   "@onboardCreating": {
     "description": "Create button busy."
-  },
-  "onboardCreate": "Create new dataset",
-  "@onboardCreate": {
-    "description": "Create button."
-  },
-  "onboardCreateBlocked": "Creating is unavailable while pairing is active. Stop pairing to create a new dataset here.",
-  "@onboardCreateBlocked": {
-    "description": "Why create is disabled."
-  },
-  "onboardJoin": "Join an existing dataset",
-  "@onboardJoin": {
-    "description": "Join button."
-  },
-  "onboardPairingPreconditions": "The other device must already have a dataset. Start pairing on both devices, then tap Connect on one device only.",
-  "@onboardPairingPreconditions": {
-    "description": "Pairing preconditions."
   },
   "sidebarPairedSummary": "{count} paired · {reach}",
   "@sidebarPairedSummary": {
@@ -1919,18 +1832,6 @@
   "pairingAnother": "Pair another device",
   "@pairingAnother": {
     "description": "Button."
-  },
-  "pairingBothRootless": "Neither device has a dataset yet, so there is nothing to join. Pair with a device that already has a dataset, or create a new dataset on one device first.",
-  "@pairingBothRootless": {
-    "description": "Failure."
-  },
-  "pairingAgain": "Pair again",
-  "@pairingAgain": {
-    "description": "Button."
-  },
-  "pairingRootMismatch": "These devices hold different datasets, and datasets cannot be merged. Pairing them again will not succeed. To use the other device's dataset here, this device's local data must be reset first.",
-  "@pairingRootMismatch": {
-    "description": "Failure."
   },
   "pairingDifferentDevice": "Pair a different device",
   "@pairingDifferentDevice": {
@@ -4552,5 +4453,193 @@
   "resetKeep": "Keep data",
   "@resetKeep": {
     "description": "Safe reset action."
+  },
+  "setupTitle": "Set up this device",
+  "@setupTitle": {
+    "description": "Onboarding title."
+  },
+  "setupLead": "Your data stays on your devices. Pick how this one starts.",
+  "@setupLead": {
+    "description": "Onboarding lead."
+  },
+  "setupCreateTitle": "Create a new dataset",
+  "@setupCreateTitle": {
+    "description": "Create choice card title."
+  },
+  "setupCreateBody": "Start fresh. You can pair other devices later.",
+  "@setupCreateBody": {
+    "description": "Create choice card body."
+  },
+  "setupCreateLocked": "Not available while pairing is open. Stop pairing to create one instead.",
+  "@setupCreateLocked": {
+    "description": "Why the Create card is locked."
+  },
+  "setupJoinTitle": "Join an existing dataset",
+  "@setupJoinTitle": {
+    "description": "Join choice card and Join view title."
+  },
+  "setupJoinBody": "Copy the dataset from one of your other devices.",
+  "@setupJoinBody": {
+    "description": "Join choice card body."
+  },
+  "setupJoinNeedsDataset": "The other device must already have a dataset.",
+  "@setupJoinNeedsDataset": {
+    "description": "Join card precondition."
+  },
+  "setupJoinOneSide": "Start the connection from only one of the two devices.",
+  "@setupJoinOneSide": {
+    "description": "Join card precondition."
+  },
+  "setupPairingStatus": "Pairing is open · {time} left",
+  "@setupPairingStatus": {
+    "description": "Pairing status row under the choice cards.",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "setupPairingWaiting": "Waiting for your other device. Tap Connect on one device only.",
+  "@setupPairingWaiting": {
+    "description": "Pairing status row hint."
+  },
+  "setupStopPairing": "Stop pairing",
+  "@setupStopPairing": {
+    "description": "Stop button in the pairing status row."
+  },
+  "joinLead": "Start pairing on the other device too. Tap Connect on one device only.",
+  "@joinLead": {
+    "description": "Join view lead."
+  },
+  "couldntJoinTitle": "Couldn't join",
+  "@couldntJoinTitle": {
+    "description": "Both-rootless failure title."
+  },
+  "couldntJoinBody": "The other device has no dataset yet. Create one there first, or create one here.",
+  "@couldntJoinBody": {
+    "description": "Both-rootless failure body."
+  },
+  "joiningTitleNamed": "Joining “{name}”",
+  "@joiningTitleNamed": {
+    "description": "Joining title with the peer name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "joiningTitle": "Joining the other device",
+  "@joiningTitle": {
+    "description": "Joining title without a peer name."
+  },
+  "joiningBodyNamed": "Copying the dataset from {name}. Keep both devices open until this finishes.",
+  "@joiningBodyNamed": {
+    "description": "Joining body with the peer name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "joiningBody": "Copying the dataset from the other device. Keep both devices open until this finishes.",
+  "@joiningBody": {
+    "description": "Joining body without a peer name."
+  },
+  "mismatchTitle": "This device has a different dataset",
+  "@mismatchTitle": {
+    "description": "Root-mismatch screen title."
+  },
+  "mismatchBodyNamed": "“{name}” uses another dataset than this device. Devices can only sync when they share the same one.",
+  "@mismatchBodyNamed": {
+    "description": "Root-mismatch body with the peer name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "mismatchBody": "The other device uses another dataset than this device. Devices can only sync when they share the same one.",
+  "@mismatchBody": {
+    "description": "Root-mismatch body without a peer name."
+  },
+  "mismatchResetNote": "To join it, reset this device's data first. The collections on this device will be deleted; the other device keeps its data.",
+  "@mismatchResetNote": {
+    "description": "Root-mismatch second paragraph."
+  },
+  "resetDataEllipsis": "Reset this device's data…",
+  "@resetDataEllipsis": {
+    "description": "Secondary action opening the reset confirmation."
+  },
+  "fatalTitle": "Fi couldn't start",
+  "@fatalTitle": {
+    "description": "Fatal start title."
+  },
+  "fatalResetBody": "This device's local data can't be opened. Retrying won't fix it. Resetting deletes this device's copy; your other devices keep theirs.",
+  "@fatalResetBody": {
+    "description": "Fatal body for reset-resolvable errors."
+  },
+  "fatalCopyDetails": "Copy details",
+  "@fatalCopyDetails": {
+    "description": "Copies Rust's error message."
+  },
+  "fatalDetailsCopied": "Details copied",
+  "@fatalDetailsCopied": {
+    "description": "Confirmation after Copy details."
+  },
+  "recoveringTitle": "Recovering this device's data",
+  "@recoveringTitle": {
+    "description": "Recovery in progress title."
+  },
+  "recoveringBody": "Fi is getting the dataset back from your other devices. Keep them open.",
+  "@recoveringBody": {
+    "description": "Recovery in progress body."
+  },
+  "recoveryNeedsDeviceBody": "This device's copy of the dataset is damaged. Open Fi on a paired device on the same network to restore it, or reset.",
+  "@recoveryNeedsDeviceBody": {
+    "description": "Recovery needs another device body."
+  },
+  "deferredLockedTitle": "Sync is off: the desktop keyring is locked",
+  "@deferredLockedTitle": {
+    "description": "Banner title, keyring locked."
+  },
+  "deferredLockedBody": "Fi keeps this device's keys in the desktop keyring. Unlock it, then retry. Your data here still works.",
+  "@deferredLockedBody": {
+    "description": "Banner body, keyring locked."
+  },
+  "deferredNoKeyringTitle": "Sync is off: no keyring is available",
+  "@deferredNoKeyringTitle": {
+    "description": "Banner title, no keyring."
+  },
+  "deferredNoKeyringBody": "Install and unlock a desktop keyring (GNOME Keyring or KWallet), then retry.",
+  "@deferredNoKeyringBody": {
+    "description": "Banner body, no keyring."
+  },
+  "deferredPortsTitle": "Sync is off: UDP {first}–{last} are in use",
+  "@deferredPortsTitle": {
+    "description": "Banner title, ports in use.",
+    "placeholders": {
+      "first": {
+        "type": "int"
+      },
+      "last": {
+        "type": "int"
+      }
+    }
+  },
+  "deferredPortsBody": "Another program or another copy of Fi is using these ports. Your data here still works.",
+  "@deferredPortsBody": {
+    "description": "Banner body, ports in use."
+  },
+  "sidebarCauseLocked": "keyring locked",
+  "@sidebarCauseLocked": {
+    "description": "Sidebar cause line."
+  },
+  "sidebarCauseNoKeyring": "no keyring",
+  "@sidebarCauseNoKeyring": {
+    "description": "Sidebar cause line."
+  },
+  "sidebarCausePorts": "ports in use",
+  "@sidebarCausePorts": {
+    "description": "Sidebar cause line."
   }
 }

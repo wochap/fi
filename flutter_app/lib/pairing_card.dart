@@ -3,22 +3,90 @@ import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/controllers.dart';
 import 'package:fi/help_button.dart';
 import 'package:fi/help_copy.dart';
-import 'package:fi/reset_dialog.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/theme/nocturne.dart';
 import 'package:fi/theme/nocturne_widgets.dart';
 import 'package:flutter/material.dart';
 
+/// Pairing failures that end the flow; the host presents them as full screens.
+bool isTerminalPairingFailure(PairingFailureKindDto? failure) =>
+    failure == PairingFailureKindDto.bothRootless ||
+    failure == PairingFailureKindDto.rootMismatch;
+
 /// The one pairing surface, shared by onboarding and the devices screen.
 ///
 /// The SAS is rendered exactly as Rust supplies it; this widget never
 /// computes or reformats it beyond the fixed six-digit zero padding.
-class PairingCard extends StatelessWidget {
-  const PairingCard({required this.controller, this.onResetDataset, super.key});
+class PairingCard extends StatefulWidget {
+  const PairingCard({
+    required this.controller,
+    this.onTerminalFailure,
+    super.key,
+  });
   final DevicesController controller;
 
-  /// Offered on the root-mismatch outcome; the only way past that dead end.
-  final ResetDatasetAction? onResetDataset;
+  /// Called once per terminal failure ([isTerminalPairingFailure]) so the host decides how to
+  /// present it; the card itself only keeps its heading for those.
+  final ValueChanged<PairingFailureKindDto>? onTerminalFailure;
+
+  /// Shown after the idle copy while Discoverable is off, so the user knows
+  /// pairing does not depend on it.
+  static String discoveryOffNote(AppLocalizations l) =>
+      l.pairingDiscoveryOffNote;
+
+  @override
+  State<PairingCard> createState() => _PairingCardState();
+}
+
+class _PairingCardState extends State<PairingCard> {
+  /// The failure already handed to the host, so each one is reported once.
+  PairingStateDto? _reported;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_check);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _check());
+  }
+
+  @override
+  void didUpdateWidget(PairingCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.removeListener(_check);
+      widget.controller.addListener(_check);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_check);
+    super.dispose();
+  }
+
+  void _check() {
+    if (!mounted) return;
+    final pairing = widget.controller.pairing;
+    if (pairing.kind != PairingKindDto.failed) {
+      _reported = null;
+      return;
+    }
+    final failure = pairing.failure;
+    if (!isTerminalPairingFailure(failure) || identical(_reported, pairing)) {
+      return;
+    }
+    _reported = pairing;
+    widget.onTerminalFailure?.call(failure!);
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      _PairingCardBody(controller: widget.controller);
+}
+
+class _PairingCardBody extends StatelessWidget {
+  const _PairingCardBody({required this.controller});
+  final DevicesController controller;
 
   static const _title = TextStyle(
     fontSize: 17,
@@ -89,14 +157,9 @@ class PairingCard extends StatelessWidget {
         label: Text(context.l10n.pairingStart),
       );
 
-  /// Shown after the idle copy while Discoverable is off, so the user knows
-  /// pairing does not depend on it.
-  static String discoveryOffNote(AppLocalizations l) =>
-      l.pairingDiscoveryOffNote;
-
   String _idleText(AppLocalizations l) => controller.preferences.discoverable
       ? l.pairingIdleBody
-      : '${l.pairingIdleBody} ${discoveryOffNote(l)}';
+      : '${l.pairingIdleBody} ${PairingCard.discoveryOffNote(l)}';
 
   /// Idle is the card's resting state (mock devices-pairing): a row on a wide screen, a stack on a phone.
   Widget _idle(BuildContext context, bool compact) => compact
@@ -473,37 +536,9 @@ class PairingCard extends StatelessWidget {
 
   List<Widget> _failure(BuildContext context) =>
       switch (controller.pairing.failure) {
-        PairingFailureKindDto.bothRootless => [
-          const Icon(FiIcons.info, size: 40),
-          Text(
-            context.l10n.pairingBothRootless,
-            key: const Key('pairing-both-rootless'),
-            textAlign: TextAlign.center,
-          ),
-          TextButton(
-            onPressed: controller.beginPairing,
-            child: Text(context.l10n.pairingAgain),
-          ),
-        ],
-        PairingFailureKindDto.rootMismatch => [
-          const Icon(FiIcons.blocked, color: Nocturne.error, size: 40),
-          Text(
-            context.l10n.pairingRootMismatch,
-            key: const Key('pairing-root-mismatch'),
-            textAlign: TextAlign.center,
-          ),
-          if (onResetDataset != null)
-            FilledButton.icon(
-              key: const Key('reset-dataset'),
-              onPressed: controller.busy ? null : () => _confirmReset(context),
-              icon: const Icon(FiIcons.reset),
-              label: Text(context.l10n.shellResetData),
-            ),
-          TextButton(
-            onPressed: controller.beginPairing,
-            child: Text(context.l10n.pairingDifferentDevice),
-          ),
-        ],
+        // Presented by the host through [PairingCard.onTerminalFailure].
+        PairingFailureKindDto.bothRootless ||
+        PairingFailureKindDto.rootMismatch => const [],
         PairingFailureKindDto.secureStoreLocked => _codeConfirmation(
           context,
           committing: false,
@@ -539,17 +574,4 @@ class PairingCard extends StatelessWidget {
           ),
         ],
       };
-
-  Future<void> _confirmReset(BuildContext context) async {
-    final action = onResetDataset;
-    if (action == null) return;
-    final confirmed = await ResetDatasetDialog.show(
-      context,
-      lead: context.l10n.pairingResetLead,
-      trustedDeviceCount: controller.devices
-          .where((device) => !device.revoked)
-          .length,
-    );
-    if (confirmed) await action();
-  }
 }

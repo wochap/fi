@@ -155,19 +155,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get issueRange => 'Value is out of range';
 
   @override
-  String get networkingKeyringLocked =>
-      'Your login keyring is locked, so this device cannot reach your other devices. Unlock the keyring, then retry. Everything stored here still works.';
-
-  @override
-  String get networkingUnavailable =>
-      'Secure device networking is unavailable on this device, so it cannot reach your other devices. Everything stored here still works.';
-
-  @override
-  String networkingPortsExhausted(int first, int last) {
-    return 'Every network port Fi uses (UDP $first–$last) is already in use, so this device cannot reach your other devices. Close the other program or instance holding them, then retry.';
-  }
-
-  @override
   String get pairingDidNotComplete => 'Pairing did not complete.';
 
   @override
@@ -1111,62 +1098,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get recoveryNeedsDevice => 'Recovery needs another device';
 
   @override
-  String recoveryNoPeerBody(String root) {
-    return 'This device lost its local copy of your dataset$root. None of your other devices is reachable right now. Bring one of them online and recovery continues automatically; no pairing is needed.';
-  }
-
-  @override
-  String get recoveryResetInstead => 'Reset this device\'s data instead';
-
-  @override
-  String recoveryRecovering(String root) {
-    return 'Recovering your dataset from your other devices$root…';
-  }
-
-  @override
-  String get recoveryCorrupt =>
-      'The local copy could not be read and was set aside. Nothing was deleted.';
-
-  @override
-  String get recoveryMissing =>
-      'The local copy was missing. Nothing was deleted.';
-
-  @override
-  String bootJoiningFrom(String name) {
-    return 'Joining dataset from $name…';
-  }
-
-  @override
-  String get bootWaitingDataset =>
-      'Waiting for this local dataset to become available.';
-
-  @override
-  String get onboardTitle => 'Your private collection space';
-
-  @override
-  String get onboardIntro =>
-      'Create a new local dataset, or join the dataset on one of your other devices. Nothing is sent to a server.';
-
-  @override
   String get onboardQuarantined =>
       'Data found on this device was set aside because its dataset record was missing. Nothing was deleted: joining the same dataset from another device restores it.';
 
   @override
   String get onboardCreating => 'Creating…';
-
-  @override
-  String get onboardCreate => 'Create new dataset';
-
-  @override
-  String get onboardCreateBlocked =>
-      'Creating is unavailable while pairing is active. Stop pairing to create a new dataset here.';
-
-  @override
-  String get onboardJoin => 'Join an existing dataset';
-
-  @override
-  String get onboardPairingPreconditions =>
-      'The other device must already have a dataset. Start pairing on both devices, then tap Connect on one device only.';
 
   @override
   String sidebarPairedSummary(int count, String reach) {
@@ -1396,17 +1332,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get pairingAnother => 'Pair another device';
-
-  @override
-  String get pairingBothRootless =>
-      'Neither device has a dataset yet, so there is nothing to join. Pair with a device that already has a dataset, or create a new dataset on one device first.';
-
-  @override
-  String get pairingAgain => 'Pair again';
-
-  @override
-  String get pairingRootMismatch =>
-      'These devices hold different datasets, and datasets cannot be merged. Pairing them again will not succeed. To use the other device\'s dataset here, this device\'s local data must be reset first.';
 
   @override
   String get pairingDifferentDevice => 'Pair a different device';
@@ -3352,4 +3277,153 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get resetKeep => 'Keep data';
+
+  @override
+  String get setupTitle => 'Set up this device';
+
+  @override
+  String get setupLead =>
+      'Your data stays on your devices. Pick how this one starts.';
+
+  @override
+  String get setupCreateTitle => 'Create a new dataset';
+
+  @override
+  String get setupCreateBody =>
+      'Start fresh. You can pair other devices later.';
+
+  @override
+  String get setupCreateLocked =>
+      'Not available while pairing is open. Stop pairing to create one instead.';
+
+  @override
+  String get setupJoinTitle => 'Join an existing dataset';
+
+  @override
+  String get setupJoinBody =>
+      'Copy the dataset from one of your other devices.';
+
+  @override
+  String get setupJoinNeedsDataset =>
+      'The other device must already have a dataset.';
+
+  @override
+  String get setupJoinOneSide =>
+      'Start the connection from only one of the two devices.';
+
+  @override
+  String setupPairingStatus(String time) {
+    return 'Pairing is open · $time left';
+  }
+
+  @override
+  String get setupPairingWaiting =>
+      'Waiting for your other device. Tap Connect on one device only.';
+
+  @override
+  String get setupStopPairing => 'Stop pairing';
+
+  @override
+  String get joinLead =>
+      'Start pairing on the other device too. Tap Connect on one device only.';
+
+  @override
+  String get couldntJoinTitle => 'Couldn\'t join';
+
+  @override
+  String get couldntJoinBody =>
+      'The other device has no dataset yet. Create one there first, or create one here.';
+
+  @override
+  String joiningTitleNamed(String name) {
+    return 'Joining “$name”';
+  }
+
+  @override
+  String get joiningTitle => 'Joining the other device';
+
+  @override
+  String joiningBodyNamed(String name) {
+    return 'Copying the dataset from $name. Keep both devices open until this finishes.';
+  }
+
+  @override
+  String get joiningBody =>
+      'Copying the dataset from the other device. Keep both devices open until this finishes.';
+
+  @override
+  String get mismatchTitle => 'This device has a different dataset';
+
+  @override
+  String mismatchBodyNamed(String name) {
+    return '“$name” uses another dataset than this device. Devices can only sync when they share the same one.';
+  }
+
+  @override
+  String get mismatchBody =>
+      'The other device uses another dataset than this device. Devices can only sync when they share the same one.';
+
+  @override
+  String get mismatchResetNote =>
+      'To join it, reset this device\'s data first. The collections on this device will be deleted; the other device keeps its data.';
+
+  @override
+  String get resetDataEllipsis => 'Reset this device\'s data…';
+
+  @override
+  String get fatalTitle => 'Fi couldn\'t start';
+
+  @override
+  String get fatalResetBody =>
+      'This device\'s local data can\'t be opened. Retrying won\'t fix it. Resetting deletes this device\'s copy; your other devices keep theirs.';
+
+  @override
+  String get fatalCopyDetails => 'Copy details';
+
+  @override
+  String get fatalDetailsCopied => 'Details copied';
+
+  @override
+  String get recoveringTitle => 'Recovering this device\'s data';
+
+  @override
+  String get recoveringBody =>
+      'Fi is getting the dataset back from your other devices. Keep them open.';
+
+  @override
+  String get recoveryNeedsDeviceBody =>
+      'This device\'s copy of the dataset is damaged. Open Fi on a paired device on the same network to restore it, or reset.';
+
+  @override
+  String get deferredLockedTitle =>
+      'Sync is off: the desktop keyring is locked';
+
+  @override
+  String get deferredLockedBody =>
+      'Fi keeps this device\'s keys in the desktop keyring. Unlock it, then retry. Your data here still works.';
+
+  @override
+  String get deferredNoKeyringTitle => 'Sync is off: no keyring is available';
+
+  @override
+  String get deferredNoKeyringBody =>
+      'Install and unlock a desktop keyring (GNOME Keyring or KWallet), then retry.';
+
+  @override
+  String deferredPortsTitle(int first, int last) {
+    return 'Sync is off: UDP $first–$last are in use';
+  }
+
+  @override
+  String get deferredPortsBody =>
+      'Another program or another copy of Fi is using these ports. Your data here still works.';
+
+  @override
+  String get sidebarCauseLocked => 'keyring locked';
+
+  @override
+  String get sidebarCauseNoKeyring => 'no keyring';
+
+  @override
+  String get sidebarCausePorts => 'ports in use';
 }

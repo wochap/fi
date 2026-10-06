@@ -1,6 +1,7 @@
 import 'package:fi/app.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fake_bridge.dart';
@@ -47,21 +48,25 @@ void main() {
       ..bootstrap = joining(recovery(RecoveryOutcomeDto.recovering));
     await tester.pumpWidget(testApp(bridge));
     await pumpUntilFound(tester, find.byKey(const Key('recovery-recovering')));
+    expect(find.text("Recovering this device's data"), findsOneWidget);
     expect(
-      find.textContaining('Recovering your dataset from your other devices'),
+      find.text(
+        'Fi is getting the dataset back from your other devices. Keep them '
+        'open.',
+      ),
       findsOneWidget,
     );
-    expect(find.textContaining('0b6f4b3e…'), findsOneWidget);
-    expect(
-      find.text('The local copy was missing. Nothing was deleted.'),
-      findsOneWidget,
-    );
+    expect(find.byKey(const Key('setup-ring')), findsOneWidget);
+    // The root id is not printed.
+    expect(find.textContaining('0b6f4b3e'), findsNothing);
     expect(find.byKey(const Key('joining-surface')), findsNothing);
     expect(find.byKey(const Key('bootstrap-error')), findsNothing);
     expect(find.byKey(const Key('create-dataset')), findsNothing);
   });
 
-  testWidgets('a corrupt snapshot says it was set aside', (tester) async {
+  testWidgets('a corrupt snapshot shows the same recovering copy', (
+    tester,
+  ) async {
     final bridge = FakeCollectionBridge()
       ..bootstrap = joining(
         recovery(
@@ -71,10 +76,33 @@ void main() {
       );
     await tester.pumpWidget(testApp(bridge));
     await pumpUntilFound(tester, find.byKey(const Key('recovery-recovering')));
-    expect(
-      find.textContaining('could not be read and was set aside'),
-      findsOneWidget,
-    );
+    expect(find.text("Recovering this device's data"), findsOneWidget);
+  });
+
+  testWidgets('Retry dials every trusted device and offers no create', (
+    tester,
+  ) async {
+    TrustedDeviceDto device(String n, {bool revoked = false}) =>
+        TrustedDeviceDto(
+          deviceId: n * 64,
+          friendlyName: 'Peer $n',
+          pairedAtMs: 1,
+          revoked: revoked,
+          connection: PeerConnectionKindDto.offline,
+        );
+    final bridge = FakeCollectionBridge()
+      ..bootstrap = joining(recovery(RecoveryOutcomeDto.noPeerAvailable))
+      ..devices.addAll([device('1'), device('2'), device('3', revoked: true)]);
+    await tester.pumpWidget(testApp(bridge));
+    await pumpUntilFound(tester, find.byKey(const Key('recovery-no-peer')));
+    await tester.pump();
+    expect(find.byKey(const Key('create-dataset')), findsNothing);
+    expect(find.textContaining('Create'), findsNothing);
+
+    await tester.tap(find.byKey(const Key('recovery-retry')));
+    await tester.pump();
+    expect(bridge.reconnects, ['1' * 64, '2' * 64]);
+    expect(find.byKey(const Key('recovery-no-peer')), findsOneWidget);
   });
 
   testWidgets(
@@ -93,7 +121,12 @@ void main() {
       );
       await pumpUntilFound(tester, find.byKey(const Key('recovery-no-peer')));
       expect(find.text('Recovery needs another device'), findsOneWidget);
-      expect(find.textContaining('no pairing is needed'), findsOneWidget);
+      expect(
+        find.textContaining("This device's copy of the dataset is damaged."),
+        findsOneWidget,
+      );
+      expect(find.text("Reset this device's data…"), findsOneWidget);
+      expect(find.byKey(const Key('recovery-retry')), findsOneWidget);
       expect(find.byKey(const Key('create-dataset')), findsNothing);
       expect(find.byKey(const Key('retry-bootstrap')), findsNothing);
       expect(bridge.pairingCalls, isNot(contains('createNewDataset')));
@@ -167,7 +200,10 @@ void main() {
       );
     await tester.pumpWidget(testApp(bridge));
     await pumpUntilFound(tester, find.byKey(const Key('bootstrap-error')));
-    expect(find.textContaining('failed repeatedly'), findsOneWidget);
+    expect(find.text("Fi couldn't start"), findsOneWidget);
+    expect(find.textContaining('Retrying won\'t fix it.'), findsOneWidget);
+    expect(find.textContaining('failed repeatedly'), findsNothing);
+    expect(find.byKey(const Key('copy-error-details')), findsOneWidget);
     expect(find.byKey(const Key('reset-dataset')), findsOneWidget);
     expect(find.byKey(const Key('retry-bootstrap')), findsNothing);
   });
@@ -186,5 +222,53 @@ void main() {
     await tester.pumpWidget(testApp(bridge));
     await pumpUntilFound(tester, find.byKey(const Key('create-dataset')));
     expect(find.byKey(const Key('recovery-quarantined')), findsOneWidget);
+  });
+
+  testWidgets('Copy details puts Rust\'s message on the clipboard', (
+    tester,
+  ) async {
+    const message =
+        "Recovering this device's dataset from your other devices failed "
+        'repeatedly, so it will not be retried.';
+    String? copied;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          copied = (call.arguments as Map)['text'] as String?;
+        }
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+    final bridge = FakeCollectionBridge()
+      ..nextError = const BridgeError(
+        kind: BridgeErrorKind.bootstrap,
+        issues: [],
+        message: message,
+        resetResolvable: true,
+      );
+    await tester.pumpWidget(testApp(bridge));
+    await pumpUntilFound(tester, find.byKey(const Key('copy-error-details')));
+    await tester.tap(find.byKey(const Key('copy-error-details')));
+    await tester.pump();
+    await tester.pump();
+    expect(copied, message);
+    expect(find.text('Details copied'), findsOneWidget);
+  });
+
+  testWidgets('a fatal error without its own message offers no Copy details', (
+    tester,
+  ) async {
+    final bridge = FakeCollectionBridge()..nextError = StateError('boom');
+    await tester.pumpWidget(testApp(bridge));
+    await pumpUntilFound(tester, find.byKey(const Key('bootstrap-error')));
+    expect(find.byKey(const Key('copy-error-details')), findsNothing);
+    expect(find.byKey(const Key('retry-bootstrap')), findsOneWidget);
   });
 }

@@ -26,7 +26,18 @@ void main() {
     );
     // Local data stays usable behind the banner.
     expect(find.text('Collections'), findsWidgets);
-    expect(find.textContaining('keyring'), findsOneWidget);
+    expect(
+      find.text('Sync is off: the desktop keyring is locked'),
+      findsOneWidget,
+    );
+    expect(
+      find.text(
+        "Fi keeps this device's keys in the desktop keyring. Unlock it, then "
+        'retry. Your data here still works.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('keyring locked'), findsOneWidget);
 
     // A retry that is still locked keeps the explanation and reports why.
     bridge.nextRetryNetworkingError = const BridgeError(
@@ -48,6 +59,8 @@ void main() {
     expect(bridge.retryNetworkingCalls, 2);
     expect(find.byKey(const Key('networking-deferred-banner')), findsNothing);
     expect(find.text('Collections'), findsWidgets);
+    // The live status replaces the cause line.
+    expect(find.text('keyring locked'), findsNothing);
   });
 
   testWidgets('exhausted ports name the UDP range and retry', (tester) async {
@@ -68,8 +81,19 @@ void main() {
       tester,
       find.byKey(const Key('networking-deferred-banner')),
     );
-    expect(find.textContaining('47380–47389'), findsOneWidget);
+    expect(
+      find.text('Sync is off: UDP 47380–47389 are in use'),
+      findsOneWidget,
+    );
     expect(find.textContaining('keyring'), findsNothing);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('app-bar-sync-status')),
+        matching: find.text('Offline'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('ports in use'), findsOneWidget);
     expect(find.byIcon(FiIcons.network), findsOneWidget);
     expect(find.text('Collections'), findsWidgets);
 
@@ -93,6 +117,7 @@ void main() {
       );
     await tester.pumpWidget(testApp(bridge));
     await pumpUntilFound(tester, find.byKey(const Key('bootstrap-error')));
+    expect(find.text("Fi couldn't start"), findsOneWidget);
     expect(find.textContaining('keyring'), findsOneWidget);
     expect(find.byKey(const Key('retry-after-unlock')), findsOneWidget);
     // Never the destructive affordance: a locked keyring is not a dataset
@@ -107,5 +132,51 @@ void main() {
     await tester.pumpAndSettle();
     expect(bridge.retryNetworkingCalls, 1);
     expect(find.byKey(const Key('bootstrap-error')), findsNothing);
+  });
+
+  testWidgets('no keyring titles the banner and reads no keyring', (
+    tester,
+  ) async {
+    final bridge = FakeCollectionBridge()
+      ..bootstrap = const BootstrapDto(
+        kind: BootstrapKindDto.ready,
+        rootId: 'root',
+      )
+      ..deferredNetworking = const NetworkingDeferredDto(
+        kind: NetworkingDeferredKindDto.secureStoreUnavailable,
+        message: '',
+      );
+    await tester.pumpWidget(testApp(bridge));
+    await pumpUntilFound(
+      tester,
+      find.byKey(const Key('networking-deferred-banner')),
+    );
+    expect(find.text('Sync is off: no keyring is available'), findsOneWidget);
+    expect(find.text('no keyring'), findsOneWidget);
+    expect(find.byKey(const Key('retry-networking')), findsOneWidget);
+  });
+
+  testWidgets('a phone shows Offline with the cause in the top row', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    for (final (kind, cause) in [
+      (NetworkingDeferredKindDto.secureStoreLocked, 'keyring locked'),
+      (NetworkingDeferredKindDto.secureStoreUnavailable, 'no keyring'),
+      (NetworkingDeferredKindDto.portsExhausted, 'ports in use'),
+    ]) {
+      final bridge = FakeCollectionBridge()
+        ..bootstrap = const BootstrapDto(
+          kind: BootstrapKindDto.ready,
+          rootId: 'root',
+        )
+        ..deferredNetworking = NetworkingDeferredDto(kind: kind, message: '');
+      await tester.pumpWidget(testApp(bridge));
+      await pumpUntilFound(tester, find.text('Offline · $cause'));
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    }
   });
 }

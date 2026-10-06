@@ -92,18 +92,37 @@ String _formatBound(FieldTypeDto type, int value, String decimalSeparator) =>
     };
 
 /// Why peer networking is waiting, in the active language.
-String networkingDeferredText(
+String networkingDeferredTitle(
   AppLocalizations l,
   NetworkingDeferredDto deferred,
   NetworkPortsDto? ports,
 ) => switch (deferred.kind) {
-  NetworkingDeferredKindDto.secureStoreLocked => l.networkingKeyringLocked,
-  NetworkingDeferredKindDto.secureStoreUnavailable => l.networkingUnavailable,
-  NetworkingDeferredKindDto.portsExhausted => l.networkingPortsExhausted(
+  NetworkingDeferredKindDto.secureStoreLocked => l.deferredLockedTitle,
+  NetworkingDeferredKindDto.secureStoreUnavailable => l.deferredNoKeyringTitle,
+  NetworkingDeferredKindDto.portsExhausted => l.deferredPortsTitle(
     ports?.rangeFirst ?? 47380,
     ports?.rangeLast ?? 47389,
   ),
 };
+
+/// What to do about deferred networking, under [networkingDeferredTitle].
+String networkingDeferredBody(
+  AppLocalizations l,
+  NetworkingDeferredDto deferred,
+) => switch (deferred.kind) {
+  NetworkingDeferredKindDto.secureStoreLocked => l.deferredLockedBody,
+  NetworkingDeferredKindDto.secureStoreUnavailable => l.deferredNoKeyringBody,
+  NetworkingDeferredKindDto.portsExhausted => l.deferredPortsBody,
+};
+
+/// The short cause under "Offline" in the navigation status while networking is deferred.
+String deferredCause(AppLocalizations l, NetworkingDeferredKindDto kind) =>
+    switch (kind) {
+      NetworkingDeferredKindDto.secureStoreLocked => l.sidebarCauseLocked,
+      NetworkingDeferredKindDto.secureStoreUnavailable =>
+        l.sidebarCauseNoKeyring,
+      NetworkingDeferredKindDto.portsExhausted => l.sidebarCausePorts,
+    };
 
 /// Why one widget could not be evaluated.
 String widgetErrorText(AppLocalizations l, WidgetErrorKindDto kind) =>

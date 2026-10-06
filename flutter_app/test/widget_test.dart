@@ -38,7 +38,7 @@ void main() {
   testWidgets('onboarding gates collection entry', (tester) async {
     final bridge = FakeCollectionBridge();
     await tester.pumpWidget(app(bridge));
-    await pumpUntilFound(tester, find.text('Create new dataset'));
+    await pumpUntilFound(tester, find.text('Create a new dataset'));
     expect(find.text('Collections'), findsNothing);
     await tester.tap(find.byKey(const Key('create-dataset')));
     await pumpUntilFound(tester, find.text('Collections'));

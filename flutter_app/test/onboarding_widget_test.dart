@@ -112,13 +112,19 @@ void main() {
     await tester.pumpWidget(testApp(bridge));
     await pumpUntilFound(tester, find.byKey(const Key('join-dataset')));
     expect(find.byKey(const Key('pairing-card')), findsNothing);
+    // The Join card states both preconditions before pairing can fail on them.
+    expect(
+      find.text('The other device must already have a dataset.'),
+      findsOneWidget,
+    );
+    expect(
+      find.text('Start the connection from only one of the two devices.'),
+      findsOneWidget,
+    );
     await tester.tap(find.byKey(const Key('join-dataset')));
     await tester.pump();
-    expect(find.byKey(const Key('pairing-card')), findsOneWidget);
-    expect(find.byKey(const Key('pairing-preconditions')), findsOneWidget);
-    expect(find.textContaining('must already have a dataset'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('start-pairing')));
     await tester.pump();
+    expect(find.byKey(const Key('pairing-card')), findsOneWidget);
     expect(find.text('Pairing is open'), findsOneWidget);
     expect(bridge.bootstrap.kind, BootstrapKindDto.needsDecision);
     expect(find.text('Collections'), findsNothing);
@@ -131,6 +137,7 @@ void main() {
       alreadyPaired: false,
     );
     bridge.candidateController.add([candidate]);
+    await tester.pump();
     await tester.pump();
     expect(find.byKey(const Key('single-initiator-hint')), findsOneWidget);
     expect(find.text('192.0.2.7:4400'), findsOneWidget);
@@ -164,26 +171,70 @@ void main() {
     final bridge = FakeCollectionBridge();
     await tester.pumpWidget(testApp(bridge));
     await pumpUntilFound(tester, find.byKey(const Key('join-dataset')));
-    FilledButton create() =>
-        tester.widget<FilledButton>(find.byKey(const Key('create-dataset')));
-    expect(create().onPressed, isNotNull);
-    expect(find.byKey(const Key('create-blocked-reason')), findsNothing);
+    expect(find.byKey(const Key('choice-locked-reason')), findsNothing);
+    expect(find.byKey(const Key('pairing-status-row')), findsNothing);
 
     await tester.tap(find.byKey(const Key('join-dataset')));
     await tester.pump();
-    await tester.tap(find.byKey(const Key('start-pairing')));
     await tester.pump();
-    expect(create().onPressed, isNull);
-    expect(find.byKey(const Key('create-blocked-reason')), findsOneWidget);
-    expect(find.textContaining('Stop pairing'), findsWidgets);
+    await tester.tap(find.byKey(const Key('join-back')));
+    await tester.pump();
+    expect(find.byKey(const Key('choice-locked-reason')), findsOneWidget);
+    expect(
+      find.text(
+        'Not available while pairing is open. Stop pairing to create one '
+        'instead.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Pairing is open · '), findsOneWidget);
+    // The locked card is inert.
+    await tester.tap(find.byKey(const Key('create-dataset')));
+    await tester.pump();
+    expect(bridge.pairingCalls, isNot(contains('createNewDataset')));
 
+    expect(
+      tester.getSize(find.byKey(const Key('stop-pairing'))).height,
+      greaterThanOrEqualTo(44),
+    );
     await tester.ensureVisible(find.byKey(const Key('stop-pairing')));
+    await tester.pump();
     await tester.tap(find.byKey(const Key('stop-pairing')));
     await tester.pump();
     await tester.pump();
-    expect(create().onPressed, isNotNull);
-    expect(find.byKey(const Key('create-blocked-reason')), findsNothing);
+    expect(find.byKey(const Key('choice-locked-reason')), findsNothing);
+    expect(find.byKey(const Key('pairing-status-row')), findsNothing);
     expect(bridge.bootstrap.kind, BootstrapKindDto.needsDecision);
+  });
+
+  testWidgets('Join starts pairing at once and Back keeps it open', (
+    tester,
+  ) async {
+    final bridge = FakeCollectionBridge();
+    await tester.pumpWidget(testApp(bridge));
+    await pumpUntilFound(tester, find.byKey(const Key('join-dataset')));
+    await tester.tap(find.byKey(const Key('join-dataset')));
+    await tester.pump();
+    await tester.pump();
+    expect(find.byKey(const Key('join-view')), findsOneWidget);
+    expect(find.text('Join an existing dataset'), findsOneWidget);
+    expect(
+      find.text(
+        'Start pairing on the other device too. Tap Connect on one device '
+        'only.',
+      ),
+      findsOneWidget,
+    );
+    expect(bridge.pairing.kind, PairingKindDto.discoverable);
+    expect(find.byKey(const Key('start-pairing')), findsNothing);
+    expect(find.byKey(const Key('pairing-time-left')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('join-back')));
+    await tester.pump();
+    expect(find.byKey(const Key('onboarding')), findsOneWidget);
+    expect(find.byKey(const Key('choice-locked-reason')), findsOneWidget);
+    expect(bridge.pairing.kind, PairingKindDto.discoverable);
+    expect(bridge.pairingCalls, isNot(contains('stopPairing')));
   });
 
   testWidgets('create closes any pairing window before issuing the create', (
@@ -221,10 +272,17 @@ void main() {
       const BootstrapDto(kind: BootstrapKindDto.joining, rootId: 'root'),
     );
     await pumpUntilFound(tester, find.byKey(const Key('joining-surface')));
-    await pumpUntilFound(
-      tester,
-      find.text('Joining dataset from Fi 3f9a2c1b…'),
+    await pumpUntilFound(tester, find.text('Joining “Fi 3f9a2c1b”'));
+    expect(
+      find.text(
+        'Copying the dataset from Fi 3f9a2c1b. Keep both devices open until '
+        'this finishes.',
+      ),
+      findsOneWidget,
     );
+    expect(find.byKey(const Key('setup-ring')), findsOneWidget);
+    expect(find.textContaining('%'), findsNothing);
+    expect(find.text('Cancel'), findsNothing);
   });
 
   testWidgets('the joining surface falls back to unnamed copy', (tester) async {
@@ -235,11 +293,14 @@ void main() {
       );
     await tester.pumpWidget(testApp(bridge));
     await pumpUntilFound(tester, find.byKey(const Key('joining-surface')));
+    expect(find.text('Joining the other device'), findsOneWidget);
     expect(
-      find.text('Waiting for this local dataset to become available.'),
+      find.text(
+        'Copying the dataset from the other device. Keep both devices open '
+        'until this finishes.',
+      ),
       findsOneWidget,
     );
-    expect(find.textContaining('Joining dataset from'), findsNothing);
   });
 
   testWidgets(
@@ -285,7 +346,7 @@ void main() {
     },
   );
 
-  testWidgets('root mismatch and both-rootless render guidance', (
+  testWidgets('both-rootless becomes Couldn\'t join; Back frees Create', (
     tester,
   ) async {
     final bridge = FakeCollectionBridge();
@@ -302,9 +363,33 @@ void main() {
       ),
     );
     await tester.pump();
-    expect(find.byKey(const Key('pairing-both-rootless')), findsOneWidget);
+    expect(find.byKey(const Key('couldnt-join')), findsOneWidget);
+    expect(find.text("Couldn't join"), findsOneWidget);
+    expect(
+      find.text(
+        'The other device has no dataset yet. Create one there first, or '
+        'create one here.',
+      ),
+      findsOneWidget,
+    );
     expect(find.text('both devices need a root dataset'), findsNothing);
 
+    await tester.tap(find.byKey(const Key('couldnt-join-back')));
+    await tester.pump();
+    await tester.pump();
+    expect(find.byKey(const Key('onboarding')), findsOneWidget);
+    expect(bridge.pairing.kind, PairingKindDto.idle);
+    expect(find.byKey(const Key('choice-locked-reason')), findsNothing);
+  });
+
+  testWidgets('root mismatch in onboarding replaces the Join view', (
+    tester,
+  ) async {
+    final bridge = FakeCollectionBridge();
+    await tester.pumpWidget(testApp(bridge));
+    await pumpUntilFound(tester, find.byKey(const Key('join-dataset')));
+    await tester.tap(find.byKey(const Key('join-dataset')));
+    await tester.pump();
     bridge.pairingController.add(
       pairingState(
         PairingKindDto.failed,
@@ -313,8 +398,14 @@ void main() {
       ),
     );
     await tester.pump();
-    expect(find.byKey(const Key('pairing-root-mismatch')), findsOneWidget);
-    expect(find.textContaining('cannot be merged'), findsOneWidget);
+    expect(find.byKey(const Key('dataset-mismatch')), findsOneWidget);
+    expect(find.byKey(const Key('join-view')), findsNothing);
     expect(find.text('Try again'), findsNothing);
+
+    await tester.tap(find.byKey(const Key('pair-different-device')));
+    await tester.pump();
+    await tester.pump();
+    expect(find.byKey(const Key('join-view')), findsOneWidget);
+    expect(bridge.pairing.kind, PairingKindDto.discoverable);
   });
 }

@@ -127,7 +127,14 @@ void main() {
     await tester.tap(find.byKey(const Key('retry-bootstrap')));
     await pumpUntilFound(tester, find.byKey(const Key('reset-dataset')));
     expect(find.byKey(const Key('retry-bootstrap')), findsNothing);
-    expect(find.text('Incompatible application version.'), findsOneWidget);
+    expect(find.text("Fi couldn't start"), findsOneWidget);
+    expect(
+      find.textContaining("This device's local data can't be opened."),
+      findsOneWidget,
+    );
+    // Rust's wording goes behind Copy details, not on the surface.
+    expect(find.text('Incompatible application version.'), findsNothing);
+    expect(find.byKey(const Key('copy-error-details')), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('reset-dataset')));
     await tester.pumpAndSettle();
@@ -164,7 +171,7 @@ void main() {
     );
   });
 
-  testWidgets('the root-mismatch outcome exposes the reset action', (
+  testWidgets('the root-mismatch outcome opens the different-dataset screen', (
     tester,
   ) async {
     final bridge = FakeCollectionBridge()..status = SyncStatusDto.searching;
@@ -181,14 +188,10 @@ void main() {
         alreadyPaired: false,
       ),
     );
-    await pumpUntilFound(
-      tester,
-      find.byKey(const Key('pairing-root-mismatch')),
-    );
+    await pumpUntilFound(tester, find.byKey(const Key('dataset-mismatch')));
+    expect(find.text('This device has a different dataset'), findsOneWidget);
     expect(find.byKey(const Key('reset-dataset')), findsOneWidget);
     expect(find.text('Pair a different device'), findsOneWidget);
-    await tester.ensureVisible(find.byKey(const Key('reset-dataset')));
-    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('reset-dataset')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('reset-dataset-dialog')), findsOneWidget);
@@ -199,5 +202,45 @@ void main() {
     await tester.tap(find.byKey(const Key('reset-cancel')));
     await tester.pumpAndSettle();
     expect(bridge.pairingCalls, isNot(contains('resetDataset')));
+  });
+
+  testWidgets('Back from a Devices-page mismatch pops with pairing idle', (
+    tester,
+  ) async {
+    final bridge = FakeCollectionBridge()..devices.add(tablet);
+    await openDevices(tester, bridge);
+    await tester.drag(
+      find.byKey(const Key('devices-page')),
+      const Offset(0, 800),
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('start-pairing')));
+    await tester.pump();
+    await tester.pump();
+    expect(find.byKey(const Key('pairing-card')), findsOneWidget);
+    bridge.pairingController.add(
+      const PairingStateDto(
+        kind: PairingKindDto.failed,
+        localConfirmed: false,
+        remoteConfirmed: false,
+        failure: PairingFailureKindDto.rootMismatch,
+        alreadyPaired: false,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('dataset-mismatch')), findsOneWidget);
+    // Tablet is trusted, but the mismatched peer is not: the unnamed copy.
+    expect(
+      find.textContaining('The other device uses another dataset'),
+      findsOneWidget,
+    );
+    expect(find.text('Retry'), findsNothing);
+
+    await tester.tap(find.byKey(const Key('dataset-mismatch-back')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('dataset-mismatch')), findsNothing);
+    expect(find.byKey(const Key('devices-page')), findsOneWidget);
+    expect(bridge.pairing.kind, PairingKindDto.idle);
+    expect(find.byKey(const Key('pairing-card')), findsNothing);
   });
 }

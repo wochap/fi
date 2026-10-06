@@ -160,19 +160,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get issueRange => 'El valor está fuera de rango';
 
   @override
-  String get networkingKeyringLocked =>
-      'Tu llavero de inicio de sesión está bloqueado, así que este dispositivo no puede comunicarse con tus otros dispositivos. Desbloquea el llavero y vuelve a intentarlo. Todo lo guardado aquí sigue funcionando.';
-
-  @override
-  String get networkingUnavailable =>
-      'La red segura entre dispositivos no está disponible en este dispositivo, así que no puede comunicarse con tus otros dispositivos. Todo lo guardado aquí sigue funcionando.';
-
-  @override
-  String networkingPortsExhausted(int first, int last) {
-    return 'Todos los puertos de red que usa Fi (UDP $first–$last) ya están en uso, así que este dispositivo no puede comunicarse con tus otros dispositivos. Cierra el otro programa o instancia que los ocupa y vuelve a intentarlo.';
-  }
-
-  @override
   String get pairingDidNotComplete => 'El emparejamiento no se completó.';
 
   @override
@@ -1121,62 +1108,11 @@ class AppLocalizationsEs extends AppLocalizations {
   String get recoveryNeedsDevice => 'La recuperación necesita otro dispositivo';
 
   @override
-  String recoveryNoPeerBody(String root) {
-    return 'Este dispositivo perdió su copia local de tu conjunto de datos$root. Ninguno de tus otros dispositivos está disponible ahora. Conecta uno de ellos y la recuperación continuará automáticamente; no hace falta emparejar.';
-  }
-
-  @override
-  String get recoveryResetInstead =>
-      'Restablecer los datos de este dispositivo en su lugar';
-
-  @override
-  String recoveryRecovering(String root) {
-    return 'Recuperando tu conjunto de datos desde tus otros dispositivos$root…';
-  }
-
-  @override
-  String get recoveryCorrupt =>
-      'No se pudo leer la copia local y se apartó. No se eliminó nada.';
-
-  @override
-  String get recoveryMissing => 'Faltaba la copia local. No se eliminó nada.';
-
-  @override
-  String bootJoiningFrom(String name) {
-    return 'Uniéndote al conjunto de datos de $name…';
-  }
-
-  @override
-  String get bootWaitingDataset =>
-      'Esperando a que este conjunto de datos local esté disponible.';
-
-  @override
-  String get onboardTitle => 'Tu espacio privado de colecciones';
-
-  @override
-  String get onboardIntro =>
-      'Crea un conjunto de datos local nuevo o únete al de uno de tus otros dispositivos. No se envía nada a ningún servidor.';
-
-  @override
   String get onboardQuarantined =>
       'Los datos encontrados en este dispositivo se apartaron porque faltaba su registro de conjunto de datos. No se eliminó nada: unirte al mismo conjunto de datos desde otro dispositivo los restaura.';
 
   @override
   String get onboardCreating => 'Creando…';
-
-  @override
-  String get onboardCreate => 'Crear conjunto de datos nuevo';
-
-  @override
-  String get onboardCreateBlocked =>
-      'No puedes crear mientras el emparejamiento está activo. Detén el emparejamiento para crear un conjunto de datos nuevo aquí.';
-
-  @override
-  String get onboardJoin => 'Unirte a un conjunto de datos existente';
-
-  @override
-  String get onboardPairingPreconditions =>
-      'El otro dispositivo ya debe tener un conjunto de datos. Inicia el emparejamiento en ambos dispositivos y luego toca Conectar en uno solo.';
 
   @override
   String sidebarPairedSummary(int count, String reach) {
@@ -1408,17 +1344,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get pairingAnother => 'Emparejar otro dispositivo';
-
-  @override
-  String get pairingBothRootless =>
-      'Ninguno de los dispositivos tiene todavía un conjunto de datos, así que no hay nada a qué unirse. Empareja con un dispositivo que ya tenga uno o crea primero un conjunto de datos nuevo en uno de ellos.';
-
-  @override
-  String get pairingAgain => 'Emparejar de nuevo';
-
-  @override
-  String get pairingRootMismatch =>
-      'Estos dispositivos tienen conjuntos de datos distintos, y no se pueden combinar. Emparejarlos de nuevo no funcionará. Para usar aquí el conjunto de datos del otro dispositivo, primero hay que restablecer los datos locales de este.';
 
   @override
   String get pairingDifferentDevice => 'Emparejar otro dispositivo distinto';
@@ -3379,4 +3304,154 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get resetKeep => 'Conservar datos';
+
+  @override
+  String get setupTitle => 'Configura este dispositivo';
+
+  @override
+  String get setupLead =>
+      'Tus datos se quedan en tus dispositivos. Elige cómo empieza este.';
+
+  @override
+  String get setupCreateTitle => 'Crear un conjunto de datos nuevo';
+
+  @override
+  String get setupCreateBody =>
+      'Empieza de cero. Puedes vincular otros dispositivos después.';
+
+  @override
+  String get setupCreateLocked =>
+      'No disponible mientras la vinculación está abierta. Detén la vinculación para crear uno.';
+
+  @override
+  String get setupJoinTitle => 'Unirse a un conjunto de datos existente';
+
+  @override
+  String get setupJoinBody =>
+      'Copia el conjunto de datos de otro de tus dispositivos.';
+
+  @override
+  String get setupJoinNeedsDataset =>
+      'El otro dispositivo ya debe tener un conjunto de datos.';
+
+  @override
+  String get setupJoinOneSide =>
+      'Inicia la conexión desde solo uno de los dos dispositivos.';
+
+  @override
+  String setupPairingStatus(String time) {
+    return 'Vinculación abierta · quedan $time';
+  }
+
+  @override
+  String get setupPairingWaiting =>
+      'Esperando a tu otro dispositivo. Toca Conectar en un solo dispositivo.';
+
+  @override
+  String get setupStopPairing => 'Detener vinculación';
+
+  @override
+  String get joinLead =>
+      'Inicia la vinculación también en el otro dispositivo. Toca Conectar en un solo dispositivo.';
+
+  @override
+  String get couldntJoinTitle => 'No se pudo unir';
+
+  @override
+  String get couldntJoinBody =>
+      'El otro dispositivo aún no tiene un conjunto de datos. Crea uno allí primero, o crea uno aquí.';
+
+  @override
+  String joiningTitleNamed(String name) {
+    return 'Uniéndose a “$name”';
+  }
+
+  @override
+  String get joiningTitle => 'Uniéndose al otro dispositivo';
+
+  @override
+  String joiningBodyNamed(String name) {
+    return 'Copiando el conjunto de datos de $name. Mantén ambos dispositivos abiertos hasta que termine.';
+  }
+
+  @override
+  String get joiningBody =>
+      'Copiando el conjunto de datos del otro dispositivo. Mantén ambos dispositivos abiertos hasta que termine.';
+
+  @override
+  String get mismatchTitle => 'Este dispositivo tiene otro conjunto de datos';
+
+  @override
+  String mismatchBodyNamed(String name) {
+    return '“$name” usa otro conjunto de datos que este dispositivo. Los dispositivos solo se sincronizan cuando comparten el mismo.';
+  }
+
+  @override
+  String get mismatchBody =>
+      'El otro dispositivo usa otro conjunto de datos que este dispositivo. Los dispositivos solo se sincronizan cuando comparten el mismo.';
+
+  @override
+  String get mismatchResetNote =>
+      'Para unirte, primero restablece los datos de este dispositivo. Las colecciones de este dispositivo se eliminarán; el otro dispositivo conserva sus datos.';
+
+  @override
+  String get resetDataEllipsis => 'Restablecer los datos de este dispositivo…';
+
+  @override
+  String get fatalTitle => 'Fi no pudo iniciar';
+
+  @override
+  String get fatalResetBody =>
+      'Los datos locales de este dispositivo no se pueden abrir. Reintentar no lo arreglará. Restablecer elimina la copia de este dispositivo; tus otros dispositivos conservan la suya.';
+
+  @override
+  String get fatalCopyDetails => 'Copiar detalles';
+
+  @override
+  String get fatalDetailsCopied => 'Detalles copiados';
+
+  @override
+  String get recoveringTitle => 'Recuperando los datos de este dispositivo';
+
+  @override
+  String get recoveringBody =>
+      'Fi está recuperando el conjunto de datos de tus otros dispositivos. Mantenlos abiertos.';
+
+  @override
+  String get recoveryNeedsDeviceBody =>
+      'La copia del conjunto de datos de este dispositivo está dañada. Abre Fi en un dispositivo vinculado de la misma red para restaurarla, o restablece.';
+
+  @override
+  String get deferredLockedTitle =>
+      'Sincronización desactivada: el llavero del escritorio está bloqueado';
+
+  @override
+  String get deferredLockedBody =>
+      'Fi guarda las claves de este dispositivo en el llavero del escritorio. Desbloquéalo y reintenta. Tus datos aquí siguen funcionando.';
+
+  @override
+  String get deferredNoKeyringTitle =>
+      'Sincronización desactivada: no hay llavero disponible';
+
+  @override
+  String get deferredNoKeyringBody =>
+      'Instala y desbloquea un llavero de escritorio (GNOME Keyring o KWallet) y reintenta.';
+
+  @override
+  String deferredPortsTitle(int first, int last) {
+    return 'Sincronización desactivada: UDP $first–$last están en uso';
+  }
+
+  @override
+  String get deferredPortsBody =>
+      'Otro programa u otra copia de Fi está usando estos puertos. Tus datos aquí siguen funcionando.';
+
+  @override
+  String get sidebarCauseLocked => 'llavero bloqueado';
+
+  @override
+  String get sidebarCauseNoKeyring => 'sin llavero';
+
+  @override
+  String get sidebarCausePorts => 'puertos en uso';
 }

@@ -290,24 +290,6 @@ abstract class AppLocalizations {
   /// **'Value is out of range'**
   String get issueRange;
 
-  /// Networking banner when the keyring is locked.
-  ///
-  /// In en, this message translates to:
-  /// **'Your login keyring is locked, so this device cannot reach your other devices. Unlock the keyring, then retry. Everything stored here still works.'**
-  String get networkingKeyringLocked;
-
-  /// Networking banner when the secure store is unavailable.
-  ///
-  /// In en, this message translates to:
-  /// **'Secure device networking is unavailable on this device, so it cannot reach your other devices. Everything stored here still works.'**
-  String get networkingUnavailable;
-
-  /// Networking banner when every sync port is taken.
-  ///
-  /// In en, this message translates to:
-  /// **'Every network port Fi uses (UDP {first}–{last}) is already in use, so this device cannot reach your other devices. Close the other program or instance holding them, then retry.'**
-  String networkingPortsExhausted(int first, int last);
-
   /// Pairing failed for an unspecified reason.
   ///
   /// In en, this message translates to:
@@ -1874,60 +1856,6 @@ abstract class AppLocalizations {
   /// **'Recovery needs another device'**
   String get recoveryNeedsDevice;
 
-  /// root is empty or ' (abc…)'.
-  ///
-  /// In en, this message translates to:
-  /// **'This device lost its local copy of your dataset{root}. None of your other devices is reachable right now. Bring one of them online and recovery continues automatically; no pairing is needed.'**
-  String recoveryNoPeerBody(String root);
-
-  /// Recovery reset button.
-  ///
-  /// In en, this message translates to:
-  /// **'Reset this device\'s data instead'**
-  String get recoveryResetInstead;
-
-  /// root is empty or ' (abc…)'.
-  ///
-  /// In en, this message translates to:
-  /// **'Recovering your dataset from your other devices{root}…'**
-  String recoveryRecovering(String root);
-
-  /// Recovery reason.
-  ///
-  /// In en, this message translates to:
-  /// **'The local copy could not be read and was set aside. Nothing was deleted.'**
-  String get recoveryCorrupt;
-
-  /// Recovery reason.
-  ///
-  /// In en, this message translates to:
-  /// **'The local copy was missing. Nothing was deleted.'**
-  String get recoveryMissing;
-
-  /// Joining surface.
-  ///
-  /// In en, this message translates to:
-  /// **'Joining dataset from {name}…'**
-  String bootJoiningFrom(String name);
-
-  /// Joining surface without a peer name.
-  ///
-  /// In en, this message translates to:
-  /// **'Waiting for this local dataset to become available.'**
-  String get bootWaitingDataset;
-
-  /// Onboarding title.
-  ///
-  /// In en, this message translates to:
-  /// **'Your private collection space'**
-  String get onboardTitle;
-
-  /// Onboarding intro.
-  ///
-  /// In en, this message translates to:
-  /// **'Create a new local dataset, or join the dataset on one of your other devices. Nothing is sent to a server.'**
-  String get onboardIntro;
-
   /// Quarantine banner.
   ///
   /// In en, this message translates to:
@@ -1939,30 +1867,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Creating…'**
   String get onboardCreating;
-
-  /// Create button.
-  ///
-  /// In en, this message translates to:
-  /// **'Create new dataset'**
-  String get onboardCreate;
-
-  /// Why create is disabled.
-  ///
-  /// In en, this message translates to:
-  /// **'Creating is unavailable while pairing is active. Stop pairing to create a new dataset here.'**
-  String get onboardCreateBlocked;
-
-  /// Join button.
-  ///
-  /// In en, this message translates to:
-  /// **'Join an existing dataset'**
-  String get onboardJoin;
-
-  /// Pairing preconditions.
-  ///
-  /// In en, this message translates to:
-  /// **'The other device must already have a dataset. Start pairing on both devices, then tap Connect on one device only.'**
-  String get onboardPairingPreconditions;
 
   /// Sidebar status second line; reach is sidebarNoneNearby or sidebarConnected.
   ///
@@ -2359,24 +2263,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Pair another device'**
   String get pairingAnother;
-
-  /// Failure.
-  ///
-  /// In en, this message translates to:
-  /// **'Neither device has a dataset yet, so there is nothing to join. Pair with a device that already has a dataset, or create a new dataset on one device first.'**
-  String get pairingBothRootless;
-
-  /// Button.
-  ///
-  /// In en, this message translates to:
-  /// **'Pair again'**
-  String get pairingAgain;
-
-  /// Failure.
-  ///
-  /// In en, this message translates to:
-  /// **'These devices hold different datasets, and datasets cannot be merged. Pairing them again will not succeed. To use the other device\'s dataset here, this device\'s local data must be reset first.'**
-  String get pairingRootMismatch;
 
   /// Button.
   ///
@@ -5311,6 +5197,246 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Keep data'**
   String get resetKeep;
+
+  /// Onboarding title.
+  ///
+  /// In en, this message translates to:
+  /// **'Set up this device'**
+  String get setupTitle;
+
+  /// Onboarding lead.
+  ///
+  /// In en, this message translates to:
+  /// **'Your data stays on your devices. Pick how this one starts.'**
+  String get setupLead;
+
+  /// Create choice card title.
+  ///
+  /// In en, this message translates to:
+  /// **'Create a new dataset'**
+  String get setupCreateTitle;
+
+  /// Create choice card body.
+  ///
+  /// In en, this message translates to:
+  /// **'Start fresh. You can pair other devices later.'**
+  String get setupCreateBody;
+
+  /// Why the Create card is locked.
+  ///
+  /// In en, this message translates to:
+  /// **'Not available while pairing is open. Stop pairing to create one instead.'**
+  String get setupCreateLocked;
+
+  /// Join choice card and Join view title.
+  ///
+  /// In en, this message translates to:
+  /// **'Join an existing dataset'**
+  String get setupJoinTitle;
+
+  /// Join choice card body.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy the dataset from one of your other devices.'**
+  String get setupJoinBody;
+
+  /// Join card precondition.
+  ///
+  /// In en, this message translates to:
+  /// **'The other device must already have a dataset.'**
+  String get setupJoinNeedsDataset;
+
+  /// Join card precondition.
+  ///
+  /// In en, this message translates to:
+  /// **'Start the connection from only one of the two devices.'**
+  String get setupJoinOneSide;
+
+  /// Pairing status row under the choice cards.
+  ///
+  /// In en, this message translates to:
+  /// **'Pairing is open · {time} left'**
+  String setupPairingStatus(String time);
+
+  /// Pairing status row hint.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for your other device. Tap Connect on one device only.'**
+  String get setupPairingWaiting;
+
+  /// Stop button in the pairing status row.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop pairing'**
+  String get setupStopPairing;
+
+  /// Join view lead.
+  ///
+  /// In en, this message translates to:
+  /// **'Start pairing on the other device too. Tap Connect on one device only.'**
+  String get joinLead;
+
+  /// Both-rootless failure title.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t join'**
+  String get couldntJoinTitle;
+
+  /// Both-rootless failure body.
+  ///
+  /// In en, this message translates to:
+  /// **'The other device has no dataset yet. Create one there first, or create one here.'**
+  String get couldntJoinBody;
+
+  /// Joining title with the peer name.
+  ///
+  /// In en, this message translates to:
+  /// **'Joining “{name}”'**
+  String joiningTitleNamed(String name);
+
+  /// Joining title without a peer name.
+  ///
+  /// In en, this message translates to:
+  /// **'Joining the other device'**
+  String get joiningTitle;
+
+  /// Joining body with the peer name.
+  ///
+  /// In en, this message translates to:
+  /// **'Copying the dataset from {name}. Keep both devices open until this finishes.'**
+  String joiningBodyNamed(String name);
+
+  /// Joining body without a peer name.
+  ///
+  /// In en, this message translates to:
+  /// **'Copying the dataset from the other device. Keep both devices open until this finishes.'**
+  String get joiningBody;
+
+  /// Root-mismatch screen title.
+  ///
+  /// In en, this message translates to:
+  /// **'This device has a different dataset'**
+  String get mismatchTitle;
+
+  /// Root-mismatch body with the peer name.
+  ///
+  /// In en, this message translates to:
+  /// **'“{name}” uses another dataset than this device. Devices can only sync when they share the same one.'**
+  String mismatchBodyNamed(String name);
+
+  /// Root-mismatch body without a peer name.
+  ///
+  /// In en, this message translates to:
+  /// **'The other device uses another dataset than this device. Devices can only sync when they share the same one.'**
+  String get mismatchBody;
+
+  /// Root-mismatch second paragraph.
+  ///
+  /// In en, this message translates to:
+  /// **'To join it, reset this device\'s data first. The collections on this device will be deleted; the other device keeps its data.'**
+  String get mismatchResetNote;
+
+  /// Secondary action opening the reset confirmation.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset this device\'s data…'**
+  String get resetDataEllipsis;
+
+  /// Fatal start title.
+  ///
+  /// In en, this message translates to:
+  /// **'Fi couldn\'t start'**
+  String get fatalTitle;
+
+  /// Fatal body for reset-resolvable errors.
+  ///
+  /// In en, this message translates to:
+  /// **'This device\'s local data can\'t be opened. Retrying won\'t fix it. Resetting deletes this device\'s copy; your other devices keep theirs.'**
+  String get fatalResetBody;
+
+  /// Copies Rust's error message.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy details'**
+  String get fatalCopyDetails;
+
+  /// Confirmation after Copy details.
+  ///
+  /// In en, this message translates to:
+  /// **'Details copied'**
+  String get fatalDetailsCopied;
+
+  /// Recovery in progress title.
+  ///
+  /// In en, this message translates to:
+  /// **'Recovering this device\'s data'**
+  String get recoveringTitle;
+
+  /// Recovery in progress body.
+  ///
+  /// In en, this message translates to:
+  /// **'Fi is getting the dataset back from your other devices. Keep them open.'**
+  String get recoveringBody;
+
+  /// Recovery needs another device body.
+  ///
+  /// In en, this message translates to:
+  /// **'This device\'s copy of the dataset is damaged. Open Fi on a paired device on the same network to restore it, or reset.'**
+  String get recoveryNeedsDeviceBody;
+
+  /// Banner title, keyring locked.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync is off: the desktop keyring is locked'**
+  String get deferredLockedTitle;
+
+  /// Banner body, keyring locked.
+  ///
+  /// In en, this message translates to:
+  /// **'Fi keeps this device\'s keys in the desktop keyring. Unlock it, then retry. Your data here still works.'**
+  String get deferredLockedBody;
+
+  /// Banner title, no keyring.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync is off: no keyring is available'**
+  String get deferredNoKeyringTitle;
+
+  /// Banner body, no keyring.
+  ///
+  /// In en, this message translates to:
+  /// **'Install and unlock a desktop keyring (GNOME Keyring or KWallet), then retry.'**
+  String get deferredNoKeyringBody;
+
+  /// Banner title, ports in use.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync is off: UDP {first}–{last} are in use'**
+  String deferredPortsTitle(int first, int last);
+
+  /// Banner body, ports in use.
+  ///
+  /// In en, this message translates to:
+  /// **'Another program or another copy of Fi is using these ports. Your data here still works.'**
+  String get deferredPortsBody;
+
+  /// Sidebar cause line.
+  ///
+  /// In en, this message translates to:
+  /// **'keyring locked'**
+  String get sidebarCauseLocked;
+
+  /// Sidebar cause line.
+  ///
+  /// In en, this message translates to:
+  /// **'no keyring'**
+  String get sidebarCauseNoKeyring;
+
+  /// Sidebar cause line.
+  ///
+  /// In en, this message translates to:
+  /// **'ports in use'**
+  String get sidebarCausePorts;
 }
 
 class _AppLocalizationsDelegate

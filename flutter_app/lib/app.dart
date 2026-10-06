@@ -20,6 +20,7 @@ import 'package:fi/pairing_card.dart';
 import 'package:fi/platform_capabilities.dart';
 import 'package:fi/reset_dialog.dart';
 import 'package:fi/settings_page.dart';
+import 'package:fi/setup_screens.dart';
 import 'package:fi/status_time.dart';
 import 'package:fi/theme/confirm_dialog.dart';
 import 'package:fi/theme/inputs.dart';
@@ -218,54 +219,14 @@ class _CollectionAppState extends State<CollectionApp>
           );
         }
         if (controller.fatalFailure case final failure?) {
-          return _CenteredSurface(
-            key: const Key('bootstrap-error'),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(FiIcons.error, size: 48),
-                const SizedBox(height: 12),
-                Text(
-                  bridgeMessage(context.l10n, failure),
-                  textAlign: TextAlign.center,
-                ),
-                // Rust's own wording, as technical detail under the localized line.
-                if (failure case BridgeError(
-                  kind: != BridgeErrorKind.validation,
-                  :final message,
-                ) when message != bridgeMessage(context.l10n, failure)) ...[
-                  const SizedBox(height: 6),
-                  Text(
-                    message,
-                    key: const Key('bootstrap-error-detail'),
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 12, color: Nocturne.muted(.55)),
-                  ),
-                ],
-                const SizedBox(height: 12),
-                if (controller.fatalSecureStoreLocked)
-                  FilledButton.icon(
-                    key: const Key('retry-after-unlock'),
-                    onPressed: controller.retryingNetworking
-                        ? null
-                        : () => unawaited(controller.retryNetworking()),
-                    icon: const Icon(FiIcons.refresh),
-                    label: Text(context.l10n.bootRetryAfterUnlock),
-                  )
-                else if (controller.fatalResetResolvable)
-                  FilledButton(
-                    key: const Key('reset-dataset'),
-                    onPressed: () => unawaited(_confirmResetFromError(context)),
-                    child: Text(context.l10n.shellResetData),
-                  )
-                else
-                  FilledButton(
-                    key: const Key('retry-bootstrap'),
-                    onPressed: () => unawaited(_start()),
-                    child: Text(context.l10n.commonRetry),
-                  ),
-              ],
-            ),
+          return FatalSurface(
+            failure: failure,
+            resetResolvable: controller.fatalResetResolvable,
+            secureStoreLocked: controller.fatalSecureStoreLocked,
+            retryingNetworking: controller.retryingNetworking,
+            onRetryAfterUnlock: () => unawaited(controller.retryNetworking()),
+            onReset: () => unawaited(_confirmResetFromError(context)),
+            onRetry: () => unawaited(_start()),
           );
         }
         final surface = switch (controller.state?.kind) {
@@ -276,6 +237,7 @@ class _CollectionAppState extends State<CollectionApp>
             devices: devices,
             voice: _voice,
             onResetDataset: _resetDataset,
+            deferred: controller.networkingDeferred?.kind,
           ),
           BootstrapKindDto.needsDecision => OnboardingPage(
             controller: controller,
@@ -285,6 +247,7 @@ class _CollectionAppState extends State<CollectionApp>
           BootstrapKindDto.joining => switch (controller.state?.recovery) {
             final recovery? when recovery.isActive => RecoverySurface(
               recovery: recovery,
+              devices: devices,
               onResetDataset: () => _confirmResetFromRecovery(context),
             ),
             _ => JoiningSurface(devices: devices),
@@ -320,10 +283,8 @@ class _CollectionAppState extends State<CollectionApp>
   );
 }
 
-/// Explains why peer networking is off and offers the retry that resumes it.
-/// A locked keyring names the keyring and the unlock, because that is the
-/// action that fixes it; an unavailable store has no such action. Exhausted
-/// ports name the UDP range from [ports].
+/// Explains why peer networking is off and offers the retry that resumes it (mock
+/// startup-errors): a title naming the cause, a body with the fix, and Retry.
 class _NetworkingDeferredBanner extends StatelessWidget {
   const _NetworkingDeferredBanner({
     required this.deferred,
@@ -341,37 +302,80 @@ class _NetworkingDeferredBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialBanner(
-      key: const Key('networking-deferred-banner'),
-      leading: Icon(switch (deferred.kind) {
-        NetworkingDeferredKindDto.secureStoreLocked => FiIcons.locked,
-        NetworkingDeferredKindDto.portsExhausted => FiIcons.network,
-        NetworkingDeferredKindDto.secureStoreUnavailable => FiIcons.offline,
-      }),
-      content: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            networkingDeferredText(context.l10n, deferred, ports),
-            key: const Key('networking-deferred-message'),
-          ),
-          if (retryFailure case final failure?) ...[
-            const SizedBox(height: 8),
-            Text(
-              bridgeMessage(context.l10n, failure),
-              key: const Key('networking-retry-error'),
-            ),
-          ],
-        ],
-      ),
-      actions: [
-        TextButton(
-          key: const Key('retry-networking'),
-          onPressed: busy ? null : onRetry,
-          child: Text(context.l10n.commonRetry),
+    final l = context.l10n;
+    final phone = MediaQuery.sizeOf(context).width < Nocturne.phoneBreakpoint;
+    final retry = OutlinedButton(
+      key: const Key('retry-networking'),
+      onPressed: busy ? null : onRetry,
+      child: Text(l.commonRetry),
+    );
+    return Padding(
+      padding: phone
+          ? const EdgeInsets.fromLTRB(12, 10, 12, 4)
+          : const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      child: Container(
+        key: const Key('networking-deferred-banner'),
+        padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+        decoration: BoxDecoration(
+          color: Nocturne.errorTint,
+          borderRadius: BorderRadius.circular(Nocturne.radius),
+          border: Border.all(color: Nocturne.error.withValues(alpha: .45)),
         ),
-      ],
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 1),
+              child: Icon(
+                switch (deferred.kind) {
+                  NetworkingDeferredKindDto.secureStoreLocked => FiIcons.locked,
+                  NetworkingDeferredKindDto.portsExhausted => FiIcons.network,
+                  NetworkingDeferredKindDto.secureStoreUnavailable =>
+                    FiIcons.offline,
+                },
+                size: 18,
+                color: Nocturne.error,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    networkingDeferredTitle(l, deferred, ports),
+                    key: const Key('networking-deferred-title'),
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    networkingDeferredBody(l, deferred),
+                    key: const Key('networking-deferred-message'),
+                    style: TextStyle(fontSize: 13, color: Nocturne.muted(.75)),
+                  ),
+                  if (retryFailure case final failure?) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      bridgeMessage(l, failure),
+                      key: const Key('networking-retry-error'),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Nocturne.error,
+                      ),
+                    ),
+                  ],
+                  if (phone) ...[const SizedBox(height: 8), retry],
+                ],
+              ),
+            ),
+            if (!phone) ...[const SizedBox(width: 12), retry],
+          ],
+        ),
+      ),
     );
   }
 }
@@ -388,6 +392,86 @@ class _CenteredSurface extends StatelessWidget {
   );
 }
 
+/// "Fi couldn't start" (mock startup-errors). A reset-resolvable error gets the fixed body and
+/// the reset; otherwise the localized error and Retry. Rust's own wording goes behind Copy
+/// details rather than on the surface.
+class FatalSurface extends StatelessWidget {
+  const FatalSurface({
+    required this.failure,
+    required this.resetResolvable,
+    required this.secureStoreLocked,
+    required this.retryingNetworking,
+    required this.onRetryAfterUnlock,
+    required this.onReset,
+    required this.onRetry,
+    super.key,
+  });
+
+  final Object failure;
+  final bool resetResolvable;
+  final bool secureStoreLocked;
+  final bool retryingNetworking;
+  final VoidCallback onRetryAfterUnlock;
+  final VoidCallback onReset;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = context.l10n;
+    final localized = bridgeMessage(l, failure);
+    final details = switch (failure) {
+      BridgeError(kind: != BridgeErrorKind.validation, :final message)
+          when message != localized =>
+        message,
+      _ => null,
+    };
+    return SetupScaffold(
+      key: const Key('bootstrap-error'),
+      title: l.fatalTitle,
+      children: [
+        Text(
+          resetResolvable && !secureStoreLocked ? l.fatalResetBody : localized,
+          key: const Key('bootstrap-error-body'),
+          style: setupBodyStyle(),
+        ),
+        const SizedBox(height: 24),
+        SetupActions(
+          children: [
+            if (details != null)
+              OutlinedButton.icon(
+                key: const Key('copy-error-details'),
+                onPressed: () => unawaited(
+                  copyWithConfirmation(context, details, l.fatalDetailsCopied),
+                ),
+                icon: const Icon(FiIcons.copy, size: 16),
+                label: Text(l.fatalCopyDetails),
+              ),
+            if (secureStoreLocked)
+              FilledButton.icon(
+                key: const Key('retry-after-unlock'),
+                onPressed: retryingNetworking ? null : onRetryAfterUnlock,
+                icon: const Icon(FiIcons.refresh),
+                label: Text(l.bootRetryAfterUnlock),
+              )
+            else if (resetResolvable)
+              FilledButton(
+                key: const Key('reset-dataset'),
+                onPressed: onReset,
+                child: Text(l.resetDataEllipsis),
+              )
+            else
+              FilledButton(
+                key: const Key('retry-bootstrap'),
+                onPressed: onRetry,
+                child: Text(l.commonRetry),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
 extension RecoveryDtoState on RecoveryDto {
   /// Whether the dataset is still being recovered (or waiting for a device
   /// that can supply it), as opposed to a completed or decided recovery.
@@ -396,87 +480,66 @@ extension RecoveryDtoState on RecoveryDto {
       outcome == RecoveryOutcomeDto.noPeerAvailable;
 }
 
-/// Shown instead of an indeterminate spinner or a fatal error while a lost
-/// or corrupt root snapshot is being recovered from the user's other devices.
-/// States plainly when another device is required, and never offers to
-/// create a new dataset as a fallback: that would split from the recorded
-/// root and never merge again.
+/// Shown while a lost or corrupt root snapshot is being recovered from the user's other
+/// devices (mock startup-errors). When none can supply it, Retry dials every trusted device
+/// now; recovery also resumes on its own when one appears. Never offers to create a new
+/// dataset: that would split from the recorded root and never merge again.
 class RecoverySurface extends StatelessWidget {
   const RecoverySurface({
     required this.recovery,
+    required this.devices,
     required this.onResetDataset,
     super.key,
   });
   final RecoveryDto recovery;
+  final DevicesController devices;
   final Future<void> Function() onResetDataset;
+
+  void _retry() {
+    for (final device in devices.devices) {
+      if (!device.revoked) unawaited(devices.reconnect(device));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final root = recovery.rootId;
-    final rootLabel = root == null ? '' : ' (${_shortRootId(root)})';
+    final l = context.l10n;
     return switch (recovery.outcome) {
-      RecoveryOutcomeDto.noPeerAvailable => _CenteredSurface(
+      RecoveryOutcomeDto.noPeerAvailable => SetupScaffold(
         key: const Key('recovery-no-peer'),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 520),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+        title: l.recoveryNeedsDevice,
+        children: [
+          Text(l.recoveryNeedsDeviceBody, style: setupBodyStyle()),
+          const SizedBox(height: 24),
+          SetupActions(
             children: [
-              const Icon(FiIcons.devices, size: 48),
-              const SizedBox(height: 12),
-              Text(
-                context.l10n.recoveryNeedsDevice,
-                style: Theme.of(context).textTheme.titleLarge,
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 12),
-              Text(
-                context.l10n.recoveryNoPeerBody(rootLabel),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 16),
               OutlinedButton(
                 key: const Key('recovery-reset-dataset'),
                 onPressed: () => unawaited(onResetDataset()),
-                child: Text(context.l10n.recoveryResetInstead),
+                child: Text(l.resetDataEllipsis),
+              ),
+              FilledButton(
+                key: const Key('recovery-retry'),
+                onPressed: _retry,
+                child: Text(l.commonRetry),
               ),
             ],
           ),
-        ),
+        ],
       ),
-      _ => _CenteredSurface(
+      _ => SetupScaffold(
         key: const Key('recovery-recovering'),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const CircularProgressIndicator(),
-            const SizedBox(height: 16),
-            Text(
-              context.l10n.recoveryRecovering(rootLabel),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              switch (recovery.reason) {
-                RecoveryReasonDto.rootSnapshotCorrupt =>
-                  context.l10n.recoveryCorrupt,
-                _ => context.l10n.recoveryMissing,
-              },
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ],
-        ),
+        leading: const SetupRing(),
+        title: l.recoveringTitle,
+        children: [Text(l.recoveringBody, style: setupBodyStyle())],
       ),
     };
   }
 }
 
-String _shortRootId(String id) =>
-    id.length <= 8 ? id : '${id.substring(0, 8)}…';
-
-/// Shown while a received root is being joined. Names the provisioning device
-/// when the pairing session that started the join is still known.
+/// Shown while a received root is being joined (mock onboarding-joining). Names the
+/// provisioning device when the pairing session that started the join is still known. No
+/// progress or cancel: Rust reports neither.
 class JoiningSurface extends StatelessWidget {
   const JoiningSurface({required this.devices, super.key});
   final DevicesController devices;
@@ -484,20 +547,21 @@ class JoiningSurface extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: devices,
-    builder: (context, _) => _CenteredSurface(
-      key: const Key('joining-surface'),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+    builder: (context, _) {
+      final l = context.l10n;
+      final name = devices.peerName;
+      return SetupScaffold(
+        key: const Key('joining-surface'),
+        leading: const SetupRing(),
+        title: name == null ? l.joiningTitle : l.joiningTitleNamed(name),
         children: [
-          const CircularProgressIndicator(),
-          const SizedBox(height: 16),
-          Text(switch (devices.peerName) {
-            final name? => context.l10n.bootJoiningFrom(name),
-            null => context.l10n.bootWaitingDataset,
-          }, textAlign: TextAlign.center),
+          Text(
+            name == null ? l.joiningBody : l.joiningBodyNamed(name),
+            style: setupBodyStyle(),
+          ),
         ],
-      ),
-    ),
+      );
+    },
   );
 }
 
@@ -517,9 +581,12 @@ class OnboardingPage extends StatefulWidget {
 }
 
 class _OnboardingPageState extends State<OnboardingPage> {
-  bool showPairing = false;
+  /// Whether the Join view replaces the two choices.
+  bool _join = false;
 
-  bool get _pairingActive => widget.devices.pairing.kind != PairingKindDto.idle;
+  DevicesController get devices => widget.devices;
+
+  bool get _pairingActive => devices.pairing.kind != PairingKindDto.idle;
 
   Future<void> _create() async {
     // Unconditional, not gated on the observed pairing state: the stream may
@@ -527,92 +594,134 @@ class _OnboardingPageState extends State<OnboardingPage> {
     // captured when it opened, so it must be closed before a root exists or a
     // peer may provision against a state that no longer holds. Stopping from
     // idle is a no-op in Rust.
-    await widget.devices.stopPairing();
+    await devices.stopPairing();
     await widget.controller.createNewDataset();
+  }
+
+  void _openJoin() {
+    setState(() => _join = true);
+    if (!_pairingActive) unawaited(devices.beginPairing());
+  }
+
+  /// Back from a terminal failure: pairing stops and the two choices return.
+  Future<void> _backToChoices() async {
+    setState(() => _join = false);
+    await devices.stopPairing();
+  }
+
+  Future<void> _confirmReset() async {
+    final action = widget.onResetDataset;
+    if (action == null) return;
+    final confirmed = await ResetDatasetDialog.show(
+      context,
+      lead: context.l10n.pairingResetLead,
+    );
+    if (!confirmed) return;
+    await devices.stopPairing();
+    await action();
   }
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: widget.devices,
+    listenable: devices,
     builder: (context, _) {
-      final controller = widget.controller;
-      final createBlocked = controller.creating || _pairingActive;
-      return Scaffold(
-        body: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(32),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 520),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    context.l10n.onboardTitle,
-                    style: Theme.of(context).textTheme.headlineMedium,
-                  ),
-                  const SizedBox(height: 12),
-                  Text(context.l10n.onboardIntro),
-                  if (controller.state?.recovery case final recovery?
-                      when recovery.outcome ==
-                          RecoveryOutcomeDto.quarantined) ...[
-                    const SizedBox(height: 16),
-                    MaterialBanner(
-                      key: const Key('recovery-quarantined'),
-                      content: Text(context.l10n.onboardQuarantined),
-                      actions: const [SizedBox.shrink()],
-                    ),
-                  ],
-                  const SizedBox(height: 24),
-                  FilledButton.icon(
-                    key: const Key('create-dataset'),
-                    onPressed: createBlocked ? null : _create,
-                    icon: const Icon(FiIcons.addCircle),
-                    label: Text(
-                      controller.creating
-                          ? context.l10n.onboardCreating
-                          : context.l10n.onboardCreate,
-                    ),
-                  ),
-                  if (_pairingActive) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      context.l10n.onboardCreateBlocked,
-                      key: const Key('create-blocked-reason'),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                  const SizedBox(height: 12),
-                  OutlinedButton.icon(
-                    key: const Key('join-dataset'),
-                    onPressed: controller.creating
-                        ? null
-                        : () => setState(() => showPairing = !showPairing),
-                    icon: Icon(showPairing ? FiIcons.collapse : FiIcons.link),
-                    label: Text(context.l10n.onboardJoin),
-                  ),
-                  if (showPairing) ...[
-                    const SizedBox(height: 16),
-                    Text(
-                      context.l10n.onboardPairingPreconditions,
-                      key: const Key('pairing-preconditions'),
-                    ),
-                    const SizedBox(height: 12),
-                    if (widget.devices.failure case final failure?)
-                      _ErrorBanner(bridgeMessage(context.l10n, failure)),
-                    PairingCard(
-                      controller: widget.devices,
-                      onResetDataset: widget.onResetDataset,
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
+      final pairing = devices.pairing;
+      if (pairing.kind == PairingKindDto.failed) {
+        switch (pairing.failure) {
+          case PairingFailureKindDto.bothRootless:
+            return CouldntJoinScreen(onBack: () => unawaited(_backToChoices()));
+          case PairingFailureKindDto.rootMismatch:
+            return DatasetMismatchScreen(
+              peerName: devices.peerName,
+              onBack: () => unawaited(_backToChoices()),
+              onPairDifferent: () {
+                setState(() => _join = true);
+                unawaited(devices.beginPairing());
+              },
+              onReset: widget.onResetDataset == null
+                  ? null
+                  : () => unawaited(_confirmReset()),
+            );
+          case _:
+        }
+      }
+      return _join ? _joinView(context) : _choices(context);
     },
   );
+
+  Widget _choices(BuildContext context) {
+    final l = context.l10n;
+    final controller = widget.controller;
+    final pairingOpen = _pairingActive;
+    return SetupScaffold(
+      key: const Key('onboarding'),
+      title: l.setupTitle,
+      lead: l.setupLead,
+      children: [
+        ChoiceCard(
+          key: const Key('create-dataset'),
+          icon: FiIcons.addCircle,
+          title: controller.creating ? l.onboardCreating : l.setupCreateTitle,
+          body: l.setupCreateBody,
+          lockedReason: pairingOpen ? l.setupCreateLocked : null,
+          onTap: controller.creating ? null : () => unawaited(_create()),
+        ),
+        const SizedBox(height: 12),
+        ChoiceCard(
+          key: const Key('join-dataset'),
+          icon: FiIcons.link,
+          title: l.setupJoinTitle,
+          body: l.setupJoinBody,
+          bullets: [l.setupJoinNeedsDataset, l.setupJoinOneSide],
+          selected: pairingOpen,
+          onTap: controller.creating ? null : _openJoin,
+        ),
+        if (pairingOpen) ...[
+          const SizedBox(height: 20),
+          PairingStatusRow(devices: devices),
+        ],
+        if (controller.state?.recovery case final recovery?
+            when recovery.outcome == RecoveryOutcomeDto.quarantined) ...[
+          const SizedBox(height: 20),
+          Text(
+            l.onboardQuarantined,
+            key: const Key('recovery-quarantined'),
+            style: TextStyle(fontSize: 13, color: Nocturne.muted(.55)),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _joinView(BuildContext context) {
+    final l = context.l10n;
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) setState(() => _join = false);
+      },
+      child: SetupScaffold(
+        key: const Key('join-view'),
+        title: l.setupJoinTitle,
+        lead: l.joinLead,
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              key: const Key('join-back'),
+              onPressed: () => setState(() => _join = false),
+              icon: const Icon(FiIcons.back, size: 16),
+              label: Text(l.commonBack),
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (devices.failure case final failure?)
+            _ErrorBanner(bridgeMessage(l, failure)),
+          PairingCard(controller: devices),
+        ],
+      ),
+    );
+  }
 }
 
 class CollectionShell extends StatefulWidget {
@@ -623,10 +732,15 @@ class CollectionShell extends StatefulWidget {
     this.fileDialogs = const PlatformFileDialogs(),
     this.uiPrefs,
     this.voice,
+    this.deferred,
     super.key,
   });
   final CollectionBridge bridge;
   final FileDialogs fileDialogs;
+
+  /// Why peer networking has not started, while it has not; the status then reads Offline
+  /// with the cause instead of the Rust aggregate.
+  final NetworkingDeferredKindDto? deferred;
   final UiPrefsStore? uiPrefs;
   final DevicesController devices;
 
@@ -718,7 +832,12 @@ class _CollectionShellState extends State<CollectionShell> {
         body: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _Sidebar(selected: selected, onSelected: _select, devices: devices),
+            _Sidebar(
+              selected: selected,
+              onSelected: _select,
+              devices: devices,
+              deferred: widget.deferred,
+            ),
             Expanded(child: page),
           ],
         ),
@@ -729,6 +848,7 @@ class _CollectionShellState extends State<CollectionShell> {
     final topRow = switch (selected) {
       0 when controller.selectedCollectionId == null => _MobileTopRow(
         status: devices.syncStatus,
+        deferred: widget.deferred,
       ),
       1 || 2 => const _MobileTopRow(),
       _ => null,
@@ -776,11 +896,13 @@ class _Sidebar extends StatelessWidget {
     required this.selected,
     required this.onSelected,
     required this.devices,
+    required this.deferred,
   });
 
   final int selected;
   final ValueChanged<int> onSelected;
   final DevicesController devices;
+  final NetworkingDeferredKindDto? deferred;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -833,7 +955,7 @@ class _Sidebar extends StatelessWidget {
           onTap: () => onSelected(2),
         ),
         const Spacer(),
-        _SidebarStatus(devices: devices),
+        _SidebarStatus(devices: devices, deferred: deferred),
       ],
     ),
   );
@@ -883,8 +1005,9 @@ class _NavRow extends StatelessWidget {
 }
 
 class _SidebarStatus extends StatelessWidget {
-  const _SidebarStatus({required this.devices});
+  const _SidebarStatus({required this.devices, this.deferred});
   final DevicesController devices;
+  final NetworkingDeferredKindDto? deferred;
 
   @override
   Widget build(BuildContext context) {
@@ -897,6 +1020,10 @@ class _SidebarStatus extends StatelessWidget {
               device.connection == PeerConnectionKindDto.synced,
         )
         .length;
+    final deferred = this.deferred;
+    final status = deferred == null
+        ? devices.syncStatus
+        : SyncStatusDto.offline;
     return Container(
       key: const Key('app-bar-sync-status'),
       padding: const EdgeInsets.all(10),
@@ -906,19 +1033,22 @@ class _SidebarStatus extends StatelessWidget {
       ),
       child: Row(
         children: [
-          _StatusDot(status: devices.syncStatus),
+          _StatusDot(status: status),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _statusText(context.l10n, devices.syncStatus),
+                  _statusText(context.l10n, status),
+                  key: const Key('sidebar-status'),
                   style: const TextStyle(fontSize: 12, height: 1.35),
                 ),
                 Text(
                   key: const Key('sidebar-status-context'),
-                  devices.syncStatus == SyncStatusDto.paused
+                  deferred != null
+                      ? deferredCause(context.l10n, deferred)
+                      : devices.syncStatus == SyncStatusDto.paused
                       ? context.l10n.sidebarSyncOff
                       : _pairingOpen(devices.pairing.kind)
                       ? context.l10n.sidebarPairingOpen
@@ -979,8 +1109,11 @@ class _StatusDot extends StatelessWidget {
 
 /// The phone-width brand row, with the aggregate status when [status] is given.
 class _MobileTopRow extends StatelessWidget {
-  const _MobileTopRow({this.status});
+  const _MobileTopRow({this.status, this.deferred});
   final SyncStatusDto? status;
+
+  /// Replaces [status] with "Offline · cause" while networking is deferred.
+  final NetworkingDeferredKindDto? deferred;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -989,18 +1122,33 @@ class _MobileTopRow extends StatelessWidget {
       children: [
         const FiLogoTile(),
         const Spacer(),
-        if (status case final status?)
-          Row(
-            key: const Key('app-bar-sync-status'),
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _StatusDot(status: status, size: 7, ring: false),
-              const SizedBox(width: 6),
-              Text(
-                _statusText(context.l10n, status),
-                style: TextStyle(fontSize: 12, color: Nocturne.muted(.6)),
-              ),
-            ],
+        if (status case final live?)
+          Flexible(
+            child: Row(
+              key: const Key('app-bar-sync-status'),
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _StatusDot(
+                  status: deferred == null ? live : SyncStatusDto.offline,
+                  size: 7,
+                  ring: false,
+                ),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    switch (deferred) {
+                      final cause? =>
+                        '${context.l10n.devicesStatusOffline} · '
+                            '${deferredCause(context.l10n, cause)}',
+                      null => _statusText(context.l10n, live),
+                    },
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 12, color: Nocturne.muted(.6)),
+                  ),
+                ),
+              ],
+            ),
           ),
       ],
     ),
@@ -1202,7 +1350,7 @@ class _DevicesPageState extends State<DevicesPage> {
                 if (pairing) ...[
                   PairingCard(
                     controller: controller,
-                    onResetDataset: onResetDataset,
+                    onTerminalFailure: (_) => unawaited(_showMismatch(context)),
                   ),
                   if (trusted.isNotEmpty) const SizedBox(height: 12),
                 ] else if (trusted.isEmpty)
@@ -1454,6 +1602,50 @@ class _DevicesPageState extends State<DevicesPage> {
     if (await controller.copyDiagnostics(device)) {
       messenger?.showSnackBar(SnackBar(content: Text(l.devicesLogCopied)));
     }
+  }
+
+  /// A root mismatch from the Devices page as a pushed "different dataset" screen. Back
+  /// stops pairing and pops; a confirmed reset pops before it runs, so the app lands on
+  /// onboarding rather than under a stale route.
+  Future<void> _showMismatch(BuildContext context) async {
+    final navigator = Navigator.of(context);
+    await navigator.push(
+      MaterialPageRoute<void>(
+        builder: (routeContext) => ListenableBuilder(
+          listenable: controller,
+          builder: (routeContext, _) => DatasetMismatchScreen(
+            peerName: controller.peerName,
+            onBack: () {
+              unawaited(controller.stopPairing());
+              Navigator.of(routeContext).pop();
+            },
+            onPairDifferent: () {
+              unawaited(controller.beginPairing());
+              Navigator.of(routeContext).pop();
+            },
+            onReset: onResetDataset == null
+                ? null
+                : () => unawaited(_resetFromMismatch(routeContext)),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _resetFromMismatch(BuildContext routeContext) async {
+    final action = onResetDataset;
+    if (action == null) return;
+    final confirmed = await ResetDatasetDialog.show(
+      routeContext,
+      lead: routeContext.l10n.pairingResetLead,
+      trustedDeviceCount: controller.devices
+          .where((device) => !device.revoked)
+          .length,
+    );
+    if (!confirmed || !routeContext.mounted) return;
+    Navigator.of(routeContext).pop();
+    await controller.stopPairing();
+    await action();
   }
 
   Future<void> _resetDataset(BuildContext context) async {
