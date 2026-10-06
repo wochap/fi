@@ -7,24 +7,43 @@ TBD: Define Flutter pairing controls, SAS confirmation, trusted-device managemen
 ### Requirement: Pairing-mode UI
 Flutter SHALL provide controls to start and stop pairing mode, show its remaining bounded lifetime, list live ephemeral candidates, and select one candidate for connection. Candidates that Rust reports as already paired SHALL be hidden from the selectable list, and when every discovered candidate is already paired the UI SHALL say so rather than showing an empty search.
 
+While pairing mode is discoverable, the pairing card (mock devices-pairing) SHALL show:
+- The title "Pairing is open" with a "Stop" action that leaves pairing mode.
+- The line "<m:ss> left of 2:00 · start it on the other device too", counting down from the Rust-supplied deadline, beside a countdown ring that empties as the window runs out.
+- A "Nearby · N" list of the selectable candidates, each row showing only the candidate's endpoint (`ip:port`) in monospace and a "Connect" action. No device name, model or discovery time SHALL be shown, because the pairing advertisement carries none.
+- "All nearby devices are already paired." when every discovered candidate is already paired, and otherwise the muted line "Devices you've already paired are hidden."
+- A help affordance stating that Connect is pressed on one device only.
+
+When Rust reports that the pairing window expired, the card SHALL read "Pairing expired" with "Pairing closed after 2 minutes. Start it again on both devices when they're nearby." When Rust reports that the code was rejected, the card SHALL read "Pairing rejected" with "The code was rejected. Nothing was paired." Both SHALL offer "Start pairing", which enters pairing mode again, and neither SHALL show success.
+
 #### Scenario: User starts pairing
 - **WHEN** the user explicitly enters pairing mode
-- **THEN** the UI reflects the retained discoverable state and displays candidates received from Rust
+- **THEN** the card reads "Pairing is open" with the remaining time and a countdown ring, and lists the candidates received from Rust by endpoint with "Connect"
 
 #### Scenario: Pairing expires
 - **WHEN** Rust reports pairing timeout
-- **THEN** the UI removes stale candidates and returns to an idle/error explanation without showing success
+- **THEN** the card removes the candidates and reads "Pairing expired" with "Start pairing", without showing success
+
+#### Scenario: Pairing is rejected
+- **WHEN** the user presses Reject on the code confirmation
+- **THEN** the card reads "Pairing rejected" with "The code was rejected. Nothing was paired." and "Start pairing"
 
 #### Scenario: Already-paired device is discovered
 - **WHEN** a discovered candidate is reported as belonging to an already-trusted device
-- **THEN** it is not offered for selection, and the list explains that the remaining devices are already paired rather than appearing empty
+- **THEN** it is not offered for selection, and the card reads "All nearby devices are already paired." when no other candidate remains
+
+#### Scenario: Candidate rows show the endpoint only
+- **WHEN** Rust reports a candidate at `192.168.0.165:47380`
+- **THEN** its row shows `192.168.0.165:47380` and "Connect", and no device name
 
 ### Requirement: SAS confirmation UI
 Flutter SHALL display the zero-padded six-digit SAS supplied by Rust for the current attempt and provide explicit confirm and reject actions, without calculating or transmitting the SAS itself. Beside the SAS, Flutter SHALL display the peer DeviceId supplied by Rust for the current attempt, so both users can compare the identity of the device they are about to trust as well as the code. The peer id SHALL be shown in full in a selectable monospace presentation, and MUST NOT be shown before Rust reports it for the awaiting-confirmation state.
 
+The confirmation (mock devices-code-confirm) SHALL be titled "Confirm the code", SHALL read "Check the same code shows on the other device, then confirm on both.", SHALL show each of the six digits in its own box, and SHALL show the peer id under the label "Device ID of <name>" in groups of eight hex characters, where <name> is the peer's friendly name when this device already records it and "the other device" otherwise. "Reject" SHALL be a secondary action on the left and "Confirm" the primary action on the right. While Rust reports the committing state the title SHALL read "Saving trust…" with a progress ring, the code and id SHALL stay visible, and both actions SHALL be unavailable. When the commit fails because the secure key store is locked, the code and id SHALL stay visible, the instruction line SHALL read "Unlock your desktop keyring, then retry.", and "Retry" SHALL take the place of "Confirm".
+
 #### Scenario: Codes match
 - **WHEN** the user confirms the displayed SAS
-- **THEN** Flutter invokes the Rust confirmation command and waits for the retained committing/trusted state
+- **THEN** Flutter invokes the Rust confirmation command, and while Rust reports committing the title reads "Saving trust…" with the code still shown and both actions unavailable
 
 #### Scenario: User rejects
 - **WHEN** the user rejects a mismatched SAS
@@ -32,22 +51,28 @@ Flutter SHALL display the zero-padded six-digit SAS supplied by Rust for the cur
 
 #### Scenario: Peer identity is shown at confirmation
 - **WHEN** Rust reports the awaiting-confirmation state with a peer DeviceId
-- **THEN** the confirmation view shows that DeviceId beside the SAS, labelled as the other device's id, and the candidate list before connection still showed only the endpoint
+- **THEN** the confirmation view shows that DeviceId in full, grouped by eight characters, under "Device ID of the other device", and the candidate list before connection still showed only the endpoint
+
+#### Scenario: Keyring locked at commit
+- **WHEN** the commit fails because the secure key store is locked
+- **THEN** the confirmation keeps the code and id, reads "Unlock your desktop keyring, then retry.", and offers "Retry" in place of "Confirm"
 
 ### Requirement: Trusted-device list
 The devices screen SHALL list locally trusted and revoked device records with friendly name, DeviceId presentation, connectivity, last seen, last sync, and status obtained through Rust queries/events. Last sync SHALL reflect the most recent time the peer reached the synced state, not only the pairing time, and SHALL be carried by the same connection-state emission that reports the synced state so the row never shows synced connectivity alongside a never-synced timestamp.
 
-The list SHALL be headed "Trusted devices" with the device count beside it. Each row SHALL show a device icon tile, the friendly name, a state tag (accent with a dot for Connected, Syncing and Synced; the error tag of the unreachable-peer state for a non-revoked row whose last attempt failed; neutral otherwise), and one line "Seen <time> · Synced <time>", with an absent value reading "Never seen" or "Never synced". A non-revoked row whose last attempt failed SHALL instead show the plain-language line, guidance and actions of the unreachable-peer state. Last seen and last sync SHALL be presented as status times, not exact values: a value under one minute old reads "just now"; under one hour reads a whole number of minutes ago; under twenty-four hours reads a whole number of hours ago; anything older reads as a short local date and time with weekday, day, month, and hour:minute, adding the year only when it differs from the current year. A value in the future because of clock skew SHALL read as "just now". Relative wording SHALL be refreshed at least once per minute while the devices screen is mounted, without waiting for a device event. Record field values, chart axes, and query output SHALL keep their exact formatting; this presentation applies to status metadata only.
+The list SHALL be headed "Trusted devices" with the device count beside it. Each row SHALL show a device icon tile, the friendly name, a state tag, and one line "Seen <time> · Synced <time>", with an absent value reading "Never seen" or "Never synced". Every state tag SHALL carry an icon beside its label, so the state is never told by colour alone: the accent style for Connected, Syncing and Synced; the error tag of the unreachable-peer state for a non-revoked row whose last attempt failed; the neutral style otherwise, including Offline, Paused and Revoked. A row whose connectivity is paused SHALL read "Paused on this device · last synced <time>" (or "Paused on this device · never synced") instead of the seen/synced line. A non-revoked row whose last attempt failed SHALL instead show the plain-language line, guidance and actions of the unreachable-peer state. Last seen and last sync SHALL be presented as status times, not exact values: a value under one minute old reads "just now"; under one hour reads a whole number of minutes ago; under twenty-four hours reads a whole number of hours ago; anything older reads as a short local date and time with weekday, day, month, and hour:minute, in that order and without commas, adding the year only when it differs from the current year. A value in the future because of clock skew SHALL read as "just now". Relative wording SHALL be refreshed at least once per minute while the devices screen is mounted, without waiting for a device event. Record field values, chart axes, and query output SHALL keep their exact formatting; this presentation applies to status metadata only.
 
-Each trusted row SHALL offer "Details", collapsed by default, and a ⋮ menu with the row's rename, revoke and delete actions. At 720px and wider Details SHALL expand inline under the row. Below 720px Details SHALL open as a pushed screen titled with the friendly name, with a back action and the same ⋮ menu.
+At 720px and wider each trusted row SHALL offer "Details", collapsed by default, and a ⋮ menu with the row's rename, revoke and delete actions, and Details SHALL expand inline under the row. Below 720px the whole row SHALL be the Details action, marked with a chevron, and SHALL open a pushed screen titled with the friendly name, with a back action and the ⋮ menu; the row itself SHALL show no ⋮ menu.
 
 Details SHALL show:
-- The state, the endpoint being tried or last tried, the last attempt time as a status time, and the local device's bound sync port. These are a four-column grid at 720px and wider and label/value rows below 720px.
+- The state, the endpoint being tried or last tried, the last attempt time as a status time, and the local device's bound sync port written as "UDP <port>". The endpoint SHALL be labelled "Last endpoint" when the last attempt failed and "Endpoint" otherwise. These are a grid at 720px and wider and label/value rows below 720px.
 - The failure code and the failure reason text when the last attempt failed, both as Rust reports them and in every language unchanged.
 - The full DeviceId with a copy action. Below 720px the id may be shortened to its first and last eight hex characters, but copy SHALL always place the full id on the clipboard.
 - A connection log headed "Connection log · N events".
 
-The connection log SHALL list the retained events for that peer and the retained local-device events, oldest first, each as time (HH:mm:ss), category, and message. The category SHALL be "pairing" for pairing events, "address" for address and discovery events, "peer" for peer connection and sync events, and "device" for other local events. The message SHALL be the event's technical text without reformatting its fields. At 720px and wider the log SHALL offer an All / Pairing / Peer filter: Pairing shows only pairing events, and Peer shows peer and address events.
+On a revoked row, Details SHALL show only the connection log, its filter and "Copy log".
+
+The connection log SHALL list the retained events for that peer and the retained local-device events, oldest first, each as time (HH:mm:ss), category, and message. The category SHALL be "pairing" for pairing events, "address" for address and discovery events, "peer" for peer connection and sync events, and "device" for other local events. The message SHALL be the event's technical text without reformatting its fields. At every width the log SHALL offer an All / Pairing / Peer filter: Pairing shows only pairing events, and Peer shows peer and address events.
 
 Details SHALL contain a "Reconnect" action that invokes the manual reconnect command, a "Connect by address…" action that opens the Connect by address dialog for that device, and a "Copy log" action that places the peer's diagnostic block on the clipboard and confirms the copy. "Reconnect" SHALL be unavailable on a revoked row and while a reconnect for that row is in flight. "Connect by address…" SHALL NOT be offered on a revoked row.
 
@@ -58,6 +83,14 @@ Details SHALL contain a "Reconnect" action that invokes the manual reconnect com
 #### Scenario: Synced row shows a sync time
 - **WHEN** the row for a peer reports synced connectivity
 - **THEN** its last-sync value is a timestamp rather than "Never synced", and it is no earlier than the transition that produced the synced state
+
+#### Scenario: Every tag has an icon
+- **WHEN** the list shows a Synced row, an Offline row, a Paused row and a Revoked row
+- **THEN** each row's state tag shows an icon beside its label, and only the Synced tag uses the accent style
+
+#### Scenario: Paused row line
+- **WHEN** Sync with paired devices is off and a peer last synced two hours ago
+- **THEN** its row reads "Paused on this device · last synced 2 h ago"
 
 #### Scenario: Recent timestamps read relatively
 - **WHEN** a device was last seen 30 minutes ago and last synced 3 hours ago
@@ -81,15 +114,19 @@ Details SHALL contain a "Reconnect" action that invokes the manual reconnect com
 
 #### Scenario: Failed peer shows why
 - **WHEN** a peer's last attempt failed with a TLS failure at `192.168.1.20:47380` and the user opens Details
-- **THEN** the panel shows the failure code `TLS_FAILED` with the failure category and message, the endpoint, when the attempt happened, and the log lines for that peer
+- **THEN** the panel shows the failure code `TLS_FAILED` with the failure category and message, "Last endpoint" `192.168.1.20:47380`, when the attempt happened, and the log lines for that peer
 
 #### Scenario: Categorized log with filter
-- **WHEN** Details are open on a 1240px-wide screen and the retained events include pairing, address and peer events
-- **THEN** each log line shows its time, its category and its message, and choosing Pairing hides every line that is not a pairing event
+- **WHEN** Details are open and the retained events include pairing, address and peer events
+- **THEN** each log line shows its time, its category and its message, and choosing Pairing hides every line that is not a pairing event, on a 1240px-wide and on a 390px-wide screen
 
 #### Scenario: Details on a phone
-- **WHEN** the user opens Details for "Fi f755167e" on a 390px-wide screen
-- **THEN** a pushed screen titled "Fi f755167e" shows the state tag, Endpoint, Last attempt, Sync port and ID rows, the connection log, and a full-width Reconnect button
+- **WHEN** the user taps the row for "Fi f755167e" on a 390px-wide screen
+- **THEN** a pushed screen titled "Fi f755167e" with the ⋮ menu shows the state tag, Endpoint, Last attempt, Sync port ("UDP 47380") and ID rows, the connection log with its filter, and a full-width Reconnect button
+
+#### Scenario: Phone row has no menu
+- **WHEN** the devices screen renders a trusted row on a 390px-wide screen
+- **THEN** the row shows a chevron and no ⋮ menu, and tapping anywhere on it opens Details
 
 #### Scenario: Reconnect from details
 - **WHEN** the user presses Reconnect on a failed peer
@@ -101,10 +138,12 @@ Details SHALL contain a "Reconnect" action that invokes the manual reconnect com
 
 #### Scenario: Revoked row offers no reconnect
 - **WHEN** a row's record is revoked and its Details are opened
-- **THEN** the panel shows the retained lines and Copy log, but no Reconnect and no Connect by address action
+- **THEN** the panel shows the retained lines, the filter and Copy log, but no state grid, no Reconnect and no Connect by address action
 
 ### Requirement: Device rename and revoke actions
 Flutter SHALL expose friendly-name editing and confirmed revoke/unpair actions that delegate to Rust and refresh persisted device state.
+
+The rename dialog SHALL be titled "Rename device" with the line "Only changes the name on this device", a required "Name" field holding the current name, and "Cancel" / "Save". The revoke confirmation SHALL be titled "Revoke <name>?" with "It stops syncing with this device right away. It stays in the list as revoked, and you can pair it again later.", "Revoke" as a secondary action on the left and "Keep device" as the primary action on the right.
 
 #### Scenario: Rename succeeds
 - **WHEN** the user saves a valid device name
@@ -114,23 +153,33 @@ Flutter SHALL expose friendly-name editing and confirmed revoke/unpair actions t
 - **WHEN** the user confirms revocation
 - **THEN** Rust revokes and disconnects the device and the UI presents it as revoked rather than merely hiding it
 
+#### Scenario: Revoke is kept
+- **WHEN** the user opens the revoke confirmation and presses "Keep device"
+- **THEN** the dialog closes and no Rust call is made
+
 ### Requirement: Revoked device delete action
-The devices screen SHALL offer a "Delete" action only on rows whose record is revoked. The action SHALL require explicit confirmation that states the record will be removed and that the device can be paired again later. On confirmation Flutter SHALL delegate to Rust and refresh the device list so the row disappears. A trusted row SHALL NOT offer the delete action.
+The devices screen SHALL offer a "Delete…" action only on rows whose record is revoked. The action SHALL require explicit confirmation that states the record will be removed and that the device can be paired again later: the confirmation SHALL be titled "Delete revoked device?" with "Removes <name> from this list. It can be paired again.", "Delete" as a secondary action on the left and "Keep" as the primary action on the right. On confirmation Flutter SHALL delegate to Rust and refresh the device list so the row disappears. A trusted row SHALL NOT offer the delete action, and a revoked row SHALL NOT offer revoke.
 
 #### Scenario: Delete a revoked device
-- **WHEN** the user chooses Delete on a revoked row and confirms
+- **WHEN** the user chooses Delete… on a revoked row and confirms
 - **THEN** the row is removed from the devices list and the trusted-device count is unchanged
 
 #### Scenario: Delete is cancelled
-- **WHEN** the user chooses Delete and dismisses the confirmation
+- **WHEN** the user chooses Delete… and presses "Keep"
 - **THEN** the row remains listed as revoked and no Rust call is made
 
 #### Scenario: Trusted row offers no delete
 - **WHEN** a row's record is trusted
 - **THEN** its menu offers rename and revoke but not delete
 
+#### Scenario: Revoked row offers no revoke
+- **WHEN** a row's record is revoked
+- **THEN** its menu offers "Rename" and "Delete…" only
+
 ### Requirement: Complete sync-status vocabulary
 The application shell SHALL present the typed Rust aggregate status exactly, mapping `Offline`, `Searching`, `Connected`, `Syncing`, `Synced`, `Error`, and `Paused` to the labels "Offline", "Looking for paired devices", "Connected", "Syncing", "Synced", "Error", and "Paused", each with a distinct icon. The label for `Searching` MUST NOT reuse the word "Searching" so it is not mistaken for pairing discovery, which keeps its own copy on the pairing card. Trusted device rows SHALL present paused connectivity as "Paused".
+
+Under the status label, the sidebar SHALL show "sync is off" while the status is `Paused`, "pairing open" while pairing mode is active, and otherwise the paired-device summary. On the devices screen the status chip SHALL read "Paused · sync with paired devices is off" at 720px and wider and "Paused · sync is off" below 720px while the status is `Paused`.
 
 #### Scenario: Heads change while connected
 - **WHEN** a previously synced peer relationship receives or creates new authoritative heads
@@ -146,7 +195,11 @@ The application shell SHALL present the typed Rust aggregate status exactly, map
 
 #### Scenario: Paused while devices are recorded
 - **WHEN** Sync with paired devices is off and trusted devices are recorded
-- **THEN** the status chip reads "Paused" with its icon and each trusted row reads "Paused" instead of "Offline"
+- **THEN** the status chip reads "Paused · sync with paired devices is off" with its icon on a 1240px-wide screen, the sidebar reads "Paused" over "sync is off", and each trusted row reads "Paused" instead of "Offline"
+
+#### Scenario: Pairing open in the sidebar
+- **WHEN** pairing mode is active on a 1240px-wide screen
+- **THEN** the sidebar shows the aggregate status label over "pairing open"
 
 ### Requirement: Pairing is reachable from a rootless onboarding state
 The onboarding surface presented when a local dataset does not yet exist SHALL provide a pairing entry
@@ -307,7 +360,7 @@ The app SHALL show a muted, selectable monospace build label reading `fi <versio
 - **THEN** every other section renders normally and no label is shown
 
 ### Requirement: Connection switches on the devices screen
-The devices screen SHALL show a Connections section with two switches, "Discoverable" and "Sync with paired devices", each with a help entry. Each switch SHALL reflect the persisted preference obtained from Rust, SHALL delegate a toggle to Rust, and SHALL show the value Rust reports back rather than an optimistic value. A failed toggle SHALL leave the switch at its previous value and surface the error inline. The section SHALL be visible whether or not any device is paired.
+The devices screen SHALL show a Connections section with two switches, "Discoverable" and "Sync with paired devices", each with a help entry. Each switch SHALL reflect the persisted preference obtained from Rust, SHALL delegate a toggle to Rust, and SHALL show the value Rust reports back rather than an optimistic value. A failed toggle SHALL leave the switch at its previous value and show "Couldn't change this. Try again." directly under that switch, until the next toggle of that switch. The section SHALL be visible whether or not any device is paired, and SHALL be the last section of the devices screen, after "Trusted devices" and "This device".
 
 #### Scenario: Switches reflect stored preferences
 - **WHEN** the devices screen opens on an installation where Discoverable is off and Sync with paired devices is on
@@ -318,37 +371,45 @@ The devices screen SHALL show a Connections section with two switches, "Discover
 - **THEN** Rust is asked to pause, the switch reads off once Rust confirms, and the status chip reads "Paused"
 
 #### Scenario: Toggle fails
-- **WHEN** Rust rejects a toggle with an error
-- **THEN** the switch returns to its previous value and the error is shown inline on the devices screen
+- **WHEN** Rust rejects a Discoverable toggle with an error
+- **THEN** the switch returns to its previous value and "Couldn't change this. Try again." is shown under the Discoverable switch, not as a page banner
+
+#### Scenario: Section order
+- **WHEN** the devices screen renders with one trusted device
+- **THEN** the sections appear in the order Trusted devices, This device, Connections
 
 ### Requirement: Pairing card explains that pairing works while discovery is off
-While Discoverable is off and pairing is idle, the devices screen SHALL state that discovery is off and that pairing still works: inside the "Trusted devices" empty state when no device is trusted, or as a muted line beside the "Pair device" action otherwise. The pairing controls SHALL remain enabled whatever the two preferences are set to.
+While Discoverable is off and pairing is idle, the devices screen SHALL state "Discovery is off — pairing still works.": inside the "Trusted devices" empty state when no device is trusted, or as a muted line beside the "Pair device" action otherwise. The pairing controls SHALL remain enabled whatever the two preferences are set to.
 
 #### Scenario: Idle card with discovery off
 - **WHEN** Discoverable is off, pairing is idle and no device is trusted
-- **THEN** the empty state shows its copy followed by a note that discovery is off and pairing still works, and "Start pairing" is enabled
+- **THEN** the empty state shows its copy followed by "Discovery is off — pairing still works.", and "Start pairing" is enabled
 
 #### Scenario: Idle with discovery off and devices trusted
 - **WHEN** Discoverable is off, pairing is idle and one device is trusted
-- **THEN** a muted line beside "Pair device" says discovery is off and pairing still works, and "Pair device" is enabled
+- **THEN** a muted line beside "Pair device" reads "Discovery is off — pairing still works.", and "Pair device" is enabled
 
 #### Scenario: Idle card with discovery on
 - **WHEN** Discoverable is on and pairing is idle
 - **THEN** no discovery-off note is shown
 
 ### Requirement: This device shows its identity
-The "This device" section of the devices screen SHALL show the name this device presents to peers during pairing and the local DeviceId, obtained from Rust, in a monospace presentation. At 720px and wider the id SHALL be shown in groups of eight hex characters, eliding the middle groups with "…"; below 720px it SHALL be shortened to its first and last eight characters. A "Copy ID" action SHALL place the full DeviceId on the clipboard and confirm the copy. The section SHALL also hold the "Reset this device's data" entry, which opens the reset confirmation. When Rust reports that no identity is available, the section SHALL say that networking is not set up instead of showing an empty identifier.
+The "This device" section of the devices screen SHALL show the name this device presents to peers during pairing, with the muted line "Name other devices see when pairing" under it, and the local DeviceId, obtained from Rust, in a monospace presentation. At 720px and wider the id SHALL be shown in groups of eight hex characters, eliding the middle groups with "…"; below 720px it SHALL be shortened to its first and last eight characters. A "Copy ID" action SHALL place the full DeviceId on the clipboard and confirm the copy by showing "ID copied" in the action's place for a few seconds. The section SHALL also hold the "Reset this device's data" entry, which opens the reset confirmation. When Rust reports that no identity is available, the section SHALL read "Networking is not set up" with the line "This device has no identity for pairing yet." instead of showing an empty identifier, and SHALL still hold the reset entry.
 
 #### Scenario: Identity shown
 - **WHEN** the devices screen is opened on a networked device
-- **THEN** the "This device" section shows the pairing name and the local DeviceId, and the id's first and last characters match the id a paired peer lists for this device
+- **THEN** the "This device" section shows the pairing name, "Name other devices see when pairing" and the local DeviceId, and the id's first and last characters match the id a paired peer lists for this device
 
 #### Scenario: Identity copyable
 - **WHEN** the user presses Copy ID
-- **THEN** the clipboard receives the full identifier, not the shortened form, and a brief confirmation is shown
+- **THEN** the clipboard receives the full identifier, not the shortened form, and "ID copied" replaces the action briefly
+
+#### Scenario: No identity
+- **WHEN** Rust reports that no identity is available
+- **THEN** the section reads "Networking is not set up" and "This device has no identity for pairing yet." with no Copy ID action
 
 ### Requirement: Devices screen pairing entry points
-When no device is trusted, the "Trusted devices" section SHALL show a dashed empty state reading "No devices paired yet" with the line "Start pairing on both devices while they're nearby. Pairing turns itself off after 2 minutes." (the last sentence may be omitted below 720px) and a primary "Start pairing" action. When at least one device is trusted, the section header SHALL offer a "Pair device" action instead. Either action SHALL enter pairing mode, and while pairing is active the pairing card SHALL take the empty state's place and run the pairing, candidate and SAS flow unchanged. While Discoverable is off, the empty state SHALL add the note that discovery is off and pairing still works. After a pairing completes, the screen SHALL show a dismissible banner reading "Paired with <name>. The first sync starts automatically." with a "Pair another" action that enters pairing mode again.
+When no device is trusted, the "Trusted devices" section SHALL show a dashed empty state reading "No devices paired yet" with the line "Start pairing on both devices while they're nearby. Pairing turns itself off after 2 minutes." (the last sentence may be omitted below 720px) and a primary "Start pairing" action, and the section header SHALL offer no "Pair device" action. When at least one device is trusted, the section header SHALL offer a "Pair device" action instead. Either action SHALL enter pairing mode, and while pairing is active the pairing card SHALL take the empty state's place and run the pairing, candidate and SAS flow unchanged. While Discoverable is off, the empty state SHALL add the note that discovery is off and pairing still works. After a pairing completes, the screen SHALL show a dismissible banner reading "Paired with <name>. The first sync starts automatically." with a "Pair another" action that enters pairing mode again.
 
 #### Scenario: Empty state starts pairing
 - **WHEN** no device is trusted and the user presses "Start pairing"
@@ -360,7 +421,7 @@ When no device is trusted, the "Trusted devices" section SHALL show a dashed emp
 
 #### Scenario: Discovery off note
 - **WHEN** Discoverable is off and no device is trusted
-- **THEN** the empty state includes the note that discovery is off and pairing still works, and "Start pairing" is enabled
+- **THEN** the empty state includes "Discovery is off — pairing still works.", and "Start pairing" is enabled
 
 ### Requirement: Unreachable peer is explained in plain language
 A trusted, non-revoked row whose last connection attempt failed SHALL present the failure as a person-facing state chosen from the typed failure kind, while Sync with paired devices is on (mock devices-unreachable):

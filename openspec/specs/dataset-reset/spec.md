@@ -71,12 +71,16 @@ Reset SHALL NOT send any message to peers, SHALL NOT attempt remote revocation, 
 - **THEN** B's record for A is unchanged and B receives no notification
 
 ### Requirement: Reset requires explicit confirmation stating consequences
-Every reset entry point SHALL require an explicit confirmation that states: the reset deletes this device's only local copy; other devices keep their copies; if this is the only device the data is permanently lost; other devices are not notified.
+Every reset entry point SHALL require an explicit confirmation that states: the reset deletes this device's only local copy; other devices keep their copies; if this is the only device the data is permanently lost; other devices are not notified. The confirmation (mock devices-confirm-dialogs) SHALL be titled "Reset this device's data?" and SHALL hold an unchecked "I understand this can't be undone" checkbox. "Reset data" SHALL be a secondary action on the left, unavailable until the checkbox is ticked, and "Keep data" the primary action on the right. When the entry point knows the trusted-device count, the confirmation SHALL add "<N> trusted devices are kept and can be paired again." (with singular and zero forms).
 
 #### Scenario: User declines
-- **WHEN** the user dismisses the confirmation
+- **WHEN** the user dismisses the confirmation or presses "Keep data"
 - **THEN** no intent is written and no state changes
 
+#### Scenario: Acknowledgement required
+- **WHEN** the confirmation opens
+- **THEN** "Reset data" is unavailable, and it becomes available only after the user ticks "I understand this can't be undone"
+
 #### Scenario: Trusted-device count is shown
-- **WHEN** the confirmation is opened from the devices surface
-- **THEN** it shows how many trusted devices this installation currently records
+- **WHEN** the confirmation is opened from the devices surface with three trusted devices recorded
+- **THEN** it reads "3 trusted devices are kept and can be paired again."
