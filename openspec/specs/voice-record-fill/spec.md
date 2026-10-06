@@ -42,7 +42,7 @@ The first mic tap SHALL run setup inside the sheet's voice panel slot, in this o
 1. A microphone primer. It has a mic icon, "Speak to fill records", "Audio is processed on this device and never saved.", "Next, Android will ask for microphone access.", and "Not now" / "Continue". Continue requests the Android microphone permission.
 2. A model download offer for the voice language's model set (mock voice-download). It has "Download voice models", a summary line, one row per file of the set with its role ("Speech recognition" or "Understanding"), its friendly label and its manifest size, a line stating whether the phone is on mobile data (with "Wi-Fi recommended") or Wi-Fi, a line with free storage, and "Later" / "Download <size>". <size> is the sum of the set's files not yet verified, and <language> is the name of the voice language. When no file of the set is verified, the summary reads "<language> · <size> total, one time. Everything runs on this phone.". When some file of the set is already verified, the summary reads "<language> · <size> to download, one time. Everything runs on this phone." and each verified file's row shows "On this phone" instead of its size.
 
-While the model downloads, the panel SHALL show a compact card: a title, a pause action, a hide action, a progress bar, "<done> of <total> · <percent>%" with the time left, and "Keep filling by hand. The mic turns on when it's ready." The title SHALL read "Downloading voice models" while downloading, "Reconnecting…" while reconnecting, "Checking downloaded data…" while verifying, and "Download paused" while paused. A failed download SHALL show its reason line in the card. The form SHALL stay fully usable during setup and download. The mic SHALL show a progress ring with the percentage and a download icon while downloading, reconnecting or verifying, and SHALL become the idle mic when the voice language's set is ready.
+While the model downloads, the panel SHALL show a compact card: a title, a pause action, a hide action, a progress bar, "<done> of <total> · <percent>%" with the time left, and "Keep filling by hand. The mic turns on when it's ready." The title SHALL read "Downloading voice models" while downloading, "Reconnecting…" while reconnecting, "Checking downloaded data…" while verifying, "Download paused" while paused, and "Download failed" after a failure (mock voice-download). While reconnecting the card SHALL add "Connection lost — the download resumes where it stopped.". While paused the progress line SHALL read "<done> of <total> kept" and the card SHALL show a labelled "Resume" button in place of the pause action. After a failure the card SHALL show the failure reason line, the progress line "<done> of <total> kept", and a labelled "Retry" button that resumes from the stored bytes; the time left is not shown while paused or failed. The form SHALL stay fully usable during setup and download. The mic SHALL show a progress ring with the percentage and a download icon while downloading, reconnecting or verifying, and SHALL become the idle mic when the voice language's set is ready.
 
 #### Scenario: Primer then permission
 - **WHEN** the microphone permission was never granted and the user taps the mic
@@ -62,11 +62,19 @@ While the model downloads, the panel SHALL show a compact card: a title, a pause
 
 #### Scenario: Reconnecting in the sheet
 - **WHEN** the download is reconnecting
-- **THEN** the card title reads "Reconnecting…" and the mic keeps its progress ring
+- **THEN** the card title reads "Reconnecting…", the card shows "Connection lost — the download resumes where it stopped.", and the mic keeps its progress ring
 
 #### Scenario: Not now
 - **WHEN** the user taps "Not now" on the primer
 - **THEN** the primer closes, no permission is requested, and the mic stays idle
+
+#### Scenario: Paused in the sheet
+- **WHEN** the download is paused at 612 MB of 1.43 GB
+- **THEN** the card title reads "Download paused", the progress line reads "612 MB of 1.43 GB kept", and a "Resume" button resumes the download
+
+#### Scenario: Failed in the sheet
+- **WHEN** the download failed with the network reason at 612 MB
+- **THEN** the card title reads "Download failed", the card shows "Couldn't reach the download server. Check your Wi-Fi, then retry. Downloaded data is kept.", and "Retry" resumes from 612 MB
 
 ### Requirement: Mic button states
 The mic button SHALL present its state by icon and label, not by color alone:
@@ -87,7 +95,7 @@ Tapping the mic in the idle or ready state SHALL start listening, and tapping it
 - **THEN** listening runs only while the mic is held, and processing starts on release
 
 ### Requirement: Listening and processing panels
-While listening, the panel SHALL show a pulsing dot with "Listening", an elapsed timer (m:ss), live input-level bars, "Try: “<example>”" built from this collection's active field names and plausible values in the voice language, "Tap stop when done, or hold the mic to talk", and Cancel. The example SHALL use sample values of the voice language: a text sample ("Lunch" / "Almuerzo"), a decimal written with the language's decimal separator ("12.50" / "12,50"), a whole number, "<field name> <first option>" for a Choice field, a date ("yesterday" / "ayer"), a date and time ("yesterday at noon" / "ayer al mediodía"), "<field name> yes" / "<field name> sí" for a Boolean field, and a duration ("45 minutes" / "45 minutos"). Field names and option labels SHALL be shown as the user wrote them. In Spanish the example SHALL be quoted with «». While processing, the panel SHALL show two steps: "Transcribed", checked once the transcript exists, then "Filling fields…" with a progress ring. It SHALL also show the transcript as soon as it exists, "Usually 4–8 seconds", and Cancel. Cancel SHALL stop the current turn, discard its audio and transcript, and leave the form as it was before the turn. "Save record" SHALL be disabled while listening or processing and enabled otherwise. Panel state changes SHALL be announced to screen readers.
+While listening, the panel SHALL show a pulsing dot with "Listening", an elapsed timer (m:ss), live input-level bars, "Try: “<example>”" built from this collection's active field names and plausible values in the voice language, "Tap stop when done, or hold the mic to talk", the muted line "Stops on its own after 30 seconds." (the turn's recording cap, mock voice-listening), and Cancel. The example SHALL use sample values of the voice language: a text sample ("Lunch" / "Almuerzo"), a decimal written with the language's decimal separator ("12.50" / "12,50"), a whole number, "<field name> <first option>" for a Choice field, a date ("yesterday" / "ayer"), a date and time ("yesterday at noon" / "ayer al mediodía"), "<field name> yes" / "<field name> sí" for a Boolean field, and a duration ("45 minutes" / "45 minutos"). Field names and option labels SHALL be shown as the user wrote them. In Spanish the example SHALL be quoted with «». While processing, the panel SHALL show two steps: "Transcribed", checked once the transcript exists, then "Filling fields…" with a progress ring. It SHALL also show the transcript as soon as it exists, "Usually 4–8 seconds", and Cancel. Cancel SHALL stop the current turn, discard its audio and transcript, and leave the form as it was before the turn. "Save record" SHALL be disabled while listening or processing and enabled otherwise. Panel state changes SHALL be announced to screen readers.
 
 #### Scenario: Example from the collection
 - **WHEN** the voice language is English and the collection has fields description, amount, category and date
@@ -104,6 +112,10 @@ While listening, the panel SHALL show a pulsing dot with "Listening", an elapsed
 #### Scenario: Cancel mid-processing
 - **WHEN** the user taps Cancel while fields are being filled
 - **THEN** no field changes, the transcript is discarded, and Save record is enabled
+
+#### Scenario: Recording cap is stated
+- **WHEN** the panel is listening
+- **THEN** it shows "Stops on its own after 30 seconds." under the hint, and a turn still recording after 30 seconds stops on its own and is processed
 
 ### Requirement: Applying a voice fill
 The engine SHALL return a patch: a list of entries, each naming an active field of the collection, a typed value, and the evidence, meaning the words of the transcript it came from. The app SHALL apply the patch to the draft with these rules:
@@ -218,12 +230,12 @@ Settings SHALL include a Voice input section wherever the app-settings capabilit
   - Verifying: tag "Verifying", summary "<language> · <total>", "Checking downloaded data…" with the time left when known, a striped bar without a percent, and Cancel.
   - Paused: tag "Paused", summary "<language> · paused at <done> of <total>", the frozen progress bar with the percent and "resumes from here", Resume and Cancel.
   - Failed: tag "Failed", a reason title and line, Retry and "Cancel and delete". A network or HTTP failure reads "No connection" / "Couldn't reach the download server. Check your Wi-Fi, then retry. Downloaded data is kept." with summary "<language> · stopped at <done>". A storage failure reads "Not enough storage" / "Free up <needed> on this phone, then retry." with the same summary. A checksum failure reads "Downloaded file is damaged" / "The <role> model failed its check. Retry downloads it again (<size>)." with summary "<language> · check failed".
-  - Ready: tag "Ready", summary "<language> · <total> used on this phone", Re-download and Delete.
+  - Ready: tag "Ready", summary "<language> · <total> used on this phone", and two buttons inside the card under the model rows: "Re-download" (secondary) and "Delete" (low-emphasis) (mocks settings, settings-confirm-dialogs).
 - Under the model rows, when speech models of other languages are on the phone, the label "Other languages" and one row per such model with "Speech recognition", its friendly label, its manifest size (or "<stored> of <size>" when partial), and "Delete".
-- The hands-free switch with "Speaks the “still need” question and a short confirmation", shown only when the voice language's set is ready.
-- The privacy line "Audio is processed on this device and never saved."
+- The privacy line "Audio is processed on this device and never saved.", as a muted line directly under the voice models card.
+- The hands-free switch with "Speaks the “still need” question and a short confirmation", in its own card under the privacy line, shown only when the voice language's set is ready.
 
-State tags SHALL pair an icon with their text, never color alone. Retry SHALL resume from the stored bytes. Cancel and "Cancel and delete" SHALL ask "Cancel download?" with "Downloaded data (<size>) will be deleted.", where <size> is what Cancel deletes, "Cancel download" and "Keep downloading", unless nothing would be deleted. Delete SHALL delete every voice model on the phone, of every language, and SHALL ask "Delete voice models?" with "Frees <size>. Voice fill won’t work until you download them again.", where <size> is everything stored for voice models, "Delete" and "Keep models". An other-language row's Delete SHALL ask "Delete this speech model?" with "Frees <size>. Voice fill in <language> needs it again.", "Delete" and "Keep model", and SHALL delete only that speech model. Re-download SHALL be confirmed first. In each confirm dialog the safe choice SHALL be the primary button on the right and the destructive choice the secondary button on the left. There is no undo.
+State tags SHALL pair an icon with their text, never color alone. Retry SHALL resume from the stored bytes. Cancel and "Cancel and delete" SHALL ask "Cancel download?" with "Downloaded data (<size>) will be deleted.", where <size> is what Cancel deletes, "Cancel download" and "Keep downloading", unless nothing would be deleted. Delete SHALL delete every voice model on the phone, of every language, and SHALL ask "Delete voice models?" with "Frees <size>. Voice fill won’t work until you download them again.", where <size> is everything stored for voice models, "Delete" and "Keep models". An other-language row's Delete SHALL ask "Delete this speech model?" with "Frees <size>. <language> voice input won't work until you download it again.", "Delete" and "Keep model" (mock settings-language), and SHALL delete only that speech model. Re-download SHALL be confirmed first. In each confirm dialog the safe choice SHALL be the primary button on the right and the destructive choice the secondary button on the left. There is no undo.
 
 #### Scenario: Ready model in Settings
 - **WHEN** the voice language is English and the English set is ready
@@ -264,6 +276,14 @@ State tags SHALL pair an icon with their text, never color alone. Retry SHALL re
 #### Scenario: Delete asks first
 - **WHEN** only the English set is on the phone and the user taps Delete and confirms
 - **THEN** the models are deleted, the card shows "Not downloaded" with "Download 1.43 GB", and the hands-free switch is hidden
+
+#### Scenario: Ready layout
+- **WHEN** the English set is ready and the user opens Settings on Android
+- **THEN** the voice models card ends with the buttons "Re-download" and "Delete", the privacy line follows the card, and the hands-free switch follows in its own card
+
+#### Scenario: Other-language delete wording
+- **WHEN** the Spanish set is ready, the English speech model is on the phone, and the user taps its Delete
+- **THEN** the dialog asks "Delete this speech model?" with "Frees 148 MB. English voice input won't work until you download it again.", "Delete" and "Keep model"
 
 ### Requirement: Voice engine boundary and fake engine
 The app SHALL reach speech-to-text and field filling only through one voice engine boundary. It takes the audio of one turn, the voice language (`en` or `es`), the collection's active fields (id, name, type, required, options, bounds) and the current draft values, and returns a transcript and a patch. It SHALL report typed failures (no speech, model not loaded, out of memory, microphone busy, cancelled). It SHALL report input levels while listening, so the level bars reflect the microphone. A scripted fake engine SHALL be available in debug builds, or when the build defines `FI_VOICE_FAKE=true`. It returns scripted transcripts and patches after realistic delays, records the voice language of each turn, and can be set to produce each typed failure.
