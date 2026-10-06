@@ -7,6 +7,7 @@ import 'package:fi/controllers.dart';
 import 'package:fi/help_button.dart';
 import 'package:fi/help_copy.dart';
 import 'package:fi/src/rust/api/models.dart';
+import 'package:fi/theme/confirm_dialog.dart';
 import 'package:fi/theme/form_errors.dart';
 import 'package:fi/theme/form_surface.dart';
 import 'package:fi/theme/inputs.dart';
@@ -28,7 +29,7 @@ Map<String, String> enumLabelsFor(CollectionSchemaDto? schema) => {
 
 /// The ordered responsive widget section of a collection screen. It sits above the record list
 /// and never replaces it.
-final class CollectionDashboard extends StatelessWidget {
+final class CollectionDashboard extends StatefulWidget {
   const CollectionDashboard({super.key, required this.controller});
 
   final CollectionsController controller;
@@ -36,10 +37,22 @@ final class CollectionDashboard extends StatelessWidget {
   static const _registry = WidgetRendererRegistry();
 
   @override
+  State<CollectionDashboard> createState() => _CollectionDashboardState();
+}
+
+final class _CollectionDashboardState extends State<CollectionDashboard> {
+  CollectionsController get controller => widget.controller;
+
+  /// Reorder mode replaces each tile's menu with move and remove controls, in place.
+  bool reordering = false;
+
+  @override
   Widget build(BuildContext context) {
     final definitions = controller.widgetDefinitions;
     final schema = controller.schema;
     final l = context.l10n;
+    // Leaving reorder mode once fewer than two widgets remain keeps the header honest.
+    final inReorder = reordering && definitions.length >= 2;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -53,28 +66,34 @@ final class CollectionDashboard extends StatelessWidget {
                   style: const TextStyle(fontSize: 12, color: Nocturne.error),
                 ),
               ),
-            Flexible(
-              child: TextButton.icon(
-                key: const Key('reorder-widgets'),
-                style: TextButton.styleFrom(
-                  foregroundColor: Nocturne.muted(.6),
+            if (inReorder)
+              FilledButton(
+                key: const Key('reorder-done'),
+                onPressed: () => setState(() => reordering = false),
+                child: Text(l.commonDone),
+              )
+            else ...[
+              Flexible(
+                child: TextButton.icon(
+                  key: const Key('reorder-widgets'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: Nocturne.muted(.6),
+                  ),
+                  onPressed: definitions.length < 2 ? null : _startReorder,
+                  icon: const Icon(FiIcons.reorder),
+                  label: Text(l.widgetReorder),
                 ),
-                onPressed: definitions.length < 2
-                    ? null
-                    : () => unawaited(showWidgetReorder(context, controller)),
-                icon: const Icon(FiIcons.reorder),
-                label: Text(l.widgetReorder),
               ),
-            ),
-            Flexible(
-              child: TextButton.icon(
-                key: const Key('add-widget'),
-                onPressed: () =>
-                    unawaited(showWidgetEditor(context, controller)),
-                icon: const Icon(FiIcons.add),
-                label: Text(l.widgetAdd),
+              Flexible(
+                child: TextButton.icon(
+                  key: const Key('add-widget'),
+                  onPressed: () =>
+                      unawaited(showWidgetEditor(context, controller)),
+                  icon: const Icon(FiIcons.add),
+                  label: Text(l.widgetAdd),
+                ),
               ),
-            ),
+            ],
           ],
         ),
         const SizedBox(height: 10),
@@ -95,7 +114,7 @@ final class CollectionDashboard extends StatelessWidget {
                 spacing: _gap,
                 runSpacing: _gap,
                 children: [
-                  for (final definition in definitions)
+                  for (final (index, definition) in definitions.indexed)
                     SizedBox(
                       key: ValueKey('widget-${definition.id}'),
                       width: _tileWidth(
@@ -104,44 +123,55 @@ final class CollectionDashboard extends StatelessWidget {
                         wide,
                       ),
                       height: _tileHeight(definition.layout.size),
-                      child: NocturneCard(
-                        padding: EdgeInsets.zero,
-                        // The glow marks a headline number; charts keep a flat ground.
-                        gradient:
-                            definition.widgetType == 'core.aggregate-number'
-                            ? nocturneGlow()
-                            : null,
-                        onTap: () => unawaited(
-                          showWidgetEditor(context, controller, definition),
-                        ),
-                        child: _registry.build(
-                          WidgetRenderContext(
-                            definition: definition,
-                            evaluation: controller.evaluationFor(definition.id),
-                            enumLabels: labels,
-                            summary: _summary(l, definition, schema),
-                          ),
+                      child: inReorder
+                          ? _ReorderTile(
+                              definitions: definitions,
+                              index: index,
+                              wide: wide,
+                              onMove: _move,
+                              onRemove: () => unawaited(
+                                confirmRemoveWidget(
+                                  context,
+                                  controller,
+                                  definition,
+                                ),
+                              ),
+                              child: _tile(definition, labels, schema),
+                            )
+                          : WidgetTileActions(
+                              onEdit: () => _edit(definition),
+                              onReorder: definitions.length < 2
+                                  ? null
+                                  : _startReorder,
+                              onRemove: () => unawaited(
+                                confirmRemoveWidget(
+                                  context,
+                                  controller,
+                                  definition,
+                                ),
+                              ),
+                              child: _tile(definition, labels, schema),
+                            ),
+                    ),
+                  if (!inReorder)
+                    SizedBox(
+                      width: wide
+                          ? _tileWidth(WidgetSizeDto.small, available, true)
+                          : available,
+                      height: wide ? _tileHeight(WidgetSizeDto.small) : 48,
+                      child: DashedSlot(
+                        onTap: () =>
+                            unawaited(showWidgetEditor(context, controller)),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(FiIcons.add),
+                            const SizedBox(width: 8),
+                            Text(l.widgetAdd),
+                          ],
                         ),
                       ),
                     ),
-                  SizedBox(
-                    width: wide
-                        ? _tileWidth(WidgetSizeDto.small, available, true)
-                        : available,
-                    height: wide ? _tileHeight(WidgetSizeDto.small) : 48,
-                    child: DashedSlot(
-                      onTap: () =>
-                          unawaited(showWidgetEditor(context, controller)),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(FiIcons.add),
-                          const SizedBox(width: 8),
-                          Text(l.widgetAdd),
-                        ],
-                      ),
-                    ),
-                  ),
                 ],
               );
             },
@@ -149,6 +179,42 @@ final class CollectionDashboard extends StatelessWidget {
       ],
     );
   }
+
+  void _startReorder() => setState(() => reordering = true);
+
+  void _edit(WidgetDefinitionDto definition) =>
+      unawaited(showWidgetEditor(context, controller, definition));
+
+  /// Moves the widget at [from] to [to] and submits the whole new order.
+  void _move(int from, int to) {
+    final ids = controller.widgetDefinitions.map((item) => item.id).toList();
+    if (from == to || to < 0 || to >= ids.length) return;
+    ids.insert(to, ids.removeAt(from));
+    unawaited(controller.reorderWidgets(ids));
+  }
+
+  Widget _tile(
+    WidgetDefinitionDto definition,
+    Map<String, String> labels,
+    CollectionSchemaDto? schema,
+  ) => NocturneCard(
+    padding: EdgeInsets.zero,
+    // The glow marks a headline number; charts keep a flat ground.
+    gradient: definition.widgetType == 'core.aggregate-number'
+        ? nocturneGlow()
+        : null,
+    // Tile taps are inert while reordering.
+    onTap: reordering ? null : () => _edit(definition),
+    child: CollectionDashboard._registry.build(
+      WidgetRenderContext(
+        definition: definition,
+        evaluation: controller.evaluationFor(definition.id),
+        enumLabels: labels,
+        summary: _summary(context.l10n, definition, schema),
+        onEdit: () => _edit(definition),
+      ),
+    ),
+  );
 
   /// The query in words for the tile's meta line, e.g. `Sum of Amount · all records`.
   String? _summary(
@@ -168,20 +234,176 @@ final class CollectionDashboard extends StatelessWidget {
   }
 }
 
+/// One tile in reorder mode: the tile itself, inert, under a bar with a drag handle, Move up,
+/// Move down and Remove widget. Dropping another tile here moves it to this position.
+final class _ReorderTile extends StatelessWidget {
+  const _ReorderTile({
+    required this.definitions,
+    required this.index,
+    required this.wide,
+    required this.onMove,
+    required this.onRemove,
+    required this.child,
+  });
+
+  final List<WidgetDefinitionDto> definitions;
+  final int index;
+  final bool wide;
+  final void Function(int from, int to) onMove;
+  final VoidCallback onRemove;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = context.l10n;
+    final definition = definitions[index];
+    final handle = Icon(
+      FiIcons.dragHandle,
+      size: 18,
+      color: Nocturne.muted(.7),
+    );
+    final feedback = Material(
+      color: Colors.transparent,
+      child: Opacity(
+        opacity: .8,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: Nocturne.surface,
+            borderRadius: BorderRadius.circular(Nocturne.radius),
+            border: Border.all(color: Nocturne.accent),
+          ),
+          child: Text(definition.title),
+        ),
+      ),
+    );
+    final box = wide ? 36.0 : Nocturne.touchTarget;
+    final handleBox = SizedBox(
+      width: box,
+      height: box,
+      child: Tooltip(
+        message: l.widgetDragToReorder,
+        child: Center(child: handle),
+      ),
+    );
+    return DragTarget<int>(
+      onWillAcceptWithDetails: (details) => details.data != index,
+      onAcceptWithDetails: (details) => onMove(details.data, index),
+      builder: (context, candidates, _) => Stack(
+        children: [
+          Positioned.fill(
+            child: IgnorePointer(child: Opacity(opacity: .55, child: child)),
+          ),
+          if (candidates.isNotEmpty)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(Nocturne.radius),
+                    border: Border.all(color: Nocturne.accent, width: 2),
+                  ),
+                ),
+              ),
+            ),
+          Positioned(
+            top: 6,
+            right: 6,
+            child: DecoratedBox(
+              key: Key('reorder-controls-${definition.id}'),
+              decoration: BoxDecoration(
+                color: Nocturne.surface,
+                borderRadius: BorderRadius.circular(Nocturne.radiusSm),
+                border: Border.all(color: Nocturne.muted(.12)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // A mouse drags straight away; touch drags after a long press so scrolling
+                  // the dashboard still works.
+                  if (wide)
+                    Draggable<int>(
+                      key: const Key('widget-drag-handle'),
+                      data: index,
+                      feedback: feedback,
+                      child: handleBox,
+                    )
+                  else
+                    LongPressDraggable<int>(
+                      key: const Key('widget-drag-handle'),
+                      data: index,
+                      feedback: feedback,
+                      child: handleBox,
+                    ),
+                  FiIconButton(
+                    key: const Key('widget-move-up'),
+                    icon: FiIcons.collapse,
+                    tooltip: l.widgetMoveUp,
+                    onPressed: index == 0
+                        ? null
+                        : () => onMove(index, index - 1),
+                  ),
+                  FiIconButton(
+                    key: const Key('widget-move-down'),
+                    icon: FiIcons.expand,
+                    tooltip: l.widgetMoveDown,
+                    onPressed: index == definitions.length - 1
+                        ? null
+                        : () => onMove(index, index + 1),
+                  ),
+                  FiIconButton(
+                    key: const Key('widget-reorder-remove'),
+                    icon: FiIcons.delete,
+                    tooltip: l.widgetRemoveTooltip,
+                    onPressed: onRemove,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Asks before removing [definition] (destructive Remove left, Keep widget right) and removes it
+/// only on Remove. Returns whether it was removed.
+Future<bool> confirmRemoveWidget(
+  BuildContext context,
+  CollectionsController controller,
+  WidgetDefinitionDto definition,
+) async {
+  final l = context.l10n;
+  final confirmed = await showConfirmDialog(
+    context,
+    title: l.widgetRemoveConfirmTitle(
+      definition.title.isEmpty ? l.widgetUntitledWidget : definition.title,
+    ),
+    body: l.widgetRemoveConfirmBody,
+    destructive: l.widgetRemove,
+    safe: l.widgetKeep,
+    destructiveKey: const Key('confirm-remove-widget'),
+    safeKey: const Key('keep-widget'),
+  );
+  if (!confirmed) return false;
+  await controller.removeWidget(definition.id);
+  return true;
+}
+
 const double _gap = 12;
 
-/// Three columns on a wide screen: small and medium tiles take one, large two, full the row.
-/// A phone stacks full-width tiles with small ones in pairs.
+/// Four columns on a wide screen: small, medium, large and full tiles span one, two, three and
+/// four. A phone stacks every tile full width.
 double _tileWidth(WidgetSizeDto size, double available, bool wide) {
-  if (!wide) {
-    return size == WidgetSizeDto.small ? (available - _gap) / 2 : available;
-  }
-  final column = (available - 2 * _gap) / 3;
-  return switch (size) {
-    WidgetSizeDto.small || WidgetSizeDto.medium => column,
-    WidgetSizeDto.large => 2 * column + _gap,
-    WidgetSizeDto.full => available,
+  if (!wide) return available;
+  final column = (available - 3 * _gap) / 4;
+  final span = switch (size) {
+    WidgetSizeDto.small => 1,
+    WidgetSizeDto.medium => 2,
+    WidgetSizeDto.large => 3,
+    WidgetSizeDto.full => 4,
   };
+  return span * column + (span - 1) * _gap;
 }
 
 double _tileHeight(WidgetSizeDto size) => switch (size) {
@@ -190,58 +412,6 @@ double _tileHeight(WidgetSizeDto size) => switch (size) {
   WidgetSizeDto.large => 290,
   WidgetSizeDto.full => 330,
 };
-
-/// Deterministic reorder of the active widgets.
-Future<void> showWidgetReorder(
-  BuildContext context,
-  CollectionsController controller,
-) async {
-  await showDialog<void>(
-    context: context,
-    builder: (dialog) => AlertDialog(
-      title: Text(context.l10n.widgetOrder),
-      content: SizedBox(
-        width: 420,
-        height: 360,
-        child: ListenableBuilder(
-          listenable: controller,
-          builder: (context, _) {
-            final definitions = [...controller.widgetDefinitions];
-            return ReorderableListView.builder(
-              itemCount: definitions.length,
-              onReorder: (oldIndex, newIndex) {
-                if (newIndex > oldIndex) newIndex--;
-                final moved = definitions.removeAt(oldIndex);
-                definitions.insert(newIndex, moved);
-                unawaited(
-                  controller.reorderWidgets(
-                    definitions.map((item) => item.id).toList(),
-                  ),
-                );
-              },
-              itemBuilder: (context, index) => ListTile(
-                key: ValueKey(definitions[index].id),
-                leading: Text('${index + 1}'),
-                title: Text(
-                  definitions[index].title.isEmpty
-                      ? definitions[index].widgetType
-                      : definitions[index].title,
-                ),
-                subtitle: Text(definitions[index].widgetType),
-              ),
-            );
-          },
-        ),
-      ),
-      actions: [
-        FilledButton(
-          onPressed: () => Navigator.pop(dialog),
-          child: Text(context.l10n.commonDone),
-        ),
-      ],
-    ),
-  );
-}
 
 /// Guided add/edit flow. It submits typed query and widget definitions and lets Rust validate
 /// them before anything is mutated; no SQL and no executable configuration is accepted here.
@@ -389,33 +559,14 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
     final schema = controller.schema;
     final shown = _shown;
     final l = context.l10n;
+    final phone = FormSurfaceScope.modeOf(context) == FormSurfaceMode.sheet;
     final form = Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       spacing: 14,
       children: [
         if (supported) ...[
-          FiSelect<String>(
-            key: const Key('widget-type'),
-            value: widgetType,
-            label: l.widgetType,
-            suffixIcon: const HelpButton(HelpId.widgetType),
-            items: [
-              for (final descriptor in controller.widgetDescriptors)
-                DropdownMenuItem(
-                  value: descriptor.widgetType,
-                  child: Text(
-                    widgetTypeName(l, descriptor.widgetType, descriptor.label),
-                  ),
-                ),
-            ],
-            onChanged: (value) => setState(() {
-              query = query.copyWith(
-                widgetType: value!,
-                bucket: value == 'core.scatter-plot' ? null : query.bucket,
-              );
-            }),
-          ),
+          _typePicker(l),
         ] else ...[
           // An unsupported widget keeps its type; only safe metadata is editable.
           Text(l.widgetTypeValue('${existing?.widgetType}')),
@@ -432,16 +583,38 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
           errors: shown.fieldLines(context.l10n, 'title'),
           onChanged: (_) => setState(() => _edited('title')),
         ),
-        FiSwitchTile(
-          key: const Key('reuse-query'),
-          contentPadding: EdgeInsets.zero,
-          title: Text(l.widgetUseSavedQuery),
-          secondary: const HelpButton(HelpId.widgetUseSavedQuery),
-          value: reuseQuery,
-          onChanged: (value) => setState(() {
-            _edited('query');
-            reuseQuery = value;
-          }),
+        SectionLabel(l.widgetData),
+        Row(
+          children: [
+            Expanded(
+              child: SegmentedButton<bool>(
+                key: const Key('query-source'),
+                showSelectedIcon: false,
+                segments: [
+                  ButtonSegment(
+                    value: false,
+                    label: Text(
+                      l.widgetDefineHere,
+                      key: const Key('query-source-define'),
+                    ),
+                  ),
+                  ButtonSegment(
+                    value: true,
+                    label: Text(
+                      l.widgetUseSavedQuery,
+                      key: const Key('query-source-saved'),
+                    ),
+                  ),
+                ],
+                selected: {reuseQuery},
+                onSelectionChanged: (value) => setState(() {
+                  _edited('query');
+                  reuseQuery = value.single;
+                }),
+              ),
+            ),
+            const HelpButton(HelpId.widgetUseSavedQuery),
+          ],
         ),
         if (reuseQuery) ...[
           FiSelect<String>(
@@ -470,13 +643,11 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
           QueryBuilder(
             schema: schema,
             state: query,
+            filterStyle: QueryFilterStyle.chip,
             onChanged: (next) => setState(() => query = next),
           ),
-        const Divider(height: 8),
-        Text(
-          l.widgetPresentation,
-          style: Theme.of(context).textTheme.titleSmall,
-        ),
+        const SizedBox(height: 4),
+        SectionLabel(l.widgetPresentation),
         if (supported)
           ..._presentationFields(l)
         else
@@ -486,12 +657,10 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
             ),
             style: Theme.of(context).textTheme.bodySmall,
           ),
-        const Divider(height: 8),
         Text(
           l.widgetSize,
           style: TextStyle(fontSize: 12, color: Nocturne.muted(.7)),
         ),
-        const SizedBox(height: 5),
         SegmentedButton<WidgetSizeDto>(
           key: const Key('widget-size'),
           showSelectedIcon: false,
@@ -507,16 +676,16 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
           selected: {size},
           onSelectionChanged: (value) => setState(() => size = value.single),
         ),
+        // A phone shows the preview in the form flow, after Size (mock widget-editor).
+        if (phone) _preview(schema),
       ],
     );
-    // Wide screens get the form beside a live preview of the tile (mock widget-editor); narrower ones pin
-    // a compact preview above the buttons.
+    // Wide screens get the form beside a live preview of the tile.
     return FormSurface(
       title: existing == null ? l.widgetAdd : l.widgetEdit,
       width: 520,
       body: form,
-      aside: _preview(schema),
-      pinnedAside: _preview(schema, compact: true),
+      aside: phone ? null : _preview(schema),
       showRequiredLegend: true,
       message: shown.form.isEmpty
           ? null
@@ -534,22 +703,22 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
             onPressed: () async {
               // Capture the navigator before the await so no BuildContext crosses the gap.
               final navigator = Navigator.of(context);
-              await controller.removeWidget(existing!.id);
-              navigator.pop();
+              if (await confirmRemoveWidget(context, controller, existing!)) {
+                navigator.pop();
+              }
             },
           ),
       ],
       primaryKey: const Key('save-widget'),
-      primaryLabel: l.commonSave,
+      primaryLabel: existing == null ? l.widgetAdd : l.commonSave,
       // Save stays enabled; pressing it shows what is missing under the input it belongs to.
       onPrimary: _save,
     );
   }
 
   /// What the tile will look like: the saved evaluation for an existing widget, the title and
-  /// query in words for a new one, and what the chosen size spans. [compact] keeps only the
-  /// label and a short tile, for pinning above the buttons on a narrow screen.
-  Widget _preview(CollectionSchemaDto? schema, {bool compact = false}) {
+  /// query in words for a new one, and what the chosen size spans.
+  Widget _preview(CollectionSchemaDto? schema) {
     final l = context.l10n;
     final source = reuseQuery
         ? _selectedQuery
@@ -575,9 +744,9 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         SectionLabel(l.widgetPreview),
-        SizedBox(height: compact ? 6 : 10),
+        const SizedBox(height: 10),
         SizedBox(
-          height: compact ? 118 : _tileHeight(size).clamp(118, 220),
+          height: _tileHeight(size).clamp(118, 220),
           child: NocturneCard(
             padding: EdgeInsets.zero,
             gradient: widgetType == 'core.aggregate-number'
@@ -621,15 +790,99 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
                   ),
           ),
         ),
-        if (!compact) ...[
-          const SizedBox(height: 10),
-          Text(switch (size) {
-            WidgetSizeDto.small => l.widgetSizeSmallHint,
-            WidgetSizeDto.medium => l.widgetSizeMediumHint,
-            WidgetSizeDto.large => l.widgetSizeLargeHint,
-            WidgetSizeDto.full => l.widgetSizeFullHint,
-          }, style: TextStyle(fontSize: 12, color: Nocturne.muted(.5))),
-        ],
+        const SizedBox(height: 10),
+        Text(switch (size) {
+          WidgetSizeDto.small => l.widgetSizeSmallHint,
+          WidgetSizeDto.medium => l.widgetSizeMediumHint,
+          WidgetSizeDto.large => l.widgetSizeLargeHint,
+          WidgetSizeDto.full => l.widgetSizeFullHint,
+        }, style: TextStyle(fontSize: 12, color: Nocturne.muted(.5))),
+      ],
+    );
+  }
+
+  /// The widget type as icon tiles, four in a row (two by two on a phone). Switching away from a
+  /// scatter plot keeps the period; a scatter plot has none.
+  Widget _typePicker(AppLocalizations l) {
+    final descriptors = controller.widgetDescriptors;
+    final perRow = Nocturne.isPhone(context) ? 2 : 4;
+    Widget tile(WidgetDescriptorDto descriptor) {
+      final type = descriptor.widgetType;
+      final selected = type == widgetType;
+      return Semantics(
+        selected: selected,
+        button: true,
+        child: InkWell(
+          key: Key('widget-type-$type'),
+          borderRadius: BorderRadius.circular(Nocturne.radius),
+          onTap: () => setState(() {
+            query = query.copyWith(
+              widgetType: type,
+              bucket: type == 'core.scatter-plot' ? null : query.bucket,
+            );
+          }),
+          child: Container(
+            height: 72,
+            decoration: BoxDecoration(
+              color: selected ? Nocturne.accent.withValues(alpha: .12) : null,
+              borderRadius: BorderRadius.circular(Nocturne.radius),
+              border: Border.all(
+                color: selected ? Nocturne.accent : Nocturne.muted(.15),
+              ),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              spacing: 6,
+              children: [
+                Icon(
+                  _typeIcon(type),
+                  size: 22,
+                  color: selected ? Nocturne.accent : Nocturne.muted(.7),
+                ),
+                Text(
+                  widgetTypeName(l, type, descriptor.label),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: selected ? Nocturne.accent : Nocturne.muted(.8),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      key: const Key('widget-type'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      spacing: 6,
+      children: [
+        Row(
+          children: [
+            Text(
+              l.widgetType,
+              style: TextStyle(fontSize: 12, color: Nocturne.muted(.7)),
+            ),
+            const HelpButton(HelpId.widgetType),
+          ],
+        ),
+        for (var start = 0; start < descriptors.length; start += perRow)
+          Row(
+            spacing: 8,
+            children: [
+              for (var i = start; i < start + perRow; i++)
+                Expanded(
+                  child: i < descriptors.length
+                      ? tile(descriptors[i])
+                      : const SizedBox.shrink(),
+                ),
+            ],
+          ),
       ],
     );
   }
@@ -699,6 +952,7 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
         // Saving as new starts from the same contents but must not inherit the id.
         existing: asNew ? null : selected,
         order: controller.queryDefinitions.length,
+        run: controller.runQuery,
         referencingWidgets: asNew
             ? 0
             : widgetsUsingQuery(controller, selected.id),

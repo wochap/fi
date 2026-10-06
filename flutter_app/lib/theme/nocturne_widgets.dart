@@ -589,8 +589,22 @@ class DashedSlot extends StatelessWidget {
   );
 }
 
+/// A dashed rounded outline in [color] around [child], marking something that needs attention.
+class DashedOutline extends StatelessWidget {
+  const DashedOutline({required this.child, required this.color, super.key});
+
+  final Widget child;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) =>
+      CustomPaint(painter: _DashedRRectPainter(color: color), child: child);
+}
+
 final class _DashedRRectPainter extends CustomPainter {
-  const _DashedRRectPainter();
+  const _DashedRRectPainter({this.color = Nocturne.divider});
+
+  final Color color;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -602,7 +616,7 @@ final class _DashedRRectPainter extends CustomPainter {
         ),
       );
     final paint = Paint()
-      ..color = Nocturne.divider
+      ..color = color
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
     for (final metric in path.computeMetrics()) {
@@ -615,7 +629,8 @@ final class _DashedRRectPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_DashedRRectPainter oldDelegate) => false;
+  bool shouldRepaint(_DashedRRectPainter oldDelegate) =>
+      color != oldDelegate.color;
 }
 
 /// The Fi mark, option 3b: an F built from three schema rows, the dot is the i.

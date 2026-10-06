@@ -247,16 +247,16 @@ Widget renderLineChart(WidgetRenderContext context) {
   final evaluation = context.evaluation;
   final title = context.definition.title;
   if (evaluation == null) {
-    return WidgetTile(title: title, child: const WidgetLoading());
+    return WidgetTile(
+      title: title,
+      child: WidgetLoading(widgetType: context.definition.widgetType),
+    );
   }
   if (!evaluation.ready) return WidgetFailure.from(context, evaluation);
   final result = evaluation.result;
   if (result == null ||
       (result.points.isEmpty && result.categoryPoints.isEmpty)) {
-    return WidgetTile(
-      title: title,
-      child: const WidgetEmpty(reason: WidgetEmptyReason.noObservations),
-    );
+    return WidgetTile(title: title, child: const WidgetEmpty());
   }
   final config = WidgetConfig(context.configuration);
   final plot = _plotFromGroupedOrSeries(result, context.enumLabels);
@@ -320,16 +320,16 @@ Widget renderBarChart(WidgetRenderContext context) {
   final evaluation = context.evaluation;
   final title = context.definition.title;
   if (evaluation == null) {
-    return WidgetTile(title: title, child: const WidgetLoading());
+    return WidgetTile(
+      title: title,
+      child: WidgetLoading(widgetType: context.definition.widgetType),
+    );
   }
   if (!evaluation.ready) return WidgetFailure.from(context, evaluation);
   final result = evaluation.result;
   if (result == null ||
       (result.points.isEmpty && result.categoryPoints.isEmpty)) {
-    return WidgetTile(
-      title: title,
-      child: const WidgetEmpty(reason: WidgetEmptyReason.nothingToChart),
-    );
+    return WidgetTile(title: title, child: const WidgetEmpty());
   }
   final plot = _plotFromGroupedOrSeries(result, context.enumLabels);
   final config = WidgetConfig(context.configuration);
@@ -380,15 +380,15 @@ Widget renderScatterPlot(WidgetRenderContext context) {
   final evaluation = context.evaluation;
   final title = context.definition.title;
   if (evaluation == null) {
-    return WidgetTile(title: title, child: const WidgetLoading());
+    return WidgetTile(
+      title: title,
+      child: WidgetLoading(widgetType: context.definition.widgetType),
+    );
   }
   if (!evaluation.ready) return WidgetFailure.from(context, evaluation);
   final result = evaluation.result;
   if (result == null || result.points.isEmpty) {
-    return WidgetTile(
-      title: title,
-      child: const WidgetEmpty(reason: WidgetEmptyReason.noObservations),
-    );
+    return WidgetTile(title: title, child: const WidgetEmpty());
   }
   final plot = _plotFromSeries(result, context.enumLabels);
   final config = WidgetConfig(context.configuration);

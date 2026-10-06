@@ -3,7 +3,9 @@ import 'package:fi/l10n/l10n.dart';
 import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/exact_format.dart';
 import 'package:fi/src/rust/api/models.dart';
+import 'package:fi/theme/action_sheet.dart';
 import 'package:fi/theme/nocturne.dart';
+import 'package:fi/theme/nocturne_widgets.dart';
 import 'package:fi/widgets/chart_renderers.dart';
 import 'package:flutter/material.dart';
 
@@ -18,6 +20,7 @@ final class WidgetRenderContext {
     required this.evaluation,
     this.enumLabels = const {},
     this.summary,
+    this.onEdit,
   });
 
   final WidgetDefinitionDto definition;
@@ -30,6 +33,9 @@ final class WidgetRenderContext {
 
   /// The query in words, shown under a headline number. Null when the query is not known here.
   final String? summary;
+
+  /// Opens the widget editor; offered by a failed tile. Null where editing is not possible.
+  final VoidCallback? onEdit;
 
   /// The decoded presentation body. Unknown keys stay present and are ignored.
   StructuredValueDto get configuration => definition.configuration.body;
@@ -70,6 +76,7 @@ final class WidgetRendererRegistry {
           title: widget.definition.title,
           kind: WidgetErrorKindDto.invalidConfiguration,
           message: context.l10n.widgetCouldNotRender('$error'),
+          onEdit: widget.onEdit,
         ),
       );
     }
@@ -120,7 +127,10 @@ Widget renderAggregateNumber(WidgetRenderContext context) {
   final evaluation = context.evaluation;
   final title = context.definition.title;
   if (evaluation == null) {
-    return WidgetTile(title: title, child: const WidgetLoading());
+    return WidgetTile(
+      title: title,
+      child: WidgetLoading(widgetType: context.definition.widgetType),
+    );
   }
   if (!evaluation.ready) return WidgetFailure.from(context, evaluation);
   final result = evaluation.result;
@@ -129,10 +139,7 @@ Widget renderAggregateNumber(WidgetRenderContext context) {
     enumLabels: context.enumLabels,
   );
   if (result?.value == null) {
-    return WidgetTile(
-      title: title,
-      child: const WidgetEmpty(reason: WidgetEmptyReason.noValue),
-    );
+    return WidgetTile(title: title, child: const WidgetEmpty());
   }
   final suffix = WidgetConfig(context.configuration).textAt('suffix');
   return WidgetTile(
@@ -189,13 +196,10 @@ final class UnsupportedWidgetPlaceholder extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final unknownKeys =
-        definition.configuration.body.kind == StructuredValueKindDto.map
-        ? definition.configuration.body.entries
-              .map((entry) => entry.key)
-              .toList()
-        : const <String>[];
     final l = context.l10n;
+    final muted = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
     return WidgetTile(
       title: definition.title.isEmpty
           ? l.widgetUntitledWidget
@@ -204,7 +208,6 @@ final class UnsupportedWidgetPlaceholder extends StatelessWidget {
       child: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
           children: [
             Row(
@@ -226,27 +229,14 @@ final class UnsupportedWidgetPlaceholder extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 4),
+            Text(l.widgetUnsupportedExplanation, style: muted),
+            const SizedBox(height: 4),
             // The exact synchronized type stays visible so the user can tell what is missing.
             SelectableText(
               definition.widgetType,
-              style: theme.textTheme.bodySmall?.copyWith(
+              style: muted?.copyWith(
+                fontSize: 11,
                 fontFamily: Nocturne.monoFamily,
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            Text(
-              l.widgetVersionLine(
-                '${definition.configuration.version}',
-                l.widgetConfigKeys(unknownKeys.length),
-              ),
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            Text(
-              l.widgetUnsupportedExplanation,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
           ],
@@ -285,7 +275,8 @@ final class WidgetTile extends StatelessWidget {
                   ),
                 ),
               ),
-              Icon(FiIcons.moreHorizontal, size: 16, color: Nocturne.muted(.6)),
+              if (WidgetTileActions.maybeOf(context) case final actions?)
+                _TileMenu(title: title, actions: actions),
             ],
           ),
           const SizedBox(height: 4),
@@ -296,46 +287,236 @@ final class WidgetTile extends StatelessWidget {
   }
 }
 
-final class WidgetLoading extends StatelessWidget {
-  const WidgetLoading({super.key});
+/// The ⋮ actions of one dashboard tile, provided by the dashboard around the tile. A tile without
+/// them (the editor preview, reorder mode) shows no menu.
+final class WidgetTileActions extends InheritedWidget {
+  const WidgetTileActions({
+    super.key,
+    required this.onEdit,
+    required this.onReorder,
+    required this.onRemove,
+    required super.child,
+  });
+
+  final VoidCallback onEdit;
+
+  /// Null while the dashboard holds fewer than two widgets.
+  final VoidCallback? onReorder;
+  final VoidCallback onRemove;
+
+  static WidgetTileActions? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<WidgetTileActions>();
 
   @override
-  Widget build(BuildContext context) => Center(
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const SizedBox(
-          width: 18,
-          height: 18,
-          child: CircularProgressIndicator(strokeWidth: 2),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          context.l10n.commonLoading,
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
-      ],
-    ),
-  );
+  bool updateShouldNotify(WidgetTileActions oldWidget) =>
+      onEdit != oldWidget.onEdit ||
+      onReorder != oldWidget.onReorder ||
+      onRemove != oldWidget.onRemove;
 }
 
-/// Why a tile has nothing to draw.
-enum WidgetEmptyReason { noData, noValue, noObservations, nothingToChart }
+enum _TileAction { edit, reorder, remove }
 
+/// The tile's ⋮ button: a menu anchored to it on a wide screen, an action sheet headed by the
+/// widget title on a phone.
+final class _TileMenu extends StatelessWidget {
+  const _TileMenu({required this.title, required this.actions});
+
+  final String title;
+  final WidgetTileActions actions;
+
+  void _run(_TileAction action) => switch (action) {
+    _TileAction.edit => actions.onEdit(),
+    _TileAction.reorder => actions.onReorder?.call(),
+    _TileAction.remove => actions.onRemove(),
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final l = context.l10n;
+    if (Nocturne.isPhone(context)) {
+      return FiIconButton(
+        key: const Key('widget-menu'),
+        icon: FiIcons.more,
+        size: 16,
+        tooltip: l.widgetMenuTooltip,
+        color: Nocturne.muted(.6),
+        onPressed: () async {
+          final chosen = await showActionSheet<_TileAction>(
+            context,
+            icon: FiIcons.widget,
+            title: title,
+            groups: [
+              ActionSheetGroup([
+                ActionSheetItem(
+                  value: _TileAction.edit,
+                  label: l.widgetEdit,
+                  icon: FiIcons.edit,
+                ),
+                if (actions.onReorder != null)
+                  ActionSheetItem(
+                    value: _TileAction.reorder,
+                    label: l.widgetReorder,
+                    icon: FiIcons.reorder,
+                  ),
+              ]),
+              ActionSheetGroup([
+                ActionSheetItem(
+                  value: _TileAction.remove,
+                  label: l.widgetMenuRemove,
+                  icon: FiIcons.delete,
+                ),
+              ]),
+            ],
+          );
+          if (chosen != null) _run(chosen);
+        },
+      );
+    }
+    return PopupMenuButton<_TileAction>(
+      key: const Key('widget-menu'),
+      tooltip: l.widgetMenuTooltip,
+      padding: EdgeInsets.zero,
+      iconSize: 16,
+      constraints: const BoxConstraints(minWidth: 180),
+      style: const ButtonStyle(
+        minimumSize: WidgetStatePropertyAll(Size(28, 28)),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+      icon: Icon(FiIcons.more, size: 16, color: Nocturne.muted(.6)),
+      onSelected: _run,
+      itemBuilder: (context) => [
+        PopupMenuItem(
+          key: const Key('widget-menu-edit'),
+          value: _TileAction.edit,
+          child: Text(l.widgetEdit),
+        ),
+        PopupMenuItem(
+          key: const Key('widget-menu-reorder'),
+          value: _TileAction.reorder,
+          enabled: actions.onReorder != null,
+          child: Text(l.widgetReorder),
+        ),
+        PopupMenuItem(
+          key: const Key('widget-menu-remove'),
+          value: _TileAction.remove,
+          child: Text(l.widgetMenuRemove),
+        ),
+      ],
+    );
+  }
+}
+
+/// A quiet skeleton in the shape of [widgetType]: a number bar, a line band, three bars, or a
+/// dot cloud. No spinner and no text, so a loading dashboard stays calm.
+final class WidgetLoading extends StatelessWidget {
+  const WidgetLoading({super.key, required this.widgetType});
+
+  final String widgetType;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Nocturne.muted(.08);
+    Widget block(double width, double height) => Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(Nocturne.radiusSm / 2),
+      ),
+    );
+    return Padding(
+      key: const Key('widget-loading'),
+      padding: const EdgeInsets.only(top: 6),
+      child: switch (widgetType) {
+        'core.aggregate-number' => Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [block(96, 30), const SizedBox(height: 10), block(140, 8)],
+        ),
+        'core.bar-chart' => Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          spacing: 10,
+          children: [
+            for (final share in const [.45, .8, .6])
+              Expanded(
+                child: FractionallySizedBox(
+                  heightFactor: share,
+                  alignment: Alignment.bottomCenter,
+                  child: block(double.infinity, double.infinity),
+                ),
+              ),
+          ],
+        ),
+        _ => CustomPaint(
+          size: Size.infinite,
+          painter: _SkeletonPainter(
+            color: color,
+            dots: widgetType == 'core.scatter-plot',
+          ),
+        ),
+      },
+    );
+  }
+}
+
+/// A polyline band for a line chart, or a scattered dot cloud.
+final class _SkeletonPainter extends CustomPainter {
+  const _SkeletonPainter({required this.color, required this.dots});
+
+  final Color color;
+  final bool dots;
+
+  static const _points = [
+    (.05, .7),
+    (.2, .45),
+    (.35, .6),
+    (.5, .3),
+    (.65, .5),
+    (.8, .25),
+    (.95, .4),
+  ];
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = color;
+    if (dots) {
+      for (final (x, y) in _points) {
+        canvas.drawCircle(Offset(x * size.width, y * size.height), 5, paint);
+        canvas.drawCircle(
+          Offset((x + .04) * size.width, (y + .25) * size.height),
+          4,
+          paint,
+        );
+      }
+      return;
+    }
+    paint
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 8
+      ..strokeJoin = StrokeJoin.round
+      ..strokeCap = StrokeCap.round;
+    final path = Path();
+    for (final (index, (x, y)) in _points.indexed) {
+      final point = Offset(x * size.width, y * size.height);
+      index == 0
+          ? path.moveTo(point.dx, point.dy)
+          : path.lineTo(point.dx, point.dy);
+    }
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(_SkeletonPainter oldDelegate) =>
+      color != oldDelegate.color || dots != oldDelegate.dots;
+}
+
+/// A tile with nothing to draw. Every widget type reads the same (mock widget-states).
 final class WidgetEmpty extends StatelessWidget {
-  const WidgetEmpty({super.key, this.reason = WidgetEmptyReason.noData});
-
-  final WidgetEmptyReason reason;
+  const WidgetEmpty({super.key});
 
   @override
   Widget build(BuildContext context) => Center(
     child: Text(
-      switch (reason) {
-        WidgetEmptyReason.noData => context.l10n.widgetNoData,
-        WidgetEmptyReason.noValue => context.l10n.widgetNoValue,
-        WidgetEmptyReason.noObservations => context.l10n.widgetNoObservations,
-        WidgetEmptyReason.nothingToChart => context.l10n.widgetNothingToChart,
-      },
+      context.l10n.widgetNoRecordsMatch,
       textAlign: TextAlign.center,
       style: Theme.of(context).textTheme.bodySmall?.copyWith(
         color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -345,22 +526,22 @@ final class WidgetEmpty extends StatelessWidget {
 }
 
 /// A typed per-widget failure. It never propagates: sibling widgets and the record list keep
-/// working.
+/// working. Rust's technical wording stays out of the tile; the editor shows it.
 final class WidgetFailureCard extends StatelessWidget {
   const WidgetFailureCard({
     super.key,
     required this.title,
     required this.kind,
     required this.message,
-    this.detail,
+    this.onEdit,
   });
 
   final String title;
   final WidgetErrorKindDto kind;
   final String message;
 
-  /// Rust's technical wording, shown small under [message].
-  final String? detail;
+  /// Opens the widget editor. Null hides the Edit widget button.
+  final VoidCallback? onEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -371,35 +552,29 @@ final class WidgetFailureCard extends StatelessWidget {
       child: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
           children: [
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Icon(_icon, size: 18, color: theme.colorScheme.error),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
-                    _headline(context.l10n),
-                    style: theme.textTheme.labelLarge?.copyWith(
-                      color: theme.colorScheme.error,
+                    message,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
                     ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 4),
-            Text(
-              message,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            if (detail case final detail? when detail != message) ...[
-              const SizedBox(height: 4),
-              Text(
-                detail,
-                style: TextStyle(fontSize: 12, color: Nocturne.muted(.55)),
+            if (onEdit case final onEdit?) ...[
+              const SizedBox(height: 8),
+              OutlinedButton(
+                key: const Key('widget-failure-edit'),
+                onPressed: onEdit,
+                child: Text(context.l10n.widgetEdit),
               ),
             ],
           ],
@@ -407,19 +582,6 @@ final class WidgetFailureCard extends StatelessWidget {
       ),
     );
   }
-
-  String _headline(AppLocalizations l) => switch (kind) {
-    WidgetErrorKindDto.unsupportedType => l.widgetUnsupported,
-    WidgetErrorKindDto.unsupportedConfigurationVersion =>
-      l.widgetHeadlineNewerConfig,
-    WidgetErrorKindDto.invalidConfiguration => l.widgetHeadlineInvalidConfig,
-    WidgetErrorKindDto.unknownQuery ||
-    WidgetErrorKindDto.invalidQuery => l.widgetHeadlineQueryUnavailable,
-    WidgetErrorKindDto.shapeMismatch => l.widgetHeadlineShapeMismatch,
-    WidgetErrorKindDto.overflow => l.widgetHeadlineOverflow,
-    WidgetErrorKindDto.queryFailed => l.widgetHeadlineQueryFailed,
-    WidgetErrorKindDto.removed => l.widgetHeadlineRemoved,
-  };
 
   IconData get _icon => switch (kind) {
     WidgetErrorKindDto.unsupportedType => FiIcons.widget,
@@ -452,6 +614,6 @@ final class WidgetFailure extends StatelessWidget {
       final kind? => widgetErrorText(context.l10n, kind),
       null => evaluation.message ?? context.l10n.widgetNotEvaluated,
     },
-    detail: evaluation.errorKind == null ? null : evaluation.message,
+    onEdit: render.onEdit,
   );
 }

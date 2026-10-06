@@ -497,9 +497,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get queryAggMax => 'Máx.';
 
   @override
-  String get queryTitle => 'Consulta';
-
-  @override
   String get queryGroupBy => 'Agrupar por';
 
   @override
@@ -549,13 +546,13 @@ class AppLocalizationsEs extends AppLocalizations {
   String get queryYAxis => 'Eje Y';
 
   @override
-  String get queryFilterField => 'Campo de filtro (opcional)';
+  String get queryFilterField => 'Campo';
 
   @override
-  String get queryFilterOperator => 'Operador del filtro';
+  String get queryFilterOperator => 'Operador';
 
   @override
-  String get queryFilterValue => 'Valor del filtro';
+  String get queryFilterValue => 'Valor';
 
   @override
   String get queryOpEquals => 'es igual a';
@@ -1830,13 +1827,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get recordsRemoveQuery => 'Quitar consulta';
 
   @override
-  String get recordsCountQueryName => 'Cantidad de registros';
-
-  @override
-  String get recordsAddCountQuery =>
-      'Agregar consulta de cantidad de registros';
-
-  @override
   String recordsUsedBy(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -2034,9 +2024,6 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get widgetOrder => 'Orden de los widgets';
-
-  @override
   String get widgetTitleRequired => 'Dale un título al widget.';
 
   @override
@@ -2093,19 +2080,16 @@ class AppLocalizationsEs extends AppLocalizations {
   String get widgetChooseData => 'Elige los datos a mostrar';
 
   @override
-  String get widgetSizeSmallHint =>
-      'Pequeño ocupa una de las tres columnas del panel con la altura mínima.';
+  String get widgetSizeSmallHint => 'Pequeño ocupa 1 de 4 columnas.';
 
   @override
-  String get widgetSizeMediumHint =>
-      'Mediano ocupa una de las tres columnas del panel.';
+  String get widgetSizeMediumHint => 'Mediano ocupa 2 de 4 columnas.';
 
   @override
-  String get widgetSizeLargeHint =>
-      'Grande ocupa dos de las tres columnas del panel.';
+  String get widgetSizeLargeHint => 'Grande ocupa 3 de 4 columnas.';
 
   @override
-  String get widgetSizeFullHint => 'Completo ocupa toda la fila del panel.';
+  String get widgetSizeFullHint => 'Completo ocupa las 4 columnas.';
 
   @override
   String get widgetUnitSuffix => 'Sufijo de unidad (opcional)';
@@ -2700,66 +2684,14 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get widgetNoValue => 'Aún no hay valor.';
-
-  @override
-  String get widgetNoData => 'Aún no hay datos.';
-
-  @override
-  String get widgetNoObservations => 'Aún no hay observaciones.';
-
-  @override
-  String get widgetNothingToChart => 'Aún no hay nada para graficar.';
-
-  @override
   String get widgetUntitledWidget => 'Widget sin título';
 
   @override
   String get widgetUnsupported => 'Widget no compatible';
 
   @override
-  String widgetConfigKeys(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count claves de configuración',
-      one: '1 clave de configuración',
-      zero: 'sin claves de configuración',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String widgetVersionLine(String version, String keys) {
-    return 'Versión $version · $keys';
-  }
-
-  @override
   String get widgetUnsupportedExplanation =>
       'Este widget lo creó otro dispositivo o una versión más reciente. Su configuración se conserva y se puede renombrar, reordenar o quitar.';
-
-  @override
-  String get widgetHeadlineNewerConfig =>
-      'Versión de configuración más reciente';
-
-  @override
-  String get widgetHeadlineInvalidConfig => 'Configuración no válida';
-
-  @override
-  String get widgetHeadlineQueryUnavailable => 'Consulta no disponible';
-
-  @override
-  String get widgetHeadlineShapeMismatch =>
-      'El resultado de la consulta no encaja';
-
-  @override
-  String get widgetHeadlineOverflow => 'Valor fuera de rango';
-
-  @override
-  String get widgetHeadlineQueryFailed => 'La consulta falló';
-
-  @override
-  String get widgetHeadlineRemoved => 'Widget quitado';
 
   @override
   String voiceKept(int count, String names) {
@@ -2860,6 +2792,41 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get exprNumber => 'Número';
+
+  @override
+  String get exprFunction => 'Función';
+
+  @override
+  String get exprDivide => 'Dividir';
+
+  @override
+  String get exprAddTerm => 'Añadir término';
+
+  @override
+  String get exprDragTerm => 'Arrastra para reordenar';
+
+  @override
+  String get exprRemoveTerm => 'Quitar término';
+
+  @override
+  String exprCannotAdd(String right, String left) {
+    return 'No se puede sumar $right a $left.';
+  }
+
+  @override
+  String exprCannotSubtract(String right, String left) {
+    return 'No se puede restar $right de $left.';
+  }
+
+  @override
+  String exprCannotMultiply(String left, String right) {
+    return 'No se puede multiplicar $left por $right.';
+  }
+
+  @override
+  String exprCannotDivide(String left, String right) {
+    return 'No se puede dividir $left entre $right.';
+  }
 
   @override
   String get exprPickField => 'Elige un campo';
@@ -3236,4 +3203,111 @@ class AppLocalizationsEs extends AppLocalizations {
   String importPlaceHeaderColumn(String column) {
     return 'el encabezado, columna “$column”';
   }
+
+  @override
+  String get widgetMenuTooltip => 'Acciones del widget';
+
+  @override
+  String get widgetMenuRemove => 'Quitar…';
+
+  @override
+  String widgetRemoveConfirmTitle(String title) {
+    return '¿Quitar el widget «$title»?';
+  }
+
+  @override
+  String get widgetRemoveConfirmBody =>
+      'Su consulta guardada y los registros se conservan.';
+
+  @override
+  String get widgetKeep => 'Conservar widget';
+
+  @override
+  String get widgetMoveUp => 'Subir';
+
+  @override
+  String get widgetMoveDown => 'Bajar';
+
+  @override
+  String get widgetDragToReorder => 'Arrastra para reordenar';
+
+  @override
+  String get widgetNoRecordsMatch => 'Aún no hay registros que coincidan';
+
+  @override
+  String get widgetData => 'Datos';
+
+  @override
+  String get widgetDefineHere => 'Definir aquí';
+
+  @override
+  String get queryOnlyRecordsWhere => 'Solo registros donde';
+
+  @override
+  String get queryOpIs => 'es';
+
+  @override
+  String queryFilterChip(String field, String operator, String value) {
+    return '$field $operator $value';
+  }
+
+  @override
+  String get queryAddFilter => 'Agregar filtro';
+
+  @override
+  String get queryRemoveFilter => 'Quitar filtro';
+
+  @override
+  String get recordsAddQuery => 'Agregar consulta';
+
+  @override
+  String get queryNewTitle => 'Nueva consulta';
+
+  @override
+  String queryUsedByApplies(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Usada por $count widgets · los cambios también se aplican allí',
+      one: 'Usada por 1 widget · los cambios también se aplican allí',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get queryResultNow => 'Resultado ahora';
+
+  @override
+  String queryResultPoints(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count puntos',
+      one: '1 punto',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String queryDeleteConfirmTitle(String name) {
+    return '¿Eliminar la consulta «$name»?';
+  }
+
+  @override
+  String queryDeleteConfirmBody(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          '$count widgets la usan y mostrarán un error hasta que los edites.',
+      one: '1 widget la usa y mostrará un error hasta que lo edites.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get queryDelete => 'Eliminar consulta';
+
+  @override
+  String get queryKeep => 'Conservar consulta';
 }

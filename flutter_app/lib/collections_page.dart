@@ -1711,7 +1711,7 @@ class CollectionsPage extends StatelessWidget {
       icon: FiIcons.formula,
       title: item.name,
       subtitle: editable
-          ? null
+          ? formulaText(expressionFromDto(item.expression!)!, schema)
           : item.unsupportedBodyJson != null
           ? l.recordsComputedNewer('${item.expressionVersion}')
           : l.recordsComputedUnsupported,
@@ -1808,6 +1808,14 @@ class CollectionsPage extends StatelessWidget {
                   key: ValueKey('saved-query-${item.id}'),
                   icon: _queryIcon(item),
                   title: item.name,
+                  tag: switch (queryResultType(
+                    item,
+                    schema,
+                    controller.computedFields,
+                  )) {
+                    final type? => describeValueType(l, type),
+                    null => null,
+                  },
                   subtitle:
                       '${describeQuery(l, item, schema)} · '
                       '${l.recordsUsedBy(widgetsUsingQuery(controller, item.id))}',
@@ -1829,10 +1837,12 @@ class CollectionsPage extends StatelessWidget {
                       ),
                     ),
                     IconButton(
+                      key: ValueKey('delete-query-${item.id}'),
                       tooltip: l.recordsRemoveQuery,
                       icon: const Icon(FiIcons.delete),
-                      onPressed: () =>
-                          unawaited(controller.removeQueryDefinition(item.id)),
+                      onPressed: () => unawaited(
+                        confirmDeleteQuery(sheet, controller, item),
+                      ),
                     ),
                   ],
                 ),
@@ -1840,33 +1850,16 @@ class CollectionsPage extends StatelessWidget {
             Align(
               alignment: Alignment.centerLeft,
               child: TextButton.icon(
-                onPressed: () => controller.createQueryDefinition(
-                  QueryDefinitionDto(
-                    id: '',
-                    collectionId: schema.id,
-                    name: l.recordsCountQueryName,
-                    queryVersion: 1,
-                    query: CollectionQueryDto(
-                      collectionId: schema.id,
-                      shape: const QueryShapeDto(
-                        kind: QueryShapeKindDto.scalar,
-                        aggregation: AggregationDto(
-                          kind: AggregationKindDto.count,
-                        ),
-                        fields: [],
-                      ),
-                      sorting: const [],
-                      calendar: const CalendarPolicyDto(
-                        timezone: 'UTC',
-                        weekStart: WeekStartDto.monday,
-                      ),
-                    ),
-                    order: controller.queryDefinitions.length,
-                    deleted: false,
+                key: const Key('add-query'),
+                onPressed: () => unawaited(
+                  showNewQueryEditor(
+                    sheet,
+                    controller: controller,
+                    schema: schema,
                   ),
                 ),
                 icon: const Icon(FiIcons.add),
-                label: Text(l.recordsAddCountQuery),
+                label: Text(l.recordsAddQuery),
               ),
             ),
           ],

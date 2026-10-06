@@ -1,6 +1,7 @@
 import 'package:fi/collections_page.dart';
 import 'package:fi/controllers.dart';
 import 'package:fi/src/rust/api/models.dart';
+import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/widgets/widget_renderers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -267,11 +268,11 @@ void main() {
     expect(narrowWidth, closeTo(388, 1));
     expect(narrowSecondTop, greaterThan(narrowFirstTop));
 
-    // Wide Linux Wayland window: the same hint yields one of three columns, side by side.
+    // Wide Linux Wayland window: the same hint spans two of four columns, side by side.
     final (wideWidth, wideFirstTop, wideSecondTop) = await layoutTwoMediumTiles(
       const Size(1400, 1200),
     );
-    expect(wideWidth, closeTo((1400 - 64 - 24) / 3, 1));
+    expect(wideWidth, closeTo((1400 - 64 - 36) / 2 + 12, 1));
     expect(wideFirstTop, wideSecondTop);
     expect(wideWidth, greaterThan(narrowWidth));
 
@@ -420,7 +421,7 @@ void main() {
     await pumpUntilFound(tester, find.byKey(const Key('widget-title')));
     await tester.enterText(find.byKey(const Key('widget-title')), 'Rejected');
     // Reuse the seeded query so the rejected write is the widget command itself.
-    await tester.tap(find.byKey(const Key('reuse-query')));
+    await tester.tap(find.byKey(const Key('query-source-saved')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('saved-query')));
     await tester.pumpAndSettle();
@@ -556,7 +557,6 @@ void main() {
 
     expect(find.byType(UnsupportedWidgetPlaceholder), findsOneWidget);
     expect(find.text('com.example.calendar-heatmap'), findsOneWidget);
-    expect(find.textContaining('Version 9'), findsOneWidget);
     // The evaluation is a typed per-widget error, and the tile still shows it in place.
     expect(
       seeded.controller
@@ -571,7 +571,6 @@ void main() {
     expect(find.byKey(const Key('widget-type')), findsNothing);
     expect(find.byKey(const Key('config-suffix')), findsNothing);
     expect(find.textContaining('preserved untouched'), findsOneWidget);
-    expect(find.textContaining('Version 9'), findsWidgets);
 
     await tester.enterText(
       find.byKey(const Key('widget-title')),
@@ -591,7 +590,132 @@ void main() {
     expect(preserved.widgetType, 'com.example.calendar-heatmap');
   });
 
-  testWidgets('reordering and removing widgets updates the dashboard', (
+  testWidgets('sizes span one to four columns wide and stack on a phone', (
+    tester,
+  ) async {
+    Future<List<Rect>> layout(Size size) async {
+      final seeded = await seed(tester, size: size);
+      for (final (index, widgetSize) in [
+        WidgetSizeDto.small,
+        WidgetSizeDto.medium,
+        WidgetSizeDto.large,
+      ].indexed) {
+        await seeded.controller.createWidget(
+          _widget(
+            collectionId: seeded.collectionId,
+            queryId: seeded.queryId,
+            title: 'Tile $index',
+            size: widgetSize,
+            order: index,
+          ),
+        );
+      }
+      await pumpPage(tester, seeded.controller);
+      return [
+        for (final item in seeded.controller.widgetDefinitions)
+          tester.getRect(find.byKey(ValueKey('widget-${item.id}'))),
+      ];
+    }
+
+    // A 1064px window holds a 1000px dashboard: four 241px columns.
+    final wide = await layout(const Size(1064, 1000));
+    const column = (1000 - 36) / 4;
+    expect(wide[0].width, closeTo(column, 1));
+    expect(wide[1].width, closeTo(2 * column + 12, 1));
+    expect(wide[2].width, closeTo(3 * column + 24, 1));
+    // Small and Medium share the first row; Large wraps to the next.
+    expect(wide[0].top, wide[1].top);
+    expect(wide[2].top, greaterThan(wide[0].bottom));
+
+    // Phone: one full-width tile per row, same order.
+    final phone = await layout(const Size(390, 1600));
+    for (final rect in phone) {
+      expect(rect.width, closeTo(phone.first.width, .5));
+    }
+    expect(phone[1].top, greaterThan(phone[0].bottom));
+    expect(phone[2].top, greaterThan(phone[1].bottom));
+  });
+
+  testWidgets(
+    'the tile menu offers edit, reorder and remove on a wide screen',
+    (tester) async {
+      final seeded = await seed(tester);
+      await seeded.controller.createWidget(
+        _widget(
+          collectionId: seeded.collectionId,
+          queryId: seeded.queryId,
+          title: 'Alpha',
+        ),
+      );
+      await pumpPage(tester, seeded.controller);
+
+      await tester.tap(find.byKey(const Key('widget-menu')));
+      await tester.pumpAndSettle();
+      expect(find.text('Edit widget'), findsOneWidget);
+      expect(find.text('Remove…'), findsOneWidget);
+      // One widget: nothing to reorder.
+      expect(
+        tester
+            .widget<PopupMenuItem<Object?>>(
+              find.byKey(const Key('widget-menu-reorder')),
+            )
+            .enabled,
+        isFalse,
+      );
+
+      await tester.tap(find.text('Edit widget'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('widget-title')), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'on a phone the tile menu is an action sheet headed by the title',
+    (tester) async {
+      final seeded = await seed(tester, size: const Size(390, 1200));
+      for (final (index, title) in ['Level over time', 'Avg level'].indexed) {
+        await seeded.controller.createWidget(
+          _widget(
+            collectionId: seeded.collectionId,
+            queryId: seeded.queryId,
+            title: title,
+            order: index,
+          ),
+        );
+      }
+      await pumpPage(tester, seeded.controller);
+
+      await tester.tap(find.byKey(const Key('widget-menu')).first);
+      await tester.pumpAndSettle();
+      final sheet = find.byType(BottomSheet);
+      expect(sheet, findsOneWidget);
+      for (final label in [
+        'Level over time',
+        'Edit widget',
+        'Reorder',
+        'Remove…',
+      ]) {
+        expect(
+          find.descendant(of: sheet, matching: find.text(label)),
+          findsOneWidget,
+          reason: label,
+        );
+      }
+
+      await tester.tap(
+        find.descendant(of: sheet, matching: find.text('Reorder')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('reorder-done')), findsOneWidget);
+      // Phone reorder controls are full touch targets.
+      expect(
+        tester.getSize(find.byKey(const Key('widget-move-down')).first),
+        const Size(44, 44),
+      );
+    },
+  );
+
+  testWidgets('Remove… asks first and only Remove removes the widget', (
     tester,
   ) async {
     final seeded = await seed(tester);
@@ -600,58 +724,181 @@ void main() {
         collectionId: seeded.collectionId,
         queryId: seeded.queryId,
         title: 'Alpha',
-        order: 0,
-      ),
-    );
-    await seeded.controller.createWidget(
-      _widget(
-        collectionId: seeded.collectionId,
-        queryId: seeded.queryId,
-        title: 'Beta',
-        order: 1,
       ),
     );
     await pumpPage(tester, seeded.controller);
-    expectReadingOrder(tester, find.text('Alpha'), find.text('Beta'));
 
-    final alphaId = seeded.controller.widgetDefinitions.first.id;
+    Future<void> chooseRemove() async {
+      await tester.tap(find.byKey(const Key('widget-menu')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Remove…'));
+      await tester.pumpAndSettle();
+      expect(find.text('Remove widget “Alpha”?'), findsOneWidget);
+      expect(
+        find.text('Its saved query and the records stay.'),
+        findsOneWidget,
+      );
+    }
+
+    await chooseRemove();
+    // Remove sits left of the primary Keep widget.
+    expect(
+      tester.getCenter(find.byKey(const Key('confirm-remove-widget'))).dx,
+      lessThan(tester.getCenter(find.byKey(const Key('keep-widget'))).dx),
+    );
+    await tester.tap(find.byKey(const Key('keep-widget')));
+    await tester.pumpAndSettle();
+    expect(seeded.controller.widgetDefinitions, hasLength(1));
+
+    await chooseRemove();
+    await tester.tap(find.byKey(const Key('confirm-remove-widget')));
+    await tester.pumpAndSettle();
+    expect(seeded.controller.widgetDefinitions, isEmpty);
+    expect(find.text('Alpha'), findsNothing);
+    // The saved query stays.
+    expect(
+      seeded.controller.queryDefinitions.map((item) => item.id),
+      contains(seeded.queryId),
+    );
+  });
+
+  testWidgets('reorder mode moves widgets in place with disabled edges', (
+    tester,
+  ) async {
+    final seeded = await seed(tester);
+    for (final (index, title) in [
+      'Avg level',
+      'Level over time',
+      'Episodes by type',
+    ].indexed) {
+      await seeded.controller.createWidget(
+        _widget(
+          collectionId: seeded.collectionId,
+          queryId: seeded.queryId,
+          title: title,
+          order: index,
+        ),
+      );
+    }
+    await pumpPage(tester, seeded.controller);
+    List<String> titles() =>
+        seeded.controller.widgetDefinitions.map((item) => item.title).toList();
+    Finder controls(String title, String key) {
+      final id = seeded.controller.widgetDefinitions
+          .firstWhere((item) => item.title == title)
+          .id;
+      return find.descendant(
+        of: find.byKey(Key('reorder-controls-$id')),
+        matching: find.byKey(Key(key)),
+      );
+    }
+
+    bool enabled(Finder finder) =>
+        tester
+            .widget<IconButton>(
+              find.descendant(of: finder, matching: find.byType(IconButton)),
+            )
+            .onPressed !=
+        null;
 
     await tester.tap(find.byKey(const Key('reorder-widgets')));
-    await pumpUntilFound(tester, find.text('Widget order'));
-    expect(find.text('Alpha'), findsWidgets);
-    expect(find.text('Beta'), findsWidgets);
+    await tester.pumpAndSettle();
+    // No dialog: Done replaces Reorder and Add widget in the header.
+    expect(find.byType(Dialog), findsNothing);
+    expect(find.byKey(const Key('reorder-done')), findsOneWidget);
+    expect(find.byKey(const Key('reorder-widgets')), findsNothing);
+    expect(find.byKey(const Key('add-widget')), findsNothing);
+    expect(find.byKey(const Key('widget-drag-handle')), findsNWidgets(3));
 
-    // Dragging the first row below the second reorders the authoritative list. A touch drag only
-    // starts after a long press, and the list needs incremental moves to track the proxy.
-    final gesture = await tester.startGesture(
-      tester.getCenter(find.byKey(ValueKey(alphaId))),
+    // Edges are disabled.
+    expect(enabled(controls('Avg level', 'widget-move-up')), isFalse);
+    expect(enabled(controls('Avg level', 'widget-move-down')), isTrue);
+    expect(enabled(controls('Episodes by type', 'widget-move-down')), isFalse);
+
+    // Tile taps are inert.
+    await tester.tap(find.text('Level over time'), warnIfMissed: false);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('widget-title')), findsNothing);
+
+    await tester.tap(controls('Avg level', 'widget-move-down'));
+    await tester.pumpAndSettle();
+    expect(titles(), ['Level over time', 'Avg level', 'Episodes by type']);
+
+    await tester.tap(find.byKey(const Key('reorder-done')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('reorder-done')), findsNothing);
+    expect(titles(), ['Level over time', 'Avg level', 'Episodes by type']);
+    expectReadingOrder(
+      tester,
+      find.text('Level over time'),
+      find.text('Avg level'),
     );
-    await tester.pump(const Duration(milliseconds: 600));
-    await tester.pumpAndSettle();
-    for (var step = 0; step < 8; step++) {
-      await gesture.moveBy(const Offset(0, 15));
-      await tester.pump(const Duration(milliseconds: 16));
+  });
+
+  testWidgets('dragging a handle in reorder mode moves the widget', (
+    tester,
+  ) async {
+    final seeded = await seed(tester);
+    for (final (index, title) in ['Alpha', 'Beta'].indexed) {
+      await seeded.controller.createWidget(
+        _widget(
+          collectionId: seeded.collectionId,
+          queryId: seeded.queryId,
+          title: title,
+          order: index,
+        ),
+      );
     }
+    await pumpPage(tester, seeded.controller);
+    await tester.tap(find.byKey(const Key('reorder-widgets')));
     await tester.pumpAndSettle();
+
+    final betaId = seeded.controller.widgetDefinitions.last.id;
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byKey(const Key('widget-drag-handle')).first),
+    );
+    await gesture.moveTo(
+      tester.getCenter(find.byKey(ValueKey('widget-$betaId'))),
+    );
+    await tester.pump();
     await gesture.up();
     await tester.pumpAndSettle();
     expect(
       seeded.controller.widgetDefinitions.map((item) => item.title).toList(),
       ['Beta', 'Alpha'],
     );
-    await tester.tap(find.text('Done'));
-    await tester.pumpAndSettle();
-    // The dashboard reflects the new deterministic order.
-    expectReadingOrder(tester, find.text('Beta'), find.text('Alpha'));
+  });
+
+  testWidgets('the editor remove action asks the same confirmation', (
+    tester,
+  ) async {
+    final seeded = await seed(tester);
+    await seeded.controller.createWidget(
+      _widget(
+        collectionId: seeded.collectionId,
+        queryId: seeded.queryId,
+        title: 'Beta',
+      ),
+    );
+    await pumpPage(tester, seeded.controller);
 
     await tester.tap(find.text('Beta'));
     await pumpUntilFound(tester, find.byKey(const Key('remove-widget')));
     await tester.tap(find.byKey(const Key('remove-widget')));
     await tester.pumpAndSettle();
-    expect(
-      seeded.controller.widgetDefinitions.map((item) => item.title).toList(),
-      ['Alpha'],
-    );
+    expect(find.text('Remove widget “Beta”?'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('keep-widget')));
+    await tester.pumpAndSettle();
+    expect(seeded.controller.widgetDefinitions, hasLength(1));
+    // Keep leaves the editor open.
+    expect(find.byKey(const Key('widget-title')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('remove-widget')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('confirm-remove-widget')));
+    await tester.pumpAndSettle();
+    expect(seeded.controller.widgetDefinitions, isEmpty);
+    expect(find.byKey(const Key('widget-title')), findsNothing);
     expect(find.text('Beta'), findsNothing);
   });
 
@@ -837,11 +1084,26 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(BottomSheet), findsOneWidget);
     expect(find.byType(Dialog), findsNothing);
-    // The compact preview is pinned above the buttons and follows the title.
+    // The preview sits in the form flow after Size, not pinned above the buttons.
     expect(find.text('PREVIEW'), findsOneWidget);
     expect(
       tester.getTopLeft(find.text('PREVIEW')).dy,
-      lessThan(tester.getTopLeft(find.byKey(const Key('save-widget'))).dy),
+      greaterThan(tester.getTopLeft(find.byKey(const Key('widget-size'))).dy),
+    );
+    // The footer holds only Cancel and Add widget.
+    final footerButtons = find.descendant(
+      of: find.byType(BottomSheet),
+      matching: find.byWidgetPredicate(
+        (widget) => widget is OutlinedButton || widget is FilledButton,
+      ),
+    );
+    expect(footerButtons, findsNWidgets(2));
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('save-widget')),
+        matching: find.text('Add widget'),
+      ),
+      findsOneWidget,
     );
     await tester.enterText(find.byKey(const Key('widget-title')), 'Pain');
     await tester.pump();
@@ -885,6 +1147,8 @@ void main() {
 
     await tester.tap(remove);
     await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('confirm-remove-widget')));
+    await tester.pumpAndSettle();
     expect(seeded.controller.widgetDefinitions, isEmpty);
   });
 
@@ -909,6 +1173,8 @@ void main() {
     final preview = tester.getRect(find.text('PREVIEW'));
     final title = tester.getRect(find.byKey(const Key('widget-title')));
     expect(preview.left, greaterThan(title.right));
+    // The size hint under the preview states the four-column span.
+    expect(find.text('Medium spans 2 of 4 columns.'), findsOneWidget);
     expect(
       tester.widget(find.byKey(const Key('remove-widget'))),
       isA<TextButton>(),
@@ -917,5 +1183,148 @@ void main() {
       tester.getTopLeft(find.byKey(const Key('remove-widget'))).dx,
       lessThan(tester.getTopLeft(find.widgetWithText(TextButton, 'Cancel')).dx),
     );
+  });
+
+  testWidgets('the widget editor picks a type from icon tiles', (tester) async {
+    final seeded = await seed(tester);
+    await pumpPage(tester, seeded.controller);
+    await tester.tap(find.byKey(const Key('add-widget')));
+    await pumpUntilFound(tester, find.byKey(const Key('widget-type')));
+
+    for (final type in [
+      'core.aggregate-number',
+      'core.line-chart',
+      'core.bar-chart',
+      'core.scatter-plot',
+    ]) {
+      expect(find.byKey(Key('widget-type-$type')), findsOneWidget);
+    }
+    // Four tiles share one row on a wide screen.
+    expect(
+      tester
+          .getTopLeft(find.byKey(const Key('widget-type-core.scatter-plot')))
+          .dy,
+      tester
+          .getTopLeft(
+            find.byKey(const Key('widget-type-core.aggregate-number')),
+          )
+          .dy,
+    );
+    // The number type has no Group by; a bar chart does.
+    expect(find.byKey(const Key('bucket-period')), findsNothing);
+    await tester.tap(find.byKey(const Key('widget-type-core.bar-chart')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('bucket-period')), findsOneWidget);
+    expect(
+      tester
+          .widget<Semantics>(
+            find
+                .ancestor(
+                  of: find.byKey(const Key('widget-type-core.bar-chart')),
+                  matching: find.byType(Semantics),
+                )
+                .first,
+          )
+          .properties
+          .selected,
+      isTrue,
+    );
+  });
+
+  testWidgets('saved-query controls appear only under Use a saved query', (
+    tester,
+  ) async {
+    final seeded = await seed(tester);
+    await pumpPage(tester, seeded.controller);
+    await tester.tap(find.byKey(const Key('add-widget')));
+    await pumpUntilFound(tester, find.byKey(const Key('query-source')));
+
+    // Define here is the default for a new widget.
+    expect(find.byKey(const Key('saved-query')), findsNothing);
+    expect(find.byKey(const Key('aggregation')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('query-source-saved')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('saved-query')), findsOneWidget);
+    expect(find.byKey(const Key('aggregation')), findsNothing);
+    await tester.tap(find.byKey(const Key('saved-query')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Record count').last);
+    await tester.pumpAndSettle();
+    expect(find.text('Edit this query'), findsOneWidget);
+    expect(find.text('Save as new'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('query-source-define')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('saved-query')), findsNothing);
+    expect(find.text('Edit this query'), findsNothing);
+    expect(find.text('Save as new'), findsNothing);
+  });
+
+  testWidgets('the widget form is grouped under Data and Presentation', (
+    tester,
+  ) async {
+    final seeded = await seed(tester);
+    await pumpPage(tester, seeded.controller);
+    await tester.tap(find.byKey(const Key('add-widget')));
+    await pumpUntilFound(tester, find.byKey(const Key('widget-type')));
+
+    expect(find.text('DATA'), findsOneWidget);
+    expect(find.text('PRESENTATION'), findsOneWidget);
+    expect(
+      find.descendant(of: find.byType(Dialog), matching: find.byType(Divider)),
+      findsNothing,
+    );
+    double top(Finder finder) => tester.getTopLeft(finder).dy;
+    expect(
+      top(find.text('DATA')),
+      lessThan(top(find.byKey(const Key('query-source')))),
+    );
+    expect(
+      top(find.byKey(const Key('aggregation'))),
+      lessThan(top(find.text('PRESENTATION'))),
+    );
+    // Size sits in Presentation.
+    expect(
+      top(find.text('PRESENTATION')),
+      lessThan(top(find.byKey(const Key('widget-size')))),
+    );
+  });
+
+  testWidgets('the widget form shows the filter as a removable chip', (
+    tester,
+  ) async {
+    final seeded = await seed(tester);
+    await pumpPage(tester, seeded.controller);
+    await tester.tap(find.byKey(const Key('add-widget')));
+    await pumpUntilFound(tester, find.byKey(const Key('add-filter')));
+
+    expect(find.byKey(const Key('filter-field')), findsNothing);
+    await tester.tap(find.byKey(const Key('add-filter')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('add-filter')), findsNothing);
+    await tester.tap(find.byKey(const Key('filter-field')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Intensity').last);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('filter-value')), '7');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('apply-filter')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Intensity is 7'), findsOneWidget);
+    expect(find.byKey(const Key('filter-field')), findsNothing);
+    // One condition at most: Add filter hides while it exists.
+    expect(find.byKey(const Key('add-filter')), findsNothing);
+
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const Key('filter-chip')),
+        matching: find.byIcon(FiIcons.clear),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Intensity is 7'), findsNothing);
+    expect(find.byKey(const Key('add-filter')), findsOneWidget);
   });
 }

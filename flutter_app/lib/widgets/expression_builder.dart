@@ -10,6 +10,7 @@ import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/theme/inputs.dart';
 import 'package:fi/theme/nocturne.dart';
 import 'package:fi/theme/nocturne_widgets.dart';
+import 'package:fi/widgets/query_builder.dart';
 import 'package:flutter/material.dart';
 
 /// The deepest nesting of operator nodes the builder offers. Core has no limit; this only keeps
@@ -262,6 +263,34 @@ ExprNode? expressionFromDto(ExpressionDto dto) {
   return decode(dto.root);
 }
 
+/// The expression as one line of text with field names, numbers and operator symbols, e.g.
+/// `End at − Start at`. Nested operations are parenthesized except a left-hand chain of the same
+/// precedence (`a − b + c`); an unknown field reads `?`.
+String formulaText(ExprNode node, CollectionSchemaDto schema) {
+  bool additive(ExprOperator operator) =>
+      operator == ExprOperator.add || operator == ExprOperator.subtract;
+  bool chains(ExprOperator parent, ExprNode left) =>
+      left is BinaryNode &&
+      (additive(parent) && additive(left.operator) ||
+          parent == ExprOperator.multiply &&
+              left.operator == ExprOperator.multiply);
+  String text(ExprNode node, {required bool nested}) => switch (node) {
+    FieldLeaf(:final fieldId) =>
+      schema.fields.where((field) => field.id == fieldId).firstOrNull?.name ??
+          '?',
+    ConstantLeaf(text: final value) =>
+      value.trim().isEmpty ? '?' : value.trim(),
+    BinaryNode(:final operator, :final left, :final right) => () {
+      final inner =
+          '${text(left, nested: !chains(operator, left))} ${operator.symbol} '
+          '${text(right, nested: true)}';
+      return nested ? '($inner)' : inner;
+    }(),
+    AbsNode(:final child) => 'abs(${text(child, nested: false)})',
+  };
+  return text(node, nested: false);
+}
+
 /// Deepest chain of operator nodes in [node].
 int operatorDepth(ExprNode node) => switch (node) {
   BinaryNode(:final left, :final right) =>
@@ -312,6 +341,53 @@ ExprNode replaceAt(ExprNode root, String path, ExprNode replacement) {
 
 String _parentPath(String path) => path.substring(0, path.lastIndexOf('.'));
 
+/// The top-level `+ − ×` chain of an expression: [terms] joined left to right by [operators]
+/// (one fewer). The tree is left-deep, so `a − b + c` is `(a − b) + c`. Anything else (a
+/// division, an absolute value, a right-nested operation) is one term.
+final class TermChain {
+  const TermChain(this.terms, this.operators);
+  final List<ExprNode> terms;
+  final List<ExprOperator> operators;
+}
+
+TermChain flattenChain(ExprNode root) {
+  final terms = <ExprNode>[];
+  final operators = <ExprOperator>[];
+  var node = root;
+  while (node is BinaryNode && node.operator != ExprOperator.divide) {
+    terms.add(node.right);
+    operators.add(node.operator);
+    node = node.left;
+  }
+  terms.add(node);
+  return TermChain(terms.reversed.toList(), operators.reversed.toList());
+}
+
+/// The left-deep tree of [terms] joined by [operators]; the inverse of [flattenChain].
+ExprNode buildChain(List<ExprNode> terms, List<ExprOperator> operators) {
+  var node = terms.first;
+  for (var i = 1; i < terms.length; i++) {
+    node = BinaryNode(operator: operators[i - 1], left: node, right: terms[i]);
+  }
+  return node;
+}
+
+/// The node path of term [index] in a chain of [count] terms.
+String termPath(int index, int count) => index == 0
+    ? r'$' + '.left' * (count - 1)
+    : '${_chainNodePath(index, count)}.right';
+
+/// The path of the operator node that joins term [index] (1 or more) to the terms before it.
+String _chainNodePath(int index, int count) => r'$' + '.left' * (count - 1 - index);
+
+/// Moves term [from] to position [to]; the operators keep their slots.
+ExprNode reorderTerms(ExprNode root, int from, int to) {
+  final chain = flattenChain(root);
+  final terms = [...chain.terms];
+  terms.insert(to, terms.removeAt(from));
+  return buildChain(terms, chain.operators);
+}
+
 /// A human label for an inferred type, e.g. `Decimal, scale 2`, in the words of `fieldKindLabel`.
 String describeValueType(AppLocalizations l, ValueTypeDto type) =>
     switch (type.kind) {
@@ -336,7 +412,9 @@ final class ExpressionBuilderValue {
   final InferredTypeDto? inferred;
 }
 
-/// A tree of node cards for a computed-field expression, typed live by Rust inference.
+enum _TermKind { field, number, function }
+
+/// Term cards for a computed-field expression, typed live by Rust inference.
 final class ExpressionBuilder extends StatefulWidget {
   const ExpressionBuilder({
     required this.schema,
@@ -374,13 +452,9 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
   /// Constant text controllers, keyed by node path so a card keeps its cursor across rebuilds.
   final Map<String, TextEditingController> _constantText = {};
 
-  List<FieldDefinitionDto> get _fields => widget.schema.fields
-      .where(
-        (field) =>
-            !field.deleted &&
-            computedSourceKinds.contains(field.fieldType.kind),
-      )
-      .toList();
+  /// Every active field: inference, not the picker, decides what combines.
+  List<FieldDefinitionDto> get _fields =>
+      widget.schema.fields.where((field) => !field.deleted).toList();
 
   FieldDefinitionDto? _field(String? id) =>
       _fields.where((field) => field.id == id).firstOrNull;
@@ -525,17 +599,417 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
   }
 
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      _formulaStrip(),
-      const SizedBox(height: 12),
-      _card(context, root, r'$', parentIsAbs: false),
-      const SizedBox(height: 12),
-      _resultLine(context),
-    ],
-  );
+  Widget build(BuildContext context) {
+    final chain = flattenChain(root);
+    final count = chain.terms.length;
+    final canAdd =
+        operatorDepth(
+          buildChain(
+            [...chain.terms, const FieldLeaf()],
+            [...chain.operators, ExprOperator.add],
+          ),
+        ) <=
+        maxOperatorDepth;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _formulaStrip(),
+        const SizedBox(height: 12),
+        ReorderableListView(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          buildDefaultDragHandles: false,
+          onReorder: (from, to) {
+            if (to > from) to--;
+            if (from == to) return;
+            _update(reorderTerms(root, from, to), structural: true);
+          },
+          children: [
+            for (var i = 0; i < count; i++)
+              Padding(
+                key: ValueKey('term-$i'),
+                padding: const EdgeInsets.only(bottom: 8),
+                child: _term(context, chain, i),
+              ),
+          ],
+        ),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            key: const Key('add-term'),
+            onPressed: canAdd
+                ? () => _update(
+                    buildChain(
+                      [...chain.terms, const FieldLeaf()],
+                      [...chain.operators, ExprOperator.add],
+                    ),
+                    structural: true,
+                  )
+                : null,
+            icon: const Icon(FiIcons.add, size: 16),
+            label: Text(context.l10n.exprAddTerm),
+          ),
+        ),
+        const SizedBox(height: 8),
+        // A positional error sits on its term; the result line steps aside until it is fixed.
+        if (_errorPath == null) _resultLine(context),
+      ],
+    );
+  }
+
+  /// The term that carries the positional error: the right-hand term of a failing chain
+  /// operator, or the term whose subtree holds the failing node.
+  int? _errorTerm(int count) {
+    final path = _errorPath;
+    if (path == null) return null;
+    for (var i = 1; i < count; i++) {
+      if (path == _chainNodePath(i, count)) return i;
+    }
+    for (var i = 0; i < count; i++) {
+      final term = termPath(i, count);
+      if (path == term || path.startsWith('$term.')) return i;
+    }
+    return null;
+  }
+
+  /// The error message for term [index] when it is the error's own place (not a node nested
+  /// inside it, whose card shows the message): a localized sentence when both operand types are
+  /// known here, Rust's message otherwise.
+  String? _termErrorText(AppLocalizations l, TermChain chain, int index) {
+    final count = chain.terms.length;
+    final path = _errorPath;
+    final message = _errorMessage;
+    if (path == null || message == null) return null;
+    final (ExprOperator, ExprNode, ExprNode)? operation;
+    if (index > 0 && path == _chainNodePath(index, count)) {
+      // Only a two-term prefix has a left operand whose type is known without Rust.
+      final left = buildChain(
+        chain.terms.sublist(0, index),
+        chain.operators.sublist(0, index - 1),
+      );
+      operation = (chain.operators[index - 1], left, chain.terms[index]);
+    } else if (path == termPath(index, count)) {
+      operation = switch (chain.terms[index]) {
+        BinaryNode(:final operator, :final left, :final right) => (
+          operator,
+          left,
+          right,
+        ),
+        _ => null,
+      };
+    } else {
+      return null;
+    }
+    if (operation case (final operator, final left, final right)) {
+      final leftType = _valueTypeOf(left);
+      final rightType = _valueTypeOf(right);
+      if (leftType != null && rightType != null) {
+        final a = describeValueType(l, leftType);
+        final b = describeValueType(l, rightType);
+        return switch (operator) {
+          ExprOperator.add => l.exprCannotAdd(b, a),
+          ExprOperator.subtract => l.exprCannotSubtract(b, a),
+          ExprOperator.multiply => l.exprCannotMultiply(a, b),
+          ExprOperator.divide => l.exprCannotDivide(a, b),
+        };
+      }
+    }
+    return message;
+  }
+
+  /// The value type of a leaf from the schema; null for anything Rust has to type.
+  ValueTypeDto? _valueTypeOf(ExprNode node) => switch (_leafType(node)) {
+    (:final kind, :final scale) => ValueTypeDto(
+      kind: valueKindFor(kind),
+      scale: scale,
+    ),
+    null => null,
+  };
+
+  /// One term card: its operator (none on the first), a drag handle, the Field / Number /
+  /// Function choice and ✕, then the inputs of that choice (mock computed-field-editor).
+  Widget _term(BuildContext context, TermChain chain, int index) {
+    final l = context.l10n;
+    final count = chain.terms.length;
+    final path = termPath(index, count);
+    final node = chain.terms[index];
+    final errorTerm = _errorTerm(count);
+    final errorText = errorTerm == index
+        ? _termErrorText(l, chain, index)
+        : null;
+    final kind = switch (node) {
+      FieldLeaf() => _TermKind.field,
+      ConstantLeaf() => _TermKind.number,
+      AbsNode() => _TermKind.function,
+      BinaryNode(operator: ExprOperator.divide) => _TermKind.function,
+      BinaryNode() => null,
+    };
+    void replace(ExprNode next) {
+      final terms = [...chain.terms]..[index] = next;
+      _update(buildChain(terms, chain.operators), structural: true);
+    }
+
+    final card = Container(
+      key: Key('expr-term-$index'),
+      padding: const EdgeInsets.fromLTRB(8, 6, 4, 10),
+      decoration: errorTerm == index
+          ? null
+          : BoxDecoration(
+              borderRadius: BorderRadius.circular(Nocturne.radius),
+              border: Border.all(color: Nocturne.muted(.12)),
+            ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        spacing: 8,
+        children: [
+          Row(
+            children: [
+              ReorderableDragStartListener(
+                index: index,
+                child: Tooltip(
+                  message: l.exprDragTerm,
+                  child: SizedBox(
+                    key: Key('term-handle-$index'),
+                    width: Nocturne.isPhone(context) ? Nocturne.touchTarget : 28,
+                    height: Nocturne.isPhone(context)
+                        ? Nocturne.touchTarget
+                        : 36,
+                    child: Icon(
+                      FiIcons.dragHandle,
+                      size: 18,
+                      color: Nocturne.muted(.5),
+                    ),
+                  ),
+                ),
+              ),
+              if (index > 0) ...[
+                SizedBox(
+                  width: 72,
+                  child: FiSelect<ExprOperator>.compact(
+                    key: Key('term-operator-$index'),
+                    value: chain.operators[index - 1],
+                    items: [
+                      for (final operator in const [
+                        ExprOperator.add,
+                        ExprOperator.subtract,
+                        ExprOperator.multiply,
+                      ])
+                        DropdownMenuItem(
+                          value: operator,
+                          child: Text(operator.symbol),
+                        ),
+                    ],
+                    onChanged: (operator) {
+                      if (operator == null) return;
+                      final operators = [...chain.operators]
+                        ..[index - 1] = operator;
+                      _update(buildChain(chain.terms, operators));
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+              ],
+              Expanded(
+                child: kind == null
+                    // A nested operation keeps its own cards below.
+                    ? Text(
+                        formulaText(node, widget.schema),
+                        style: TextStyle(
+                          fontFamily: Nocturne.monoFamily,
+                          fontSize: 13,
+                          color: Nocturne.muted(.7),
+                        ),
+                      )
+                    : Align(
+                        alignment: Alignment.centerLeft,
+                        child: SegmentedButton<_TermKind>(
+                          key: Key('term-kind-$index'),
+                          showSelectedIcon: false,
+                          segments: [
+                            ButtonSegment(
+                              value: _TermKind.field,
+                              label: Text(l.exprField),
+                            ),
+                            ButtonSegment(
+                              value: _TermKind.number,
+                              label: Text(l.exprNumber),
+                            ),
+                            ButtonSegment(
+                              value: _TermKind.function,
+                              label: Text(l.exprFunction),
+                            ),
+                          ],
+                          selected: {kind},
+                          onSelectionChanged: (selection) => replace(
+                            switch (selection.single) {
+                              _TermKind.field => const FieldLeaf(),
+                              _TermKind.number => _constantFor(path),
+                              _TermKind.function => AbsNode(node),
+                            },
+                          ),
+                        ),
+                      ),
+              ),
+              FiIconButton(
+                key: Key('remove-term-$index'),
+                icon: FiIcons.close,
+                tooltip: l.exprRemoveTerm,
+                onPressed: count < 2
+                    ? null
+                    : () {
+                        final terms = [...chain.terms]..removeAt(index);
+                        final operators = [...chain.operators]
+                          ..removeAt(index == 0 ? 0 : index - 1);
+                        _update(
+                          buildChain(terms, operators),
+                          structural: true,
+                        );
+                      },
+              ),
+            ],
+          ),
+          Padding(
+            padding: const EdgeInsets.only(left: 8),
+            child: switch (node) {
+              FieldLeaf() || ConstantLeaf() => Align(
+                alignment: Alignment.centerLeft,
+                child: _leafInputs(context, node, path),
+              ),
+              AbsNode() ||
+              BinaryNode(operator: ExprOperator.divide) => _function(
+                context,
+                node,
+                path,
+                index,
+                replace,
+              ),
+              _ => _card(context, node, path, parentIsAbs: false),
+            },
+          ),
+          if (switch (node) {
+                FieldLeaf() || ConstantLeaf() => incompleteNodes(
+                  node,
+                  path,
+                )[path],
+                _ => null,
+              }
+              case final leaf? when errorText == null)
+            Text(
+              incompleteText(l, leaf),
+              key: Key('expr-error-$path'),
+              style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          if (errorText != null)
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(FiIcons.warning, size: 16, color: Nocturne.accent),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    errorText,
+                    key: Key('expr-error-term-$index'),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Nocturne.accent300,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+    return errorTerm == index
+        ? DashedOutline(color: Nocturne.accent, child: card)
+        : card;
+  }
+
+  /// A Function term: Absolute value of its inner term, or a division with its output scale and
+  /// rounding. Switching between the two keeps the inner (left-hand) term.
+  Widget _function(
+    BuildContext context,
+    ExprNode node,
+    String path,
+    int index,
+    void Function(ExprNode) replace,
+  ) {
+    final l = context.l10n;
+    final isAbs = node is AbsNode;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      spacing: 6,
+      children: [
+        Align(
+          alignment: Alignment.centerLeft,
+          child: SizedBox(
+            width: 200,
+            child: FiSelect<bool>.compact(
+              key: Key('term-function-$index'),
+              value: isAbs,
+              items: [
+                DropdownMenuItem(value: true, child: Text(l.exprAbsoluteValue)),
+                DropdownMenuItem(value: false, child: Text(l.exprDivide)),
+              ],
+              onChanged: (abs) {
+                if (abs == null || abs == isAbs) return;
+                if (node case AbsNode(:final child)) {
+                  final leftType = _leafType(child);
+                  replace(
+                    BinaryNode(
+                      operator: ExprOperator.divide,
+                      left: child,
+                      right: const FieldLeaf(),
+                      // Design D3: keep the left operand's scale when it has one.
+                      outputScale:
+                          leftType?.kind == FieldTypeKindDto.fixedDecimal
+                          ? leftType!.scale ?? 2
+                          : 2,
+                    ),
+                  );
+                } else if (node case BinaryNode(:final left)) {
+                  replace(AbsNode(left));
+                }
+              },
+            ),
+          ),
+        ),
+        switch (node) {
+          AbsNode(:final child) => _card(
+            context,
+            child,
+            '$path.expression',
+            parentIsAbs: true,
+          ),
+          final BinaryNode divide => Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _card(context, divide.left, '$path.left', parentIsAbs: false),
+              Text(
+                ExprOperator.divide.symbol,
+                style: const TextStyle(fontSize: 16),
+              ),
+              _card(context, divide.right, '$path.right', parentIsAbs: false),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: _divideControls(context, divide, path),
+              ),
+            ],
+          ),
+          _ => const SizedBox.shrink(),
+        },
+      ],
+    );
+  }
 
   /// The whole expression as one line of formula, so the tree of cards below reads as an edit of
   /// something visible (mock computed-field-editor). Unfinished leaves show as dashed slots.
@@ -613,6 +1087,14 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
       children: [
         if (missing > 0) ...[
           const Icon(FiIcons.error, size: 16, color: Nocturne.accent300),
+          const SizedBox(width: 6),
+        ] else if (_inferred != null && !isError) ...[
+          const Icon(
+            FiIcons.check,
+            key: Key('computed-result-ok'),
+            size: 16,
+            color: Nocturne.accent,
+          ),
           const SizedBox(width: 6),
         ],
         Expanded(
@@ -746,6 +1228,7 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
     );
   }
 
+  /// A leaf inside a Function or nested operation: Field / Number, then its inputs.
   Widget _leaf(BuildContext context, ExprNode node, String path) {
     final isConstant = node is ConstantLeaf;
     return Wrap(
@@ -770,6 +1253,17 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
             structural: true,
           ),
         ),
+        _leafInputs(context, node, path),
+      ],
+    );
+  }
+
+  /// The field select, or the number and its scale.
+  Widget _leafInputs(BuildContext context, ExprNode node, String path) => Wrap(
+    spacing: 8,
+    runSpacing: 8,
+    crossAxisAlignment: WrapCrossAlignment.center,
+    children: [
         if (node case FieldLeaf(:final fieldId))
           SizedBox(
             width: 220,
@@ -825,9 +1319,8 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
             ),
           ),
         ],
-      ],
-    );
-  }
+    ],
+  );
 
   Widget _binary(BuildContext context, BinaryNode node, String path) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -913,25 +1406,22 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
         ),
       ],
     ),
-    SizedBox(
-      width: 210,
-      child: FiSelect<RoundingPolicyDto>.compact(
-        key: Key('rounding-$path'),
-        value: node.rounding,
-        items: [
-          DropdownMenuItem(
-            value: RoundingPolicyDto.halfEven,
-            child: Text(context.l10n.exprRoundHalfEven),
-          ),
-          DropdownMenuItem(
-            value: RoundingPolicyDto.rejectInexact,
-            child: Text(context.l10n.queryRoundingRejectInexact),
-          ),
-        ],
-        onChanged: (rounding) {
-          if (rounding == null) return;
-          _update(replaceAt(root, path, node.copyWith(rounding: rounding)));
-        },
+    SegmentedButton<RoundingPolicyDto>(
+      key: Key('rounding-$path'),
+      showSelectedIcon: false,
+      segments: [
+        ButtonSegment(
+          value: RoundingPolicyDto.halfEven,
+          label: Text(context.l10n.queryRoundingHalfEven),
+        ),
+        ButtonSegment(
+          value: RoundingPolicyDto.rejectInexact,
+          label: Text(context.l10n.queryRoundingRejectInexact),
+        ),
+      ],
+      selected: {node.rounding},
+      onSelectionChanged: (selection) => _update(
+        replaceAt(root, path, node.copyWith(rounding: selection.single)),
       ),
     ),
   ];

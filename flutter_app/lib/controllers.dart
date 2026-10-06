@@ -469,6 +469,13 @@ final class CollectionsController extends ChangeNotifier {
     await refresh();
   }
 
+  /// Runs [query] against this device's records now, without saving anything.
+  Future<QueryResultDto> runQuery(CollectionQueryDto query) =>
+      bridge.executeCollectionQuery(
+        query,
+        DateTime.now().toUtc().millisecondsSinceEpoch,
+      );
+
   Future<void> removeQueryDefinition(String id) async {
     await bridge.removeQueryDefinition(selectedCollectionId!, id);
     await refresh();

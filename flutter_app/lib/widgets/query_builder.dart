@@ -3,7 +3,9 @@ import 'package:fi/help_button.dart';
 import 'package:fi/help_copy.dart';
 import 'package:fi/l10n/l10n.dart';
 import 'package:fi/src/rust/api/models.dart';
+import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/theme/inputs.dart';
+import 'package:fi/theme/nocturne.dart';
 import 'package:flutter/material.dart';
 
 /// Sentinel so `copyWith` can distinguish "leave this alone" from "set this to null".
@@ -533,6 +535,52 @@ String _aggregationLabel(AppLocalizations l, AggregationKindDto kind) =>
       AggregationKindDto.max => l.queryAggMax,
     };
 
+/// The type of the value [definition]'s aggregation produces, for the tag on its row: Integer
+/// for Count, the operand's type for Sum, Min and Max, and a decimal at the declared output scale
+/// for Average. Null when the query does not aggregate or its operand is unknown here.
+ValueTypeDto? queryResultType(
+  QueryDefinitionDto definition,
+  CollectionSchemaDto schema, [
+  List<ComputedFieldDefinitionDto> computedFields = const [],
+]) {
+  final aggregation = definition.query?.shape.aggregation;
+  if (aggregation == null) return null;
+  switch (aggregation.kind) {
+    case AggregationKindDto.count:
+      return const ValueTypeDto(kind: ValueTypeKindDto.integer);
+    case AggregationKindDto.average:
+      return ValueTypeDto(
+        kind: ValueTypeKindDto.fixedDecimal,
+        scale: aggregation.outputScale ?? 0,
+      );
+    case AggregationKindDto.sum ||
+        AggregationKindDto.min ||
+        AggregationKindDto.max:
+      final expression = aggregation.expression;
+      if (expression == null ||
+          expression.nodes.length != 1 ||
+          expression.root != 0) {
+        return null;
+      }
+      final reference = expression.nodes.single.field;
+      if (reference == null) return null;
+      if (reference.kind == FieldReferenceKindDto.computed) {
+        return computedFields
+            .where((item) => item.id == reference.id)
+            .firstOrNull
+            ?.declaredType;
+      }
+      final field = schema.fields
+          .where((item) => item.id == reference.id)
+          .firstOrNull;
+      if (field == null) return null;
+      return ValueTypeDto(
+        kind: valueKindFor(field.fieldType.kind),
+        scale: field.fieldType.scale,
+      );
+  }
+}
+
 /// The single-node field expression the builder emits everywhere it names a field.
 ExpressionDto fieldExpression(String fieldId) => ExpressionDto(
   root: 0,
@@ -700,6 +748,10 @@ List<FieldDefinitionDto> plotFieldsOf(CollectionSchemaDto schema) =>
           kind == FieldTypeKindDto.dateTime,
     );
 
+/// How the filter condition is presented: the widget form shows it as a removable chip behind
+/// "Add filter"; the saved-query editor shows one "Only records where" row.
+enum QueryFilterStyle { chip, row }
+
 /// The guided query controls, shared by the widget form and the saved-query editor.
 ///
 /// It owns no state of its own beyond the filter text controller: every change is reported to the
@@ -710,6 +762,7 @@ final class QueryBuilder extends StatefulWidget {
     required this.state,
     required this.onChanged,
     this.showPresets = true,
+    this.filterStyle = QueryFilterStyle.row,
     super.key,
   });
 
@@ -720,12 +773,17 @@ final class QueryBuilder extends StatefulWidget {
   /// The saved-query editor shows presets too; only the unsupported-widget path hides them.
   final bool showPresets;
 
+  final QueryFilterStyle filterStyle;
+
   @override
   State<QueryBuilder> createState() => _QueryBuilderState();
 }
 
 class _QueryBuilderState extends State<QueryBuilder> {
   final filterValue = TextEditingController();
+
+  /// Chip style: the condition row is open, either from "Add filter" or by tapping the chip.
+  bool editingFilter = false;
 
   QueryBuilderState get state => widget.state;
   CollectionSchemaDto get schema => widget.schema;
@@ -762,7 +820,6 @@ class _QueryBuilderState extends State<QueryBuilder> {
       // Outlined inputs need air between them; the labels sit on their top edges.
       spacing: 14,
       children: [
-        Text(l.queryTitle, style: Theme.of(context).textTheme.titleSmall),
         if (widget.showPresets &&
             (state.widgetType == 'core.line-chart' ||
                 state.widgetType == 'core.bar-chart'))
@@ -885,26 +942,27 @@ class _QueryBuilderState extends State<QueryBuilder> {
                 ),
               ),
             ),
-            FiSelect<RoundingPolicyDto>(
-              key: const Key('rounding'),
-              value: state.rounding,
-              label: l.queryRoundingPolicy,
-              suffixIcon: const HelpButton(HelpId.widgetRounding),
-              items: [
-                DropdownMenuItem(
-                  value: RoundingPolicyDto.halfEven,
-                  child: Text(l.queryRoundingHalfEven),
-                ),
-                DropdownMenuItem(
-                  value: RoundingPolicyDto.rejectInexact,
-                  child: Text(l.queryRoundingRejectInexact),
-                ),
-              ],
-              onChanged: state.aggregationDisabled
-                  ? null
-                  : (value) => _emit(
-                      state.copyWith(rounding: value ?? state.rounding),
-                    ),
+            _labelled(
+              l.queryRoundingPolicy,
+              const HelpButton(HelpId.widgetRounding),
+              SegmentedButton<RoundingPolicyDto>(
+                key: const Key('rounding'),
+                showSelectedIcon: false,
+                segments: [
+                  ButtonSegment(
+                    value: RoundingPolicyDto.halfEven,
+                    label: Text(l.queryRoundingHalfEven),
+                  ),
+                  ButtonSegment(
+                    value: RoundingPolicyDto.rejectInexact,
+                    label: Text(l.queryRoundingRejectInexact),
+                  ),
+                ],
+                selected: {state.rounding},
+                onSelectionChanged: state.aggregationDisabled
+                    ? null
+                    : (value) => _emit(state.copyWith(rounding: value.single)),
+              ),
             ),
           ],
         ],
@@ -926,72 +984,193 @@ class _QueryBuilderState extends State<QueryBuilder> {
             onChanged: (value) => _emit(state.copyWith(seriesYFieldId: value)),
           ),
         ],
-        const Divider(height: 20),
-        _fieldDropdown(
-          key: const Key('filter-field'),
-          label: l.queryFilterField,
-          help: HelpId.widgetFilter,
-          fields: activeFieldsOf(schema),
-          value: state.filterFieldId,
-          allowClear: true,
-          onChanged: (value) => _emit(state.copyWith(filterFieldId: value)),
+        ...switch (widget.filterStyle) {
+          QueryFilterStyle.row => [
+            Text(
+              l.queryOnlyRecordsWhere,
+              style: TextStyle(fontSize: 12, color: Nocturne.muted(.7)),
+            ),
+            _conditionRow(l),
+          ],
+          QueryFilterStyle.chip => _filterChip(l),
+        },
+      ],
+    );
+  }
+
+  /// A control under a small label with its help button, for controls without a label of their
+  /// own (segmented buttons).
+  Widget _labelled(String label, Widget help, Widget control) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Row(
+        children: [
+          Text(
+            label,
+            style: TextStyle(fontSize: 12, color: Nocturne.muted(.7)),
+          ),
+          help,
+        ],
+      ),
+      control,
+    ],
+  );
+
+  /// The condition in words, e.g. `Type is headache`.
+  String _conditionText(AppLocalizations l) {
+    final field = schema.fields
+        .where((item) => item.id == state.filterFieldId)
+        .firstOrNull;
+    final value = field?.fieldType.kind == FieldTypeKindDto.enum_
+        ? field!.enumOptions
+                  .where((option) => option.id == state.filterValue.trim())
+                  .firstOrNull
+                  ?.label ??
+              state.filterValue.trim()
+        : state.filterValue.trim();
+    return l.queryFilterChip(field?.name ?? '?', switch (state.filterOperator) {
+      ComparisonOperatorDto.equal => l.queryOpIs,
+      ComparisonOperatorDto.notEqual => l.queryOpIsNot,
+      ComparisonOperatorDto.greaterThan => l.queryOpGreaterThan,
+      ComparisonOperatorDto.greaterThanOrEqual => l.queryOpAtLeast,
+      ComparisonOperatorDto.lessThan => l.queryOpLessThan,
+      ComparisonOperatorDto.lessThanOrEqual => l.queryOpAtMost,
+    }, value);
+  }
+
+  void _clearFilter() {
+    setState(() => editingFilter = false);
+    _emit(state.copyWith(filterFieldId: null, filterValue: ''));
+  }
+
+  /// Chip style: the finished condition as a chip (✕ removes it), the open condition row, or the
+  /// "Add filter" button. One condition at most, so "Add filter" hides while one exists.
+  List<Widget> _filterChip(AppLocalizations l) {
+    final complete =
+        state.filterFieldId != null && state.filterValue.trim().isNotEmpty;
+    if (editingFilter || (state.filterFieldId != null && !complete)) {
+      return [
+        _conditionRow(l),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            TextButton(
+              key: const Key('remove-filter'),
+              onPressed: _clearFilter,
+              child: Text(l.queryRemoveFilter),
+            ),
+            TextButton(
+              key: const Key('apply-filter'),
+              onPressed: complete
+                  ? () => setState(() => editingFilter = false)
+                  : null,
+              child: Text(l.commonDone),
+            ),
+          ],
         ),
-        if (state.filterFieldId != null) ...[
-          // The condition is one inline row: operator beside value.
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            spacing: 8,
-            children: [
-              Expanded(
-                child: FiSelect<ComparisonOperatorDto>.compact(
-                  key: const Key('filter-operator'),
-                  value: state.filterOperator,
-                  label: l.queryFilterOperator,
-                  items: [
-                    DropdownMenuItem(
-                      value: ComparisonOperatorDto.equal,
-                      child: Text(l.queryOpEquals),
-                    ),
-                    DropdownMenuItem(
-                      value: ComparisonOperatorDto.notEqual,
-                      child: Text(l.queryOpIsNot),
-                    ),
-                    DropdownMenuItem(
-                      value: ComparisonOperatorDto.greaterThan,
-                      child: Text(l.queryOpGreaterThan),
-                    ),
-                    DropdownMenuItem(
-                      value: ComparisonOperatorDto.greaterThanOrEqual,
-                      child: Text(l.queryOpAtLeast),
-                    ),
-                    DropdownMenuItem(
-                      value: ComparisonOperatorDto.lessThan,
-                      child: Text(l.queryOpLessThan),
-                    ),
-                    DropdownMenuItem(
-                      value: ComparisonOperatorDto.lessThanOrEqual,
-                      child: Text(l.queryOpAtMost),
-                    ),
-                  ],
-                  onChanged: (value) => _emit(
+      ];
+    }
+    if (state.filterFieldId != null) {
+      return [
+        Align(
+          alignment: Alignment.centerLeft,
+          child: InputChip(
+            key: const Key('filter-chip'),
+            label: Text(_conditionText(l)),
+            onPressed: () => setState(() => editingFilter = true),
+            onDeleted: _clearFilter,
+            deleteIcon: const Icon(FiIcons.clear, size: 14),
+            deleteButtonTooltipMessage: l.queryRemoveFilter,
+          ),
+        ),
+      ];
+    }
+    return [
+      Row(
+        children: [
+          TextButton.icon(
+            key: const Key('add-filter'),
+            onPressed: () => setState(() => editingFilter = true),
+            icon: const Icon(FiIcons.add, size: 16),
+            label: Text(l.queryAddFilter),
+          ),
+          const HelpButton(HelpId.widgetFilter),
+        ],
+      ),
+    ];
+  }
+
+  /// Field, operator and value side by side.
+  Widget _conditionRow(AppLocalizations l) {
+    final fields = activeFieldsOf(schema);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      spacing: 8,
+      children: [
+        Expanded(
+          child: FiSelect<String>.compact(
+            key: const Key('filter-field'),
+            value: fields.any((field) => field.id == state.filterFieldId)
+                ? state.filterFieldId
+                : null,
+            label: l.queryFilterField,
+            items: [
+              DropdownMenuItem<String>(value: null, child: Text(l.commonNone)),
+              for (final field in fields)
+                DropdownMenuItem(value: field.id, child: Text(field.name)),
+            ],
+            onChanged: (value) => _emit(state.copyWith(filterFieldId: value)),
+          ),
+        ),
+        Expanded(
+          child: FiSelect<ComparisonOperatorDto>.compact(
+            key: const Key('filter-operator'),
+            value: state.filterOperator,
+            label: l.queryFilterOperator,
+            items: [
+              DropdownMenuItem(
+                value: ComparisonOperatorDto.equal,
+                child: Text(l.queryOpEquals),
+              ),
+              DropdownMenuItem(
+                value: ComparisonOperatorDto.notEqual,
+                child: Text(l.queryOpIsNot),
+              ),
+              DropdownMenuItem(
+                value: ComparisonOperatorDto.greaterThan,
+                child: Text(l.queryOpGreaterThan),
+              ),
+              DropdownMenuItem(
+                value: ComparisonOperatorDto.greaterThanOrEqual,
+                child: Text(l.queryOpAtLeast),
+              ),
+              DropdownMenuItem(
+                value: ComparisonOperatorDto.lessThan,
+                child: Text(l.queryOpLessThan),
+              ),
+              DropdownMenuItem(
+                value: ComparisonOperatorDto.lessThanOrEqual,
+                child: Text(l.queryOpAtMost),
+              ),
+            ],
+            onChanged: state.filterFieldId == null
+                ? null
+                : (value) => _emit(
                     state.copyWith(
                       filterOperator: value ?? state.filterOperator,
                     ),
                   ),
-                ),
-              ),
-              Expanded(
-                child: FiTextInput.compact(
-                  key: const Key('filter-value'),
-                  controller: filterValue,
-                  label: l.queryFilterValue,
-                  onChanged: (value) =>
-                      _emit(state.copyWith(filterValue: value)),
-                ),
-              ),
-            ],
           ),
-        ],
+        ),
+        Expanded(
+          child: FiTextInput.compact(
+            key: const Key('filter-value'),
+            controller: filterValue,
+            enabled: state.filterFieldId != null,
+            label: l.queryFilterValue,
+            onChanged: (value) => _emit(state.copyWith(filterValue: value)),
+          ),
+        ),
       ],
     );
   }
@@ -1003,7 +1182,6 @@ class _QueryBuilderState extends State<QueryBuilder> {
     required List<FieldDefinitionDto> fields,
     required String? value,
     required ValueChanged<String?> onChanged,
-    bool allowClear = false,
     bool enabled = true,
   }) {
     final current = fields.any((field) => field.id == value) ? value : null;
@@ -1013,11 +1191,6 @@ class _QueryBuilderState extends State<QueryBuilder> {
       label: label,
       suffixIcon: HelpButton(help),
       items: [
-        if (allowClear)
-          DropdownMenuItem<String>(
-            value: null,
-            child: Text(context.l10n.commonNone),
-          ),
         for (final field in fields)
           DropdownMenuItem(value: field.id, child: Text(field.name)),
       ],

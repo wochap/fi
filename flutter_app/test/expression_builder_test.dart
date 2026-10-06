@@ -1,4 +1,5 @@
 import 'package:fi/src/rust/api/models.dart';
+import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/widgets/computed_field_editor.dart';
 import 'package:fi/widgets/expression_builder.dart';
 import 'package:flutter/material.dart';
@@ -35,6 +36,8 @@ final schema = CollectionSchemaDto(
     _field('c', FieldTypeKindDto.integer),
     _field('date_a', FieldTypeKindDto.date),
     _field('date_b', FieldTypeKindDto.date),
+    _field('End at', FieldTypeKindDto.dateTime),
+    _field('Note', FieldTypeKindDto.text),
   ],
 );
 
@@ -182,64 +185,145 @@ void main() {
     expect(expressionFromDto(compare), isNull);
   });
 
-  testWidgets('the add-operator affordance disappears at the depth cap', (
-    tester,
-  ) async {
-    await pumpBuilder(tester, chain(maxOperatorDepth - 1));
-    final deepest = r'$' + '.left' * (maxOperatorDepth - 1);
-    expect(find.byKey(Key('add-operator-$deepest')), findsOneWidget);
-
-    await pumpBuilder(tester, chain(maxOperatorDepth));
-    final deepestAtCap = r'$' + '.left' * maxOperatorDepth;
-    expect(find.byKey(Key('expr-node-$deepestAtCap')), findsOneWidget);
-    expect(find.byKey(Key('add-operator-$deepestAtCap')), findsNothing);
-    expect(find.byKey(const Key(r'add-operator-$')), findsNothing);
+  test('a left-deep + − × chain flattens into terms and rebuilds', () {
+    const tree = BinaryNode(
+      operator: ExprOperator.add,
+      left: BinaryNode(
+        operator: ExprOperator.subtract,
+        left: FieldLeaf('a'),
+        right: AbsNode(FieldLeaf('b')),
+      ),
+      right: BinaryNode(
+        operator: ExprOperator.subtract,
+        left: FieldLeaf('c'),
+        right: FieldLeaf('a'),
+      ),
+    );
+    final chain = flattenChain(tree);
+    expect(chain.terms.map(describe), ['a', 'abs(b)', '(c subtract a)']);
+    expect(chain.operators, [ExprOperator.subtract, ExprOperator.add]);
+    expect(describe(buildChain(chain.terms, chain.operators)), describe(tree));
+    expect(termPath(0, 3), r'$.left.left');
+    expect(termPath(1, 3), r'$.left.right');
+    expect(termPath(2, 3), r'$.right');
   });
 
-  testWidgets(
-    'choosing an operator wraps a leaf and division carries its policy',
-    (tester) async {
-      ExpressionDto? submitted;
-      await pumpBuilder(
-        tester,
-        const FieldLeaf('a'),
-        infer: (expression) async {
-          submitted = expression;
-          return const InferredTypeDto(
-            valueType: ValueTypeDto(
-              kind: ValueTypeKindDto.fixedDecimal,
-              scale: 2,
-            ),
-            nullable: false,
-          );
-        },
-      );
-      await tester.tap(find.byKey(const Key(r'add-operator-$')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('operator-divide')));
-      await tester.pumpAndSettle();
-      // The new right leaf starts empty, so nothing is submitted until it is picked.
-      expect(find.byKey(const Key(r'expr-error-$.right')), findsOneWidget);
-      expect(find.byKey(const Key(r'scale-$')), findsOneWidget);
-      // D3: the default output scale follows a FixedDecimal left operand.
-      expect(tester.widget<Text>(find.byKey(const Key(r'scale-$'))).data, '2');
+  test('reordering three terms keeps the operators in their slots', () {
+    const tree = BinaryNode(
+      operator: ExprOperator.multiply,
+      left: BinaryNode(
+        operator: ExprOperator.subtract,
+        left: FieldLeaf('a'),
+        right: FieldLeaf('b'),
+      ),
+      right: FieldLeaf('c'),
+    );
+    expect(describe(reorderTerms(tree, 2, 0)), '((c subtract a) multiply b)');
+    expect(describe(reorderTerms(tree, 0, 2)), '((b subtract c) multiply a)');
+  });
 
-      await tester.tap(find.byKey(const Key(r'field-$.right')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('c').last);
-      await tester.pumpAndSettle();
-      final root = submitted!.nodes[submitted!.root];
-      expect(root.kind, ExpressionKindDto.divide);
-      expect(root.outputScale, 2);
-      expect(root.rounding, RoundingPolicyDto.halfEven);
-      expect(find.text('Result: Decimal, scale 2'), findsOneWidget);
+  test('formulaText reads field names and operator symbols', () {
+    expect(
+      formulaText(
+        const BinaryNode(
+          operator: ExprOperator.subtract,
+          left: FieldLeaf('date_a'),
+          right: FieldLeaf('date_b'),
+        ),
+        schema,
+      ),
+      'date_a − date_b',
+    );
+  });
 
-      await tester.tap(find.byKey(const Key(r'remove-$')));
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key(r'expr-node-$.right')), findsNothing);
-      expect(submitted!.nodes[submitted!.root].kind, ExpressionKindDto.field);
-    },
-  );
+  testWidgets('End at − Start at shows as two term cards and round-trips', (
+    tester,
+  ) async {
+    const tree = BinaryNode(
+      operator: ExprOperator.subtract,
+      left: FieldLeaf('date_a'),
+      right: FieldLeaf('date_b'),
+    );
+    ExpressionDto? submitted;
+    await pumpBuilder(
+      tester,
+      tree,
+      infer: (expression) async {
+        submitted = expression;
+        return const InferredTypeDto(
+          valueType: ValueTypeDto(kind: ValueTypeKindDto.duration),
+          nullable: false,
+        );
+      },
+    );
+    expect(find.byKey(const Key('expr-term-0')), findsOneWidget);
+    expect(find.byKey(const Key('expr-term-1')), findsOneWidget);
+    expect(find.byKey(const Key('term-operator-0')), findsNothing);
+    expect(find.byKey(const Key('term-operator-1')), findsOneWidget);
+    expect(describe(expressionFromDto(submitted!)!), describe(tree));
+  });
+
+  testWidgets('Add term is disabled at the depth cap', (tester) async {
+    await pumpBuilder(tester, chain(maxOperatorDepth - 1));
+    TextButton addTerm() =>
+        tester.widget<TextButton>(find.byKey(const Key('add-term')));
+    expect(addTerm().onPressed, isNotNull);
+    await tester.ensureVisible(find.byKey(const Key('add-term')));
+    await tester.tap(find.byKey(const Key('add-term')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(Key('expr-term-$maxOperatorDepth'), skipOffstage: false), findsOneWidget);
+    expect(addTerm().onPressed, isNull);
+  });
+
+  testWidgets('Function wraps a term in abs and Divide carries its policy', (
+    tester,
+  ) async {
+    ExpressionDto? submitted;
+    await pumpBuilder(
+      tester,
+      const FieldLeaf('a'),
+      infer: (expression) async {
+        submitted = expression;
+        return const InferredTypeDto(
+          valueType: ValueTypeDto(
+            kind: ValueTypeKindDto.fixedDecimal,
+            scale: 2,
+          ),
+          nullable: false,
+        );
+      },
+    );
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const Key('term-kind-0')),
+        matching: find.text('Function'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(describe(expressionFromDto(submitted!)!), 'abs(a)');
+
+    await tester.tap(find.byKey(const Key('term-function-0')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Divide').last);
+    await tester.pumpAndSettle();
+    // The new right leaf starts empty; D3: the output scale follows the left operand.
+    expect(find.byKey(const Key(r'expr-error-$.right')), findsOneWidget);
+    expect(tester.widget<Text>(find.byKey(const Key(r'scale-$'))).data, '2');
+
+    await tester.tap(find.byKey(const Key(r'field-$.right')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('c').last);
+    await tester.pumpAndSettle();
+    expect(describe(expressionFromDto(submitted!)!), '(a / c @2 halfEven)');
+
+    await tester.tap(find.text('Reject inexact'));
+    await tester.pumpAndSettle();
+    expect(
+      describe(expressionFromDto(submitted!)!),
+      '(a / c @2 rejectInexact)',
+    );
+    expect(find.byKey(const Key('computed-result-ok')), findsOneWidget);
+  });
 
   testWidgets('a positional inference error marks its card and blocks Save', (
     tester,
@@ -294,14 +378,53 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    // The failing `a + c` node maps to its right-hand term, c.
     expect(
-      tester.widget<Text>(find.byKey(const Key(r'expr-error-$.left'))).data,
-      'arithmetic operands are incompatible',
+      tester.widget<Text>(find.byKey(const Key('expr-error-term-1'))).data,
+      "Can't add a Integer to a Decimal, scale 2.",
     );
-    expect(find.byKey(const Key(r'expr-error-$')), findsNothing);
+    expect(find.byKey(const Key('expr-error-term-2')), findsNothing);
+    expect(find.byKey(const Key('computed-result')), findsNothing);
     final save = tester.widget<FilledButton>(
       find.byKey(const Key('save-computed')),
     );
     expect(save.onPressed, isNull);
+  });
+
+  testWidgets('End at − Note marks Note with a localized sentence', (
+    tester,
+  ) async {
+    await pumpBuilder(
+      tester,
+      const BinaryNode(
+        operator: ExprOperator.subtract,
+        left: FieldLeaf('End at'),
+        right: FieldLeaf('Note'),
+      ),
+      infer: (_) async => throw const BridgeError(
+        kind: BridgeErrorKind.validation,
+        issues: [
+          BridgeIssueDto(
+            fields: [r'$'],
+            code: 'invalid',
+            message: 'arithmetic operands are incompatible',
+          ),
+        ],
+        message: 'arithmetic operands are incompatible',
+        resetResolvable: false,
+      ),
+    );
+    expect(
+      tester.widget<Text>(find.byKey(const Key('expr-error-term-1'))).data,
+      "Can't subtract a Text from a Date & time.",
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('expr-term-1')),
+        matching: find.byIcon(FiIcons.warning),
+      ),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('computed-result')), findsNothing);
   });
 }

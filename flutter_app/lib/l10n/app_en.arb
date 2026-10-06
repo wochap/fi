@@ -667,10 +667,6 @@
   "@queryAggMax": {
     "description": "Aggregation"
   },
-  "queryTitle": "Query",
-  "@queryTitle": {
-    "description": "Section title"
-  },
   "queryGroupBy": "Group by",
   "@queryGroupBy": {
     "description": "Label"
@@ -735,17 +731,17 @@
   "@queryYAxis": {
     "description": "Label"
   },
-  "queryFilterField": "Filter field (optional)",
+  "queryFilterField": "Field",
   "@queryFilterField": {
-    "description": "Label"
+    "description": "Filter field select"
   },
-  "queryFilterOperator": "Filter operator",
+  "queryFilterOperator": "Operator",
   "@queryFilterOperator": {
-    "description": "Label"
+    "description": "Filter operator select"
   },
-  "queryFilterValue": "Filter value",
+  "queryFilterValue": "Value",
   "@queryFilterValue": {
-    "description": "Label"
+    "description": "Filter value input"
   },
   "queryOpEquals": "equals",
   "@queryOpEquals": {
@@ -2430,14 +2426,6 @@
   "@recordsRemoveQuery": {
     "description": "Tooltip"
   },
-  "recordsCountQueryName": "Record count",
-  "@recordsCountQueryName": {
-    "description": "Default saved query name"
-  },
-  "recordsAddCountQuery": "Add record-count query",
-  "@recordsAddCountQuery": {
-    "description": "Button"
-  },
   "recordsUsedBy": "{count, plural, =0{used by no widgets} =1{used by 1 widget} other{used by {count} widgets}}",
   "@recordsUsedBy": {
     "description": "Query usage",
@@ -2679,10 +2667,6 @@
       }
     }
   },
-  "widgetOrder": "Widget order",
-  "@widgetOrder": {
-    "description": "Dialog title"
-  },
   "widgetTitleRequired": "Give the widget a title.",
   "@widgetTitleRequired": {
     "description": "Validation"
@@ -2761,19 +2745,19 @@
   "@widgetChooseData": {
     "description": "Preview placeholder"
   },
-  "widgetSizeSmallHint": "Small spans one of three dashboard columns at its lowest height.",
+  "widgetSizeSmallHint": "Small spans 1 of 4 columns.",
   "@widgetSizeSmallHint": {
     "description": "Size hint"
   },
-  "widgetSizeMediumHint": "Medium spans one of three dashboard columns.",
+  "widgetSizeMediumHint": "Medium spans 2 of 4 columns.",
   "@widgetSizeMediumHint": {
     "description": "Size hint"
   },
-  "widgetSizeLargeHint": "Large spans two of three dashboard columns.",
+  "widgetSizeLargeHint": "Large spans 3 of 4 columns.",
   "@widgetSizeLargeHint": {
     "description": "Size hint"
   },
-  "widgetSizeFullHint": "Full spans the whole dashboard row.",
+  "widgetSizeFullHint": "Full spans all 4 columns.",
   "@widgetSizeFullHint": {
     "description": "Size hint"
   },
@@ -3581,22 +3565,6 @@
       }
     }
   },
-  "widgetNoValue": "No value yet.",
-  "@widgetNoValue": {
-    "description": "Empty state"
-  },
-  "widgetNoData": "No data yet.",
-  "@widgetNoData": {
-    "description": "Empty state"
-  },
-  "widgetNoObservations": "No observations yet.",
-  "@widgetNoObservations": {
-    "description": "Empty state"
-  },
-  "widgetNothingToChart": "Nothing to chart yet.",
-  "@widgetNothingToChart": {
-    "description": "Empty state"
-  },
   "widgetUntitledWidget": "Untitled widget",
   "@widgetUntitledWidget": {
     "description": "Title fallback"
@@ -3605,58 +3573,9 @@
   "@widgetUnsupported": {
     "description": "Headline"
   },
-  "widgetConfigKeys": "{count, plural, =0{no configuration keys} =1{1 configuration keys} other{{count} configuration keys}}",
-  "@widgetConfigKeys": {
-    "description": "Unsupported widget key count",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
-  "widgetVersionLine": "Version {version} · {keys}",
-  "@widgetVersionLine": {
-    "description": "Unsupported widget meta line",
-    "placeholders": {
-      "version": {
-        "type": "String"
-      },
-      "keys": {
-        "type": "String"
-      }
-    }
-  },
   "widgetUnsupportedExplanation": "This widget was created by another device or a newer version. Its configuration is preserved and can be renamed, reordered, or removed.",
   "@widgetUnsupportedExplanation": {
     "description": "Unsupported widget explanation"
-  },
-  "widgetHeadlineNewerConfig": "Newer configuration version",
-  "@widgetHeadlineNewerConfig": {
-    "description": "Failure headline"
-  },
-  "widgetHeadlineInvalidConfig": "Invalid configuration",
-  "@widgetHeadlineInvalidConfig": {
-    "description": "Failure headline"
-  },
-  "widgetHeadlineQueryUnavailable": "Query unavailable",
-  "@widgetHeadlineQueryUnavailable": {
-    "description": "Failure headline"
-  },
-  "widgetHeadlineShapeMismatch": "Query result does not fit",
-  "@widgetHeadlineShapeMismatch": {
-    "description": "Failure headline"
-  },
-  "widgetHeadlineOverflow": "Value out of range",
-  "@widgetHeadlineOverflow": {
-    "description": "Failure headline"
-  },
-  "widgetHeadlineQueryFailed": "Query failed",
-  "@widgetHeadlineQueryFailed": {
-    "description": "Failure headline"
-  },
-  "widgetHeadlineRemoved": "Widget removed",
-  "@widgetHeadlineRemoved": {
-    "description": "Failure headline"
   },
   "voiceKept": "{count, plural, =1{Your edit to {names} was kept.} other{Your edits to {names} were kept.}}",
   "@voiceKept": {
@@ -3790,6 +3709,70 @@
   "exprNumber": "Number",
   "@exprNumber": {
     "description": "Segment / label"
+  },
+  "exprFunction": "Function",
+  "@exprFunction": {
+    "description": "Segment: the term is a function (absolute value or division)"
+  },
+  "exprDivide": "Divide",
+  "@exprDivide": {
+    "description": "Function choice"
+  },
+  "exprAddTerm": "Add term",
+  "@exprAddTerm": {
+    "description": "Button appending a term to the formula"
+  },
+  "exprDragTerm": "Drag to reorder",
+  "@exprDragTerm": {
+    "description": "Drag handle tooltip on a term"
+  },
+  "exprRemoveTerm": "Remove term",
+  "@exprRemoveTerm": {
+    "description": "Tooltip of ✕ on a term"
+  },
+  "exprCannotAdd": "Can't add a {right} to a {left}.",
+  "@exprCannotAdd": {
+    "placeholders": {
+      "right": {
+        "type": "String"
+      },
+      "left": {
+        "type": "String"
+      }
+    }
+  },
+  "exprCannotSubtract": "Can't subtract a {right} from a {left}.",
+  "@exprCannotSubtract": {
+    "placeholders": {
+      "right": {
+        "type": "String"
+      },
+      "left": {
+        "type": "String"
+      }
+    }
+  },
+  "exprCannotMultiply": "Can't multiply a {left} by a {right}.",
+  "@exprCannotMultiply": {
+    "placeholders": {
+      "left": {
+        "type": "String"
+      },
+      "right": {
+        "type": "String"
+      }
+    }
+  },
+  "exprCannotDivide": "Can't divide a {left} by a {right}.",
+  "@exprCannotDivide": {
+    "placeholders": {
+      "left": {
+        "type": "String"
+      },
+      "right": {
+        "type": "String"
+      }
+    }
   },
   "exprPickField": "Pick a field",
   "@exprPickField": {
@@ -4332,5 +4315,141 @@
         "type": "String"
       }
     }
+  },
+  "widgetMenuTooltip": "Widget actions",
+  "@widgetMenuTooltip": {
+    "description": "Tooltip of a tile's ⋮ button"
+  },
+  "widgetMenuRemove": "Remove…",
+  "@widgetMenuRemove": {
+    "description": "Tile menu action"
+  },
+  "widgetRemoveConfirmTitle": "Remove widget “{title}”?",
+  "@widgetRemoveConfirmTitle": {
+    "description": "Confirm title",
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "widgetRemoveConfirmBody": "Its saved query and the records stay.",
+  "@widgetRemoveConfirmBody": {
+    "description": "Confirm body"
+  },
+  "widgetKeep": "Keep widget",
+  "@widgetKeep": {
+    "description": "Confirm safe action"
+  },
+  "widgetMoveUp": "Move up",
+  "@widgetMoveUp": {
+    "description": "Reorder mode button"
+  },
+  "widgetMoveDown": "Move down",
+  "@widgetMoveDown": {
+    "description": "Reorder mode button"
+  },
+  "widgetDragToReorder": "Drag to reorder",
+  "@widgetDragToReorder": {
+    "description": "Drag handle tooltip"
+  },
+  "widgetNoRecordsMatch": "No records match yet",
+  "@widgetNoRecordsMatch": {
+    "description": "Empty widget tile"
+  },
+  "widgetData": "Data",
+  "@widgetData": {
+    "description": "Widget form section heading"
+  },
+  "widgetDefineHere": "Define here",
+  "@widgetDefineHere": {
+    "description": "Query source segment"
+  },
+  "queryOnlyRecordsWhere": "Only records where",
+  "@queryOnlyRecordsWhere": {
+    "description": "Label above the filter row"
+  },
+  "queryOpIs": "is",
+  "@queryOpIs": {
+    "description": "Equality operator inside a filter chip"
+  },
+  "queryFilterChip": "{field} {operator} {value}",
+  "@queryFilterChip": {
+    "description": "Filter condition chip, e.g. Type is headache",
+    "placeholders": {
+      "field": {
+        "type": "String"
+      },
+      "operator": {
+        "type": "String"
+      },
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "queryAddFilter": "Add filter",
+  "@queryAddFilter": {
+    "description": "Button"
+  },
+  "queryRemoveFilter": "Remove filter",
+  "@queryRemoveFilter": {
+    "description": "Button / tooltip"
+  },
+  "recordsAddQuery": "Add query",
+  "@recordsAddQuery": {
+    "description": "Button"
+  },
+  "queryNewTitle": "New query",
+  "@queryNewTitle": {
+    "description": "Query editor title"
+  },
+  "queryUsedByApplies": "{count, plural, =1{Used by 1 widget · changes apply there too} other{Used by {count} widgets · changes apply there too}}",
+  "@queryUsedByApplies": {
+    "description": "Query editor subtitle",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "queryResultNow": "Result now",
+  "@queryResultNow": {
+    "description": "Live query result label"
+  },
+  "queryResultPoints": "{count, plural, =1{1 point} other{{count} points}}",
+  "@queryResultPoints": {
+    "description": "Live result of a series query",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "queryDeleteConfirmTitle": "Delete query “{name}”?",
+  "@queryDeleteConfirmTitle": {
+    "description": "Confirm title",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "queryDeleteConfirmBody": "{count, plural, =1{1 widget uses it and will show an error until you edit it.} other{{count} widgets use it and will show an error until you edit them.}}",
+  "@queryDeleteConfirmBody": {
+    "description": "Confirm body",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "queryDelete": "Delete query",
+  "@queryDelete": {
+    "description": "Confirm destructive action"
+  },
+  "queryKeep": "Keep query",
+  "@queryKeep": {
+    "description": "Confirm safe action"
   }
 }

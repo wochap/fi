@@ -144,10 +144,12 @@ WidgetRenderContext renderContext(
   WidgetDefinitionDto widget, {
   WidgetEvaluationDto? evaluation,
   Map<String, String> enumLabels = const {},
+  VoidCallback? onEdit,
 }) => WidgetRenderContext(
   definition: widget,
   evaluation: evaluation,
   enumLabels: enumLabels,
+  onEdit: onEdit,
 );
 
 /// Charts need bounded space and a moment for their implicit animation.
@@ -214,9 +216,32 @@ void main() {
       // The preserved type and configuration stay visible; nothing offers to rewrite them.
       expect(find.text('com.example.calendar-heatmap'), findsOneWidget);
       expect(find.text('Unsupported widget'), findsWidgets);
-      expect(find.textContaining('Version 7'), findsOneWidget);
-      expect(find.textContaining('3 configuration keys'), findsOneWidget);
       expect(find.text('Calendar heatmap'), findsOneWidget);
+    });
+
+    testWidgets('the unsupported card shows title, explanation and type only', (
+      tester,
+    ) async {
+      final widget = definition(
+        type: 'com.example.mood-heatmap',
+        title: 'Mood',
+      );
+      var edits = 0;
+      await pumpChart(
+        tester,
+        _registry.build(renderContext(widget, onEdit: () => edits++)),
+        size: const Size(320, 220),
+      );
+      expect(find.text('Mood'), findsOneWidget);
+      expect(find.text('Unsupported widget'), findsOneWidget);
+      expect(
+        find.textContaining('Its configuration is preserved'),
+        findsOneWidget,
+      );
+      expect(find.text('com.example.mood-heatmap'), findsOneWidget);
+      expect(find.text('Edit widget'), findsNothing);
+      expect(find.textContaining('Version'), findsNothing);
+      expect(edits, 0);
     });
 
     testWidgets('a throwing renderer is contained inside its own tile', (
@@ -335,6 +360,7 @@ void main() {
         size: const Size(300, 160),
       );
       expect(find.byType(WidgetEmpty), findsOneWidget);
+      expect(find.text('No records match yet'), findsOneWidget);
       expect(find.text('0'), findsNothing);
     });
 
@@ -583,6 +609,7 @@ void main() {
           findsOneWidget,
           reason: '$type must show an empty state',
         );
+        expect(find.text('No records match yet'), findsOneWidget, reason: type);
         expect(find.byType(LineChart), findsNothing, reason: type);
         expect(find.byType(BarChart), findsNothing, reason: type);
         expect(find.byType(ScatterChart), findsNothing, reason: type);
@@ -591,28 +618,44 @@ void main() {
   });
 
   group('per-widget states', () {
-    testWidgets('a null evaluation shows loading', (tester) async {
-      final widget = definition(title: 'Loading');
-      await pumpChart(
-        tester,
-        _registry.build(renderContext(widget)),
-        size: const Size(300, 160),
-      );
-      expect(find.byType(WidgetLoading), findsOneWidget);
+    testWidgets('a null evaluation shows a quiet skeleton per type', (
+      tester,
+    ) async {
+      for (final type in [
+        'core.aggregate-number',
+        'core.line-chart',
+        'core.bar-chart',
+        'core.scatter-plot',
+      ]) {
+        final widget = definition(type: type, title: 'Loading');
+        await pumpChart(
+          tester,
+          _registry.build(renderContext(widget)),
+          size: const Size(300, 160),
+        );
+        expect(find.byType(WidgetLoading), findsOneWidget, reason: type);
+        expect(find.byType(CircularProgressIndicator), findsNothing);
+        expect(find.text('Loading…'), findsNothing);
+        expect(tester.takeException(), isNull);
+      }
     });
 
-    testWidgets('each typed error renders its own headline', (tester) async {
+    testWidgets('each typed error shows its message without Rust wording', (
+      tester,
+    ) async {
       final cases = <WidgetErrorKindDto, String>{
-        WidgetErrorKindDto.shapeMismatch: 'Query result does not fit',
-        WidgetErrorKindDto.overflow: 'Value out of range',
-        WidgetErrorKindDto.unknownQuery: 'Query unavailable',
-        WidgetErrorKindDto.invalidQuery: 'Query unavailable',
-        WidgetErrorKindDto.unsupportedType: 'Unsupported widget',
-        WidgetErrorKindDto.unsupportedConfigurationVersion:
-            'Newer configuration version',
-        WidgetErrorKindDto.invalidConfiguration: 'Invalid configuration',
-        WidgetErrorKindDto.queryFailed: 'Query failed',
-        WidgetErrorKindDto.removed: 'Widget removed',
+        WidgetErrorKindDto.shapeMismatch:
+            'The saved query returns a result this widget cannot show.',
+        WidgetErrorKindDto.overflow:
+            'The result is too large to compute exactly.',
+        WidgetErrorKindDto.unknownQuery:
+            'The saved query of this widget is no longer available.',
+        WidgetErrorKindDto.invalidQuery:
+            'The saved query of this widget is not valid.',
+        WidgetErrorKindDto.invalidConfiguration:
+            "This widget's settings are not valid.",
+        WidgetErrorKindDto.queryFailed: 'The saved query could not run.',
+        WidgetErrorKindDto.removed: 'This widget was removed.',
       };
       for (final entry in cases.entries) {
         final widget = definition(type: 'core.line-chart', title: 'Broken');
@@ -622,22 +665,44 @@ void main() {
             renderContext(
               widget,
               evaluation: failed(widget, entry.key, 'detail ${entry.key.name}'),
+              onEdit: () {},
             ),
           ),
           size: const Size(320, 200),
         );
-        expect(
-          find.text(entry.value),
-          findsOneWidget,
-          reason: '${entry.key} headline',
-        );
+        expect(find.text(entry.value), findsOneWidget, reason: '${entry.key}');
         expect(
           find.textContaining('detail ${entry.key.name}'),
-          findsOneWidget,
-          reason: '${entry.key} message',
+          findsNothing,
+          reason: '${entry.key} hides the technical detail',
         );
+        expect(find.text('Edit widget'), findsOneWidget);
         expect(find.byType(LineChart), findsNothing, reason: entry.key.name);
       }
+    });
+
+    testWidgets('Edit widget on an invalid query opens the editor', (
+      tester,
+    ) async {
+      final widget = definition(type: 'core.line-chart', title: 'Broken');
+      var edits = 0;
+      await pumpChart(
+        tester,
+        _registry.build(
+          renderContext(
+            widget,
+            evaluation: failed(widget, WidgetErrorKindDto.invalidQuery, 'x'),
+            onEdit: () => edits++,
+          ),
+        ),
+        size: const Size(320, 200),
+      );
+      expect(
+        find.text('The saved query of this widget is not valid.'),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const Key('widget-failure-edit')));
+      expect(edits, 1);
     });
 
     testWidgets('a failing widget does not stop its siblings', (tester) async {
@@ -676,7 +741,10 @@ void main() {
         size: const Size(360, 400),
       );
       expect(find.text('2576.50'), findsOneWidget);
-      expect(find.text('Query result does not fit'), findsOneWidget);
+      expect(
+        find.text('The saved query returns a result this widget cannot show.'),
+        findsOneWidget,
+      );
     });
   });
 }

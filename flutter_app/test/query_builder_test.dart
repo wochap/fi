@@ -1,5 +1,5 @@
 import 'package:fi/l10n/l10n.dart';
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/widgets/query_builder.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -318,5 +318,42 @@ void main() {
     // The emitted query is unchanged by the controls being on screen.
     expect(_definition(state).query!.shape.kind, QueryShapeKindDto.series);
     expect(_definition(state).query!.shape.aggregation, isNull);
+  });
+
+  testWidgets('Rounding is a two-segment control that selects Reject inexact', (
+    tester,
+  ) async {
+    var state = const QueryBuilderState(
+      aggregation: AggregationKindDto.average,
+      operandFieldId: 'amount',
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: StatefulBuilder(
+              builder: (context, setState) => QueryBuilder(
+                schema: schema,
+                state: state,
+                onChanged: (next) => setState(() => state = next),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Half to even'), findsOneWidget);
+    await tester.tap(find.text('Reject inexact'));
+    await tester.pumpAndSettle();
+    expect(state.rounding, RoundingPolicyDto.rejectInexact);
+    expect(
+      _definition(state).query!.shape.aggregation!.rounding,
+      RoundingPolicyDto.rejectInexact,
+    );
+    // The saved-query editor style labels the filter row.
+    expect(find.text('Only records where'), findsOneWidget);
   });
 }

@@ -830,12 +830,6 @@ abstract class AppLocalizations {
   /// **'Max'**
   String get queryAggMax;
 
-  /// Section title
-  ///
-  /// In en, this message translates to:
-  /// **'Query'**
-  String get queryTitle;
-
   /// Label
   ///
   /// In en, this message translates to:
@@ -932,22 +926,22 @@ abstract class AppLocalizations {
   /// **'Y axis'**
   String get queryYAxis;
 
-  /// Label
+  /// Filter field select
   ///
   /// In en, this message translates to:
-  /// **'Filter field (optional)'**
+  /// **'Field'**
   String get queryFilterField;
 
-  /// Label
+  /// Filter operator select
   ///
   /// In en, this message translates to:
-  /// **'Filter operator'**
+  /// **'Operator'**
   String get queryFilterOperator;
 
-  /// Label
+  /// Filter value input
   ///
   /// In en, this message translates to:
-  /// **'Filter value'**
+  /// **'Value'**
   String get queryFilterValue;
 
   /// Operator
@@ -2996,18 +2990,6 @@ abstract class AppLocalizations {
   /// **'Remove query'**
   String get recordsRemoveQuery;
 
-  /// Default saved query name
-  ///
-  /// In en, this message translates to:
-  /// **'Record count'**
-  String get recordsCountQueryName;
-
-  /// Button
-  ///
-  /// In en, this message translates to:
-  /// **'Add record-count query'**
-  String get recordsAddCountQuery;
-
   /// Query usage
   ///
   /// In en, this message translates to:
@@ -3248,12 +3230,6 @@ abstract class AppLocalizations {
   /// **'{description} · all records'**
   String widgetAllRecords(String description);
 
-  /// Dialog title
-  ///
-  /// In en, this message translates to:
-  /// **'Widget order'**
-  String get widgetOrder;
-
   /// Validation
   ///
   /// In en, this message translates to:
@@ -3359,25 +3335,25 @@ abstract class AppLocalizations {
   /// Size hint
   ///
   /// In en, this message translates to:
-  /// **'Small spans one of three dashboard columns at its lowest height.'**
+  /// **'Small spans 1 of 4 columns.'**
   String get widgetSizeSmallHint;
 
   /// Size hint
   ///
   /// In en, this message translates to:
-  /// **'Medium spans one of three dashboard columns.'**
+  /// **'Medium spans 2 of 4 columns.'**
   String get widgetSizeMediumHint;
 
   /// Size hint
   ///
   /// In en, this message translates to:
-  /// **'Large spans two of three dashboard columns.'**
+  /// **'Large spans 3 of 4 columns.'**
   String get widgetSizeLargeHint;
 
   /// Size hint
   ///
   /// In en, this message translates to:
-  /// **'Full spans the whole dashboard row.'**
+  /// **'Full spans all 4 columns.'**
   String get widgetSizeFullHint;
 
   /// Label
@@ -4316,30 +4292,6 @@ abstract class AppLocalizations {
   /// **'This widget could not be rendered: {error}'**
   String widgetCouldNotRender(String error);
 
-  /// Empty state
-  ///
-  /// In en, this message translates to:
-  /// **'No value yet.'**
-  String get widgetNoValue;
-
-  /// Empty state
-  ///
-  /// In en, this message translates to:
-  /// **'No data yet.'**
-  String get widgetNoData;
-
-  /// Empty state
-  ///
-  /// In en, this message translates to:
-  /// **'No observations yet.'**
-  String get widgetNoObservations;
-
-  /// Empty state
-  ///
-  /// In en, this message translates to:
-  /// **'Nothing to chart yet.'**
-  String get widgetNothingToChart;
-
   /// Title fallback
   ///
   /// In en, this message translates to:
@@ -4352,65 +4304,11 @@ abstract class AppLocalizations {
   /// **'Unsupported widget'**
   String get widgetUnsupported;
 
-  /// Unsupported widget key count
-  ///
-  /// In en, this message translates to:
-  /// **'{count, plural, =0{no configuration keys} =1{1 configuration keys} other{{count} configuration keys}}'**
-  String widgetConfigKeys(int count);
-
-  /// Unsupported widget meta line
-  ///
-  /// In en, this message translates to:
-  /// **'Version {version} · {keys}'**
-  String widgetVersionLine(String version, String keys);
-
   /// Unsupported widget explanation
   ///
   /// In en, this message translates to:
   /// **'This widget was created by another device or a newer version. Its configuration is preserved and can be renamed, reordered, or removed.'**
   String get widgetUnsupportedExplanation;
-
-  /// Failure headline
-  ///
-  /// In en, this message translates to:
-  /// **'Newer configuration version'**
-  String get widgetHeadlineNewerConfig;
-
-  /// Failure headline
-  ///
-  /// In en, this message translates to:
-  /// **'Invalid configuration'**
-  String get widgetHeadlineInvalidConfig;
-
-  /// Failure headline
-  ///
-  /// In en, this message translates to:
-  /// **'Query unavailable'**
-  String get widgetHeadlineQueryUnavailable;
-
-  /// Failure headline
-  ///
-  /// In en, this message translates to:
-  /// **'Query result does not fit'**
-  String get widgetHeadlineShapeMismatch;
-
-  /// Failure headline
-  ///
-  /// In en, this message translates to:
-  /// **'Value out of range'**
-  String get widgetHeadlineOverflow;
-
-  /// Failure headline
-  ///
-  /// In en, this message translates to:
-  /// **'Query failed'**
-  String get widgetHeadlineQueryFailed;
-
-  /// Failure headline
-  ///
-  /// In en, this message translates to:
-  /// **'Widget removed'**
-  String get widgetHeadlineRemoved;
 
   /// Typed edits kept
   ///
@@ -4561,6 +4459,60 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Number'**
   String get exprNumber;
+
+  /// Segment: the term is a function (absolute value or division)
+  ///
+  /// In en, this message translates to:
+  /// **'Function'**
+  String get exprFunction;
+
+  /// Function choice
+  ///
+  /// In en, this message translates to:
+  /// **'Divide'**
+  String get exprDivide;
+
+  /// Button appending a term to the formula
+  ///
+  /// In en, this message translates to:
+  /// **'Add term'**
+  String get exprAddTerm;
+
+  /// Drag handle tooltip on a term
+  ///
+  /// In en, this message translates to:
+  /// **'Drag to reorder'**
+  String get exprDragTerm;
+
+  /// Tooltip of ✕ on a term
+  ///
+  /// In en, this message translates to:
+  /// **'Remove term'**
+  String get exprRemoveTerm;
+
+  /// No description provided for @exprCannotAdd.
+  ///
+  /// In en, this message translates to:
+  /// **'Can\'t add a {right} to a {left}.'**
+  String exprCannotAdd(String right, String left);
+
+  /// No description provided for @exprCannotSubtract.
+  ///
+  /// In en, this message translates to:
+  /// **'Can\'t subtract a {right} from a {left}.'**
+  String exprCannotSubtract(String right, String left);
+
+  /// No description provided for @exprCannotMultiply.
+  ///
+  /// In en, this message translates to:
+  /// **'Can\'t multiply a {left} by a {right}.'**
+  String exprCannotMultiply(String left, String right);
+
+  /// No description provided for @exprCannotDivide.
+  ///
+  /// In en, this message translates to:
+  /// **'Can\'t divide a {left} by a {right}.'**
+  String exprCannotDivide(String left, String right);
 
   /// Hint
   ///
@@ -5095,6 +5047,156 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'the header, column “{column}”'**
   String importPlaceHeaderColumn(String column);
+
+  /// Tooltip of a tile's ⋮ button
+  ///
+  /// In en, this message translates to:
+  /// **'Widget actions'**
+  String get widgetMenuTooltip;
+
+  /// Tile menu action
+  ///
+  /// In en, this message translates to:
+  /// **'Remove…'**
+  String get widgetMenuRemove;
+
+  /// Confirm title
+  ///
+  /// In en, this message translates to:
+  /// **'Remove widget “{title}”?'**
+  String widgetRemoveConfirmTitle(String title);
+
+  /// Confirm body
+  ///
+  /// In en, this message translates to:
+  /// **'Its saved query and the records stay.'**
+  String get widgetRemoveConfirmBody;
+
+  /// Confirm safe action
+  ///
+  /// In en, this message translates to:
+  /// **'Keep widget'**
+  String get widgetKeep;
+
+  /// Reorder mode button
+  ///
+  /// In en, this message translates to:
+  /// **'Move up'**
+  String get widgetMoveUp;
+
+  /// Reorder mode button
+  ///
+  /// In en, this message translates to:
+  /// **'Move down'**
+  String get widgetMoveDown;
+
+  /// Drag handle tooltip
+  ///
+  /// In en, this message translates to:
+  /// **'Drag to reorder'**
+  String get widgetDragToReorder;
+
+  /// Empty widget tile
+  ///
+  /// In en, this message translates to:
+  /// **'No records match yet'**
+  String get widgetNoRecordsMatch;
+
+  /// Widget form section heading
+  ///
+  /// In en, this message translates to:
+  /// **'Data'**
+  String get widgetData;
+
+  /// Query source segment
+  ///
+  /// In en, this message translates to:
+  /// **'Define here'**
+  String get widgetDefineHere;
+
+  /// Label above the filter row
+  ///
+  /// In en, this message translates to:
+  /// **'Only records where'**
+  String get queryOnlyRecordsWhere;
+
+  /// Equality operator inside a filter chip
+  ///
+  /// In en, this message translates to:
+  /// **'is'**
+  String get queryOpIs;
+
+  /// Filter condition chip, e.g. Type is headache
+  ///
+  /// In en, this message translates to:
+  /// **'{field} {operator} {value}'**
+  String queryFilterChip(String field, String operator, String value);
+
+  /// Button
+  ///
+  /// In en, this message translates to:
+  /// **'Add filter'**
+  String get queryAddFilter;
+
+  /// Button / tooltip
+  ///
+  /// In en, this message translates to:
+  /// **'Remove filter'**
+  String get queryRemoveFilter;
+
+  /// Button
+  ///
+  /// In en, this message translates to:
+  /// **'Add query'**
+  String get recordsAddQuery;
+
+  /// Query editor title
+  ///
+  /// In en, this message translates to:
+  /// **'New query'**
+  String get queryNewTitle;
+
+  /// Query editor subtitle
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Used by 1 widget · changes apply there too} other{Used by {count} widgets · changes apply there too}}'**
+  String queryUsedByApplies(int count);
+
+  /// Live query result label
+  ///
+  /// In en, this message translates to:
+  /// **'Result now'**
+  String get queryResultNow;
+
+  /// Live result of a series query
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 point} other{{count} points}}'**
+  String queryResultPoints(int count);
+
+  /// Confirm title
+  ///
+  /// In en, this message translates to:
+  /// **'Delete query “{name}”?'**
+  String queryDeleteConfirmTitle(String name);
+
+  /// Confirm body
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 widget uses it and will show an error until you edit it.} other{{count} widgets use it and will show an error until you edit them.}}'**
+  String queryDeleteConfirmBody(int count);
+
+  /// Confirm destructive action
+  ///
+  /// In en, this message translates to:
+  /// **'Delete query'**
+  String get queryDelete;
+
+  /// Confirm safe action
+  ///
+  /// In en, this message translates to:
+  /// **'Keep query'**
+  String get queryKeep;
 }
 
 class _AppLocalizationsDelegate

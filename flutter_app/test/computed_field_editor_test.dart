@@ -4,6 +4,7 @@ import 'package:fi/help_copy.dart';
 import 'package:fi/l10n/l10n.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/theme/nocturne.dart';
+import 'package:fi/widgets/expression_builder.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -154,6 +155,28 @@ Future<String> seedMagnitude(Ledger ledger) =>
       ),
     );
 
+/// Taps "Add term", sets its operator and picks [field] for it.
+Future<void> addTerm(
+  WidgetTester tester,
+  ExprOperator operator,
+  String field,
+) async {
+  await tester.tap(find.byKey(const Key('add-term')));
+  await tester.pumpAndSettle();
+  await pickOperator(tester, operator);
+  await tester.tap(find.byKey(const Key(r'field-$.right')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text(field).last);
+  await settle(tester);
+}
+
+Future<void> pickOperator(WidgetTester tester, ExprOperator operator) async {
+  await tester.tap(find.byKey(const Key('term-operator-1')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text(operator.symbol).last);
+  await tester.pumpAndSettle();
+}
+
 void main() {
   testWidgets('building amount × rate saves the type Rust inferred', (
     tester,
@@ -165,19 +188,13 @@ void main() {
     await settle(tester);
     expect(find.byKey(const Key('computed-editor')), findsOneWidget);
     await tester.enterText(find.byKey(const Key('computed-name')), 'Cost');
-    await tester.tap(find.byKey(const Key(r'add-operator-$')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('operator-multiply')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key(r'field-$.right')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Rate').last);
-    await settle(tester);
+    await addTerm(tester, ExprOperator.multiply, 'Rate');
 
     expect(
       find.text('Result: Decimal, scale 5 · may be empty'),
       findsOneWidget,
     );
+    expect(find.byKey(const Key('computed-result-ok')), findsOneWidget);
     await tester.tap(find.byKey(const Key('save-computed')));
     await settle(tester);
 
@@ -201,17 +218,14 @@ void main() {
       await tester.tap(find.byKey(const Key('add-computed-field')));
       await settle(tester);
       await tester.enterText(find.byKey(const Key('computed-name')), 'Sum');
-      await tester.tap(find.byKey(const Key(r'add-operator-$')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('operator-add')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key(r'field-$.right')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Rate').last);
-      await settle(tester);
+      await addTerm(tester, ExprOperator.add, 'Rate');
 
-      expect(find.byKey(const Key(r'expr-error-$')), findsOneWidget);
-      expect(find.text('arithmetic operands are incompatible'), findsOneWidget);
+      // The error sits on the right-hand term, in words built from both operand types.
+      expect(
+        tester.widget<Text>(find.byKey(const Key('expr-error-term-1'))).data,
+        "Can't add a Decimal, scale 3 to a Decimal, scale 2.",
+      );
+      expect(find.byKey(const Key('computed-result')), findsNothing);
       expect(
         tester
             .widget<FilledButton>(find.byKey(const Key('save-computed')))
@@ -238,13 +252,26 @@ void main() {
 
     await tester.enterText(find.byKey(const Key('computed-name')), 'Size');
     // Replace abs(amount) with amount − 1.00.
-    await tester.tap(find.byKey(const Key(r'unabs-$')));
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const Key('term-kind-0')),
+        matching: find.text('Field'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key(r'field-$')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Amount').last);
     await settle(tester);
-    await tester.tap(find.byKey(const Key(r'add-operator-$')));
+    await tester.tap(find.byKey(const Key('add-term')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('operator-subtract')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Number').last);
+    await pickOperator(tester, ExprOperator.subtract);
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const Key('term-kind-1')),
+        matching: find.text('Number'),
+      ),
+    );
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const Key(r'constant-$.right')), '1');
     await settle(tester);
