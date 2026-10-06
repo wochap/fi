@@ -208,6 +208,15 @@ mode, show its remaining bounded lifetime, list live ephemeral candidates, selec
 the Rust-supplied SAS, and confirm or reject. A rootless device MUST NOT be required to create a local
 dataset in order to reach pairing.
 
+The onboarding surface SHALL be titled "Set up this device" with the line "Your data stays on your
+devices. Pick how this one starts." and SHALL offer two choice cards, each of which is itself the
+action (mock onboarding-first-run): "Create a new dataset" ("Start fresh. You can pair other devices
+later.") and "Join an existing dataset" ("Copy the dataset from one of your other devices."). Choosing
+Join SHALL open a view titled "Join an existing dataset" with the line "Start pairing on the other
+device too. Tap Connect on one device only." and SHALL enter pairing mode at once, without a separate
+start action. That view SHALL offer a way back to the two choices; going back SHALL leave a running
+pairing window open.
+
 #### Scenario: Fresh installation joins instead of creating
 - **WHEN** a device with no local dataset enters pairing mode from onboarding, selects a ready peer,
   and both users confirm matching SAS values
@@ -217,6 +226,11 @@ dataset in order to reach pairing.
 #### Scenario: Pairing surface is shared, not duplicated
 - **WHEN** the same pairing session is presented from onboarding and later from the devices screen
 - **THEN** both render the SAS exactly as supplied by Rust without local computation or reformatting
+
+#### Scenario: Choosing Join starts pairing
+- **WHEN** a rootless device shows the two choices and the user taps "Join an existing dataset"
+- **THEN** the "Join an existing dataset" view is shown and pairing mode is active with its remaining
+  time, without the user pressing a separate start action
 
 ### Requirement: The pairing controller outlives bootstrap transitions
 Pairing state SHALL be owned above the bootstrap-state switch so that an in-flight confirmation is not
@@ -269,7 +283,12 @@ to the user rather than presented as an unexplained disabled control.
 ### Requirement: Onboarding states the preconditions for pairing
 The onboarding surface SHALL state that the peer must already have a dataset, and SHALL state that
 connection is initiated from one device only. Both preconditions SHALL be presented before the user
-can reach the failure they prevent.
+can reach the failure they prevent: on the Join card, as the lines "The other device must already
+have a dataset." and "Start the connection from only one of the two devices."
+
+A both-rootless pairing failure reached from onboarding SHALL replace the Join view with a screen
+titled "Couldn't join" reading "The other device has no dataset yet. Create one there first, or
+create one here." and a "Back" action that returns to the two choices with pairing stopped.
 
 #### Scenario: Two rootless devices attempt to pair
 - **WHEN** a device without a dataset enters pairing mode from onboarding
@@ -280,17 +299,35 @@ can reach the failure they prevent.
 - **WHEN** the onboarding surface presents a selectable candidate
 - **THEN** it states that connection is initiated from one device only
 
+#### Scenario: Back from a both-rootless failure
+- **WHEN** the "Couldn't join" screen is shown and the user taps "Back"
+- **THEN** the two choices are shown, pairing mode is idle, and "Create a new dataset" is available
+
 ### Requirement: Root mismatch is presented as an actionable condition
 A pairing attempt between two devices holding different established roots SHALL be presented as an
 actionable condition that states the cause and offers the dataset reset for this device as the
 resolution. The application MUST NOT present it as a transient failure, offer a retry that cannot
 succeed, or imply that the two roots can be merged.
 
+The condition SHALL be shown as a full screen titled "This device has a different dataset" (mock
+onboarding-dataset-mismatch), wherever the pairing ran. Its body SHALL read "“<name>” uses another
+dataset than this device. Devices can only sync when they share the same one." when the peer's name is
+known, and "The other device uses another dataset than this device. Devices can only sync when they
+share the same one." otherwise, followed by "To join it, reset this device's data first. The
+collections on this device will be deleted; the other device keeps its data." It SHALL offer "Reset
+this device's data…" (secondary), "Pair a different device" and "Back" (primary). Back SHALL return
+to the screen the pairing ran from with pairing idle.
+
 #### Scenario: Devices hold different roots
 - **WHEN** a device with an established root attempts to pair with a device holding a different
   established root
 - **THEN** the failure names the differing-root cause and presents a reset action for this device that
   opens the reset confirmation, alongside the option to pair a different device
+
+#### Scenario: Back from a different dataset
+- **WHEN** the different-dataset screen is shown after pairing from the Devices page and the user taps
+  "Back"
+- **THEN** the Devices page is shown with pairing idle and no retry is offered
 
 ### Requirement: Reset is reachable from the devices surface
 The devices surface SHALL offer a reset action that opens the reset confirmation and, on confirmation, performs the reset and returns the user to onboarding.
@@ -302,6 +339,8 @@ The devices surface SHALL offer a reset action that opens the reset confirmation
 ### Requirement: Fatal bootstrap errors offer reset when reset can resolve them
 The fatal bootstrap-error surface SHALL show a reset action instead of a retry action when the error is classified as reset-resolvable, and SHALL keep the retry action otherwise.
 
+The surface SHALL be titled "Fi couldn't start" (mock startup-errors). For a reset-resolvable error the body SHALL read "This device's local data can't be opened. Retrying won't fix it. Resetting deletes this device's copy; your other devices keep theirs."; otherwise the body SHALL be the localized error text. The surface SHALL NOT show an error code. When Rust supplied its own error text, a "Copy details" action SHALL place that text on the clipboard and confirm the copy, instead of printing it on the surface.
+
 #### Scenario: Unsupported schema version
 - **WHEN** initialization fails because the root's application schema version is unsupported
 - **THEN** the error surface offers "Reset this device's data" and no retry
@@ -309,6 +348,11 @@ The fatal bootstrap-error surface SHALL show a reset action instead of a retry a
 #### Scenario: Locked secure store
 - **WHEN** initialization fails because the secure key store is locked
 - **THEN** the error surface offers retry and no reset
+
+#### Scenario: Copy the technical details
+- **WHEN** the fatal surface is shown for an error that carries Rust's own message and the user taps
+  "Copy details"
+- **THEN** the clipboard holds that message and the copy is confirmed
 
 ### Requirement: Locked secure store is explained with a retry
 When Rust reports that the secure key store is locked, Flutter SHALL show that specific condition — naming the desktop keyring and the action of unlocking it — instead of the generic networking-initialization message, and SHALL offer a retry action that re-runs the failed operation without restarting the application.
@@ -512,3 +556,25 @@ After a failure the dialog SHALL stay open with the typed text kept, so the user
 #### Scenario: Phone
 - **WHEN** the user opens Connect by address from Details on a 390px-wide screen
 - **THEN** it opens as a bottom sheet with the same content and actions
+
+### Requirement: Deferred networking reads as sync being off
+The networking-deferred banner SHALL show a title line and a body (mock startup-errors): keyring locked "Sync is off: the desktop keyring is locked" / "Fi keeps this device's keys in the desktop keyring. Unlock it, then retry. Your data here still works."; keyring unavailable "Sync is off: no keyring is available" / "Install and unlock a desktop keyring (GNOME Keyring or KWallet), then retry."; exhausted ports "Sync is off: UDP <first>–<last> are in use" / "Another program or another copy of Fi is using these ports. Your data here still works." Each SHALL offer "Retry". While the banner is shown, the navigation status SHALL read "Offline" with the cause as its secondary line: "keyring locked", "no keyring" or "ports in use".
+
+#### Scenario: Ports in use at startup
+- **WHEN** the app starts with every port 47380–47389 held by other sockets
+- **THEN** the banner reads "Sync is off: UDP 47380–47389 are in use" with Retry, the collections stay usable below it, and the sidebar status reads "Offline" with "ports in use"
+
+#### Scenario: Retry clears the cause line
+- **WHEN** the user unlocks the keyring and taps Retry on the keyring-locked banner
+- **THEN** the banner disappears and the sidebar status shows the live sync status again
+
+### Requirement: Recovery surfaces are plain and offer an immediate retry
+While a lost or corrupt local copy is being recovered, the app SHALL show "Recovering this device's data" with an indeterminate progress ring and "Fi is getting the dataset back from your other devices. Keep them open." When no trusted device can supply it, the app SHALL show "Recovery needs another device" with "This device's copy of the dataset is damaged. Open Fi on a paired device on the same network to restore it, or reset.", a secondary "Reset this device's data…" that opens the reset confirmation, and a primary "Retry" that dials every trusted, non-revoked device at once. Recovery SHALL still continue on its own when a device appears; creating a new dataset SHALL NOT be offered.
+
+#### Scenario: Retry dials the trusted devices
+- **WHEN** "Recovery needs another device" is shown with two trusted devices and the user taps "Retry"
+- **THEN** an immediate connection attempt is made to both devices and the surface stays until recovery reports progress
+
+#### Scenario: No create fallback
+- **WHEN** "Recovery needs another device" is shown
+- **THEN** no action creates a new dataset
