@@ -363,7 +363,7 @@ When no device is trusted, the "Trusted devices" section SHALL show a dashed emp
 - **THEN** the empty state includes the note that discovery is off and pairing still works, and "Start pairing" is enabled
 
 ### Requirement: Unreachable peer is explained in plain language
-A trusted, non-revoked row whose last connection attempt failed SHALL present the failure as a person-facing state chosen from the typed failure kind, while Sync with paired devices is on (mock 8g):
+A trusted, non-revoked row whose last connection attempt failed SHALL present the failure as a person-facing state chosen from the typed failure kind, while Sync with paired devices is on (mock devices-unreachable):
 - No route: the tag "Not reachable" and the line "Not found on your network".
 - Route, transport or stream failure, or a failure without a kind: the tag "Not reachable" and the line "Didn't answer at its last address".
 - Trust or TLS failure: the tag "Can't verify" and the line "It no longer recognizes this device".
@@ -407,7 +407,7 @@ The tag SHALL use the error style with an icon beside its text, never colour alo
 - **THEN** the tag, the line, the guidance and both buttons show their full Spanish text without overflow
 
 ### Requirement: Connect by address dialog
-"Connect by address…" SHALL open, for one trusted device, a dialog at 720px and wider and a bottom sheet below 720px (mock 8h), holding:
+"Connect by address…" SHALL open, for one trusted device, a dialog at 720px and wider and a bottom sheet below 720px (mock devices-connect-address), holding:
 - The title "Connect by address".
 - The line "Reach <name> directly when it isn't found on the network. It must already be paired."
 - An "Address" field prefilled with the device's last known address, else the endpoint last tried for it, else empty, with the example `192.168.0.165:47380` as its hint, and the help line "Find it on the other device under Settings › About › This device."

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Defines the icon set, the field-type icons, and the small shared marks (clear button, tags, field-status markers, switches, phone touch targets) that every Fi screen uses, so that redesigned screens match `docs/design/fi-redesign`.
+Defines the icon set, the field-type icons, and the small shared marks (clear button, tags, field-status markers, switches, phone touch targets) that every Fi screen uses, so that redesigned screens match `design/project/Fi Redesign.dc.html`.
 
 ## Requirements
 
