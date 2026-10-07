@@ -1,62 +1,74 @@
 /* Nocturne — design-system tokens and component classes. This file is the source of truth for the system's look; retune it here and see readme.md. */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
+/* Color — Catppuccin. Mocha is the default (and the dark theme); Latte is the
+   light theme. The role tokens, neutral ramp, status colors and shadows change
+   per theme; the accent ramps are regenerated in OKLCH from each theme's mauve /
+   lavender on the shared lightness scale (100 lightest, 500 ≈ the accent,
+   900 darkest). Everything else — type, spacing, radii — is theme-independent. */
 :root {
-  --color-bg: #161826;
-  --color-surface: #232532;
-  --color-text: #e9e9ed;
-  --color-accent: #9184d9; /* review round 7 (Barron): the accent moves to
-     the product's blurple — OKLCH hue 289.2, the hue of the app's own Pro
-     accent (#9a8fe0, --om-accent-pro) — at the same lightness the steel
-     accent held (L 0.660, so the documented ratios survive) and chroma
-     in the product blurple's own range (its token sits at C 0.118; the
-     accent takes 0.125, from the old steel's 0.030):
-     the accent now reads as an accent rather than another neutral. */
-  --color-accent-2: #a7a1db; /* the machine-derived stand-in follows: same
-     hue, same L 0.734, chroma at the same 2:3 proportion it held */
-  --color-divider: color-mix(in srgb, #e9e9ed 16%, transparent);
+  color-scheme: dark;
+  --color-bg: #1e1e2e; /* base */
+  --color-surface: #313244; /* surface0 */
+  --color-text: #cdd6f4; /* text */
+  --color-accent: #cba6f7; /* mauve */
+  --color-accent-2: #b4befe; /* lavender */
+  --color-divider: color-mix(in srgb, #585b70 60%, transparent); /* surface2 60% */
+  --color-danger: #f38ba8; /* red */
+  --color-success: #a6e3a1; /* green */
+  --color-warning: #f9e2af; /* yellow */
+  --color-scrim: color-mix(in srgb, #11111b 65%, transparent); /* crust 65% — dialog and sheet backdrops */
 
-  /* Tonal ramps — generated in OKLCH on one shared lightness scale, so the
-     same step of any role matches the others in visual value. */
-  --color-neutral-100: #f3f5fe;
-  --color-neutral-200: #e4e7f5;
-  --color-neutral-300: #cfd3e5;
-  --color-neutral-400: #b2b6ca;
-  --color-neutral-500: #9397ab;
-  --color-neutral-600: #75798c;
-  --color-neutral-700: #595d6c;
-  --color-neutral-800: #3f424d;
-  --color-neutral-900: #292b31;
+  --color-neutral-100: #cdd6f4; /* text */
+  --color-neutral-200: #bac2de; /* subtext1 */
+  --color-neutral-300: #a6adc8; /* subtext0 */
+  --color-neutral-400: #9399b2; /* overlay2 */
+  --color-neutral-500: #7f849c; /* overlay1 */
+  --color-neutral-600: #6c7086; /* overlay0 */
+  --color-neutral-700: #585b70; /* surface2 */
+  --color-neutral-800: #45475a; /* surface1 */
+  --color-neutral-900: #313244; /* surface0 */
 
-  --color-accent-100: #f5f4ff;
-  --color-accent-200: #e7e5fe;
-  --color-accent-300: #d2cefd;
-  --color-accent-400: #b5abfc;
-  --color-accent-500: #968ae0;
-  --color-accent-600: #796cbf;
-  --color-accent-700: #5d5294;
-  --color-accent-800: #423a6a;
-  --color-accent-900: #2b2741;
+  --color-accent-100: #f5eefe;
+  --color-accent-200: #ecddff;
+  --color-accent-300: #d9c2f6;
+  --color-accent-400: #d2b4f6;
+  --color-accent-500: #cba6f7;
+  --color-accent-600: #9377b5;
+  --color-accent-700: #5f4a76;
+  --color-accent-800: #413350;
+  --color-accent-900: #251e2d;
 
-  --color-accent-2-100: #f5f4ff;
-  --color-accent-2-200: #e7e5fe;
-  --color-accent-2-300: #d2cefd;
-  --color-accent-2-400: #b5afe8;
-  --color-accent-2-500: #9690c9;
-  --color-accent-2-600: #7972a9;
-  --color-accent-2-700: #5c5783;
-  --color-accent-2-800: #423e5d;
-  --color-accent-2-900: #2b293a;
+  --color-accent-2-100: #eef1ff;
+  --color-accent-2-200: #dee3fe;
+  --color-accent-2-300: #c4cbf3;
+  --color-accent-2-400: #bcc5f9;
+  --color-accent-2-500: #b4befe;
+  --color-accent-2-600: #7f86b7;
+  --color-accent-2-700: #4d5275;
+  --color-accent-2-800: #35394f;
+  --color-accent-2-900: #1f212d;
 
-  /* Deck section-divider ground — review round 3: saturation as presence.
-     Dividers take a saturated deep indigo (hue 277, the neutral ramp's own
-     family; C 0.094 — written when the accent held C 0.030, before the
-     round-7 blurple raised it past the ground's) with a lighter bloom and
-     a ghost tint of the same hue, while the slide grounds stay
-     desaturated. Deck-scale fills only — not interface colors. */
-  --color-section: #262a60;
-  --color-section-glow: #353b80;
-  --color-section-ghost: #4c5397;
+  /* Theme-relative roles — the step each role points at flips between the
+     themes so one mock reads right on both grounds (100 is always lightest). */
+  --color-accent-fill: var(--color-accent-900);
+  --color-accent-edge: var(--color-accent-700);
+  --color-accent-text: var(--color-accent-300);
+  --color-accent-ink: var(--color-accent-200);
+  --color-accent-ink-strong: var(--color-accent-100);
+  --color-neutral-fill: var(--color-neutral-900);
+  --color-neutral-fill-strong: var(--color-neutral-800);
+  --color-neutral-edge: var(--color-neutral-700);
+  --color-neutral-ghost: var(--color-neutral-600);
+  --color-neutral-muted: var(--color-neutral-500);
+
+  --color-section: #181825; /* mantle */
+  --color-section-glow: #45475a; /* surface1 */
+  --color-section-ghost: #6c7086; /* overlay0 */
+
+  --shadow-sm: 0 0 0 1px #585b70;
+  --shadow-md: 0 0 0 1px #6c7086, 0 6px 18px rgba(0,0,0,0.55);
+  --shadow-lg: 0 0 0 1px #7f849c, 0 16px 40px rgba(0,0,0,0.65);
 
   --font-heading: "Inter", system-ui, sans-serif;
   --font-heading-weight: 500;
@@ -72,12 +84,140 @@
   --radius-sm: 4px;
   --radius-md: 8px;
   --radius-lg: 14px;
+}
 
-  /* Elevation — derived from the ground: soft ink-tinted shadows on a
-     light theme, a hairline edge + ambient darkness on a dark one. */
-  --shadow-sm: 0 0 0 1px #3f424d;
-  --shadow-md: 0 0 0 1px #595d6c, 0 6px 18px rgba(0,0,0,0.55);
-  --shadow-lg: 0 0 0 1px #9397ab, 0 16px 40px rgba(0,0,0,0.65);
+/* Latte — explicit opt-in, or the OS preference when no theme is pinned.
+   Mocha above already governs `prefers-color-scheme: dark` and
+   `[data-theme="dark"]`. */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --color-bg: #eff1f5; /* base */
+  --color-surface: #ccd0da; /* surface0 */
+  --color-text: #4c4f69; /* text */
+  --color-accent: #8839ef; /* mauve */
+  --color-accent-2: #7287fd; /* lavender */
+  --color-divider: color-mix(in srgb, #acb0be 60%, transparent); /* surface2 60% */
+  --color-danger: #d20f39; /* red */
+  --color-success: #40a02b; /* green */
+  --color-warning: #df8e1d; /* yellow */
+  --color-scrim: color-mix(in srgb, #4c4f69 40%, transparent); /* text 40% — dialog and sheet backdrops */
+
+  --color-neutral-100: #eff1f5; /* base */
+  --color-neutral-200: #e6e9ef; /* mantle */
+  --color-neutral-300: #dce0e8; /* crust */
+  --color-neutral-400: #ccd0da; /* surface0 */
+  --color-neutral-500: #bcc0cc; /* surface1 */
+  --color-neutral-600: #acb0be; /* surface2 */
+  --color-neutral-700: #9ca0b0; /* overlay0 */
+  --color-neutral-800: #8c8fa1; /* overlay1 */
+  --color-neutral-900: #7c7f93; /* overlay2 */
+
+  --color-accent-100: #f3effe;
+  --color-accent-200: #e7dfff;
+  --color-accent-300: #d3c3ff;
+  --color-accent-400: #ac83fe;
+  --color-accent-500: #8839ef;
+  --color-accent-600: #743bc7;
+  --color-accent-700: #613ba0;
+  --color-accent-800: #422a6b;
+  --color-accent-900: #251a3c;
+
+  --color-accent-2-100: #eef1fe;
+  --color-accent-2-200: #dce4fe;
+  --color-accent-2-300: #becbff;
+  --color-accent-2-400: #96aaff;
+  --color-accent-2-500: #7287fd;
+  --color-accent-2-600: #596ac6;
+  --color-accent-2-700: #424f91;
+  --color-accent-2-800: #2e3762;
+  --color-accent-2-900: #1b2037;
+
+  /* Theme-relative roles — the step each role points at flips between the
+     themes so one mock reads right on both grounds (100 is always lightest). */
+  --color-accent-fill: var(--color-accent-200);
+  --color-accent-edge: var(--color-accent-400);
+  --color-accent-text: var(--color-accent-700);
+  --color-accent-ink: var(--color-accent-800);
+  --color-accent-ink-strong: var(--color-accent-900);
+  --color-neutral-fill: var(--color-neutral-400);
+  --color-neutral-fill-strong: var(--color-neutral-500);
+  --color-neutral-edge: var(--color-neutral-600);
+  --color-neutral-ghost: var(--color-neutral-700);
+  --color-neutral-muted: var(--color-neutral-800);
+
+  --color-section: #e6e9ef; /* mantle */
+  --color-section-glow: #bcc0cc; /* surface1 */
+  --color-section-ghost: #9ca0b0; /* overlay0 */
+
+  --shadow-sm: 0 0 0 1px #ccd0da;
+  --shadow-md: 0 0 0 1px #bcc0cc, 0 6px 18px rgba(76,79,105,0.14);
+  --shadow-lg: 0 0 0 1px #acb0be, 0 16px 40px rgba(76,79,105,0.20);
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    color-scheme: light;
+    --color-bg: #eff1f5; /* base */
+    --color-surface: #ccd0da; /* surface0 */
+    --color-text: #4c4f69; /* text */
+    --color-accent: #8839ef; /* mauve */
+    --color-accent-2: #7287fd; /* lavender */
+    --color-divider: color-mix(in srgb, #acb0be 60%, transparent); /* surface2 60% */
+    --color-danger: #d20f39; /* red */
+    --color-success: #40a02b; /* green */
+    --color-warning: #df8e1d; /* yellow */
+    --color-scrim: color-mix(in srgb, #4c4f69 40%, transparent); /* text 40% — dialog and sheet backdrops */
+
+    --color-neutral-100: #eff1f5; /* base */
+    --color-neutral-200: #e6e9ef; /* mantle */
+    --color-neutral-300: #dce0e8; /* crust */
+    --color-neutral-400: #ccd0da; /* surface0 */
+    --color-neutral-500: #bcc0cc; /* surface1 */
+    --color-neutral-600: #acb0be; /* surface2 */
+    --color-neutral-700: #9ca0b0; /* overlay0 */
+    --color-neutral-800: #8c8fa1; /* overlay1 */
+    --color-neutral-900: #7c7f93; /* overlay2 */
+
+    --color-accent-100: #f3effe;
+    --color-accent-200: #e7dfff;
+    --color-accent-300: #d3c3ff;
+    --color-accent-400: #ac83fe;
+    --color-accent-500: #8839ef;
+    --color-accent-600: #743bc7;
+    --color-accent-700: #613ba0;
+    --color-accent-800: #422a6b;
+    --color-accent-900: #251a3c;
+
+    --color-accent-2-100: #eef1fe;
+    --color-accent-2-200: #dce4fe;
+    --color-accent-2-300: #becbff;
+    --color-accent-2-400: #96aaff;
+    --color-accent-2-500: #7287fd;
+    --color-accent-2-600: #596ac6;
+    --color-accent-2-700: #424f91;
+    --color-accent-2-800: #2e3762;
+    --color-accent-2-900: #1b2037;
+
+    /* Theme-relative roles — the step each role points at flips between the
+       themes so one mock reads right on both grounds (100 is always lightest). */
+    --color-accent-fill: var(--color-accent-200);
+    --color-accent-edge: var(--color-accent-400);
+    --color-accent-text: var(--color-accent-700);
+    --color-accent-ink: var(--color-accent-800);
+    --color-accent-ink-strong: var(--color-accent-900);
+    --color-neutral-fill: var(--color-neutral-400);
+    --color-neutral-fill-strong: var(--color-neutral-500);
+    --color-neutral-edge: var(--color-neutral-600);
+    --color-neutral-ghost: var(--color-neutral-700);
+    --color-neutral-muted: var(--color-neutral-800);
+
+    --color-section: #e6e9ef; /* mantle */
+    --color-section-glow: #bcc0cc; /* surface1 */
+    --color-section-ghost: #9ca0b0; /* overlay0 */
+
+    --shadow-sm: 0 0 0 1px #ccd0da;
+    --shadow-md: 0 0 0 1px #bcc0cc, 0 6px 18px rgba(76,79,105,0.14);
+    --shadow-lg: 0 0 0 1px #acb0be, 0 16px 40px rgba(76,79,105,0.20);
+  }
 }
 
 body {
@@ -88,6 +228,9 @@ body {
 h1, h2, h3, h4 { font-family: var(--font-heading); font-weight: var(--font-heading-weight); }
 
 .lighten{mix-blend-mode:lighten;background-color:transparent}
+/* On Latte the same wrapper multiplies instead, so a photograph's light values fall away into the page. */
+:root[data-theme="light"] .lighten{mix-blend-mode:multiply}
+@media (prefers-color-scheme: light){ :root:not([data-theme="dark"]) .lighten{mix-blend-mode:multiply} }
 
 /* ══════════════════════════════════════════════════════════════════════════
    Components — built with the tokens above. Plain CSS
@@ -224,9 +367,12 @@ textarea.input { min-height: 90px; resize: vertical; }
   letter-spacing: 0.02em; padding: 3px 10px;
   border-radius: calc(var(--radius-md) * 0.75);
 }
-.tag-accent { background: var(--color-accent-800); color: var(--color-accent-100); }
-.tag-accent-2 { background: var(--color-accent-2-800); color: var(--color-accent-2-100); }
-.tag-neutral { background: var(--color-neutral-800); color: var(--color-neutral-100); }
+.tag-accent { background: var(--color-accent-fill); color: var(--color-accent-ink-strong); }
+.tag-accent-2 { background: var(--color-accent-fill); color: var(--color-accent-ink-strong); }
+.tag-neutral { background: var(--color-neutral-fill-strong); color: var(--color-text); }
+.tag-danger { border: 1px solid var(--color-danger); color: var(--color-danger); }
+.tag-success { background: color-mix(in srgb, var(--color-success) 22%, transparent); color: var(--color-text); }
+.tag-success svg, .tag-success i { color: var(--color-success); }
 .tag-outline { border: 1px solid var(--color-accent); color: var(--color-accent); }
 
 /* — navigation — */
@@ -278,7 +424,7 @@ textarea.input { min-height: 90px; resize: vertical; }
 .dialog-backdrop {
   position: fixed; inset: 0; display: grid; place-items: center;
   padding: var(--space-4);
-  background: color-mix(in srgb, var(--color-neutral-900) 50%, transparent);
+  background: var(--color-scrim);
 }
 .dialog {
   width: min(440px, 100%); display: flex; flex-direction: column; gap: var(--space-3);

@@ -13,4 +13,5 @@ ui-redesign-for-flutter-app
 
 design/**/*.webp
 design/**/*.png
+design/**/*.jpg
 .thumbnail

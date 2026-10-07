@@ -1,0 +1,187 @@
+<!-- @dsCard group="Foundations" name="Color" subtitle="Catppuccin Mocha and Latte side by side — roles, status colors and the tonal ramps" viewport="640x760" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Nocturne — Color</title>
+<link rel="stylesheet" href="../styles.css" />
+<style>
+/* Demo scaffolding only. The two columns re-declare the theme tokens on a scoped
+   container so both themes render on one page; the values are the ones in ../styles.css. */
+.demo { max-width: 1280px; margin: 0 auto; padding: var(--space-6) var(--space-4) var(--space-8); }
+.themes { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: var(--space-4); }
+.theme { padding: var(--space-4); border-radius: var(--radius-lg); background: var(--color-bg); color: var(--color-text); box-shadow: var(--shadow-sm); }
+.demo-head { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.55; margin: var(--space-6) 0 var(--space-3); }
+.row { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.note { font-size: 12px; opacity: 0.7; max-width: 60ch; }
+code { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 0.92em; }
+.swatches { display: flex; gap: var(--space-2); }
+.swc { flex: 1; min-width: 0; }
+.sw { height: 32px; border-radius: var(--radius-sm); border: 1px solid color-mix(in srgb, var(--color-text) 18%, transparent); }
+.swl { font-size: 10px; opacity: 0.6; margin-top: 4px; overflow-wrap: anywhere; }
+.rrow { display: flex; align-items: center; gap: var(--space-3); margin: var(--space-2) 0; }
+.rlabel { flex: none; width: 64px; font-size: 10px; letter-spacing: 0.08em; opacity: 0.5; }
+.ramp { display: flex; gap: 6px; flex: 1; }
+.ramp .sw { flex: 1; height: 22px; }
+.mocha {
+    --color-bg: #1e1e2e; /* base */
+    --color-surface: #313244; /* surface0 */
+    --color-text: #cdd6f4; /* text */
+    --color-accent: #cba6f7; /* mauve */
+    --color-accent-2: #b4befe; /* lavender */
+    --color-divider: color-mix(in srgb, #585b70 60%, transparent); /* surface2 60% */
+    --color-danger: #f38ba8; /* red */
+    --color-success: #a6e3a1; /* green */
+    --color-warning: #f9e2af; /* yellow */
+    --color-scrim: color-mix(in srgb, #11111b 65%, transparent); /* crust 65% — dialog and sheet backdrops */
+
+    --color-neutral-100: #cdd6f4; /* text */
+    --color-neutral-200: #bac2de; /* subtext1 */
+    --color-neutral-300: #a6adc8; /* subtext0 */
+    --color-neutral-400: #9399b2; /* overlay2 */
+    --color-neutral-500: #7f849c; /* overlay1 */
+    --color-neutral-600: #6c7086; /* overlay0 */
+    --color-neutral-700: #585b70; /* surface2 */
+    --color-neutral-800: #45475a; /* surface1 */
+    --color-neutral-900: #313244; /* surface0 */
+
+    --color-accent-100: #f5eefe;
+    --color-accent-200: #ecddff;
+    --color-accent-300: #d9c2f6;
+    --color-accent-400: #d2b4f6;
+    --color-accent-500: #cba6f7;
+    --color-accent-600: #9377b5;
+    --color-accent-700: #5f4a76;
+    --color-accent-800: #413350;
+    --color-accent-900: #251e2d;
+
+    --color-accent-2-100: #eef1ff;
+    --color-accent-2-200: #dee3fe;
+    --color-accent-2-300: #c4cbf3;
+    --color-accent-2-400: #bcc5f9;
+    --color-accent-2-500: #b4befe;
+    --color-accent-2-600: #7f86b7;
+    --color-accent-2-700: #4d5275;
+    --color-accent-2-800: #35394f;
+    --color-accent-2-900: #1f212d;
+
+    /* Theme-relative roles — the step each role points at flips between the
+       themes so one mock reads right on both grounds (100 is always lightest). */
+    --color-accent-fill: var(--color-accent-900);
+    --color-accent-edge: var(--color-accent-700);
+    --color-accent-text: var(--color-accent-300);
+    --color-accent-ink: var(--color-accent-200);
+    --color-accent-ink-strong: var(--color-accent-100);
+    --color-neutral-fill: var(--color-neutral-900);
+    --color-neutral-fill-strong: var(--color-neutral-800);
+    --color-neutral-edge: var(--color-neutral-700);
+    --color-neutral-ghost: var(--color-neutral-600);
+    --color-neutral-muted: var(--color-neutral-500);
+
+    --color-section: #181825; /* mantle */
+    --color-section-glow: #45475a; /* surface1 */
+    --color-section-ghost: #6c7086; /* overlay0 */
+
+    --shadow-sm: 0 0 0 1px #585b70;
+    --shadow-md: 0 0 0 1px #6c7086, 0 6px 18px rgba(0,0,0,0.55);
+    --shadow-lg: 0 0 0 1px #7f849c, 0 16px 40px rgba(0,0,0,0.65);
+}
+.latte {
+    --color-bg: #eff1f5; /* base */
+    --color-surface: #ccd0da; /* surface0 */
+    --color-text: #4c4f69; /* text */
+    --color-accent: #8839ef; /* mauve */
+    --color-accent-2: #7287fd; /* lavender */
+    --color-divider: color-mix(in srgb, #acb0be 60%, transparent); /* surface2 60% */
+    --color-danger: #d20f39; /* red */
+    --color-success: #40a02b; /* green */
+    --color-warning: #df8e1d; /* yellow */
+    --color-scrim: color-mix(in srgb, #4c4f69 40%, transparent); /* text 40% — dialog and sheet backdrops */
+
+    --color-neutral-100: #eff1f5; /* base */
+    --color-neutral-200: #e6e9ef; /* mantle */
+    --color-neutral-300: #dce0e8; /* crust */
+    --color-neutral-400: #ccd0da; /* surface0 */
+    --color-neutral-500: #bcc0cc; /* surface1 */
+    --color-neutral-600: #acb0be; /* surface2 */
+    --color-neutral-700: #9ca0b0; /* overlay0 */
+    --color-neutral-800: #8c8fa1; /* overlay1 */
+    --color-neutral-900: #7c7f93; /* overlay2 */
+
+    --color-accent-100: #f3effe;
+    --color-accent-200: #e7dfff;
+    --color-accent-300: #d3c3ff;
+    --color-accent-400: #ac83fe;
+    --color-accent-500: #8839ef;
+    --color-accent-600: #743bc7;
+    --color-accent-700: #613ba0;
+    --color-accent-800: #422a6b;
+    --color-accent-900: #251a3c;
+
+    --color-accent-2-100: #eef1fe;
+    --color-accent-2-200: #dce4fe;
+    --color-accent-2-300: #becbff;
+    --color-accent-2-400: #96aaff;
+    --color-accent-2-500: #7287fd;
+    --color-accent-2-600: #596ac6;
+    --color-accent-2-700: #424f91;
+    --color-accent-2-800: #2e3762;
+    --color-accent-2-900: #1b2037;
+
+    /* Theme-relative roles — the step each role points at flips between the
+       themes so one mock reads right on both grounds (100 is always lightest). */
+    --color-accent-fill: var(--color-accent-200);
+    --color-accent-edge: var(--color-accent-400);
+    --color-accent-text: var(--color-accent-700);
+    --color-accent-ink: var(--color-accent-800);
+    --color-accent-ink-strong: var(--color-accent-900);
+    --color-neutral-fill: var(--color-neutral-400);
+    --color-neutral-fill-strong: var(--color-neutral-500);
+    --color-neutral-edge: var(--color-neutral-600);
+    --color-neutral-ghost: var(--color-neutral-700);
+    --color-neutral-muted: var(--color-neutral-800);
+
+    --color-section: #e6e9ef; /* mantle */
+    --color-section-glow: #bcc0cc; /* surface1 */
+    --color-section-ghost: #9ca0b0; /* overlay0 */
+
+    --shadow-sm: 0 0 0 1px #ccd0da;
+    --shadow-md: 0 0 0 1px #bcc0cc, 0 6px 18px rgba(76,79,105,0.14);
+    --shadow-lg: 0 0 0 1px #acb0be, 0 16px 40px rgba(76,79,105,0.20);
+}
+</style>
+</head>
+<body>
+<main class="demo">
+<div class="themes">
+<section class="theme mocha">
+  <h5 style="margin:0">Mocha</h5><div class="note" style="margin-bottom:var(--space-3)">Dark — the default. Dark steps (700–900) tint fills; 100–300 carry text on them.</div>
+  <div class="demo-head">Roles</div>
+  <div class="swatches"><div class="swc"><div class="sw" style="background:var(--color-bg)"></div><div class="swl">bg · base</div></div><div class="swc"><div class="sw" style="background:var(--color-surface)"></div><div class="swl">surface · surface0</div></div><div class="swc"><div class="sw" style="background:var(--color-text)"></div><div class="swl">text · text</div></div><div class="swc"><div class="sw" style="background:var(--color-accent)"></div><div class="swl">accent · mauve</div></div><div class="swc"><div class="sw" style="background:var(--color-accent-2)"></div><div class="swl">accent-2 · lavender</div></div></div>
+  <div class="demo-head">Status</div>
+  <div class="swatches"><div class="swc"><div class="sw" style="background:var(--color-danger)"></div><div class="swl">danger · red</div></div><div class="swc"><div class="sw" style="background:var(--color-success)"></div><div class="swl">success · green</div></div><div class="swc"><div class="sw" style="background:var(--color-warning)"></div><div class="swl">warning · yellow</div></div><div class="swc"><div class="sw" style="background:var(--color-section)"></div><div class="swl">section · mantle</div></div></div>
+  <div class="demo-head">Ramps — 100 (light) to 900 (dark)</div>
+  <div class="rrow"><span class="rlabel">Neutral</span><div class="ramp"><div class="sw" title="100" style="background:var(--color-neutral-100)"></div><div class="sw" title="200" style="background:var(--color-neutral-200)"></div><div class="sw" title="300" style="background:var(--color-neutral-300)"></div><div class="sw" title="400" style="background:var(--color-neutral-400)"></div><div class="sw" title="500" style="background:var(--color-neutral-500)"></div><div class="sw" title="600" style="background:var(--color-neutral-600)"></div><div class="sw" title="700" style="background:var(--color-neutral-700)"></div><div class="sw" title="800" style="background:var(--color-neutral-800)"></div><div class="sw" title="900" style="background:var(--color-neutral-900)"></div></div></div><div class="rrow"><span class="rlabel">Accent</span><div class="ramp"><div class="sw" title="100" style="background:var(--color-accent-100)"></div><div class="sw" title="200" style="background:var(--color-accent-200)"></div><div class="sw" title="300" style="background:var(--color-accent-300)"></div><div class="sw" title="400" style="background:var(--color-accent-400)"></div><div class="sw" title="500" style="background:var(--color-accent-500)"></div><div class="sw" title="600" style="background:var(--color-accent-600)"></div><div class="sw" title="700" style="background:var(--color-accent-700)"></div><div class="sw" title="800" style="background:var(--color-accent-800)"></div><div class="sw" title="900" style="background:var(--color-accent-900)"></div></div></div><div class="rrow"><span class="rlabel">Accent 2</span><div class="ramp"><div class="sw" title="100" style="background:var(--color-accent-2-100)"></div><div class="sw" title="200" style="background:var(--color-accent-2-200)"></div><div class="sw" title="300" style="background:var(--color-accent-2-300)"></div><div class="sw" title="400" style="background:var(--color-accent-2-400)"></div><div class="sw" title="500" style="background:var(--color-accent-2-500)"></div><div class="sw" title="600" style="background:var(--color-accent-2-600)"></div><div class="sw" title="700" style="background:var(--color-accent-2-700)"></div><div class="sw" title="800" style="background:var(--color-accent-2-800)"></div><div class="sw" title="900" style="background:var(--color-accent-2-900)"></div></div></div>
+  <div class="demo-head">In use</div>
+  <div class="row"><span class="tag tag-accent">tag-accent</span><span class="tag tag-neutral">tag-neutral</span><span class="tag tag-outline">tag-outline</span><span class="tag tag-danger">tag-danger</span><span class="tag tag-success">tag-success</span></div>
+  <p class="note" style="margin-top:var(--space-3)"><span style="color:var(--color-accent-text)">Accent text at paragraph size</span> uses <code>--color-accent-text</code>; <span style="background:var(--color-accent-fill);color:var(--color-accent-ink);padding:1px 6px;border-radius:4px">fill + ink</span> is <code>--color-accent-fill</code> under <code>--color-accent-ink</code>.</p>
+</section>
+<section class="theme latte">
+  <h5 style="margin:0">Latte</h5><div class="note" style="margin-bottom:var(--space-3)">Light — <code>data-theme="light"</code> or the OS preference. Direction of use inverts: 100–300 tint fills, 700–900 carry text. Numbering never flips.</div>
+  <div class="demo-head">Roles</div>
+  <div class="swatches"><div class="swc"><div class="sw" style="background:var(--color-bg)"></div><div class="swl">bg · base</div></div><div class="swc"><div class="sw" style="background:var(--color-surface)"></div><div class="swl">surface · surface0</div></div><div class="swc"><div class="sw" style="background:var(--color-text)"></div><div class="swl">text · text</div></div><div class="swc"><div class="sw" style="background:var(--color-accent)"></div><div class="swl">accent · mauve</div></div><div class="swc"><div class="sw" style="background:var(--color-accent-2)"></div><div class="swl">accent-2 · lavender</div></div></div>
+  <div class="demo-head">Status</div>
+  <div class="swatches"><div class="swc"><div class="sw" style="background:var(--color-danger)"></div><div class="swl">danger · red</div></div><div class="swc"><div class="sw" style="background:var(--color-success)"></div><div class="swl">success · green</div></div><div class="swc"><div class="sw" style="background:var(--color-warning)"></div><div class="swl">warning · yellow</div></div><div class="swc"><div class="sw" style="background:var(--color-section)"></div><div class="swl">section · mantle</div></div></div>
+  <div class="demo-head">Ramps — 100 (light) to 900 (dark)</div>
+  <div class="rrow"><span class="rlabel">Neutral</span><div class="ramp"><div class="sw" title="100" style="background:var(--color-neutral-100)"></div><div class="sw" title="200" style="background:var(--color-neutral-200)"></div><div class="sw" title="300" style="background:var(--color-neutral-300)"></div><div class="sw" title="400" style="background:var(--color-neutral-400)"></div><div class="sw" title="500" style="background:var(--color-neutral-500)"></div><div class="sw" title="600" style="background:var(--color-neutral-600)"></div><div class="sw" title="700" style="background:var(--color-neutral-700)"></div><div class="sw" title="800" style="background:var(--color-neutral-800)"></div><div class="sw" title="900" style="background:var(--color-neutral-900)"></div></div></div><div class="rrow"><span class="rlabel">Accent</span><div class="ramp"><div class="sw" title="100" style="background:var(--color-accent-100)"></div><div class="sw" title="200" style="background:var(--color-accent-200)"></div><div class="sw" title="300" style="background:var(--color-accent-300)"></div><div class="sw" title="400" style="background:var(--color-accent-400)"></div><div class="sw" title="500" style="background:var(--color-accent-500)"></div><div class="sw" title="600" style="background:var(--color-accent-600)"></div><div class="sw" title="700" style="background:var(--color-accent-700)"></div><div class="sw" title="800" style="background:var(--color-accent-800)"></div><div class="sw" title="900" style="background:var(--color-accent-900)"></div></div></div><div class="rrow"><span class="rlabel">Accent 2</span><div class="ramp"><div class="sw" title="100" style="background:var(--color-accent-2-100)"></div><div class="sw" title="200" style="background:var(--color-accent-2-200)"></div><div class="sw" title="300" style="background:var(--color-accent-2-300)"></div><div class="sw" title="400" style="background:var(--color-accent-2-400)"></div><div class="sw" title="500" style="background:var(--color-accent-2-500)"></div><div class="sw" title="600" style="background:var(--color-accent-2-600)"></div><div class="sw" title="700" style="background:var(--color-accent-2-700)"></div><div class="sw" title="800" style="background:var(--color-accent-2-800)"></div><div class="sw" title="900" style="background:var(--color-accent-2-900)"></div></div></div>
+  <div class="demo-head">In use</div>
+  <div class="row"><span class="tag tag-accent">tag-accent</span><span class="tag tag-neutral">tag-neutral</span><span class="tag tag-outline">tag-outline</span><span class="tag tag-danger">tag-danger</span><span class="tag tag-success">tag-success</span></div>
+  <p class="note" style="margin-top:var(--space-3)"><span style="color:var(--color-accent-text)">Accent text at paragraph size</span> uses <code>--color-accent-text</code>; <span style="background:var(--color-accent-fill);color:var(--color-accent-ink);padding:1px 6px;border-radius:4px">fill + ink</span> is <code>--color-accent-fill</code> under <code>--color-accent-ink</code>.</p>
+</section>
+</div>
+<div class="demo-head">Usage</div>
+<p class="note">Reach for the theme-relative roles first — <code>--color-accent-fill / -edge / -text / -ink / -ink-strong</code> and <code>--color-neutral-fill / -fill-strong / -edge / -ghost / -muted</code> — they point at the right ramp step for the active theme. Use numbered steps only when a value must stay fixed across themes. Status colors are the Catppuccin red, green and yellow; they carry marks, icons and short labels, with body text staying in <code>--color-text</code>. Paragraph-size accent text is <code>--color-accent-text</code> (accent-300 on Mocha, accent-700 on Latte).</p>
+</main>
+</body>
+</html>
