@@ -239,7 +239,7 @@ A Choice value that holds a deleted option SHALL read "<label> (deleted)" in the
 - **THEN** it shows a non-destructive unsupported-field placeholder and preserves the definition
 
 ### Requirement: Generic record CRUD experience
-The generated collection experience SHALL create, edit, view, logically delete, and list records using stable field IDs and typed values obtained through the bridge. Records projected as invalid are incomplete and SHALL be marked in the list without relying on color alone:
+The generated collection experience SHALL create, edit, view, logically delete, clone, and list records using stable field IDs and typed values obtained through the bridge. Records projected as invalid are incomplete and SHALL be marked in the list without relying on color alone:
 
 - At 720px and wider, an incomplete row SHALL show a 2px accent edge at its leading side and a warning icon in its first cell, and each cell of a missing required field SHALL show an accent "Required" tag.
 - Below 720px, an incomplete card SHALL show an outline "Incomplete" tag with a warning icon, and the missing field's line SHALL show a "Needed" marker in place of a value.
@@ -248,9 +248,11 @@ When a collection has incomplete records, a status line under the records SHALL 
 
 Opening an incomplete record SHALL open the record editor scrolled to the first missing required field in form order, with keyboard focus in that field. The field SHALL show the Needed marker and the line "Needed to complete this record". The editor title SHALL add "· N field needed" at 720px and wider. Saving values for every missing field SHALL remove the record's incomplete marks after the projection refreshes.
 
-The new-record editor SHALL be titled "New record" with "in <collection>". At 720px and wider its footer SHALL show "* Required · Ctrl+Enter to save" at the leading edge and Cancel and "Save record" at the trailing edge, and Ctrl+Enter SHALL save. Below 720px it SHALL be the bottom sheet with a close ✕ in the header and a full-width "Save record" footer.
+The new-record editor SHALL be titled "New record" with "in <collection>". At 720px and wider its footer SHALL show "* Required · Ctrl+Enter to save" at the leading edge and Cancel and "Save record" at the trailing edge, and Ctrl+Enter SHALL save. Below 720px it SHALL be the bottom sheet with a close ✕ in the header and a full-width "Save record" footer. When the new-record editor is opened by Clone, it SHALL show the context line "Clone of ‘<title>’" under the header, where <title> is the source record's primary display value; when that value is empty the line SHALL be omitted.
 
-The edit-record editor SHALL be titled "Edit record" with "in <collection> · created <date>" when the record has a creation time, and its primary action SHALL read "Save changes". At 720px and wider a "Delete…" text button SHALL sit at the leading edge of the footer, apart from Cancel and "Save changes". Below 720px a ⋮ in the header SHALL hold Duplicate and "Delete record…", and the footer SHALL hold only "Save changes". Delete SHALL ask for confirmation before logically deleting the record. Duplicate SHALL close the editor and open the new-record editor prefilled with this record's current values, without saving anything until the user saves.
+The edit-record editor SHALL be titled "Edit record" with "in <collection> · created <date>" when the record has a creation time, and its primary action SHALL read "Save changes". At 720px and wider a "Delete…" text button SHALL sit at the leading edge of the footer, apart from Cancel and "Save changes". Below 720px a ⋮ in the header SHALL hold Clone and "Delete record…", and the footer SHALL hold only "Save changes". Delete SHALL ask for confirmation before logically deleting the record. Clone SHALL close the editor and open the new-record editor prefilled with this record's current values, without saving anything until the user saves. Values of removed Choice options SHALL NOT be prefilled.
+
+At 720px and wider, outside selection mode, each record row SHALL end with a ⋯ button labelled "Record actions" in place of a delete icon. Its menu SHALL hold "Clone" and "Delete…". Clone SHALL open the new-record editor prefilled with the row's values, as Clone from the edit-record editor does. Delete… SHALL ask for the same confirmation as the edit-record editor's Delete before logically deleting the record. Below 720px each record card SHALL keep its immediate delete icon and SHALL have no row menu.
 
 #### Scenario: Create Headache record
 - **WHEN** the user completes a schema-generated Headache form
@@ -264,9 +266,17 @@ The edit-record editor SHALL be titled "Edit record" with "in <collection> · cr
 - **WHEN** the user presses "Delete…" in the edit dialog on a 1240px-wide screen and confirms
 - **THEN** the record is logically deleted and the dialog closes; cancelling the confirmation leaves the dialog open with edits intact
 
-#### Scenario: Duplicate on a phone
-- **WHEN** the user chooses Duplicate from the edit sheet's ⋮ on a 390px-wide screen
-- **THEN** the new-record sheet opens holding the same values, and no record is created until the user presses "Save record"
+#### Scenario: Clone on a phone
+- **WHEN** the user chooses Clone from the edit sheet's ⋮ on a 390px-wide screen for the record "Lunch at Nando's"
+- **THEN** the new-record sheet opens holding the same values with the line "Clone of ‘Lunch at Nando's’", and no record is created until the user presses "Save record"
+
+#### Scenario: Clone from the row menu
+- **WHEN** the user opens the ⋯ menu of the row "Lunch at Nando's" on a 1240px-wide screen and chooses "Clone"
+- **THEN** the New record dialog opens prefilled with that row's values, its date included, and shows "Clone of ‘Lunch at Nando's’"
+
+#### Scenario: Delete from the row menu asks first
+- **WHEN** the user chooses "Delete…" from a row's ⋯ menu on a 1240px-wide screen
+- **THEN** the delete confirmation appears, confirming deletes the record, and cancelling leaves it in place
 
 #### Scenario: Invalid record in list
 - **WHEN** the record list on a 1240px-wide screen contains a record with `valid = false` and a missing-required diagnostic for "text multiline"
@@ -324,9 +334,9 @@ Collection and record controllers SHALL react to typed data/projection events by
 - **THEN** its generic record list refreshes without reading Automerge directly
 
 ### Requirement: Multi-select record actions
-The generic collection screen SHALL offer a selection mode in which the user selects multiple records, sees the selected count, and applies a batch delete or a batch edit that sets one active field to one typed value on every selected record. In selection mode the header SHALL become an action bar showing a close action, "N selected", "in <collection>" at 720px and wider, and Select all, "Edit field" and Delete (labelled buttons at 720px and wider, icon buttons below). Selected rows and cards SHALL show the accent tint, an accent outline or leading edge, and a checked box.
+The generic collection screen SHALL offer a selection mode in which the user selects multiple records, sees the selected count, and applies a batch delete, a batch clone, or a batch edit that sets one active field to one typed value on every selected record. In selection mode the header SHALL become an action bar showing a close action, "N selected", "in <collection>" at 720px and wider, and Select all, "Edit field", Clone and Delete (labelled buttons at 720px and wider, icon buttons below). Selected rows and cards SHALL show the accent tint, an accent outline or leading edge, and a checked box.
 
-"Edit field" SHALL open "Edit field on N records" with a Field select and a "New value" input that uses the field's registered record-form control, with the line "Uses the same control as the record form.", and Cancel and Continue. Continue SHALL ask "Set <field> on N records?" with "Every selected record is updated in one step.", Cancel and "Set <field>". Delete SHALL ask "Delete N records?" with "Every selected record is deleted in one step.", "Delete" as a secondary action at the leading edge and "Keep records" as the primary action. Both batch actions SHALL submit a single batch command through the bridge and SHALL report the affected count after success as "Set <field> on N records" or "Deleted N records". Single-record delete from the list SHALL remain immediate with no confirmation. Selection SHALL be cleared after a batch completes and SHALL drop records that disappear from the projected list.
+"Edit field" SHALL open "Edit field on N records" with a Field select and a "New value" input that uses the field's registered record-form control, with the line "Uses the same control as the record form.", and Cancel and Continue. Continue SHALL ask "Set <field> on N records?" with "Every selected record is updated in one step.", Cancel and "Set <field>". Delete SHALL ask "Delete N records?" with "Every selected record is deleted in one step.", "Delete" as a secondary action at the leading edge and "Keep records" as the primary action. Clone SHALL NOT ask for confirmation and SHALL NOT open a form: it SHALL submit one clone-records command for the selected records through the bridge. The batch actions SHALL submit a single batch command through the bridge and SHALL report the affected count after success as "Set <field> on N records", "Deleted N records", or "Cloned N records" ("Cloned 1 record" for one). The Clone feedback SHALL carry an Undo action; Undo SHALL delete exactly the records that clone created, in one batch delete, and SHALL do nothing for clones already deleted. Single-record delete from a phone card SHALL remain immediate with no confirmation. Selection SHALL be cleared after a batch completes and SHALL drop records that disappear from the projected list.
 
 #### Scenario: Enter selection and batch delete
 - **WHEN** the user long-presses a record, selects two more, and taps Delete
@@ -340,21 +350,33 @@ The generic collection screen SHALL offer a selection mode in which the user sel
 - **WHEN** the user selects 4 records, presses "Edit field", chooses the `category` field, enters a value in "New value" with that field's registered editor, presses Continue and confirms "Set category on 4 records?" with "Set category"
 - **THEN** Flutter submits one batch field-set command, the four records show the new value after refresh, and feedback shows "Set category on 4 records"
 
+#### Scenario: Batch clone with undo
+- **WHEN** the user long-presses a record on a 390px-wide screen, selects two more, and taps Clone
+- **THEN** Flutter submits one clone-records command, three new records appear after refresh, the selection is cleared, and feedback shows "Cloned 3 records" with Undo
+
+#### Scenario: Undo a clone
+- **WHEN** the user presses Undo on "Cloned 3 records"
+- **THEN** Flutter submits one batch delete of the three created records and the source records are unchanged
+
+#### Scenario: Clone one record
+- **WHEN** one record is selected and the user presses Clone
+- **THEN** one copy is created and feedback shows "Cloned 1 record" with Undo
+
 #### Scenario: Cancel keeps selection
 - **WHEN** the user dismisses the confirmation dialog
 - **THEN** no command is sent and the selection is unchanged
 
 #### Scenario: Rust rejects the batch
-- **WHEN** the batch is rejected because a selected record was deleted remotely or the value violates the field definition
+- **WHEN** the batch is rejected because a selected record was deleted remotely, a selected record is incomplete and cannot be cloned, or the value violates the field definition
 - **THEN** the screen shows the typed error, no record changes, and the selection is pruned to records still present
 
-#### Scenario: Single delete unchanged
-- **WHEN** the user taps the delete icon on one record outside selection mode
+#### Scenario: Single delete unchanged on a phone
+- **WHEN** the user taps the delete icon on one record card outside selection mode on a 390px-wide screen
 - **THEN** the record is deleted immediately with no confirmation dialog
 
 #### Scenario: Action bar on desktop
 - **WHEN** two records of "pains" are selected on a 1240px-wide screen
-- **THEN** the header reads "2 selected" and "in pains" with "Select all", "Edit field" and "Delete" buttons
+- **THEN** the header reads "2 selected" and "in pains" with "Select all", "Edit field", "Clone" and "Delete" buttons
 
 ### Requirement: Structured computed-field editor
 Flutter SHALL provide a computed-field editor, reachable from the collection's computed-field list for both creating a new field and editing an existing one, that collects a name and a structured expression through a builder limited to source-field references, typed numeric constants, addition, subtraction, multiplication, division with an output scale and rounding policy, and absolute value. The editor SHALL obtain the output type and nullability from Rust inference on every expression change and display them; the user MUST NOT be asked to choose a declared type. When Rust rejects the expression the editor SHALL show the typed error at the offending node and keep the save action disabled. Saving an existing field SHALL issue an in-place update for its stable ID.

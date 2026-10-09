@@ -144,3 +144,26 @@ Every record view returned by the list and get queries SHALL carry the record's 
 #### Scenario: Id without a timestamp
 - **WHEN** a record's id is not a time-ordered id
 - **THEN** its view reports no creation time and the record is still listed
+
+### Requirement: Clone records command
+The application core SHALL provide a command that clones one or more active records of one active collection and returns the new record ids in the order of the source ids. Each clone SHALL receive a fresh time-ordered record id and SHALL hold the source record's current value for every active field of the collection, copied as-is (Date and DateTime values included), with these exceptions: a value of a deleted field SHALL NOT be copied, and a Choice value holding a removed option SHALL be dropped (the field is left without a value). Computed field values SHALL NOT be stored; they are recomputed for the clone. The clones SHALL be written as one atomic record batch of `CreateRecord` members, so every clone is validated with the same rules as record creation against the same snapshot, and a failure of any member SHALL reject the whole command and create no record. The source records MUST NOT be modified. An empty id list, a source id that is not an active record of the collection, or a source id given twice SHALL be rejected before any write.
+
+#### Scenario: Clone three records
+- **WHEN** the command clones three active records of "expenses"
+- **THEN** three new records exist with fresh ids and the sources' values, the root document gains exactly one new change, and subscribers receive one `DataChanged` event for `Records` in "expenses"
+
+#### Scenario: Dates copied as-is
+- **WHEN** a record dated 2026-09-27 is cloned on 2026-10-08
+- **THEN** the clone's date is 2026-09-27 and its creation time is the clone's own creation time
+
+#### Scenario: Removed option dropped
+- **WHEN** an optional Choice field holds the removed option "option 3" and the record is cloned
+- **THEN** the clone has no value for that field and every other value is copied
+
+#### Scenario: Incomplete source rejects the clone
+- **WHEN** one of the selected sources lacks a value for a required field without a default, or its only value for a required Choice field is a removed option
+- **THEN** the command fails with the typed validation error identifying that member, and no record is created
+
+#### Scenario: Sources unchanged
+- **WHEN** a record is cloned
+- **THEN** the source record's field registers and stamps are unchanged
