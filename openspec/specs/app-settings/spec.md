@@ -28,15 +28,16 @@ Settings SHALL be a top-level destination on every platform and at every width. 
 ### Requirement: Settings sections follow platform capabilities
 The app SHALL decide which Settings sections appear from the running platform's capabilities, never from the window width. The capabilities SHALL be replaceable as a whole so tests can present the app as Android or as desktop. Sections SHALL appear in this order, each with its section label:
 - Language: shown on every platform. Its content is defined by the Language section requirement.
+- Appearance: shown on every platform. Its content is defined by the Appearance section requirement.
 - Voice input: shown only when the platform supports on-device voice (Android) and a voice engine is available to the build. Its content is defined by the voice-record-fill capability.
 - Microphone: shown only on Android and only when Voice input is shown. It holds "Microphone access" with the permission state ("Allowed", "Not allowed yet" with "Fi asks the first time you use voice.", "Off" with "Turn it on in Android settings to fill by voice."), and an "Android settings" secondary button with a settings icon that opens this app's Android settings page (mock settings-microphone). The permission state SHALL be shown as an icon beside its text, never by colour alone: a check for "Allowed" (in the accent colour), a dashed circle for "Not allowed yet", and a prohibit sign for "Off". The permission state SHALL be read again when the app returns to the foreground.
 - About: shown on every platform.
 
 No text mentioning Android, and no control that opens Android settings, SHALL appear on a platform other than Android. On a platform other than Android the page header SHALL read "Settings" with the line "Preferences for this computer." under it; on Android the header SHALL read "Settings" alone.
 
-#### Scenario: Desktop shows Language and About
+#### Scenario: Desktop shows Language, Appearance and About
 - **WHEN** the app runs with desktop capabilities, even with a voice engine available, and the user opens Settings on a 1240px-wide screen
-- **THEN** Settings shows "Preferences for this computer.", the Language section and then the About section, and shows no Voice input section, no Microphone section and no "Android settings" button
+- **THEN** Settings shows "Preferences for this computer.", the Language section, the Appearance section and then the About section, and shows no Voice input section, no Microphone section and no "Android settings" button
 
 #### Scenario: Desktop capabilities at phone width
 - **WHEN** the app runs with desktop capabilities and a voice engine available, and the window is 390px wide
@@ -44,11 +45,11 @@ No text mentioning Android, and no control that opens Android settings, SHALL ap
 
 #### Scenario: Android with voice available
 - **WHEN** the app runs with Android capabilities and a voice engine is available
-- **THEN** Settings shows Language, Voice input, Microphone and About in that order
+- **THEN** Settings shows Language, Appearance, Voice input, Microphone and About in that order
 
 #### Scenario: Android without a voice engine
 - **WHEN** the app runs with Android capabilities and no voice engine is available to the build
-- **THEN** Settings shows only Language and About
+- **THEN** Settings shows only Language, Appearance and About
 
 #### Scenario: Permission changed in Android settings
 - **WHEN** the Microphone section shows "Off", the user taps "Android settings", allows the microphone there and returns to the app
@@ -93,6 +94,37 @@ Sizes SHALL come from the model manifest. Where the Voice input section is not s
 #### Scenario: Not now keeps the language
 - **WHEN** the Spanish speech model offer is shown and the user taps "Ahora no"
 - **THEN** the offer closes, the interface stays in Spanish, and the mic in New record leads to the download offer
+
+### Requirement: Appearance section
+The Appearance section SHALL offer three choices: System default, Light and Dark. System default SHALL be the preference on a device that never chose. The System default choice SHALL name the theme the system currently resolves to ("Light" or "Dark"), and SHALL update when the system setting changes while Settings is open. The current preference SHALL be marked. Picking a choice SHALL apply it at once, without closing Settings or losing any screen's state, and SHALL store it on the device only: it is never synced to paired devices and never sent to the core.
+- On a platform other than Android, the section SHALL be one card with the row "Theme", the line "Light or dark. Changes apply right away." under it, and a dropdown showing the current choice. The System default entry SHALL read "System default (<theme>)", for example "System default (Dark)".
+- On Android, the section SHALL be one card holding a radio list with the rows "System default" (with the line "<theme> — same as your phone", for example "Dark — same as your phone"), "Light" and "Dark".
+
+The section label SHALL read "Appearance". In Spanish the copy SHALL read: section "Apariencia", row "Tema", line "Claro u oscuro. Los cambios se aplican al instante.", choices "Predeterminado del sistema (<tema>)" / "Predeterminado del sistema" with "<tema> — igual que tu teléfono", "Claro" and "Oscuro".
+
+#### Scenario: Desktop dropdown
+- **WHEN** the app runs with desktop capabilities, the desktop is set to dark, and the user opens Settings
+- **THEN** the Appearance section shows "Theme", "Light or dark. Changes apply right away." and a dropdown reading "System default (Dark)", whose entries are "System default (Dark)", "Light" and "Dark"
+
+#### Scenario: Android radio list
+- **WHEN** the app runs with Android capabilities, the phone is set to light, and the user opens Settings
+- **THEN** the Appearance section shows the rows "System default" with "Light — same as your phone", "Light" and "Dark", and System default is selected
+
+#### Scenario: Picking Light applies at once
+- **WHEN** the system is dark, the user has text typed in a New record form behind Settings, and picks "Light"
+- **THEN** the app switches to the Latte theme at once, Settings stays open with "Light" selected, and the New record form still holds the typed text when the user returns to it
+
+#### Scenario: Preference survives a restart
+- **WHEN** the user picks "Dark" while the system is light and restarts the app
+- **THEN** the app starts in the Mocha theme and the Appearance section shows "Dark" selected
+
+#### Scenario: Not synced
+- **WHEN** the user picks "Light" on one device that is paired with another
+- **THEN** the other device's Appearance preference and theme are unchanged
+
+#### Scenario: Spanish copy
+- **WHEN** the interface is Spanish, the app runs with Android capabilities, the phone is dark, and the user opens Settings
+- **THEN** the section label reads "Apariencia" and the rows read "Predeterminado del sistema" with "Oscuro — igual que tu teléfono", "Claro" and "Oscuro"
 
 ### Requirement: About section
 The About section SHALL be shown on every platform as one card with these rows in order:

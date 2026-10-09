@@ -153,3 +153,51 @@ The theme color set SHALL provide danger `#f38ba8`, success `#a6e3a1` and warnin
 #### Scenario: Locked keystore
 - **WHEN** the keystore-locked screen is shown
 - **THEN** its status icon is drawn in warning and its explanation in the text color
+
+### Requirement: Light and dark themes
+The app SHALL have two themes taken from the design system's tokens: Mocha, the dark theme, and Latte, the light theme. Every color the app draws SHALL resolve through the active theme's color set, so no screen keeps a color of the other theme after a switch. Each theme-relative role SHALL point at the step the design system names for that theme; on Latte: accent fill → accent-200, accent edge → accent-400, accent text → accent-700, accent ink → accent-800, accent ink strong → accent-900, neutral fill → neutral-400, neutral fill strong → neutral-500, neutral edge → neutral-600, neutral ghost → neutral-700, neutral muted → neutral-800. Latte's base colors SHALL be background `#eff1f5`, surface `#ccd0da`, text `#4c4f69`, accent `#8839ef`, danger `#d20f39`, success `#40a02b`, warning `#df8e1d`, section `#e6e9ef`, and its scrim SHALL be text `#4c4f69` at 40%.
+
+The active theme SHALL be decided by the Appearance preference: Light selects Latte, Dark selects Mocha, and System default selects Latte when the platform reports light and Mocha when it reports dark. The stored preference SHALL be applied before the app's first themed frame, without an animated transition from the other theme. With System default, a change of the platform setting while the app runs SHALL switch the theme without a restart. A switch SHALL keep every screen's state: open sheets and dialogs, form drafts, scroll positions and the selected destination.
+
+#### Scenario: Follows a light phone
+- **WHEN** the Appearance preference is System default and the phone is set to light mode
+- **THEN** the app draws the Latte theme: the page background is `#eff1f5` and body text is `#4c4f69`
+
+#### Scenario: System change while running
+- **WHEN** the Appearance preference is System default, the app shows the Collections page in Mocha, and the user switches the phone to light mode
+- **THEN** the app switches to Latte without restarting and the Collections page keeps its scroll position
+
+#### Scenario: Manual choice overrides the system
+- **WHEN** the Appearance preference is Dark and the phone is set to light mode
+- **THEN** the app draws the Mocha theme
+
+#### Scenario: Roles flip on Latte
+- **WHEN** a voice-filled field is shown on Latte
+- **THEN** its control uses the accent fill (accent-200) as its tint and the accent edge (accent-400) as its border, not the Mocha steps
+
+#### Scenario: Ready tag on Latte
+- **WHEN** Settings shows the voice models card with the "Ready" tag on Latte
+- **THEN** the tag's icon is drawn in the success color `#40a02b` and the word "Ready" is drawn in the text color `#4c4f69`
+
+#### Scenario: Stored choice applies without a fade at start
+- **WHEN** the Appearance preference is Light, the phone is in dark mode, and the app is launched from cold
+- **THEN** the first frame Flutter draws already uses Latte, with no cross-fade from Mocha
+
+#### Scenario: Open form survives a switch
+- **WHEN** the Edit record sheet is open with an unsaved change and the theme switches
+- **THEN** the sheet stays open with the unsaved change in place
+
+### Requirement: Platform chrome follows the theme
+On Android, the window background shown while the app starts SHALL follow the phone's light or dark setting: Latte's background when light, Mocha's background when dark, so no dark frame flashes before a light app and no light frame before a dark one. While the app runs, the status bar and navigation bar icons SHALL follow the active app theme: dark icons on Latte and light icons on Mocha, including when the Appearance preference differs from the phone's setting. The app SHALL NOT set the bar colors; it SHALL draw its own background under the bars and keep its content out of them. On Linux, System default SHALL follow the light or dark brightness that the desktop reports to Flutter, and the Light and Dark choices SHALL apply whatever the desktop reports.
+
+#### Scenario: Light launch on a light phone
+- **WHEN** the phone is in light mode and the app is launched from cold
+- **THEN** the launch background is `#eff1f5` until the first frame
+
+#### Scenario: Bar icons follow a manual choice
+- **WHEN** the phone is in dark mode and the Appearance preference is Light
+- **THEN** the app draws Latte and the status bar and navigation bar icons are dark
+
+#### Scenario: Linux desktop set to dark
+- **WHEN** the app runs on a Linux desktop that reports dark and the Appearance preference is System default
+- **THEN** the app draws Mocha, and picking Light switches it to Latte
