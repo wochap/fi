@@ -886,6 +886,47 @@ void main() {
       await _speak(tester);
       expect(find.text('Nothing matched'), findsOneWidget);
       expect(find.text('Try again'), findsOneWidget);
+      expect(find.byKey(const Key('voice-error-heard')), findsOneWidget);
+      expect(find.text('“hello there”'), findsOneWidget);
+    });
+
+    testWidgets('nothing matched shows what was heard and keeps the form', (
+      tester,
+    ) async {
+      await _openNewRecord(
+        tester,
+        _Harness(
+          script: [const FakeVoiceTurn.nothingMatched('a mount twelve fifty')],
+        ),
+      );
+      await tester.enterText(
+        _inRow('description', find.byType(TextField)),
+        'Kept',
+      );
+      await tester.pump();
+      await _speak(tester);
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('Nothing matched'), findsOneWidget);
+      expect(find.text('HEARD'), findsOneWidget);
+      expect(find.text('“a mount twelve fifty”'), findsOneWidget);
+      expect(find.text('Try again'), findsOneWidget);
+      expect(find.text('Kept'), findsOneWidget);
+    });
+
+    testWidgets('nothing matched without a transcript has no Heard block', (
+      tester,
+    ) async {
+      await _openNewRecord(
+        tester,
+        _Harness(
+          script: [
+            const FakeVoiceTurn.failure(VoiceFailureKind.nothingMatched),
+          ],
+        ),
+      );
+      await _speak(tester);
+      expect(find.text('Nothing matched'), findsOneWidget);
+      expect(find.byKey(const Key('voice-error-heard')), findsNothing);
     });
 
     testWidgets('Try again listens again', (tester) async {
@@ -1029,6 +1070,19 @@ void main() {
       expect(find.text('Se detiene solo tras 30 segundos.'), findsOneWidget);
       await tester.tap(find.byKey(const Key('voice-cancel')));
       await tester.pumpAndSettle();
+    });
+
+    testWidgets('nothing matched shows the transcript in Spanish quotes', (
+      tester,
+    ) async {
+      final harness = _Harness(
+        script: [const FakeVoiceTurn.nothingMatched('un monte doce cincuenta')],
+      );
+      await _openSpanishNewRecord(tester, harness);
+      await _speak(tester);
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('ESCUCHADO'), findsOneWidget);
+      expect(find.text('«un monte doce cincuenta»'), findsOneWidget);
     });
 
     testWidgets('a Spanish turn asks for the rest in Spanish', (tester) async {

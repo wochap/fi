@@ -215,25 +215,39 @@ final class FakeVoiceTurn {
   const FakeVoiceTurn.result(VoiceTurnResult this.result)
     : respond = null,
       failure = null,
-      failAt = FakeFailurePoint.stop;
+      failAt = FakeFailurePoint.stop,
+      transcript = null;
 
   /// A result computed from the turn's request.
   const FakeVoiceTurn.respond(
     VoiceTurnResult Function(VoiceFillRequest request) this.respond,
   ) : result = null,
       failure = null,
-      failAt = FakeFailurePoint.stop;
+      failAt = FakeFailurePoint.stop,
+      transcript = null;
 
+  /// Fails before any transcript exists.
   const FakeVoiceTurn.failure(
     VoiceFailureKind this.failure, {
     this.failAt = FakeFailurePoint.stop,
   }) : result = null,
-       respond = null;
+       respond = null,
+       transcript = null;
+
+  /// Reports [transcript], then fails as nothing matched.
+  const FakeVoiceTurn.nothingMatched(String this.transcript)
+    : result = null,
+      respond = null,
+      failure = VoiceFailureKind.nothingMatched,
+      failAt = FakeFailurePoint.stop;
 
   final VoiceTurnResult? result;
   final VoiceTurnResult Function(VoiceFillRequest request)? respond;
   final VoiceFailureKind? failure;
   final FakeFailurePoint failAt;
+
+  /// The transcript reported before [failure], if any.
+  final String? transcript;
 }
 
 /// Where a scripted failure surfaces: as soon as listening starts, or when it stops.
@@ -352,7 +366,13 @@ final class FakeVoiceEngine implements VoiceEngine {
     _stopLevels();
     final turn = _current;
     await _wait(transcribeDelay);
-    if (turn.failure case final failure?) throw VoiceFailure(failure);
+    if (turn.failure case final failure?) {
+      if (turn.transcript case final transcript?) {
+        onTranscript?.call(transcript);
+        await _wait(fillDelay);
+      }
+      throw VoiceFailure(failure);
+    }
     final result = turn.result ?? turn.respond!(request);
     onTranscript?.call(result.transcript);
     await _wait(fillDelay);

@@ -538,6 +538,7 @@
   "voiceFillingFieldsStep": "Llenando campos…",
   "voiceUsuallySeconds": "Suele tardar 4–8 segundos",
   "voiceHeard": "Escuchado",
+  "voiceQuotedTranscript": "«{transcript}»",
   "voiceHeardCaps": "ESCUCHADO",
   "voiceWhatWasHeard": "Lo que se escuchó",
   "voiceClearField": "Borrar campo",

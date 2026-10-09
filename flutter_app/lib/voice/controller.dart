@@ -66,6 +66,10 @@ class VoiceFillController extends ChangeNotifier with WidgetsBindingObserver {
   VoiceFailureKind? _failure;
   VoiceFailureKind? get failure => _failure;
 
+  /// The transcript of a turn that matched nothing; shown on the Nothing matched panel.
+  String? _failedTranscript;
+  String? get failedTranscript => _failedTranscript;
+
   ProcessingStage stage = ProcessingStage.transcribing;
 
   /// The running turn's transcript, once it exists.
@@ -247,6 +251,7 @@ class VoiceFillController extends ChangeNotifier with WidgetsBindingObserver {
     levels.clear();
     elapsed = Duration.zero;
     pendingTranscript = null;
+    _failedTranscript = null;
     services.models.setVoiceTurnActive(true);
     _set(VoicePhase.listening);
     _elapsedTimer = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -314,11 +319,12 @@ class VoiceFillController extends ChangeNotifier with WidgetsBindingObserver {
       );
     } on VoiceFailure catch (failure) {
       if (token != _turnToken) return;
+      final transcript = pendingTranscript;
       _endTurn();
       if (failure.kind == VoiceFailureKind.cancelled) {
         _set(_resting);
       } else {
-        _fail(failure.kind);
+        _fail(failure.kind, transcript: transcript);
       }
       return;
     }
@@ -346,7 +352,7 @@ class VoiceFillController extends ChangeNotifier with WidgetsBindingObserver {
       turn: heard.length + 1,
     );
     if (outcome.applied.isEmpty) {
-      _fail(VoiceFailureKind.nothingMatched);
+      _fail(VoiceFailureKind.nothingMatched, transcript: result.transcript);
       return;
     }
     heard.add(result.transcript);
@@ -407,20 +413,28 @@ class VoiceFillController extends ChangeNotifier with WidgetsBindingObserver {
 
   // Errors.
 
-  void _fail(VoiceFailureKind kind) {
+  void _fail(VoiceFailureKind kind, {String? transcript}) {
     _failure = kind;
+    _failedTranscript =
+        kind == VoiceFailureKind.nothingMatched &&
+            transcript != null &&
+            transcript.trim().isNotEmpty
+        ? transcript
+        : null;
     _set(VoicePhase.error);
   }
 
   /// Dismiss, or "Not now" on the permission panel.
   void dismissError() {
     _failure = null;
+    _failedTranscript = null;
     _set(_resting);
   }
 
   /// Try again, Speak again, Retry.
   Future<void> retry() async {
     _failure = null;
+    _failedTranscript = null;
     _phase = _resting;
     await begin();
   }
@@ -487,6 +501,7 @@ class VoiceFillController extends ChangeNotifier with WidgetsBindingObserver {
     _endTurn();
     heard.clear();
     pendingTranscript = null;
+    _failedTranscript = null;
     spokenLine = null;
     if (_phase == VoicePhase.speaking) await services.speech.stop();
   }
@@ -502,6 +517,7 @@ class VoiceFillController extends ChangeNotifier with WidgetsBindingObserver {
     services.models.setVoiceTurnActive(false);
     heard.clear();
     pendingTranscript = null;
+    _failedTranscript = null;
     super.dispose();
   }
 }

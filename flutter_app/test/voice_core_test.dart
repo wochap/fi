@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/ui_prefs.dart';
 import 'package:fi/voice/controller.dart';
@@ -493,6 +494,72 @@ void main() {
       addTearDown(c.dispose);
       await turn(tester, c);
       expect(c.failure, VoiceFailureKind.nothingMatched);
+    });
+
+    testWidgets('nothing matched keeps the transcript of an empty patch', (
+      tester,
+    ) async {
+      final c = make([
+        const FakeVoiceTurn.result(
+          VoiceTurnResult(transcript: 'hello', patch: []),
+        ),
+      ]);
+      addTearDown(c.dispose);
+      await turn(tester, c);
+      expect(c.failedTranscript, 'hello');
+      expect(c.pendingTranscript, isNull);
+      c.dismissError();
+      expect(c.failedTranscript, isNull);
+    });
+
+    testWidgets('nothing matched from the engine keeps its transcript', (
+      tester,
+    ) async {
+      final c = make([
+        const FakeVoiceTurn.nothingMatched('a mount twelve fifty'),
+        FakeVoiceTurn.result(lunchResult),
+      ]);
+      addTearDown(c.dispose);
+      await turn(tester, c);
+      expect(c.failure, VoiceFailureKind.nothingMatched);
+      expect(c.failedTranscript, 'a mount twelve fifty');
+      unawaited(c.retry());
+      await tester.pump();
+      expect(c.phase, VoicePhase.listening);
+      expect(c.failedTranscript, isNull);
+      await c.cancel();
+    });
+
+    testWidgets('closing the sheet forgets the failed transcript', (
+      tester,
+    ) async {
+      final c = make([const FakeVoiceTurn.nothingMatched('hello')]);
+      addTearDown(c.dispose);
+      await turn(tester, c);
+      expect(c.failedTranscript, 'hello');
+      await c.discard();
+      expect(c.failedTranscript, isNull);
+    });
+
+    testWidgets('no transcript is kept without one, blank, or other failures', (
+      tester,
+    ) async {
+      for (final script in [
+        [const FakeVoiceTurn.failure(VoiceFailureKind.nothingMatched)],
+        [const FakeVoiceTurn.nothingMatched('   ')],
+        [
+          const FakeVoiceTurn.result(
+            VoiceTurnResult(transcript: '', patch: []),
+          ),
+        ],
+        [const FakeVoiceTurn.failure(VoiceFailureKind.noSpeech)],
+      ]) {
+        final c = make(script);
+        await turn(tester, c);
+        expect(c.phase, VoicePhase.error);
+        expect(c.failedTranscript, isNull);
+        c.dispose();
+      }
     });
 
     testWidgets('cancel while processing leaves the form unchanged', (

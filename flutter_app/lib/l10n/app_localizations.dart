@@ -3326,6 +3326,12 @@ abstract class AppLocalizations {
   /// **'Heard'**
   String get voiceHeard;
 
+  /// A voice transcript in quotes, on the processing panel and the Nothing matched panel's Heard block.
+  ///
+  /// In en, this message translates to:
+  /// **'“{transcript}”'**
+  String voiceQuotedTranscript(String transcript);
+
   /// Heard popover label
   ///
   /// In en, this message translates to:

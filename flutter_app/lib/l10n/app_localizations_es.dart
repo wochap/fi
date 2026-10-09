@@ -2055,6 +2055,11 @@ class AppLocalizationsEs extends AppLocalizations {
   String get voiceHeard => 'Escuchado';
 
   @override
+  String voiceQuotedTranscript(String transcript) {
+    return '«$transcript»';
+  }
+
+  @override
   String get voiceHeardCaps => 'ESCUCHADO';
 
   @override

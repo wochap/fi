@@ -658,7 +658,7 @@ class _VoicePanelState extends State<VoicePanel> {
                 borderRadius: BorderRadius.circular(Nocturne.radiusSm),
               ),
               child: Text(
-                '“$transcript”',
+                context.l10n.voiceQuotedTranscript(transcript),
                 style: const TextStyle(fontSize: 14, height: 1.45),
               ),
             ),
@@ -681,6 +681,43 @@ class _VoicePanelState extends State<VoicePanel> {
       ),
     );
   }
+
+  /// The read-only Heard block of the Nothing matched panel (mock voice-errors).
+  Widget _failedHeard(String transcript) => Container(
+    key: const Key('voice-error-heard'),
+    padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+    decoration: BoxDecoration(
+      color: Nocturne.neutral800,
+      borderRadius: BorderRadius.circular(Nocturne.radius),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: 6,
+      children: [
+        ExcludeSemantics(
+          child: Row(
+            children: [
+              const Icon(FiIcons.voice, size: 12, color: Nocturne.accent),
+              const SizedBox(width: 6),
+              Text(
+                context.l10n.voiceHeardCaps,
+                style: TextStyle(
+                  fontSize: 11,
+                  letterSpacing: .66,
+                  color: Nocturne.muted(.55),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Text(
+          context.l10n.voiceQuotedTranscript(transcript),
+          semanticsLabel: '${context.l10n.voiceHeard}: $transcript',
+          style: const TextStyle(fontSize: 14, height: 1.45),
+        ),
+      ],
+    ),
+  );
 
   Widget _heardToggle() => TextButton.icon(
     key: const Key('voice-heard'),
@@ -948,6 +985,9 @@ class _VoicePanelState extends State<VoicePanel> {
             ],
           ),
           Text(copy.line, style: _muted(.6, 13)),
+          if (kind == VoiceFailureKind.nothingMatched)
+            if (c.failedTranscript case final transcript?)
+              _failedHeard(transcript),
           Wrap(
             alignment: WrapAlignment.end,
             crossAxisAlignment: WrapCrossAlignment.center,

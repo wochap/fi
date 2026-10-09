@@ -2039,6 +2039,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get voiceHeard => 'Heard';
 
   @override
+  String voiceQuotedTranscript(String transcript) {
+    return '“$transcript”';
+  }
+
+  @override
   String get voiceHeardCaps => 'HEARD';
 
   @override

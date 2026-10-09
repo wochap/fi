@@ -2718,6 +2718,15 @@
   "@voiceHeard": {
     "description": "Heard toggle"
   },
+  "voiceQuotedTranscript": "“{transcript}”",
+  "@voiceQuotedTranscript": {
+    "description": "A voice transcript in quotes, on the processing panel and the Nothing matched panel's Heard block.",
+    "placeholders": {
+      "transcript": {
+        "type": "String"
+      }
+    }
+  },
   "voiceHeardCaps": "HEARD",
   "@voiceHeardCaps": {
     "description": "Heard popover label"
