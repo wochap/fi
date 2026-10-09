@@ -12,11 +12,15 @@ Expressions SHALL be represented as versioned serializable structured data conta
 - **THEN** its node kinds, stable field IDs, constants, and numeric policies are preserved
 
 ### Requirement: Typed field access and constants
-Field access SHALL identify source or supported computed fields by stable IDs, and constants SHALL retain explicit Text, Integer, FixedDecimal scale, Boolean, Date, DateTime, Duration, EnumOption, or Null types as applicable.
+Field access SHALL identify source or supported computed fields by stable IDs, and constants SHALL retain explicit Text, Integer, FixedDecimal scale, Boolean, Date, DateTime, Duration, EnumOption, EnumOptionSet, or Null types as applicable. An EnumOptionSet constant SHALL hold option ids of exactly one EnumSet or Enum field.
 
 #### Scenario: Field renamed after expression creation
 - **WHEN** a referenced field is renamed
 - **THEN** the expression continues to resolve the same `FieldId`
+
+#### Scenario: Option set constant
+- **WHEN** an expression holds an EnumOptionSet constant {"work", "urgent"} of the field "tags"
+- **THEN** it round-trips with both option ids and its field
 
 ### Requirement: Static expression validation
 Before a local definition is committed, Rust SHALL resolve referenced fields in the owning collection, infer output type and nullability, and reject missing/deleted fields or operator/type/scale combinations outside the defined language.
@@ -37,10 +41,24 @@ Integer arithmetic and compatible FixedDecimal arithmetic SHALL use checked inte
 - **THEN** evaluation fails rather than truncating or using binary floating-point
 
 ### Requirement: Comparison and boolean semantics
-Equal, NotEqual, GreaterThan, GreaterThanOrEqual, LessThan, and LessThanOrEqual SHALL accept only compatible operand types; And, Or, and Not SHALL accept Boolean operands; and evaluation SHALL be deterministic.
+Equal, NotEqual, GreaterThan, GreaterThanOrEqual, LessThan, and LessThanOrEqual SHALL accept only compatible operand types; And, Or, and Not SHALL accept Boolean operands; and evaluation SHALL be deterministic. Equal and NotEqual SHALL NOT accept an EnumSet operand, and ordering comparisons SHALL NOT accept EnumSet or Enum set operands.
+
+HasAnyOf, HasAllOf and HasNoneOf SHALL take an EnumSet field operand and an EnumOptionSet constant of that field, and SHALL return Boolean: HasAnyOf is true when the record's set shares at least one option with the constant, HasAllOf when it holds every option of the constant, and HasNoneOf when it shares none. A Null (empty) record set SHALL make HasAnyOf and HasAllOf false and HasNoneOf true. IsNull and IsNotNull SHALL test a Choices field for an empty or non-empty set.
 
 #### Scenario: Reject incompatible comparison
 - **WHEN** an expression compares DateTime with Text
+- **THEN** validation rejects the definition before persistence
+
+#### Scenario: Has any of
+- **WHEN** a filter is "tags has any of {work, urgent}" over records holding {"work"}, {"food"} and the empty set
+- **THEN** only the first record matches
+
+#### Scenario: Has all of and has none of
+- **WHEN** records hold {"work", "urgent"}, {"work"} and the empty set
+- **THEN** "has all of {work, urgent}" matches only the first, and "has none of {urgent}" matches the second and the third
+
+#### Scenario: Equality on a set rejected
+- **WHEN** an expression uses Equal with a Choices field operand
 - **THEN** validation rejects the definition before persistence
 
 ### Requirement: Explicit null semantics

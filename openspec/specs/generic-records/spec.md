@@ -5,11 +5,19 @@ TBD: Define generic typed records, authoritative validation, field-granular muta
 ## Requirements
 
 ### Requirement: Generic typed record representation
-Records SHALL use canonical UUIDv7 `RecordId` and `CollectionSchemaId` values, a map from stable `FieldId` to strongly typed `FieldValue`, and logical deletion metadata; the application MUST NOT generate a Rust struct or physical SQLite table per user schema.
+Records SHALL use canonical UUIDv7 `RecordId` and `CollectionSchemaId` values, a map from stable `FieldId` to strongly typed `FieldValue`, and logical deletion metadata; the application MUST NOT generate a Rust struct or physical SQLite table per user schema. `FieldValue` SHALL include an EnumSet variant holding a set of option ids, ordered by the field's option order with the option id as tie-breaker when read. An empty EnumSet value SHALL read as Null.
 
 #### Scenario: Create records for unrelated schemas
 - **WHEN** the user creates Headache and Money Movement records
 - **THEN** both use the same generic record command, authoritative representation, projection, and query path
+
+#### Scenario: Choices value in a record
+- **WHEN** a record is created with the Choices field "tags" set to {"urgent", "work"}
+- **THEN** the record reads "tags" as the set of both option ids in the field's option order
+
+#### Scenario: Empty set is Null
+- **WHEN** an optional Choices field is updated to the empty set
+- **THEN** the record reads that field as Null, and a required Choices field updated to the empty set is rejected with a missing-required issue
 
 ### Requirement: Rust-authoritative record validation
 Before authoritative mutation, Rust SHALL verify that the collection and field are active, value types match definitions, required fields are present, numeric ranges hold, enum options are active members (except that an existing record may keep a removed option it already holds, as long as the command does not newly set it), relative Date defaults resolve from the record's creation day, defaults are valid, and FixedDecimal representations use the field's scale. Validation SHALL report every issue it finds rather than stopping at the first, and each issue SHALL carry the ids of the fields it concerns, a stable code, and a safe message that contains no ids.

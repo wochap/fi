@@ -60,3 +60,22 @@ The application SHALL document that HLC provides causal monotonicity and determi
 #### Scenario: Offline clock skew
 - **WHEN** concurrent offline writes have different physical clock readings and no causal relationship
 - **THEN** the defined HLC ordering determines the winner consistently without claiming knowledge of actual human edit order
+
+### Requirement: Per-option membership registers for Choices
+A Choices (EnumSet) record value SHALL be stored as one LWW register per option under the record's values, keyed by the field id and the option id, whose payload states whether the option is in the set. Each register SHALL carry its own HLC stamp and SHALL be decoded by enumerating all conflicting candidates and selecting the greatest stamp, as for any register. Writing a set SHALL write a register only for options whose membership changes, all under the command's stamp. The set SHALL be the options whose winning register says present. A record that still holds a single-value register for the field from before a Choice → Choices conversion SHALL read that register as membership of its option at its stamp (a Null register as no member), combined with the per-option registers by greatest stamp per option.
+
+#### Scenario: Concurrent different options compose
+- **WHEN** a record holds {"food"}, Device A adds "work" and Device B adds "urgent" while disconnected, then they sync
+- **THEN** both devices read {"food", "work", "urgent"}
+
+#### Scenario: Concurrent same option resolves by HLC
+- **WHEN** a record holds {"food"}, Device A removes "food", and Device B removes "food" and then adds it back with a stamp greater than A's, both offline
+- **THEN** after sync every device reads {"food"}, because B's register for "food" has the greater stamp
+
+#### Scenario: Concurrent add and remove of different options
+- **WHEN** Device A removes "food" and Device B adds "work" from {"food"} while disconnected
+- **THEN** after sync every device reads {"work"}
+
+#### Scenario: Legacy Choice value after conversion
+- **WHEN** a record holds the single-value register "food" from before the field became Choices, and a later write adds "work"
+- **THEN** the record reads {"food", "work"}

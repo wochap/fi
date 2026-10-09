@@ -89,15 +89,15 @@ Removing a field SHALL always ask first, from every entry point: the delete icon
 
 Schema metadata that holds a value of the field's own type — the default and the minimum and maximum bounds — SHALL be edited with the same typed control the record editor uses for that type, never as the raw stored integer, and each such control SHALL offer an explicit unset state because the slot is optional whatever the field requires of records. Changing the field type or the decimal scale SHALL clear those slots rather than reinterpret them.
 
-Every field kind SHALL be shown to the user by a human label — Text, Integer, Decimal, Boolean, Date, Date & time, Duration, Choice — in the type selector, in the field list, and in any other place a kind is named. Generated identifiers such as `enum_` or `fixedDecimal` MUST NOT appear in the UI.
+Every field kind SHALL be shown to the user by a human label — Text, Integer, Decimal, Boolean, Date, Date & time, Duration, Choice, Choices (Spanish "Opciones") — in the type selector, in the field list, and in any other place a kind is named. Generated identifiers such as `enum_` or `fixedDecimal` MUST NOT appear in the UI.
 
-When the kind is Choice, the field editor SHALL show an inline options section listing the option labels in order with add, rename, remove, and drag reorder. Edits to options SHALL be held in the editor and committed on Save together with the field, for a new field and for an existing one alike; Cancel SHALL discard them. The default selector for a Choice field SHALL offer the options currently held in the editor, including ones not yet saved.
+When the kind is Choice or Choices, the field editor SHALL show an inline options section listing the option labels in order with add, rename, remove, and drag reorder. Edits to options SHALL be held in the editor and committed on Save together with the field, for a new field and for an existing one alike; Cancel SHALL discard them. The default selector for a Choice field SHALL offer the options currently held in the editor, including ones not yet saved. The default of a Choices field SHALL be picked with the same Choices control the record editor uses ("A set of options, picked on new records."), offering the same options. In a Choices field an option label containing `;` SHALL show an inline error and disable Save.
 
 On Save the editor SHALL submit the field definition, then the option changes as individual option commands (create, rename or reorder, remove), then, when the chosen default is an option created by this save, a second field update carrying the option ID returned for it. Options left unchanged SHALL NOT be resubmitted.
 
-At 720px and wider the schema editor SHALL be the side sheet headed by "<collection> · N fields" and "Collection schema". It SHALL list fields as rows with a drag handle, the field-type icon in a tile, the name with the required mark, a short summary (for example "Integer · 5–30", "Integer · 0–10 · slider" for an Integer shown as a slider, "Text · multiline", "Choice · stomachache, headache"), and a trailing chevron; hovering a row SHALL reveal a delete icon before the chevron. Below the rows a dashed secondary "Add field" button SHALL open the "New field" inline panel; editing an existing field SHALL open as an inline panel in the sheet. The footer SHALL read "Drag to reorder · click a field to edit" with Done. Below 720px the schema editor SHALL be a sheet of rows at least 52px tall, each with the field-type icon in a tile and ending in a chevron, followed by a dashed "Add field" button and a footer reading "Long-press to reorder" with Done. Tapping a row SHALL push a field screen titled with the field name and "Field in <collection>", with a back action, a ⋮ menu holding Delete field, and a "Save field" footer. "Add field" SHALL push the same screen titled "New field" with an "Add field" footer.
+At 720px and wider the schema editor SHALL be the side sheet headed by "<collection> · N fields" and "Collection schema". It SHALL list fields as rows with a drag handle, the field-type icon in a tile, the name with the required mark, a short summary (for example "Integer · 5–30", "Integer · 0–10 · slider" for an Integer shown as a slider, "Text · multiline", "Choice · stomachache, headache", "Choices · work, urgent, food"), and a trailing chevron; hovering a row SHALL reveal a delete icon before the chevron. Below the rows a dashed secondary "Add field" button SHALL open the "New field" inline panel; editing an existing field SHALL open as an inline panel in the sheet. The footer SHALL read "Drag to reorder · click a field to edit" with Done. Below 720px the schema editor SHALL be a sheet of rows at least 52px tall, each with the field-type icon in a tile and ending in a chevron, followed by a dashed "Add field" button and a footer reading "Long-press to reorder" with Done. Tapping a row SHALL push a field screen titled with the field name and "Field in <collection>", with a back action, a ⋮ menu holding Delete field, and a "Save field" footer. "Add field" SHALL push the same screen titled "New field" with an "Add field" footer.
 
-The field editor SHALL present the type as a grid of eight tiles in two rows of four, each with the type icon and human label. The type SHALL be fixed once the field exists, and the other tiles SHALL be shown disabled. Below the type the editor SHALL show option chips for the chosen type: Required for every type; Multiline and Length limits for Text; Range for Integer, Decimal and Duration; Show as slider for Integer; Date range for Date and Date & time; Default value for every type. Each chip SHALL have its `?` help button directly beside it in the chip row, whether the chip is on or off. A chip that is on SHALL show a check and open its settings block under the chips, headed by the chip's name with a ✕ that turns the chip off and clears its settings. Length limits SHALL show Min characters and Max characters side by side. Range and Date range SHALL show their two bounds side by side, labelled Earliest and Latest for dates. A Choice field SHALL always show its options section.
+The field editor SHALL present the type as a grid of nine tiles in three rows of three, with Choices directly after Choice, each with the type icon and human label. The type SHALL be fixed once the field exists, and the other tiles SHALL be shown disabled, except that an existing Choice field SHALL keep the Choices tile enabled and an existing Choices field SHALL keep the Choice tile enabled. Picking it SHALL keep the options and convert the default (one option becomes a set of one; a set of one becomes that option; a larger set clears the default). Saving a Choices → Choice change that Rust rejects because records hold two or more options SHALL keep the editor open with the line "<N> records hold more than one choice. Edit them first." Below the type the editor SHALL show option chips for the chosen type: Required for every type, with the helper "Required means at least one option is picked." for Choices; Multiline and Length limits for Text; Range for Integer, Decimal and Duration; Show as slider for Integer; Date range for Date and Date & time; Default value for every type. Each chip SHALL have its `?` help button directly beside it in the chip row, whether the chip is on or off. A chip that is on SHALL show a check and open its settings block under the chips, headed by the chip's name with a ✕ that turns the chip off and clears its settings. Length limits SHALL show Min characters and Max characters side by side. Range and Date range SHALL show their two bounds side by side, labelled Earliest and Latest for dates. A Choice or Choices field SHALL always show its options section.
 
 The editor SHALL check the default against the other settings while the user types: a Text default outside the length limits SHALL show a counter such as "2 / 4–8" and the line "Default must be 4–8 characters." under it, a default outside the range SHALL show the range it must fall in, and the save action SHALL be disabled while such a line is shown.
 
@@ -135,7 +135,7 @@ Each option row SHALL have a drag handle, the label as an editable input, and a 
 
 #### Scenario: Kind labels are human
 - **WHEN** the user opens the type selector or reads the field list
-- **THEN** kinds read Text, Integer, Decimal, Boolean, Date, Date & time, Duration, and Choice, and a Choice row summarizes its options
+- **THEN** kinds read Text, Integer, Decimal, Boolean, Date, Date & time, Duration, Choice, and Choices, and Choice and Choices rows summarize their options
 
 #### Scenario: Type grid and chips for a Date field
 - **WHEN** the user adds a field named "due" and picks the Date tile
@@ -151,7 +151,7 @@ Each option row SHALL have a drag handle, the label as an editable input, and a 
 
 #### Scenario: Type fixed for an existing field
 - **WHEN** the user opens an existing Date field
-- **THEN** the Date tile is selected and the other seven tiles are disabled
+- **THEN** the Date tile is selected and the other eight tiles are disabled
 
 #### Scenario: Field screen on a phone
 - **WHEN** the user taps the "due" row in the schema sheet on a 390px-wide screen
@@ -209,6 +209,18 @@ Each option row SHALL have a drag handle, the label as an editable input, and a 
 - **WHEN** the user opens the field editor for a Text field
 - **THEN** a `?` button sits beside each of the Required, Multiline, Length limits and Default value chips, and tapping the one beside Required opens the Required help without turning the chip on
 
+#### Scenario: Create a Choices field
+- **WHEN** the user picks the Choices tile, adds options "work", "urgent", "food", picks "work" and "urgent" as the default, and taps Save
+- **THEN** a Choices field is created with the three options and the default {"work", "urgent"}, and the field list shows "Choices · work, urgent, food"
+
+#### Scenario: Turn a Choice field into Choices
+- **WHEN** the user opens an existing Choice field with default "food", picks the Choices tile and saves
+- **THEN** the field becomes Choices with the same options and the default {"food"}
+
+#### Scenario: Choices back to Choice blocked
+- **WHEN** the user switches an existing Choices field to Choice and saves while 3 records hold two or more options
+- **THEN** the editor stays open with "3 records hold more than one choice. Edit them first." and the field is unchanged
+
 ### Requirement: Registry-driven field rendering
 A Flutter field renderer registry SHALL map supported field kinds to editor and display components, and generic forms MUST NOT use domain-specific Headache or Money implementations.
 
@@ -217,14 +229,15 @@ The record editor SHALL lay fields out with labels beside the controls in a 140p
 - An Integer with the slider flag uses the slider.
 - A required Boolean uses a switch; an optional Boolean uses a Yes / No segmented choice that can be cleared.
 - A Choice with 2–4 active options uses a segmented choice. With 5–10 active options it uses a select that opens a dropdown at 720px and wider and a picker sheet titled with the field name, with a Clear action when optional, below 720px. With more than 10 active options it uses a search input that filters by substring and highlights the match, opening in place at 720px and wider and as a full-height search sheet with a back action, the option count and Clear below 720px.
+- A Choices field uses wrapping toggle chips, each showing a check icon when on, with up to 4 active options. With 5–10 active options it uses a field showing the picked labels, or "N picked" when they don't fit, with a Clear action when optional, that opens a sheet titled with the field name holding one checkbox row per active option and a Done action. With more than 10 active options the sheet adds a search input that filters by substring.
 - Date and Date & time use the picker input.
 - Duration uses the duration input.
 
-A Choice value that holds a deleted option SHALL read "<label> (deleted)" in the record editor and in record lists, and the deleted option SHALL NOT be offered in any Choice control for picking.
+A Choice value or a Choices member that holds a deleted option SHALL read "<label> (deleted)" in the record editor and in record lists, and the deleted option SHALL NOT be offered in any Choice or Choices control for picking. Unpicking a deleted member SHALL remove it from the set, and it SHALL NOT be offered again.
 
 #### Scenario: Render supported controls
-- **WHEN** a schema contains Text, Integer, FixedDecimal, Boolean, Date, DateTime, Duration, and Enum fields
-- **THEN** the generic form renders the registered text, numeric, decimal, switch or segmented boolean, picker, duration, and choice controls
+- **WHEN** a schema contains Text, Integer, FixedDecimal, Boolean, Date, DateTime, Duration, Enum, and EnumSet fields
+- **THEN** the generic form renders the registered text, numeric, decimal, switch or segmented boolean, picker, duration, choice, and choices controls
 
 #### Scenario: Choice control follows the option count
 - **WHEN** a form has Choice fields with 3, 7 and 48 active options on a 390px-wide screen
@@ -237,6 +250,14 @@ A Choice value that holds a deleted option SHALL read "<label> (deleted)" in the
 #### Scenario: Unsupported future field type
 - **WHEN** a device reads a field type it cannot render
 - **THEN** it shows a non-destructive unsupported-field placeholder and preserves the definition
+
+#### Scenario: Choices control follows the option count
+- **WHEN** a form has Choices fields with 3, 7 and 48 active options on a 390px-wide screen
+- **THEN** the first is a row of toggle chips, the second is a field that opens a checkbox sheet with Done, and the third opens the same sheet with a search input
+
+#### Scenario: Picked labels or a count
+- **WHEN** a Choices field with 7 options has "work" and "urgent" picked and both labels fit
+- **THEN** the field reads "work, urgent", and when the picked labels don't fit it reads "3 picked"
 
 ### Requirement: Generic record CRUD experience
 The generated collection experience SHALL create, edit, view, logically delete, clone, and list records using stable field IDs and typed values obtained through the bridge. Records projected as invalid are incomplete and SHALL be marked in the list without relying on color alone:
@@ -306,6 +327,7 @@ At 720px and wider the records SHALL be shown as a table:
 - The first column SHALL stay pinned at the leading edge while the other columns, of equal fixed width, scroll horizontally.
 - A "Scroll for more columns →" hint SHALL be shown while columns are hidden past the trailing edge, and the trailing edge SHALL fade into the background.
 - Empty cells SHALL read "—" at reduced opacity.
+- A Choices value SHALL show its picked labels as small tags in the field's option order; the tags that don't fit SHALL collapse into one "+N" tag. The same SHALL apply to Choices values on mobile cards.
 - The header row SHALL stay visible while the rows scroll vertically.
 
 Below 720px each record SHALL be a card showing up to its first three active fields in form order, each with its type icon, name and value, followed by "+ N more fields · <creation date>" when more fields exist, or by the creation date alone. The records section SHALL read "Newest first".
@@ -325,6 +347,10 @@ Below 720px each record SHALL be a card showing up to its first three active fie
 #### Scenario: Mobile card
 - **WHEN** a record with nine fields created on 22 Sep 2026 is listed on a 390px-wide screen
 - **THEN** its card shows the first three fields with type icons and ends with "+ 6 more fields · Sep 22, 2026"
+
+#### Scenario: Choices tags in a row
+- **WHEN** a record's "tags" holds five options and only three tags fit the column
+- **THEN** the cell shows the first three tags and "+2"
 
 ### Requirement: Reactive projection refresh
 Collection and record controllers SHALL react to typed data/projection events by rereading SQLite-backed queries, and stream lag SHALL recover through a complete refresh.
@@ -694,3 +720,21 @@ These rules SHALL apply in both the layout below 720px and the layout at 720px a
 #### Scenario: Pushed screens close first
 - **WHEN** the record editor is open over a collection and the user presses system back
 - **THEN** the record editor closes (after its close confirmation when it shows one) and the collection stays open
+
+### Requirement: Query builder operators for Choices
+When a filter row in the query builder uses a Choices field, it SHALL offer the operators "has any of", "has all of", "has none of", "is empty" and "is not empty". The first three SHALL take a multi-pick of the field's active options and SHALL be submitted as HasAnyOf, HasAllOf and HasNoneOf with an EnumOptionSet constant; "is empty" and "is not empty" SHALL be submitted as IsNull and IsNotNull and take no value. Equality and ordering operators SHALL NOT be offered for a Choices field.
+
+#### Scenario: Filter on tags
+- **WHEN** the user adds a filter on "tags", picks "has any of", and picks "work" and "urgent"
+- **THEN** the saved query holds HasAnyOf of "tags" with the set {"work", "urgent"}
+
+#### Scenario: Empty check
+- **WHEN** the user picks "is empty" for "tags"
+- **THEN** no option pick is shown and the saved query holds IsNull of "tags"
+
+### Requirement: Record clone copies Choices sets
+Cloning a record SHALL copy a Choices value without its removed options; a set left empty SHALL be copied as no value.
+
+#### Scenario: Clone drops removed members
+- **WHEN** a record holding {"work", "urgent"} is cloned after "urgent" was removed
+- **THEN** the new record form holds {"work"}

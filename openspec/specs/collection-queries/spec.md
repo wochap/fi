@@ -89,3 +89,14 @@ A query definition that becomes invalid through concurrency or unsupported versi
 #### Scenario: Referenced field concurrently removed
 - **WHEN** a query and field removal merge into an invalid definition
 - **THEN** the query remains inspectable, reports the missing field, and unrelated collection queries still execute
+
+### Requirement: Grouping by a Choices field
+A query SHALL accept a Choices field as a grouping key. Each record SHALL contribute to the group of every option in its set, and a record with an empty set SHALL contribute to the Null group. Groups SHALL be ordered by the field's option order with the option id as tie-breaker, and a removed option SHALL form its own group under its last label. Aggregations SHALL be computed per group over the records in that group, so group totals may add up to more than the ungrouped total.
+
+#### Scenario: Record counted in each group
+- **WHEN** Sum of amount is grouped by "tags" over a record "Lunch" 12.50 holding {"food", "work"} and a record 5.00 holding {"food"}
+- **THEN** the result is food 17.50 and work 12.50
+
+#### Scenario: Empty set in the Null group
+- **WHEN** Count is grouped by "tags" and one record has an empty set
+- **THEN** that record is counted in the Null group only

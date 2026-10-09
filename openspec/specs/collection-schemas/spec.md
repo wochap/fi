@@ -23,7 +23,9 @@ Every field and enum option SHALL have a globally unique stable ID independent o
 - **THEN** records referencing its `EnumOptionId` display the new label without changing their stored value
 
 ### Requirement: Supported field definitions
-Field definitions SHALL support Text, Integer, FixedDecimal with scale, Boolean, Date, DateTime, Duration, and Enum types plus requiredness, optional default, applicable validation metadata, display metadata, deterministic order, and logical deletion. Multiline text SHALL be represented as Text display metadata. A slider presentation SHALL be represented as Integer display metadata and SHALL be valid only when the field declares both a minimum and a maximum. A slider MAY carry a positive whole-number step as Integer display metadata; a definition without a step SHALL read as step 1. Display metadata SHALL be forward compatible: a definition missing a display flag SHALL read as that flag unset, and a definition missing the step SHALL read as step 1.
+Field definitions SHALL support Text, Integer, FixedDecimal with scale, Boolean, Date, DateTime, Duration, Enum (shown as "Choice") and EnumSet (shown as "Choices") types plus requiredness, optional default, applicable validation metadata, display metadata, deterministic order, and logical deletion. Multiline text SHALL be represented as Text display metadata. A slider presentation SHALL be represented as Integer display metadata and SHALL be valid only when the field declares both a minimum and a maximum. A slider MAY carry a positive whole-number step as Integer display metadata; a definition without a step SHALL read as step 1. Display metadata SHALL be forward compatible: a definition missing a display flag SHALL read as that flag unset, and a definition missing the step SHALL read as step 1.
+
+An EnumSet field SHALL carry an option list with the same structure and rules as an Enum field (stable option ids, labels, order, logical removal). Its value SHALL be a set of that field's option ids. Its default, when present, SHALL be a non-empty set of active options of the field. A required EnumSet field SHALL be satisfied only by a set holding at least one option. An option label of an EnumSet field SHALL NOT contain the character `;`.
 
 A Date field MAY declare a relative default: a signed whole number of days added to the record's creation day. A field SHALL NOT declare both a fixed default and a relative default, and a relative default SHALL be rejected on any type other than Date. The relative default SHALL be stored so that a device that does not know it reads the field as having no default rather than failing to read the schema.
 
@@ -59,6 +61,18 @@ A Date field MAY declare a relative default: a signed whole number of days added
 - **WHEN** a field definition stored with the slider flag but without any step entry is read
 - **THEN** it parses with step 1 and no malformed diagnostic
 
+#### Scenario: Choices field round-trips
+- **WHEN** an EnumSet field "tags" with options "work", "urgent", "food" and default {"work"} is created on one device
+- **THEN** another device reads the same field type, options in order, and default set
+
+#### Scenario: Semicolon in a Choices label
+- **WHEN** an option labelled "food; drinks" is added to, or an option is renamed to it in, an EnumSet field
+- **THEN** the command returns a typed validation error naming the option label and commits nothing
+
+#### Scenario: Choices default with a removed option
+- **WHEN** an EnumSet field's default names an option that is removed or not of that field
+- **THEN** the command returns a typed validation error naming the default and commits nothing
+
 ### Requirement: Schema validation before mutation
 Rust application-core commands SHALL validate names, field types, scale bounds, defaults, min/max constraints, enum membership metadata, display metadata applicability, slider step, duplicate identities, and command targets before committing authoritative schema changes. A slider step SHALL be rejected when it is zero, when it is present without the slider flag, or when it does not divide the distance between the maximum and the minimum exactly.
 
@@ -91,16 +105,18 @@ Rust application-core commands SHALL validate names, field types, scale bounds, 
 - **THEN** the command accepts the definition and the slider offers exactly the values 1 and 5
 
 ### Requirement: Safe schema evolution
-Schema commands SHALL support collection create, rename, logical delete, field add/update/logical removal/reorder, and enum option maintenance. A field base type or FixedDecimal scale MUST NOT change once active records contain a value for that field. A required constraint MAY be introduced or a default removed while active records lack the field; the command SHALL be accepted, and each active record lacking the field SHALL be projected as invalid with a typed missing-required diagnostic until it is repaired or the constraint is relaxed. When the field carries a default, the default SHALL continue to satisfy the constraint for records lacking the field.
+Schema commands SHALL support collection create, rename, logical delete, field add/update/logical removal/reorder, and enum option maintenance. A field base type or FixedDecimal scale MUST NOT change once active records contain a value for that field, except between Enum and EnumSet as stated below. A required constraint MAY be introduced or a default removed while active records lack the field; the command SHALL be accepted, and each active record lacking the field SHALL be projected as invalid with a typed missing-required diagnostic until it is repaired or the constraint is relaxed. When the field carries a default, the default SHALL continue to satisfy the constraint for records lacking the field.
 
-Removing an enum option SHALL be accepted whether or not active records hold it. Records that hold a removed option SHALL keep that value, SHALL remain valid, and SHALL read the option's last label; the option SHALL no longer be accepted as a new value.
+An Enum field SHALL be convertible to EnumSet whether or not active records hold values; each record value `X` SHALL then read as the set {`X`}, a Null value as the empty set, and the field's default `X` as the default {`X`}. The conversion SHALL be rejected when any active option label contains `;`. An EnumSet field SHALL be convertible to Enum only while no active record holds two or more options; the conversion SHALL rewrite each active record holding one option to that option and each empty set to Null in the same change, and a default of one option SHALL become that option. A conversion blocked by a record holding two or more options SHALL return a typed error naming the field and the number of such records.
+
+Removing an enum option SHALL be accepted whether or not active records hold it. Records that hold a removed option SHALL keep that value, SHALL remain valid, and SHALL read the option's last label; the option SHALL no longer be accepted as a new value. This SHALL apply to both Enum values and members of EnumSet values.
 
 #### Scenario: Remove field logically
 - **WHEN** a populated field is removed
 - **THEN** the field is hidden from ordinary editing while its definition and existing authoritative record values remain recoverable
 
 #### Scenario: Unsafe type change
-- **WHEN** a user attempts to change the type or decimal scale of a populated field
+- **WHEN** a user attempts to change the type or decimal scale of a populated field, other than between Choice and Choices
 - **THEN** Rust rejects the command without modifying the schema
 
 #### Scenario: Required introduced over records lacking the field
@@ -118,6 +134,22 @@ Removing an enum option SHALL be accepted whether or not active records hold it.
 #### Scenario: Invalid record repaired
 - **WHEN** a record marked invalid for a missing required field receives a value for that field through an ordinary field update
 - **THEN** the record is projected as valid with no missing-required diagnostic
+
+#### Scenario: Choice converted to Choices
+- **WHEN** a Choice field "category" is converted to Choices while records hold "food", "transport" and Null
+- **THEN** the command commits and those records read {"food"}, {"transport"} and the empty set
+
+#### Scenario: Choices to Choice blocked
+- **WHEN** a Choices field is converted to Choice while 3 active records hold two or more options
+- **THEN** Rust rejects the command with a typed error naming the field and 3 records, and nothing changes
+
+#### Scenario: Choices to Choice allowed
+- **WHEN** a Choices field is converted to Choice while every active record holds at most one option
+- **THEN** the command commits in one change and each record holds its single option, or Null for an empty set
+
+#### Scenario: Removed option in a set
+- **WHEN** the option "urgent" is removed while a record holds {"work", "urgent"}
+- **THEN** the record keeps both, stays valid, reads "urgent" with its last label, and a new set holding "urgent" is rejected
 
 ### Requirement: Deterministic schema ordering
 Fields and enum options SHALL have explicit order metadata and SHALL be presented using the stable ID as a final tie-breaker so concurrent reorder operations converge deterministically.
@@ -193,3 +225,10 @@ The core SHALL define one text grammar for durations and expose parsing and form
 #### Scenario: Round trip
 - **WHEN** 5430250 milliseconds is formatted and the result is parsed
 - **THEN** the text is "1h 30m 30s 250ms" and parsing returns 5430250
+
+### Requirement: Cloning remaps Choices sets
+The structure-only collection clone and the JSON collection import SHALL rewrite every option id inside EnumSet defaults and EnumSet constants in expressions to the fresh option identities, as they do for Enum options.
+
+#### Scenario: Clone a Choices default
+- **WHEN** a collection whose EnumSet field has default {"work"} and a saved query filtering "has any of {urgent}" is cloned
+- **THEN** the cloned default and the cloned filter constant name only the cloned options, and evaluating the cloned query succeeds with no dangling-reference diagnostic

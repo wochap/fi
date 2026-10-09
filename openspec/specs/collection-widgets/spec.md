@@ -127,3 +127,14 @@ Each saved-query row in the queries dialog SHALL show a tag with the type of the
 #### Scenario: Add query opens the editor
 - **WHEN** the user taps "Add query"
 - **THEN** the query editor opens with an empty name, and nothing is created until the user saves
+
+### Requirement: Overlap note for Choices grouping
+A widget whose query groups by a Choices field SHALL show the muted note "Groups overlap: a record counts in each of its choices." under its content, in English and in its Spanish translation. Widgets grouped by any other key SHALL NOT show the note.
+
+#### Scenario: Grouped by Choices
+- **WHEN** a bar widget shows Sum of amount grouped by "tags", a Choices field
+- **THEN** the widget shows "Groups overlap: a record counts in each of its choices."
+
+#### Scenario: Grouped by Choice
+- **WHEN** a widget groups by a Choice field
+- **THEN** no overlap note is shown

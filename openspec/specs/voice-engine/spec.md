@@ -54,10 +54,10 @@ The engine SHALL transcribe a turn's audio on the device, with no network use, u
 ### Requirement: Schema-constrained filling
 The engine SHALL build, for each collection schema, a grammar that only allows a JSON array of patch entries. Each entry SHALL hold:
 - `field`: one of the collection's active, non-computed field names;
-- `value`: a string span, `true`, `false` or `null`;
+- `value`: a string span, `true`, `false`, `null`, or, for a Choices field only, an array of one or more string spans;
 - `evidence`: a string.
 
-No field SHALL appear twice, and there SHALL be at most one entry per field. For each Choice field the value SHALL be constrained to its active option labels or `null`. The grammar SHALL be compiled once per schema version and reused, whatever the turn's language.
+No field SHALL appear twice, and there SHALL be at most one entry per field. For each Choice field the value SHALL be constrained to its active option labels or `null`. For each Choices field the value SHALL be constrained to an array of distinct active option labels of that field, or `null`. The grammar SHALL be compiled once per schema version and reused, whatever the turn's language.
 
 The prompt SHALL list the fields compactly with type, required flag, options and the values already in the draft, SHALL include today's local date and weekday, and SHALL instruct the model to use `null` for anything not said and to copy evidence words from the transcript. For a Spanish turn the prompt SHALL also state that the transcript is in Spanish and that values and evidence must be copied in Spanish exactly as spoken, without translating. Generation SHALL use greedy sampling, the model's thinking or reasoning mode SHALL be off, and output SHALL be capped at 256 tokens.
 
@@ -72,6 +72,10 @@ The prompt SHALL list the fields compactly with type, required flag, options and
 #### Scenario: Spanish prompt
 - **WHEN** a Spanish turn is filled
 - **THEN** the prompt states that the transcript is Spanish and asks for values and evidence copied without translation, and an English turn's prompt has no such line
+
+#### Scenario: Choices labels constrained
+- **WHEN** the engine fills “tags work and urgent” against a schema with a Choices field "tags" holding "work", "urgent" and "food"
+- **THEN** the output entry for "tags" is an array of labels of that field only, and the patch value is the set {"work", "urgent"}
 
 ### Requirement: Deterministic value normalization
 The engine SHALL convert each entry's value span into the field's typed value with deterministic rules of the turn's language, not with the model.
@@ -246,3 +250,14 @@ It SHALL not run in the default test suite. The acceptance bar SHALL be at least
 #### Scenario: Spanish evaluation
 - **WHEN** the evaluation is run for Spanish
 - **THEN** it fills the Spanish utterance set as Spanish turns and reports the same figures against the same bar
+
+### Requirement: Choices values in the patch
+For a Choices field, the engine SHALL map each label of the array to its option id, drop duplicates, and return the set as the entry's typed value. The evidence check SHALL apply to the whole entry: the evidence must occur in the transcript and every label span must occur within the evidence, after the same normalization as other entries. A Choices entry SHALL replace the field's set when applied, following the same overwrite rules as any other entry.
+
+#### Scenario: Labels not in the evidence
+- **WHEN** the transcript is “tags work” and the model returns ["work", "urgent"] with evidence “tags work”
+- **THEN** the entry is removed because “urgent” is not within the evidence
+
+#### Scenario: Spanish Choices
+- **WHEN** a Spanish turn says “etiquetas trabajo y urgente” for a Choices field with options "trabajo" and "urgente"
+- **THEN** the patch sets that field to {"trabajo", "urgente"}
