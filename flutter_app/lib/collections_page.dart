@@ -774,8 +774,25 @@ class CollectionsPage extends StatelessWidget {
                     selectedIds: controller.selectedRecordIds,
                     onOpen: (record) => _openRecord(context, schema, record),
                     onToggle: controller.toggleSelected,
-                    onDelete: (record) =>
-                        unawaited(controller.deleteRecord(record.id)),
+                    onClone: (record) => unawaited(
+                      _recordEditor(
+                        context,
+                        schema,
+                        null,
+                        null,
+                        _cloneValues(fields, (id) => _recordValue(record, id)),
+                        _cloneTitle(
+                          context,
+                          fields,
+                          (id) => _recordValue(record, id),
+                        ),
+                      ),
+                    ),
+                    onDelete: (record) async {
+                      if (await _confirmRecordDelete(context)) {
+                        await controller.deleteRecord(record.id);
+                      }
+                    },
                   ),
                 ),
               ),
@@ -1893,6 +1910,7 @@ class CollectionsPage extends StatelessWidget {
 
     void edit() => unawaited(_batchEdit(context, schema));
     void delete() => unawaited(_batchDelete(context));
+    void clone() => unawaited(_batchClone(context));
     return Container(
       padding: const EdgeInsets.fromLTRB(4, 6, 12, 6),
       decoration: BoxDecoration(
@@ -1949,6 +1967,14 @@ class CollectionsPage extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             OutlinedButton.icon(
+              key: const Key('selection-clone'),
+              style: outlined,
+              onPressed: count == 0 ? null : clone,
+              icon: const Icon(FiIcons.copy),
+              label: Text(l.recordsClone),
+            ),
+            const SizedBox(width: 8),
+            OutlinedButton.icon(
               key: const Key('batch-delete'),
               style: outlined,
               onPressed: count == 0 ? null : delete,
@@ -1968,6 +1994,13 @@ class CollectionsPage extends StatelessWidget {
               style: onAccent,
               onPressed: count == 0 ? null : edit,
               icon: const Icon(FiIcons.edit),
+            ),
+            IconButton(
+              key: const Key('selection-clone'),
+              tooltip: l.recordsClone,
+              style: onAccent,
+              onPressed: count == 0 ? null : clone,
+              icon: const Icon(FiIcons.copy),
             ),
             IconButton(
               key: const Key('batch-delete'),
@@ -2023,6 +2056,34 @@ class CollectionsPage extends StatelessWidget {
     } catch (_) {
       // The typed error is already on the controller's banner and the
       // selection has been pruned, so the user can retry from what is left.
+    }
+  }
+
+  /// Clones the whole selection in one batch, without a form or confirmation, and offers Undo,
+  /// which deletes exactly the created copies.
+  Future<void> _batchClone(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final l = context.l10n;
+    final width = MediaQuery.sizeOf(context).width;
+    try {
+      final created = await controller.cloneSelected();
+      showOutcomeToastOn(
+        messenger,
+        l,
+        width,
+        l.recordsClonedSnack(created.length),
+        success: true,
+        action: SnackBarAction(
+          key: const Key('undo-clone'),
+          label: l.commonUndo,
+          onPressed: () => unawaited(
+            controller.undoClone(created).catchError((Object _) {}),
+          ),
+        ),
+      );
+    } catch (_) {
+      // The typed error is already on the controller's banner and the
+      // selection has been pruned.
     }
   }
 
@@ -2155,13 +2216,15 @@ class CollectionsPage extends StatelessWidget {
   }
 
   /// A dialog on a wide screen; on a phone, a bottom sheet with large inputs (mocks record-form-empty, record-form-errors, record-form-edit).
-  /// [prefill] opens a new record holding those values instead of the defaults (Duplicate).
+  /// [prefill] opens a new record holding those values instead of the defaults (Clone), and
+  /// [cloneOf] is the cloned record's title for the "Clone of ‘…’" line.
   Future<void> _recordEditor(
     BuildContext context,
     CollectionSchemaDto schema, [
     RecordDto? existing,
     String? focusFieldId,
     Map<String, FieldValueDto>? prefill,
+    String? cloneOf,
   ]) {
     // The sheet is its own route, so the shell's voice scope is carried into it.
     final voice = VoiceScope.scopeOf(context);
@@ -2176,9 +2239,12 @@ class CollectionsPage extends StatelessWidget {
           existing: existing,
           focusFieldId: focusFieldId,
           prefill: prefill,
-          onDuplicate: (values) {
+          cloneOf: cloneOf,
+          onClone: (values, title) {
             if (context.mounted) {
-              unawaited(_recordEditor(context, schema, null, null, values));
+              unawaited(
+                _recordEditor(context, schema, null, null, values, title),
+              );
             }
           },
         ),
@@ -2531,7 +2597,8 @@ class _RecordEditorForm extends StatefulWidget {
     this.existing,
     this.focusFieldId,
     this.prefill,
-    this.onDuplicate,
+    this.cloneOf,
+    this.onClone,
   });
 
   final CollectionsController controller;
@@ -2541,11 +2608,16 @@ class _RecordEditorForm extends StatefulWidget {
   /// The field to scroll to and focus on open: an incomplete record's first missing one.
   final String? focusFieldId;
 
-  /// A new record's values in place of the defaults, from Duplicate.
+  /// A new record's values in place of the defaults, from Clone.
   final Map<String, FieldValueDto>? prefill;
 
-  /// Opens a new-record editor holding these values, after this editor has closed.
-  final ValueChanged<Map<String, FieldValueDto>>? onDuplicate;
+  /// The cloned record's title, shown as "Clone of ‘<title>’"; null omits the line.
+  final String? cloneOf;
+
+  /// Opens a new-record editor holding these values (and the source's title), after this
+  /// editor has closed.
+  final void Function(Map<String, FieldValueDto> values, String? title)?
+  onClone;
 
   @override
   State<_RecordEditorForm> createState() => _RecordEditorFormState();
@@ -2859,27 +2931,8 @@ class _RecordEditorFormState extends State<_RecordEditorForm> {
   /// Asks, then logically deletes the record and closes the editor. Cancelling keeps the editor
   /// open with its edits.
   Future<void> _delete() async {
-    final l = context.l10n;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialog) => AlertDialog(
-        title: Text(l.recordDeleteTitle),
-        content: Text(l.recordDeleteBody),
-        actions: [
-          TextButton(
-            key: const Key('dismiss-record-delete'),
-            onPressed: () => Navigator.pop(dialog, false),
-            child: Text(l.commonCancel),
-          ),
-          FilledButton(
-            key: const Key('confirm-record-delete'),
-            onPressed: () => Navigator.pop(dialog, true),
-            child: Text(l.commonDelete),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
+    final confirmed = await _confirmRecordDelete(context);
+    if (!confirmed || !mounted) return;
     try {
       await widget.controller.deleteRecord(widget.existing!.id);
       if (mounted) Navigator.pop(context);
@@ -2888,22 +2941,13 @@ class _RecordEditorFormState extends State<_RecordEditorForm> {
     }
   }
 
-  /// Closes this editor and opens a new record holding the current values, except removed
-  /// options, which a new record can't pick.
-  void _duplicate() {
-    bool removed(FieldDefinitionDto field, FieldValueDto value) =>
-        value.kind == FieldValueKindDto.enum_ &&
-        field.enumOptions.any(
-          (option) => option.id == value.textValue && option.deleted,
-        );
-    final copy = <String, FieldValueDto>{};
-    for (final field in fields) {
-      final value = values[field.id];
-      if (value == null || value.kind == FieldValueKindDto.null_) continue;
-      if (!removed(field, value)) copy[field.id] = value;
-    }
+  /// Closes this editor and opens a new record holding the current values (see
+  /// [_cloneValues]).
+  void _clone() {
+    final copy = _cloneValues(fields, (id) => values[id]);
+    final title = _cloneTitle(context, fields, (id) => values[id]);
     Navigator.pop(context);
-    widget.onDuplicate?.call(copy);
+    widget.onClone?.call(copy, title);
   }
 
   String _contextLabel(AppLocalizations l) {
@@ -3001,10 +3045,10 @@ class _RecordEditorFormState extends State<_RecordEditorForm> {
           ? const []
           : [
               FormMenuAction(
-                key: const Key('record-duplicate'),
-                label: l.collectionsDuplicate,
+                key: const Key('record-clone'),
+                label: l.recordsClone,
                 icon: FiIcons.copy,
-                onPressed: _duplicate,
+                onPressed: _clone,
               ),
               FormMenuAction(
                 key: const Key('record-delete-menu'),
@@ -3019,46 +3063,49 @@ class _RecordEditorFormState extends State<_RecordEditorForm> {
               count: withErrors.length,
               onShow: () => _focusField(withErrors.first.id),
             ),
-      body: RecordFormBody(
-        rows: [
-          for (final field in fields)
-            RecordFormRow(
-              key: ValueKey('record-field-${field.id}'),
-              id: field.id,
-              name: field.name,
-              required: FieldRendererRegistry.marksRequired(field),
-              defaulted: _defaulted.contains(field.id),
-              needed: _stillNeeded(field.id),
-              voiceFilled: voice?.draftState.of(field.id).isVoice ?? false,
-              onVoiceChip: voice == null
-                  ? null
-                  : () => voice.openEvidence(field.id),
-              voiceNeeded: voice?.isNeeded(field.id) ?? false,
-              belowLabel: _evidence(voice, field.id),
-              control: Focus(
-                focusNode: _focusGroups[field.id],
-                child: KeyedSubtree(
-                  key: _fieldKeys[field.id],
+      body: _withCloneLine(
+        existing == null ? widget.cloneOf : null,
+        RecordFormBody(
+          rows: [
+            for (final field in fields)
+              RecordFormRow(
+                key: ValueKey('record-field-${field.id}'),
+                id: field.id,
+                name: field.name,
+                required: FieldRendererRegistry.marksRequired(field),
+                defaulted: _defaulted.contains(field.id),
+                needed: _stillNeeded(field.id),
+                voiceFilled: voice?.draftState.of(field.id).isVoice ?? false,
+                onVoiceChip: voice == null
+                    ? null
+                    : () => voice.openEvidence(field.id),
+                voiceNeeded: voice?.isNeeded(field.id) ?? false,
+                belowLabel: _evidence(voice, field.id),
+                control: Focus(
+                  focusNode: _focusGroups[field.id],
                   child: KeyedSubtree(
-                    key: ValueKey(_revisions[field.id] ?? 0),
-                    child: const FieldRendererRegistry().editor(
-                      field,
-                      values[field.id],
-                      (value) => _changed(field.id, value),
-                      errors: issues.fieldLines(
-                        context.l10n,
-                        field.id,
-                        field: field,
-                        decimalSeparator: decimalSeparatorOf(context),
+                    key: _fieldKeys[field.id],
+                    child: KeyedSubtree(
+                      key: ValueKey(_revisions[field.id] ?? 0),
+                      child: const FieldRendererRegistry().editor(
+                        field,
+                        values[field.id],
+                        (value) => _changed(field.id, value),
+                        errors: issues.fieldLines(
+                          context.l10n,
+                          field.id,
+                          field: field,
+                          decimalSeparator: decimalSeparatorOf(context),
+                        ),
+                        quickFill: true,
+                        showLabel: false,
                       ),
-                      quickFill: true,
-                      showLabel: false,
                     ),
                   ),
                 ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
       errors: issues.formLines(context.l10n),
       primaryLabel: existing == null ? l.recordSave : l.recordSaveChanges,
@@ -3066,6 +3113,92 @@ class _RecordEditorFormState extends State<_RecordEditorForm> {
       onPrimary: voice?.busy ?? false ? null : _save,
     );
   }
+}
+
+/// [body] under the muted "Clone of ‘<title>’" line, or [body] alone without a title.
+Widget _withCloneLine(String? title, Widget body) {
+  if (title == null || title.isEmpty) return body;
+  return Builder(
+    builder: (context) => Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          context.l10n.recordsCloneOf(title),
+          key: const Key('record-clone-of'),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(fontSize: 12, color: Nocturne.muted(.55)),
+        ),
+        const SizedBox(height: 12),
+        body,
+      ],
+    ),
+  );
+}
+
+/// A clone's starting values: every value of [fields], except empty ones and removed Choice
+/// options, which a new record can't pick.
+Map<String, FieldValueDto> _cloneValues(
+  List<FieldDefinitionDto> fields,
+  FieldValueDto? Function(String fieldId) valueOf,
+) {
+  bool removed(FieldDefinitionDto field, FieldValueDto value) =>
+      value.kind == FieldValueKindDto.enum_ &&
+      field.enumOptions.any(
+        (option) => option.id == value.textValue && option.deleted,
+      );
+  final copy = <String, FieldValueDto>{};
+  for (final field in fields) {
+    final value = valueOf(field.id);
+    if (value == null || value.kind == FieldValueKindDto.null_) continue;
+    if (!removed(field, value)) copy[field.id] = value;
+  }
+  return copy;
+}
+
+/// A record's title, as the list shows it: its first field's display text, or null when that
+/// is empty.
+String? _cloneTitle(
+  BuildContext context,
+  List<FieldDefinitionDto> fields,
+  FieldValueDto? Function(String fieldId) valueOf,
+) {
+  final first = fields.firstOrNull;
+  if (first == null) return null;
+  final text = const FieldRendererRegistry().displayText(
+    first,
+    valueOf(first.id),
+    human: true,
+    l: context.l10n,
+    decimalSeparator: decimalSeparatorOf(context),
+  );
+  return text == null || text.trim().isEmpty ? null : text;
+}
+
+/// Asks before a record is logically deleted; true when the user confirms.
+Future<bool> _confirmRecordDelete(BuildContext context) async {
+  final l = context.l10n;
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (dialog) => AlertDialog(
+      title: Text(l.recordDeleteTitle),
+      content: Text(l.recordDeleteBody),
+      actions: [
+        TextButton(
+          key: const Key('dismiss-record-delete'),
+          onPressed: () => Navigator.pop(dialog, false),
+          child: Text(l.commonCancel),
+        ),
+        FilledButton(
+          key: const Key('confirm-record-delete'),
+          onPressed: () => Navigator.pop(dialog, true),
+          child: Text(l.commonDelete),
+        ),
+      ],
+    ),
+  );
+  return confirmed == true;
 }
 
 /// A record's projected diagnostics as form issues: those naming a field go under it.
@@ -3090,6 +3223,7 @@ class _RecordTable extends StatefulWidget {
     required this.selectedIds,
     required this.onOpen,
     required this.onToggle,
+    required this.onClone,
     required this.onDelete,
   });
 
@@ -3108,6 +3242,9 @@ class _RecordTable extends StatefulWidget {
   final Set<String> selectedIds;
   final ValueChanged<RecordDto> onOpen;
   final ValueChanged<String> onToggle;
+
+  /// Row menu actions; Delete… confirms before deleting.
+  final ValueChanged<RecordDto> onClone;
   final ValueChanged<RecordDto> onDelete;
 
   @override
@@ -3281,15 +3418,33 @@ class _RecordTableState extends State<_RecordTable> {
     final selected = widget.selectedIds.contains(record.id);
     Widget content;
     if (column >= _dataColumns) {
-      content = Center(
-        child: FiIconButton(
-          icon: FiIcons.delete,
-          tooltip: context.l10n.recordsDeleteRecord,
-          color: Nocturne.muted(.5),
-          onPressed: () => widget.onDelete(record),
+      final l = context.l10n;
+      return Center(
+        child: PopupMenuButton<String>(
+          key: Key('record-row-menu-${record.id}'),
+          tooltip: l.recordsActions,
+          icon: Icon(
+            FiIcons.moreHorizontal,
+            size: 18,
+            color: Nocturne.muted(.5),
+          ),
+          onSelected: (action) => action == 'clone'
+              ? widget.onClone(record)
+              : widget.onDelete(record),
+          itemBuilder: (_) => [
+            PopupMenuItem(
+              key: const Key('record-row-clone'),
+              value: 'clone',
+              child: Text(l.recordsClone),
+            ),
+            PopupMenuItem(
+              key: const Key('record-row-delete'),
+              value: 'delete',
+              child: Text(l.collectionsDeleteEllipsis),
+            ),
+          ],
         ),
       );
-      return content;
     }
     final missing = !record.valid && widget.fields.isNotEmpty
         ? missingRequiredFields(record, widget.fields).map((f) => f.id).toSet()

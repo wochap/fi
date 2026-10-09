@@ -170,6 +170,14 @@ Future<void> deleteRecords({
   collectionId: collectionId,
 );
 
+Future<List<String>> cloneRecords({
+  required List<String> recordIds,
+  required String collectionId,
+}) => RustLib.instance.api.crateApiCollectionsCloneRecords(
+  recordIds: recordIds,
+  collectionId: collectionId,
+);
+
 Future<void> setRecordsField({
   required List<String> recordIds,
   required String collectionId,

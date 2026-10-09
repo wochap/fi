@@ -597,8 +597,10 @@ class DashedOutline extends StatelessWidget {
   final Color color;
 
   @override
-  Widget build(BuildContext context) =>
-      CustomPaint(painter: _DashedRRectPainter(color: color), child: child);
+  Widget build(BuildContext context) => CustomPaint(
+    painter: _DashedRRectPainter(color: color),
+    child: child,
+  );
 }
 
 final class _DashedRRectPainter extends CustomPainter {

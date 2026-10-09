@@ -271,7 +271,10 @@ void main() {
     await tester.ensureVisible(find.byKey(const Key('add-term')));
     await tester.tap(find.byKey(const Key('add-term')));
     await tester.pumpAndSettle();
-    expect(find.byKey(Key('expr-term-$maxOperatorDepth'), skipOffstage: false), findsOneWidget);
+    expect(
+      find.byKey(Key('expr-term-$maxOperatorDepth'), skipOffstage: false),
+      findsOneWidget,
+    );
     expect(addTerm().onPressed, isNull);
   });
 

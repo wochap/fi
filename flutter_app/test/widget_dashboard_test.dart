@@ -222,7 +222,7 @@ void main() {
       expect(find.text('Schema'), findsOneWidget);
       expect(find.text('Queries'), findsOneWidget);
       expect(find.text('7'), findsWidgets);
-      expect(find.byTooltip('Delete record'), findsOneWidget);
+      expect(find.byTooltip('Record actions'), findsOneWidget);
     },
   );
 

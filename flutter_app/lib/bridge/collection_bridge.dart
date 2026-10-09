@@ -155,6 +155,13 @@ abstract interface class CollectionBridge {
   /// any member is invalid, so the list is all-or-nothing.
   Future<void> deleteRecords(List<String> recordIds, String collectionId);
 
+  /// Clones every record in one atomic batch and returns the new ids in source
+  /// order. Rust rejects the whole batch if any clone is invalid.
+  Future<List<String>> cloneRecords(
+    List<String> recordIds,
+    String collectionId,
+  );
+
   /// Sets one field to one value on every record in one atomic batch.
   Future<void> setRecordsField(
     List<String> recordIds,
@@ -455,6 +462,14 @@ final class RustCollectionBridge implements CollectionBridge {
         recordIds: recordIds,
         collectionId: collectionId,
       );
+  @override
+  Future<List<String>> cloneRecords(
+    List<String> recordIds,
+    String collectionId,
+  ) => collections.cloneRecords(
+    recordIds: recordIds,
+    collectionId: collectionId,
+  );
   @override
   Future<void> setRecordsField(
     List<String> recordIds,

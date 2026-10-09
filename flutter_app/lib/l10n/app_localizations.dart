@@ -2390,12 +2390,6 @@ abstract class AppLocalizations {
   /// **'Empty'**
   String get inputEmpty;
 
-  /// Duplicate action
-  ///
-  /// In en, this message translates to:
-  /// **'Duplicate'**
-  String get collectionsDuplicate;
-
   /// Collection menu item
   ///
   /// In en, this message translates to:
@@ -5443,6 +5437,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'ports in use'**
   String get sidebarCausePorts;
+
+  /// Record clone action
+  ///
+  /// In en, this message translates to:
+  /// **'Clone'**
+  String get recordsClone;
+
+  /// Context line of a new record cloned from another
+  ///
+  /// In en, this message translates to:
+  /// **'Clone of ‘{title}’'**
+  String recordsCloneOf(String title);
+
+  /// Feedback after cloning selected records
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Cloned 1 record} other{Cloned {count} records}}'**
+  String recordsClonedSnack(int count);
+
+  /// Tooltip of a record row's actions menu
+  ///
+  /// In en, this message translates to:
+  /// **'Record actions'**
+  String get recordsActions;
+
+  /// Snackbar action that reverts the last action
+  ///
+  /// In en, this message translates to:
+  /// **'Undo'**
+  String get commonUndo;
 }
 
 class _AppLocalizationsDelegate

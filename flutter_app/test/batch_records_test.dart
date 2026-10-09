@@ -86,15 +86,15 @@ void main() {
   ) async {
     final bridge = seeded(3);
     await openCollection(tester, bridge);
-    expect(find.byTooltip('Delete record'), findsNWidgets(3));
+    expect(find.byTooltip('Record actions'), findsNWidgets(3));
 
     await tester.longPress(find.text('row 0'));
     await tester.pumpAndSettle();
     expect(find.text('1 selected'), findsOneWidget);
     expect(
-      find.byTooltip('Delete record'),
+      find.byTooltip('Record actions'),
       findsNothing,
-      reason: 'the per-tile delete is hidden while selecting',
+      reason: 'the row menu is hidden while selecting',
     );
     expect(find.byType(Checkbox), findsNWidgets(3));
 
@@ -107,7 +107,7 @@ void main() {
     await tester.tap(find.byKey(const Key('cancel-selection')));
     await tester.pumpAndSettle();
     expect(find.text('2 selected'), findsNothing);
-    expect(find.byTooltip('Delete record'), findsNWidgets(3));
+    expect(find.byTooltip('Record actions'), findsNWidgets(3));
   });
 
   testWidgets('the header Select action opens an empty selection', (
@@ -258,6 +258,13 @@ void main() {
       ),
       findsOneWidget,
     );
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('selection-clone')),
+        matching: find.text('Clone'),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('a selected phone card has the accent outline', (tester) async {
@@ -295,12 +302,114 @@ void main() {
   testWidgets('single delete outside selection mode has no dialog', (
     tester,
   ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
     final bridge = seeded(2);
     await openCollection(tester, bridge);
     await tester.tap(find.byTooltip('Delete record').first);
     await tester.pumpAndSettle();
     expect(find.byType(AlertDialog), findsNothing);
     expect(bridge.batchDeleteCalls, isEmpty);
+    expect(find.text('row 0'), findsNothing);
+    expect(find.text('row 1'), findsOneWidget);
+  });
+
+  testWidgets('selection Clone sends one command and Undo deletes the copies', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final bridge = seeded(3);
+    await openCollection(tester, bridge);
+    await tester.longPress(find.text('row 0'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('row 1'));
+    await tester.tap(find.text('row 2'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('selection-clone')));
+    await tester.pumpAndSettle();
+    expect(bridge.batchCloneCalls, [
+      ['record-0', 'record-1', 'record-2'],
+    ]);
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(find.text('Cloned 3 records'), findsOneWidget);
+    expect(find.text('3 selected'), findsNothing);
+    expect(bridge.records[_collection], hasLength(6));
+    final created = [
+      for (final record in bridge.records[_collection]!.skip(3)) record.id,
+    ];
+
+    await tester.tap(find.text('Undo'));
+    await tester.pumpAndSettle();
+    expect(bridge.batchDeleteCalls, [created]);
+    expect(bridge.records[_collection]!.map((record) => record.id), [
+      'record-0',
+      'record-1',
+      'record-2',
+    ]);
+  });
+
+  testWidgets('cloning one record says Cloned 1 record', (tester) async {
+    final bridge = seeded(2);
+    await openCollection(tester, bridge);
+    await tester.longPress(find.text('row 0'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('selection-clone')));
+    await tester.pumpAndSettle();
+    expect(bridge.batchCloneCalls, [
+      ['record-0'],
+    ]);
+    expect(find.text('Cloned 1 record'), findsOneWidget);
+    expect(find.text('row 0'), findsNWidgets(2));
+  });
+
+  testWidgets('the wide row menu clones through the prefilled form', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1240, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final bridge = seeded(2);
+    await openCollection(tester, bridge);
+    await tester.tap(find.byKey(const Key('record-row-menu-record-0')));
+    await tester.pumpAndSettle();
+    expect(find.text('Clone'), findsOneWidget);
+    expect(find.text('Delete…'), findsOneWidget);
+    await tester.tap(find.text('Clone'));
+    await tester.pumpAndSettle();
+    expect(find.text('New record'), findsWidgets);
+    expect(find.text('Clone of ‘row 0’'), findsOneWidget);
+    expect(find.widgetWithText(TextFormField, 'row 0'), findsOneWidget);
+    expect(bridge.records[_collection], hasLength(2));
+    await tester.tap(find.text('Save record'));
+    await tester.pumpAndSettle();
+    expect(bridge.records[_collection], hasLength(3));
+    expect(bridge.batchCloneCalls, isEmpty);
+  });
+
+  testWidgets('the wide row menu Delete… confirms first', (tester) async {
+    tester.view.physicalSize = const Size(1240, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final bridge = seeded(2);
+    await openCollection(tester, bridge);
+    await tester.tap(find.byKey(const Key('record-row-menu-record-0')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete…'));
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsOneWidget);
+    await tester.tap(find.byKey(const Key('dismiss-record-delete')));
+    await tester.pumpAndSettle();
+    expect(find.text('row 0'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('record-row-menu-record-0')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete…'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('confirm-record-delete')));
+    await tester.pumpAndSettle();
     expect(find.text('row 0'), findsNothing);
     expect(find.text('row 1'), findsOneWidget);
   });

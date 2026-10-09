@@ -378,7 +378,8 @@ String termPath(int index, int count) => index == 0
     : '${_chainNodePath(index, count)}.right';
 
 /// The path of the operator node that joins term [index] (1 or more) to the terms before it.
-String _chainNodePath(int index, int count) => r'$' + '.left' * (count - 1 - index);
+String _chainNodePath(int index, int count) =>
+    r'$' + '.left' * (count - 1 - index);
 
 /// Moves term [from] to position [to]; the operators keep their slots.
 ExprNode reorderTerms(ExprNode root, int from, int to) {
@@ -772,7 +773,9 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
                   message: l.exprDragTerm,
                   child: SizedBox(
                     key: Key('term-handle-$index'),
-                    width: Nocturne.isPhone(context) ? Nocturne.touchTarget : 28,
+                    width: Nocturne.isPhone(context)
+                        ? Nocturne.touchTarget
+                        : 28,
                     height: Nocturne.isPhone(context)
                         ? Nocturne.touchTarget
                         : 36,
@@ -842,13 +845,12 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
                             ),
                           ],
                           selected: {kind},
-                          onSelectionChanged: (selection) => replace(
-                            switch (selection.single) {
-                              _TermKind.field => const FieldLeaf(),
-                              _TermKind.number => _constantFor(path),
-                              _TermKind.function => AbsNode(node),
-                            },
-                          ),
+                          onSelectionChanged: (selection) =>
+                              replace(switch (selection.single) {
+                                _TermKind.field => const FieldLeaf(),
+                                _TermKind.number => _constantFor(path),
+                                _TermKind.function => AbsNode(node),
+                              }),
                         ),
                       ),
               ),
@@ -862,10 +864,7 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
                         final terms = [...chain.terms]..removeAt(index);
                         final operators = [...chain.operators]
                           ..removeAt(index == 0 ? 0 : index - 1);
-                        _update(
-                          buildChain(terms, operators),
-                          structural: true,
-                        );
+                        _update(buildChain(terms, operators), structural: true);
                       },
               ),
             ],
@@ -877,22 +876,14 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
                 alignment: Alignment.centerLeft,
                 child: _leafInputs(context, node, path),
               ),
-              AbsNode() ||
-              BinaryNode(operator: ExprOperator.divide) => _function(
-                context,
-                node,
-                path,
-                index,
-                replace,
-              ),
+              AbsNode() || BinaryNode(operator: ExprOperator.divide) =>
+                _function(context, node, path, index, replace),
               _ => _card(context, node, path, parentIsAbs: false),
             },
           ),
           if (switch (node) {
-                FieldLeaf() || ConstantLeaf() => incompleteNodes(
-                  node,
-                  path,
-                )[path],
+                FieldLeaf() ||
+                ConstantLeaf() => incompleteNodes(node, path)[path],
                 _ => null,
               }
               case final leaf? when errorText == null)
@@ -1264,61 +1255,61 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
     runSpacing: 8,
     crossAxisAlignment: WrapCrossAlignment.center,
     children: [
-        if (node case FieldLeaf(:final fieldId))
-          SizedBox(
-            width: 220,
-            child: FiSelect<String>.compact(
-              key: Key('field-$path'),
-              value: _field(fieldId)?.id,
-              hint: context.l10n.exprPickField,
-              items: [
-                for (final field in _fields)
-                  DropdownMenuItem(value: field.id, child: Text(field.name)),
-              ],
-              onChanged: (id) => _update(replaceAt(root, path, FieldLeaf(id))),
+      if (node case FieldLeaf(:final fieldId))
+        SizedBox(
+          width: 220,
+          child: FiSelect<String>.compact(
+            key: Key('field-$path'),
+            value: _field(fieldId)?.id,
+            hint: context.l10n.exprPickField,
+            items: [
+              for (final field in _fields)
+                DropdownMenuItem(value: field.id, child: Text(field.name)),
+            ],
+            onChanged: (id) => _update(replaceAt(root, path, FieldLeaf(id))),
+          ),
+        ),
+      if (node case ConstantLeaf(:final text, :final scale)) ...[
+        SizedBox(
+          width: 140,
+          child: FiTextInput.compact(
+            key: Key('constant-$path'),
+            controller: _constantText.putIfAbsent(
+              path,
+              () => TextEditingController(text: text),
+            ),
+            keyboardType: const TextInputType.numberWithOptions(
+              signed: true,
+              decimal: true,
+            ),
+            label: context.l10n.exprNumber,
+            onChanged: (value) => _update(
+              replaceAt(root, path, ConstantLeaf(text: value, scale: scale)),
             ),
           ),
-        if (node case ConstantLeaf(:final text, :final scale)) ...[
-          SizedBox(
-            width: 140,
-            child: FiTextInput.compact(
-              key: Key('constant-$path'),
-              controller: _constantText.putIfAbsent(
-                path,
-                () => TextEditingController(text: text),
+        ),
+        SizedBox(
+          width: 190,
+          child: FiSelect<int?>.compact(
+            key: Key('constant-scale-$path'),
+            value: scale,
+            items: [
+              DropdownMenuItem<int?>(
+                value: null,
+                child: Text(context.l10n.exprWhole),
               ),
-              keyboardType: const TextInputType.numberWithOptions(
-                signed: true,
-                decimal: true,
-              ),
-              label: context.l10n.exprNumber,
-              onChanged: (value) => _update(
-                replaceAt(root, path, ConstantLeaf(text: value, scale: scale)),
-              ),
-            ),
-          ),
-          SizedBox(
-            width: 190,
-            child: FiSelect<int?>.compact(
-              key: Key('constant-scale-$path'),
-              value: scale,
-              items: [
+              for (var i = 0; i <= 18; i++)
                 DropdownMenuItem<int?>(
-                  value: null,
-                  child: Text(context.l10n.exprWhole),
+                  value: i,
+                  child: Text(context.l10n.exprTypeDecimal(i)),
                 ),
-                for (var i = 0; i <= 18; i++)
-                  DropdownMenuItem<int?>(
-                    value: i,
-                    child: Text(context.l10n.exprTypeDecimal(i)),
-                  ),
-              ],
-              onChanged: (next) => _update(
-                replaceAt(root, path, ConstantLeaf(text: text, scale: next)),
-              ),
+            ],
+            onChanged: (next) => _update(
+              replaceAt(root, path, ConstantLeaf(text: text, scale: next)),
             ),
           ),
-        ],
+        ),
+      ],
     ],
   );
 

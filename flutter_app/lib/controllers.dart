@@ -810,6 +810,37 @@ final class CollectionsController extends ChangeNotifier {
     return ids.length;
   }
 
+  /// Clones the selection in one atomic batch and returns the created ids, in
+  /// selection order, so the caller can offer Undo.
+  Future<List<String>> cloneSelected() async {
+    final ids = selectedRecordIds.toList(growable: false);
+    final List<String> created;
+    try {
+      created = await bridge.cloneRecords(ids, selectedCollectionId!);
+    } catch (failure) {
+      await _reportBatchFailure(failure);
+      rethrow;
+    }
+    await refresh();
+    clearSelection();
+    return created;
+  }
+
+  /// Deletes the clones [ids] that are still active, in one batch. Clones
+  /// already deleted are skipped so the undo never fails on them.
+  Future<void> undoClone(List<String> ids) async {
+    final present = {for (final record in records) record.id};
+    final active = ids.where(present.contains).toList(growable: false);
+    if (active.isEmpty) return;
+    try {
+      await bridge.deleteRecords(active, selectedCollectionId!);
+    } catch (failure) {
+      await _reportBatchFailure(failure);
+      rethrow;
+    }
+    await refresh();
+  }
+
   /// A rejected batch wrote nothing, so the list is refreshed only to prune the
   /// selection; the typed error then replaces the message that refresh cleared.
   Future<void> _reportBatchFailure(Object failure) async {

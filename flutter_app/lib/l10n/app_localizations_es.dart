@@ -1422,9 +1422,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get inputEmpty => 'Vacío';
 
   @override
-  String get collectionsDuplicate => 'Duplicar';
-
-  @override
   String get collectionsImportCsv => 'Importar CSV…';
 
   @override
@@ -3459,4 +3456,29 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get sidebarCausePorts => 'puertos en uso';
+
+  @override
+  String get recordsClone => 'Clonar';
+
+  @override
+  String recordsCloneOf(String title) {
+    return 'Clon de ‘$title’';
+  }
+
+  @override
+  String recordsClonedSnack(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count registros clonados',
+      one: '1 registro clonado',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get recordsActions => 'Acciones del registro';
+
+  @override
+  String get commonUndo => 'Deshacer';
 }

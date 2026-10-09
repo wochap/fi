@@ -251,6 +251,17 @@ pub async fn delete_records(
         .await
         .map_err(Into::into)
 }
+pub async fn clone_records(
+    record_ids: Vec<String>,
+    collection_id: String,
+) -> Result<Vec<String>, BridgeError> {
+    let record_ids = parse_records(&record_ids)?;
+    let ids = core()
+        .await?
+        .clone_records(record_ids, parse_collection(&collection_id)?)
+        .await?;
+    Ok(ids.into_iter().map(|id| id.to_string()).collect())
+}
 pub async fn set_records_field(
     record_ids: Vec<String>,
     collection_id: String,

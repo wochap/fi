@@ -1508,3 +1508,113 @@ async fn collection_last_edited_follows_a_synced_edit() {
     a.shutdown().await.unwrap();
     b.shutdown().await.unwrap();
 }
+
+#[tokio::test]
+async fn clone_records_copies_values_in_one_batch_and_rejects_incomplete_sources() {
+    let directory = tempfile::tempdir().unwrap();
+    let app = AppCore::open(directory.path()).await.unwrap();
+    app.create_new_dataset().await.unwrap();
+    let collection = app
+        .create_collection("Expenses".into(), String::new())
+        .await
+        .unwrap();
+    let title = field("Title", FieldType::Text, true, 0);
+    let day = field("Day", FieldType::Date, false, 1);
+    let mut kind = field("Kind", FieldType::Enum, false, 2);
+    let keep = EnumOption {
+        id: EnumOptionId::new(),
+        label: "option 1".into(),
+        order: 0,
+        deleted: false,
+    };
+    let gone = EnumOption {
+        id: EnumOptionId::new(),
+        label: "option 3".into(),
+        order: 1,
+        deleted: false,
+    };
+    kind.enum_options = vec![keep.clone(), gone.clone()];
+    let scrap = field("Scrap", FieldType::Text, false, 3);
+    for definition in [&title, &day, &kind, &scrap] {
+        app.add_field(collection, definition.clone()).await.unwrap();
+    }
+    let mut sources = Vec::new();
+    for (index, option) in [&keep, &gone, &keep].into_iter().enumerate() {
+        sources.push(
+            app.create_record(
+                collection,
+                BTreeMap::from([
+                    (title.id, FieldValue::Text(format!("row {index}"))),
+                    (day.id, FieldValue::Date(20_358)),
+                    (kind.id, FieldValue::Enum(option.id)),
+                    (scrap.id, FieldValue::Text("old".into())),
+                ]),
+            )
+            .await
+            .unwrap(),
+        );
+    }
+    app.remove_enum_option(collection, kind.id, gone.id)
+        .await
+        .unwrap();
+    app.remove_field(collection, scrap.id).await.unwrap();
+    let before: Vec<_> = sources
+        .iter()
+        .map(|id| app.record(*id).unwrap().unwrap().record)
+        .collect();
+
+    let ProjectionState::Ready { checkpoint: start } = app.projection_state() else {
+        panic!("projection not ready");
+    };
+    let mut events = app.subscribe_data_changed();
+    let clones = app.clone_records(sources.clone(), collection).await.unwrap();
+    assert_eq!(clones.len(), 3);
+    let event = tokio::time::timeout(Duration::from_secs(5), events.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(event.kinds, vec![app_core::DomainKind::Records]);
+    assert_eq!(event.collection_ids, vec![collection]);
+    assert_ne!(event.checkpoint.heads, start.heads);
+    assert!(
+        tokio::time::timeout(Duration::from_millis(50), events.recv())
+            .await
+            .is_err(),
+        "a clone batch emits exactly one DataChanged"
+    );
+    assert_eq!(app.records(collection).unwrap().len(), 6);
+    for (index, (source, clone)) in sources.iter().zip(&clones).enumerate() {
+        assert_ne!(source, clone);
+        let copy = app.record(*clone).unwrap().unwrap().record;
+        assert_eq!(
+            copy.values.get(&title.id),
+            Some(&FieldValue::Text(format!("row {index}")))
+        );
+        assert_eq!(copy.values.get(&day.id), Some(&FieldValue::Date(20_358)));
+        assert!(!copy.values.contains_key(&scrap.id));
+        if index == 1 {
+            assert!(
+                matches!(copy.values.get(&kind.id), None | Some(FieldValue::Null)),
+                "removed option dropped"
+            );
+        } else {
+            assert_eq!(copy.values.get(&kind.id), Some(&FieldValue::Enum(keep.id)));
+        }
+    }
+    for (id, original) in sources.iter().zip(&before) {
+        assert_eq!(&app.record(*id).unwrap().unwrap().record, original);
+    }
+
+    // A required field added without a default makes every source incomplete.
+    let mood = field("Mood", FieldType::Text, true, 4);
+    app.add_field(collection, mood).await.unwrap();
+    assert!(app.clone_records(vec![sources[0]], collection).await.is_err());
+    assert_eq!(app.records(collection).unwrap().len(), 6);
+    assert!(app.clone_records(vec![], collection).await.is_err());
+    assert!(
+        app.clone_records(vec![sources[0], sources[0]], collection)
+            .await
+            .is_err()
+    );
+    app.shutdown().await.unwrap();
+}

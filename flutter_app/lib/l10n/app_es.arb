@@ -382,7 +382,6 @@
   "inputToday": "Hoy",
   "inputNow": "Ahora",
   "inputEmpty": "Vacío",
-  "collectionsDuplicate": "Duplicar",
   "collectionsImportCsv": "Importar CSV…",
   "collectionsExportCsv": "Exportar CSV",
   "collectionsExportJson": "Exportar JSON",
@@ -890,5 +889,10 @@
   "deferredPortsBody": "Otro programa u otra copia de Fi está usando estos puertos. Tus datos aquí siguen funcionando.",
   "sidebarCauseLocked": "llavero bloqueado",
   "sidebarCauseNoKeyring": "sin llavero",
-  "sidebarCausePorts": "puertos en uso"
+  "sidebarCausePorts": "puertos en uso",
+  "recordsClone": "Clonar",
+  "recordsCloneOf": "Clon de ‘{title}’",
+  "recordsClonedSnack": "{count, plural, =1{1 registro clonado} other{{count} registros clonados}}",
+  "recordsActions": "Acciones del registro",
+  "commonUndo": "Deshacer"
 }

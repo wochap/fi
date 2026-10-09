@@ -1922,10 +1922,6 @@
   "@inputEmpty": {
     "description": "Hint of an empty value input"
   },
-  "collectionsDuplicate": "Duplicate",
-  "@collectionsDuplicate": {
-    "description": "Duplicate action"
-  },
   "collectionsImportCsv": "Import CSV…",
   "@collectionsImportCsv": {
     "description": "Collection menu item"
@@ -4650,5 +4646,35 @@
   "sidebarCausePorts": "ports in use",
   "@sidebarCausePorts": {
     "description": "Sidebar cause line."
+  },
+  "recordsClone": "Clone",
+  "@recordsClone": {
+    "description": "Record clone action"
+  },
+  "recordsCloneOf": "Clone of ‘{title}’",
+  "@recordsCloneOf": {
+    "description": "Context line of a new record cloned from another",
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "recordsClonedSnack": "{count, plural, =1{Cloned 1 record} other{Cloned {count} records}}",
+  "@recordsClonedSnack": {
+    "description": "Feedback after cloning selected records",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "recordsActions": "Record actions",
+  "@recordsActions": {
+    "description": "Tooltip of a record row's actions menu"
+  },
+  "commonUndo": "Undo",
+  "@commonUndo": {
+    "description": "Snackbar action that reverts the last action"
   }
 }

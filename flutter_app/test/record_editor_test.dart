@@ -270,9 +270,7 @@ void main() {
     );
   });
 
-  testWidgets('duplicate on a phone opens a prefilled new record', (
-    tester,
-  ) async {
+  testWidgets('clone on a phone opens a prefilled new record', (tester) async {
     final bridge = _seeded(records: const [_held]);
     await _open(tester, bridge, _phone);
     await tester.tap(find.text('Buy oat').first);
@@ -281,11 +279,13 @@ void main() {
     expect(find.widgetWithText(FilledButton, 'Save changes'), findsOneWidget);
     await tester.tap(find.byTooltip('More'));
     await tester.pumpAndSettle();
-    expect(find.text('Duplicate'), findsOneWidget);
+    expect(find.byKey(const Key('record-clone')), findsOneWidget);
+    expect(find.text('Clone'), findsOneWidget);
     expect(find.text('Delete record…'), findsOneWidget);
-    await tester.tap(find.text('Duplicate'));
+    await tester.tap(find.text('Clone'));
     await tester.pumpAndSettle();
     expect(find.text('New record'), findsOneWidget);
+    expect(find.text('Clone of ‘Buy oat’'), findsOneWidget);
     expect(find.widgetWithText(TextFormField, 'Buy oat'), findsOneWidget);
     expect(bridge.records[_collection], hasLength(1));
     await tester.tap(find.text('Save record'));

@@ -28,6 +28,7 @@ void showOutcomeToastOn(
   double screenWidth,
   String message, {
   required bool success,
+  SnackBarAction? action,
 }) {
   messenger
     ..hideCurrentSnackBar()
@@ -40,7 +41,7 @@ void showOutcomeToastOn(
             ? const Duration(milliseconds: 4000)
             : const Duration(days: 1),
         action: success
-            ? null
+            ? action
             : SnackBarAction(label: l.outcomeDismiss, onPressed: () {}),
         content: Row(
           crossAxisAlignment: CrossAxisAlignment.start,

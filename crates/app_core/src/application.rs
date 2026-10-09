@@ -1851,6 +1851,79 @@ impl AppCore {
         .await
     }
 
+    /// Clones active records of one collection in one atomic batch of
+    /// `CreateRecord` members. Copies active-field values as-is, dropping values
+    /// of deleted fields and removed Choice options. Returns the new ids in
+    /// source order.
+    pub async fn clone_records(
+        &self,
+        record_ids: Vec<RecordId>,
+        collection_id: CollectionSchemaId,
+    ) -> Result<Vec<RecordId>> {
+        ensure_query_ready(self.lifecycle_state())?;
+        if record_ids.is_empty() {
+            return Err(crate::DomainError::Invalid {
+                field: "record_ids",
+                message: "must not be empty".into(),
+            }
+            .into());
+        }
+        let mut seen = std::collections::HashSet::new();
+        if !record_ids.iter().all(|id| seen.insert(*id)) {
+            return Err(crate::DomainError::Invalid {
+                field: "record_ids",
+                message: "must be unique".into(),
+            }
+            .into());
+        }
+        let schema = self.active_schema(collection_id)?;
+        let mut members = Vec::with_capacity(record_ids.len());
+        let mut ids = Vec::with_capacity(record_ids.len());
+        for source_id in record_ids {
+            let source = self
+                .read_model
+                .record(source_id)?
+                .map(|view| view.record)
+                .filter(|record| record.collection_id == collection_id && !record.deleted)
+                .ok_or_else(|| crate::DomainError::NotFound {
+                    kind: "record",
+                    id: source_id.to_string(),
+                })?;
+            let values = schema
+                .ordered_fields()
+                .into_iter()
+                .filter_map(|field| {
+                    let value = source.values.get(&field.id)?;
+                    let keep = match value {
+                        FieldValue::Null => false,
+                        FieldValue::Enum(option) => field
+                            .enum_options
+                            .iter()
+                            .any(|candidate| candidate.id == *option && !candidate.deleted),
+                        _ => true,
+                    };
+                    keep.then(|| (field.id, value.clone()))
+                })
+                .collect();
+            let id = RecordId::new();
+            ids.push(id);
+            members.push(GenericCommand::CreateRecord(GenericRecord {
+                id,
+                collection_id,
+                values,
+                stamps: std::collections::BTreeMap::new(),
+                deleted: false,
+            }));
+        }
+        self.generic(
+            GenericCommand::Batch(members),
+            vec![DomainKind::Records],
+            vec![collection_id],
+        )
+        .await?;
+        Ok(ids)
+    }
+
     /// Sets one field to one value on every record in one atomic batch.
     pub async fn set_records_field(
         &self,

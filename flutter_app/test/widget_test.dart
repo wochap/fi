@@ -84,7 +84,11 @@ void main() {
     await tester.tap(find.text('Save record'));
     await tester.pumpAndSettle();
     expect(find.text('After lunch'), findsOneWidget);
-    await tester.tap(find.byTooltip('Delete record'));
+    await tester.tap(find.byTooltip('Record actions'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete…'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('confirm-record-delete')));
     await tester.pumpAndSettle();
     expect(find.text('No records yet.'), findsOneWidget);
   });
