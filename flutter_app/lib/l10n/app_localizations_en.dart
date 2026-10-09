@@ -41,6 +41,21 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get settingsAppearance => 'Appearance';
+
+  @override
+  String get themeLabel => 'Theme';
+
+  @override
+  String get themeHint => 'Light or dark. Changes apply right away.';
+
+  @override
+  String get themeLight => 'Light';
+
+  @override
+  String get themeDark => 'Dark';
+
+  @override
   String get errorUnexpected =>
       'The local collection service encountered an unexpected error.';
 

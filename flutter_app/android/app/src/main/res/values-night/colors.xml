@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Nocturne Mocha background, behind the launch screen and the Flutter UI. -->
+    <color name="fi_bg">#1e1e2e</color>
+</resources>

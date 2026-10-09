@@ -549,6 +549,7 @@ void main() {
   testWidgets('a network failure offers Retry and Cancel and delete', (
     tester,
   ) async {
+    useDarkPlatform(tester);
     final models = FakeVoiceModels(
       modelStatusOf(
         ModelStatusKindDto.failed,
@@ -628,6 +629,7 @@ void main() {
   testWidgets('ready shows the tag, hands-free, re-download and delete', (
     tester,
   ) async {
+    useDarkPlatform(tester);
     final prefs = MemoryUiPrefsStore();
     final models = FakeVoiceModels(modelStatusOf(ModelStatusKindDto.ready));
     await _openSettings(

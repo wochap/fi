@@ -41,6 +41,21 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String get settingsAppearance => 'Apariencia';
+
+  @override
+  String get themeLabel => 'Tema';
+
+  @override
+  String get themeHint => 'Claro u oscuro. Los cambios se aplican al instante.';
+
+  @override
+  String get themeLight => 'Claro';
+
+  @override
+  String get themeDark => 'Oscuro';
+
+  @override
   String get errorUnexpected =>
       'El servicio local de colecciones tuvo un error inesperado.';
 

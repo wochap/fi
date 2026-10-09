@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:fi/theme/nocturne.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -100,4 +102,106 @@ void main() {
     expect(theme.colorScheme.error, m.danger);
     expect(theme.colorScheme.scrim, m.scrim);
   });
+
+  const l = NocturneColors.latte;
+
+  test('Latte matches the design palette', () {
+    expect(l.brightness, Brightness.light);
+    expect(l.bg, const Color(0xFFEFF1F5));
+    expect(l.surface, const Color(0xFFCCD0DA));
+    expect(l.text, const Color(0xFF4C4F69));
+    expect(l.accent, const Color(0xFF8839EF));
+    expect(l.divider, const Color(0x99ACB0BE));
+    expect(l.danger, const Color(0xFFD20F39));
+    expect(l.success, const Color(0xFF40A02B));
+    expect(l.warning, const Color(0xFFDF8E1D));
+    expect(l.scrim, const Color(0xFF4C4F69).withValues(alpha: .4));
+    expect(l.section, const Color(0xFFE6E9EF));
+    expect(l.sectionGlow, const Color(0xFFBCC0CC));
+    expect(l.sectionGhost, const Color(0xFF9CA0B0));
+    expect(
+      [
+        l.neutral100,
+        l.neutral200,
+        l.neutral300,
+        l.neutral400,
+        l.neutral500,
+        l.neutral600,
+        l.neutral700,
+        l.neutral800,
+        l.neutral900,
+      ],
+      const [
+        Color(0xFFEFF1F5),
+        Color(0xFFE6E9EF),
+        Color(0xFFDCE0E8),
+        Color(0xFFCCD0DA),
+        Color(0xFFBCC0CC),
+        Color(0xFFACB0BE),
+        Color(0xFF9CA0B0),
+        Color(0xFF8C8FA1),
+        Color(0xFF7C7F93),
+      ],
+    );
+    expect(
+      [
+        l.accent100,
+        l.accent200,
+        l.accent300,
+        l.accent400,
+        l.accent500,
+        l.accent600,
+        l.accent700,
+        l.accent800,
+        l.accent900,
+      ],
+      const [
+        Color(0xFFF3EFFE),
+        Color(0xFFE7DFFF),
+        Color(0xFFD3C3FF),
+        Color(0xFFAC83FE),
+        Color(0xFF8839EF),
+        Color(0xFF743BC7),
+        Color(0xFF613BA0),
+        Color(0xFF422A6B),
+        Color(0xFF251A3C),
+      ],
+    );
+    expect(l.shadowSm.single.color, const Color(0xFFCCD0DA));
+    expect(l.shadowMd.first.color, const Color(0xFFBCC0CC));
+    expect(l.shadowLg.first.color, const Color(0xFFACB0BE));
+  });
+
+  test('roles resolve to the Latte steps', () {
+    expect(l.accentFill, l.accent200);
+    expect(l.accentEdge, l.accent400);
+    expect(l.accentText, l.accent700);
+    expect(l.accentInk, l.accent800);
+    expect(l.accentInkStrong, l.accent900);
+    expect(l.neutralFill, l.neutral400);
+    expect(l.neutralFillStrong, l.neutral500);
+    expect(l.neutralEdge, l.neutral600);
+    expect(l.neutralGhost, l.neutral700);
+    expect(l.neutralMuted, l.neutral800);
+  });
+
+  test('the light theme is light', () {
+    final theme = nocturneTheme(l);
+    expect(theme.brightness, Brightness.light);
+    expect(theme.extension<NocturneColors>(), l);
+    expect(theme.scaffoldBackgroundColor, l.bg);
+  });
+
+  double contrast(Color a, Color b) {
+    final la = a.computeLuminance(), lb = b.computeLuminance();
+    return (math.max(la, lb) + .05) / (math.min(la, lb) + .05);
+  }
+
+  for (final (name, c) in [('Mocha', m), ('Latte', l)]) {
+    test('$name contrast holds', () {
+      expect(contrast(c.text, c.bg), greaterThanOrEqualTo(4.5));
+      expect(contrast(c.accentText, c.bg), greaterThanOrEqualTo(4.5));
+      expect(contrast(c.accent, c.bg), greaterThanOrEqualTo(3));
+    });
+  }
 }

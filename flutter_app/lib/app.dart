@@ -22,6 +22,7 @@ import 'package:fi/reset_dialog.dart';
 import 'package:fi/settings_page.dart';
 import 'package:fi/setup_screens.dart';
 import 'package:fi/status_time.dart';
+import 'package:fi/theme/app_theme.dart';
 import 'package:fi/theme/confirm_dialog.dart';
 import 'package:fi/theme/inputs.dart';
 import 'package:fi/theme/nocturne.dart';
@@ -82,11 +83,13 @@ class _CollectionAppState extends State<CollectionApp>
       widget.uiPrefs ?? FileUiPrefsStore(widget.dataDirProvider);
   static const _platform = MethodChannel('fi/platform');
   final LanguageController _language = LanguageController();
+  final AppThemeController _theme = AppThemeController();
 
   @override
   void initState() {
     super.initState();
     unawaited(_language.load(_uiPrefs));
+    unawaited(_theme.load(_uiPrefs));
     WidgetsBinding.instance.addObserver(this);
     controller = BootstrapController(
       bridge: widget.bridge,
@@ -176,6 +179,7 @@ class _CollectionAppState extends State<CollectionApp>
   @override
   void dispose() {
     _language.dispose();
+    _theme.dispose();
     devices.dispose();
     controller.dispose();
     WidgetsBinding.instance.removeObserver(this);
@@ -189,9 +193,12 @@ class _CollectionAppState extends State<CollectionApp>
     capabilities: widget.capabilities ?? PlatformCapabilities.current(),
     child: LanguageScope(
       notifier: _language,
-      child: ListenableBuilder(
-        listenable: _language,
-        builder: (context, _) => _app(),
+      child: ThemeScope(
+        notifier: _theme,
+        child: ListenableBuilder(
+          listenable: Listenable.merge([_language, _theme]),
+          builder: (context, _) => _app(),
+        ),
       ),
     ),
   );
@@ -199,7 +206,13 @@ class _CollectionAppState extends State<CollectionApp>
   Widget _app() => MaterialApp(
     title: 'Fi',
     debugShowCheckedModeBanner: false,
-    theme: nocturneTheme(NocturneColors.mocha),
+    theme: latteTheme,
+    darkTheme: mochaTheme,
+    themeMode: _theme.themeMode,
+    // The stored choice applies at start without a cross-fade.
+    themeAnimationDuration: _theme.animate
+        ? kThemeAnimationDuration
+        : Duration.zero,
     locale: _language.locale,
     supportedLocales: AppLocalizations.supportedLocales,
     localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -207,7 +220,10 @@ class _CollectionAppState extends State<CollectionApp>
         resolveAppLocale(locales, supported),
     builder: (context, child) {
       Intl.defaultLocale = Localizations.localeOf(context).languageCode;
-      return child!;
+      return AnnotatedRegion<SystemUiOverlayStyle>(
+        value: systemOverlayStyle(Theme.of(context).brightness),
+        child: child!,
+      );
     },
     home: ListenableBuilder(
       listenable: controller,

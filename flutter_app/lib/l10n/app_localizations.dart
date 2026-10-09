@@ -152,6 +152,36 @@ abstract class AppLocalizations {
   /// **'{language} — same as your phone'**
   String langSameAsPhone(String language);
 
+  /// Settings section label for the color theme.
+  ///
+  /// In en, this message translates to:
+  /// **'Appearance'**
+  String get settingsAppearance;
+
+  /// Title of the color theme setting.
+  ///
+  /// In en, this message translates to:
+  /// **'Theme'**
+  String get themeLabel;
+
+  /// Explains the color theme setting.
+  ///
+  /// In en, this message translates to:
+  /// **'Light or dark. Changes apply right away.'**
+  String get themeHint;
+
+  /// The light color theme.
+  ///
+  /// In en, this message translates to:
+  /// **'Light'**
+  String get themeLight;
+
+  /// The dark color theme.
+  ///
+  /// In en, this message translates to:
+  /// **'Dark'**
+  String get themeDark;
+
   /// Shown for a failure that is not a typed bridge error.
   ///
   /// In en, this message translates to:

@@ -96,7 +96,13 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Ajustes'), findsWidgets);
     expect(find.text('IDIOMA'), findsOneWidget);
-    expect(find.text('Predeterminado del sistema'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('settings-language')),
+        matching: find.text('Predeterminado del sistema'),
+      ),
+      findsOneWidget,
+    );
     expect(find.text('English — igual que tu teléfono'), findsOneWidget);
     expect(
       tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,

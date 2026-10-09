@@ -268,6 +268,7 @@ void main() {
   });
 
   testWidgets('a selected phone card has the accent outline', (tester) async {
+    useDarkPlatform(tester);
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);

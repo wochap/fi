@@ -10,6 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'device_widget_test.dart';
 import 'fake_bridge.dart';
+import 'widget_test.dart' show useDarkPlatform;
 
 TrustedDeviceDto _device(
   String id,
@@ -96,6 +97,7 @@ void main() {
   testWidgets(
     'every tag has an icon; Synced success, Revoked danger, Offline neutral',
     (tester) async {
+      useDarkPlatform(tester);
       final now = clock.now();
       final bridge = FakeCollectionBridge()
         ..devices.addAll([

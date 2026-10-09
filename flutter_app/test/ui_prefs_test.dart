@@ -24,4 +24,21 @@ void main() {
       AppLanguage.system,
     );
   });
+
+  test('the app theme survives a JSON round trip', () {
+    for (final mode in AppThemeMode.values) {
+      final prefs = UiPrefs(appTheme: mode, appLanguage: AppLanguage.spanish);
+      final read = UiPrefs.fromJson(prefs.toJson());
+      expect(read.appTheme, mode);
+      expect(read.appLanguage, AppLanguage.spanish);
+    }
+  });
+
+  test('a missing or unknown app theme reads as the system theme', () {
+    expect(UiPrefs.fromJson({}).appTheme, AppThemeMode.system);
+    expect(
+      UiPrefs.fromJson({'app_theme': 'sepia'}).appTheme,
+      AppThemeMode.system,
+    );
+  });
 }

@@ -46,6 +46,26 @@
       }
     }
   },
+  "settingsAppearance": "Appearance",
+  "@settingsAppearance": {
+    "description": "Settings section label for the color theme."
+  },
+  "themeLabel": "Theme",
+  "@themeLabel": {
+    "description": "Title of the color theme setting."
+  },
+  "themeHint": "Light or dark. Changes apply right away.",
+  "@themeHint": {
+    "description": "Explains the color theme setting."
+  },
+  "themeLight": "Light",
+  "@themeLight": {
+    "description": "The light color theme."
+  },
+  "themeDark": "Dark",
+  "@themeDark": {
+    "description": "The dark color theme."
+  },
   "errorUnexpected": "The local collection service encountered an unexpected error.",
   "@errorUnexpected": {
     "description": "Shown for a failure that is not a typed bridge error."

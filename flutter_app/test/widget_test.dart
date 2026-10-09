@@ -26,6 +26,14 @@ Widget app(
   voiceServices: voice == null ? null : (_, _) => voice,
   capabilities: capabilities,
 );
+
+/// Presents the platform as set to dark mode, so the app draws Mocha under
+/// the default System theme.
+void useDarkPlatform(WidgetTester tester) {
+  tester.platformDispatcher.platformBrightnessTestValue = Brightness.dark;
+  addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
+}
+
 Future<void> pumpUntilFound(WidgetTester tester, Finder finder) async {
   for (var attempt = 0; attempt < 30; attempt++) {
     await tester.pump(const Duration(milliseconds: 50));

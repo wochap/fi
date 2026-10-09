@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Nocturne Latte background, behind the launch screen and the Flutter UI. -->
+    <color name="fi_bg">#eff1f5</color>
+</resources>

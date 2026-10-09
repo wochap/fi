@@ -26,6 +26,20 @@ enum AppLanguage {
       values.where((value) => value.code == code).firstOrNull ?? system;
 }
 
+/// The color theme: the system's light or dark setting, or a fixed one.
+enum AppThemeMode {
+  system,
+  light,
+  dark;
+
+  /// Stored form: `system`, `light` or `dark`.
+  String get code => name;
+
+  /// Reads [code]; anything unknown is [system].
+  static AppThemeMode fromCode(Object? code) =>
+      values.where((value) => value.code == code).firstOrNull ?? system;
+}
+
 /// Device-local presentation choices. They never enter Rust or sync.
 final class UiPrefs {
   const UiPrefs({
@@ -33,6 +47,7 @@ final class UiPrefs {
     this.voiceTipDismissed = false,
     this.handsFree = false,
     this.appLanguage = AppLanguage.system,
+    this.appTheme = AppThemeMode.system,
   });
 
   final CollectionSort collectionSort;
@@ -46,16 +61,21 @@ final class UiPrefs {
   /// The interface language; follows the system by default.
   final AppLanguage appLanguage;
 
+  /// The color theme; follows the system by default.
+  final AppThemeMode appTheme;
+
   UiPrefs copyWith({
     CollectionSort? collectionSort,
     bool? voiceTipDismissed,
     bool? handsFree,
     AppLanguage? appLanguage,
+    AppThemeMode? appTheme,
   }) => UiPrefs(
     collectionSort: collectionSort ?? this.collectionSort,
     voiceTipDismissed: voiceTipDismissed ?? this.voiceTipDismissed,
     handsFree: handsFree ?? this.handsFree,
     appLanguage: appLanguage ?? this.appLanguage,
+    appTheme: appTheme ?? this.appTheme,
   );
 
   Map<String, Object?> toJson() => {
@@ -63,6 +83,7 @@ final class UiPrefs {
     'voice_tip_dismissed': voiceTipDismissed,
     'hands_free': handsFree,
     'app_language': appLanguage.code,
+    'app_theme': appTheme.code,
   };
 
   /// Reads what [toJson] wrote; anything unreadable falls back to the defaults.
@@ -76,6 +97,7 @@ final class UiPrefs {
       voiceTipDismissed: json['voice_tip_dismissed'] == true,
       handsFree: json['hands_free'] == true,
       appLanguage: AppLanguage.fromCode(json['app_language']),
+      appTheme: AppThemeMode.fromCode(json['app_theme']),
     );
   }
 }

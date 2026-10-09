@@ -7,6 +7,7 @@ import 'package:fi/platform_capabilities.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/theme/inputs.dart';
+import 'package:fi/theme/app_theme.dart';
 import 'package:fi/theme/nocturne.dart';
 import 'package:fi/theme/nocturne_widgets.dart';
 import 'package:fi/ui_prefs.dart';
@@ -105,6 +106,10 @@ class _SettingsPageState extends State<SettingsPage>
     // In display order.
     final sections = <_Section>[
       (label: context.l10n.settingsLanguage, child: const _LanguageSection()),
+      (
+        label: context.l10n.settingsAppearance,
+        child: const _AppearanceSection(),
+      ),
       if (voiceShown)
         (
           label: context.l10n.settingsVoiceInput,
@@ -270,6 +275,105 @@ class _SettingsPageState extends State<SettingsPage>
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// The color theme: a dropdown on desktop, a radio list on Android, laid out
+/// like the Language section.
+class _AppearanceSection extends StatelessWidget {
+  const _AppearanceSection();
+
+  static const _wideWidth = 560.0;
+
+  static Key _optionKey(AppThemeMode mode) => Key('theme-option-${mode.code}');
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = ThemeScope.of(context);
+    final l = context.l10n;
+    final systemName =
+        MediaQuery.platformBrightnessOf(context) == Brightness.light
+        ? l.themeLight
+        : l.themeDark;
+    void choose(AppThemeMode? value) {
+      if (value != null) unawaited(controller.set(value));
+    }
+
+    String name(AppThemeMode mode) => switch (mode) {
+      AppThemeMode.system => l.langSystemDefaultNamed(systemName),
+      AppThemeMode.light => l.themeLight,
+      AppThemeMode.dark => l.themeDark,
+    };
+
+    if (!PlatformScope.of(context).android) {
+      final label = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        spacing: 6,
+        children: [
+          Text(l.themeLabel),
+          Text(
+            l.themeHint,
+            style: TextStyle(fontSize: 13, color: context.nocturne.muted(.6)),
+          ),
+        ],
+      );
+      final dropdown = FiSelect<AppThemeMode>(
+        key: const Key('settings-theme-dropdown'),
+        value: controller.value,
+        onChanged: choose,
+        items: [
+          for (final mode in AppThemeMode.values)
+            DropdownMenuItem(
+              key: _optionKey(mode),
+              value: mode,
+              child: Text(name(mode)),
+            ),
+        ],
+      );
+      return NocturneCard(
+        key: const Key('settings-appearance'),
+        child: LayoutBuilder(
+          builder: (context, constraints) => constraints.maxWidth >= _wideWidth
+              ? Row(
+                  spacing: 24,
+                  children: [
+                    Expanded(child: label),
+                    SizedBox(width: 280, child: dropdown),
+                  ],
+                )
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  spacing: 6,
+                  children: [label, dropdown],
+                ),
+        ),
+      );
+    }
+    return NocturneCard(
+      key: const Key('settings-appearance'),
+      padding: EdgeInsets.zero,
+      child: RadioGroup<AppThemeMode>(
+        groupValue: controller.value,
+        onChanged: choose,
+        child: Column(
+          children: [
+            for (final mode in AppThemeMode.values)
+              RadioListTile<AppThemeMode>(
+                key: _optionKey(mode),
+                value: mode,
+                title: Text(
+                  mode == AppThemeMode.system
+                      ? l.langSystemDefault
+                      : name(mode),
+                ),
+                subtitle: mode == AppThemeMode.system
+                    ? Text(l.langSameAsPhone(systemName))
+                    : null,
+              ),
+          ],
+        ),
       ),
     );
   }

@@ -1,7 +1,7 @@
 # Fi UI design guide (Nocturne)
 
 Read this before adding or changing any Flutter UI. The app follows **Nocturne**: a quiet, dense,
-interface on Catppuccin (Mocha is the dark theme). Inter at weight 500 for headings, soft 8px corners, and an accent used as a line or a
+interface on Catppuccin, in two themes: Mocha (dark) and Latte (light). Inter at weight 500 for headings, soft 8px corners, and an accent used as a line or a
 glow, never as a flood of color. Follow these rules so new screens match the existing ones.
 
 ## Design source
@@ -19,7 +19,8 @@ guide disagree, update this guide to match.
 
 | File | What it holds |
 | --- | --- |
-| `lib/theme/nocturne.dart` | `NocturneColors` (the theme's colors, roles, status colors, scrim and shadows; `NocturneColors.mocha`), read with `context.nocturne`; `Nocturne` constants (radii, fonts, breakpoints, input heights via `Nocturne.inputHeight`); `nocturneTheme(NocturneColors)`, the only `ThemeData` builder |
+| `lib/theme/nocturne.dart` | `NocturneColors` (the theme's colors, roles, status colors, scrim and shadows; `NocturneColors.mocha` and `NocturneColors.latte`), read with `context.nocturne`; `Nocturne` constants (radii, fonts, breakpoints, input heights via `Nocturne.inputHeight`); `nocturneTheme(NocturneColors)`, the only `ThemeData` builder |
+| `lib/theme/app_theme.dart` | `latteTheme` / `mochaTheme` (built once), `AppThemeController` + `ThemeScope` (the Appearance preference), `systemOverlayStyle()` (bar icon brightness) |
 | `lib/theme/nocturne_widgets.dart` | Shared pieces: `FadedRule`, `Kicker`, `SectionLabel`, `GlowDot`, `IconTile`, `Tag` (accent, `Tag.neutral`, `Tag.outline`, `Tag.danger`, `Tag.success`, optional leading icon), `NocturneCard`, `nocturneGlow()`, `DashedSlot`, `FiLogoMark`, `FiLogoTile`, `ClearMark`, the field status markers `VoiceChip` / `DefaultMarker` / `NeededMarker`, `FiSwitch` / `FiSwitchTile`, `FiIconButton`, `CardListRow` |
 | `lib/theme/fi_icons.dart` | `FiIcons`: every icon the app draws, named by meaning and pointing at a Phosphor glyph; `fieldTypeIcon()` for the nine field types |
 | `lib/theme/side_sheet.dart` | `showSideSheet()`: a 480px sheet from the right, or a bottom sheet on a phone |
@@ -90,11 +91,31 @@ widget to `nocturne_widgets.dart` only when a second screen needs it.
    input (the dictation mic) goes in `FiTextInput.trailingAction`, after the clear mark, with its
    own 44px target; in a multiline input the slot stays pinned to the top.
 
-## Colors: Catppuccin Mocha, roles and statuses
+## Colors: Catppuccin Mocha and Latte, roles and statuses
 
 Colors live in `NocturneColors` (`lib/theme/nocturne.dart`), a `ThemeExtension` read with
-`context.nocturne`. The values come from the `:root` block of `design/project/_ds/nocturne-*/styles.css`
-(Catppuccin Mocha: base `#1e1e2e`, surface0 `#313244`, text `#cdd6f4`, mauve accent `#cba6f7`).
+`context.nocturne`. There are two instances, each copied literally from
+`design/project/_ds/nocturne-*/styles.css`: `NocturneColors.mocha` from `:root` (base `#1e1e2e`,
+surface0 `#313244`, text `#cdd6f4`, mauve accent `#cba6f7`) and `NocturneColors.latte` from
+`[data-theme="light"]` (base `#eff1f5`, surface0 `#ccd0da`, text `#4c4f69`, mauve accent `#8839ef`,
+scrim text at 40%). `nocturneTheme(colors)` builds both `ThemeData`s; brightness comes from the set.
+
+Which theme is active: `MaterialApp` gets `theme` (Latte), `darkTheme` (Mocha) and `themeMode`
+from the Appearance preference (Settings › Appearance: System default, Light, Dark; stored as
+`app_theme` in `ui_prefs.json`, device-local, never synced). System default follows the phone or
+desktop setting live. Switching only rebuilds through the theme, so every screen keeps its state;
+that only holds if colors are read in `build`, so never cache a theme color in `initState`, a
+`late final`, or a static decoration or text style. At start the stored choice applies without a
+cross-fade (`themeAnimationDuration` is zero until the frame after it loads).
+
+Platform chrome: on Android the launch and window background is `@color/fi_bg`
+(`values/colors.xml` Latte `#eff1f5`, `values-night/colors.xml` Mocha `#1e1e2e`), so the launch
+screen follows the phone's setting (the app preference isn't readable before the engine starts).
+While running, an `AnnotatedRegion<SystemUiOverlayStyle>` in `MaterialApp.builder` sets only the
+status and navigation bar icon brightness (dark icons on Latte); bar colors are never set, since the
+app draws edge-to-edge under the bars. On Linux, System default follows whatever brightness Flutter
+reports from the xdg-desktop-portal `color-scheme`; on this NixOS/Hyprland desktop the portal
+reports it (`prefer-dark` reads as 1). If a desktop doesn't report it, Light and Dark still work.
 Theme tokens: `bg`, `surface`, `text`, `accent`, `divider`, `section`, `sectionGlow`, `sectionGhost`,
 `scrim` (the backdrop behind dialogs and sheets), `shadowSm/Md/Lg`, `muted(opacity)`.
 
@@ -331,6 +352,15 @@ chart-package ticks.
   `FontLoader` from `assets/fonts/…` and `fonts/MaterialIcons-Regular.otf`, then write goldens to a
   scratch directory with `--update-goldens`. Delete the test afterwards. Test goldens draw shadows
   as solid black; that's expected.
+- Both themes: `test/latte_theme_test.dart` pumps the key screens under Latte and Mocha and fails
+  if a Mocha-only color is drawn on Latte (`expectNoMochaColor`). Use `platformBrightness(tester, …)`
+  (or `useDarkPlatform` from `widget_test.dart`) when a test asserts a theme's colors: the test
+  platform is light, so the app draws Latte by default.
+- Latte goldens: `test/latte_goldens_test.dart` renders 12 mocked screens (onboarding-first-run, collections, collection-records, collection-selection, record-form-empty, record-form-edit, schema-sheet, devices, settings, settings-language, settings-model-states, settings-microphone) under Latte at 1280×800 and
+  390×844 with the bundled fonts into `test/goldens/latte/`. Compare them with the mocks in
+  `design/project/Fi Redesign.dc.html` toggled to `data-theme="light"`; fix a wrong color by picking
+  another role, never a numbered step. Regenerate after a deliberate change with
+  `flutter test --update-goldens test/latte_goldens_test.dart` (Linux host only; rasterization differs elsewhere).
 - Run commands through the nix dev shell: `nix develop -c bash -c 'cd flutter_app && flutter test'`.
 
 ## Not done yet
