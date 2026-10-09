@@ -7,7 +7,7 @@ Lets a phone user fill the New record form by speaking. The user reviews the fil
 ## Requirements
 
 ### Requirement: Voice fill availability and entry
-Voice fill SHALL be offered only in the New record sheet on screens narrower than 720px, and only when a voice engine is available to the build. It MUST NOT appear in Edit record, in the desktop dialog, or anywhere else. When offered, the sheet footer SHALL hold a 56px round mic button at its leading edge and "Save record" filling the rest of the row. The first time the sheet opens with voice fill offered, a tip SHALL appear at the top of the sheet: a sparkle icon, "Fill by voice", "Tap the mic below and say the details. You review before saving.", and a dismiss action. Once dismissed, the tip SHALL NOT appear again on this device.
+Whole-form voice fill SHALL be offered only in the New record sheet on screens narrower than 720px, and only when a voice engine is available to the build. Whole-form voice fill MUST NOT appear in Edit record, in the desktop dialog, or anywhere else. Dictation into a single Text field is a separate feature (voice-field-dictation) with its own availability and is not governed by this rule. When offered, the sheet footer SHALL hold a 56px round mic button at its leading edge and "Save record" filling the rest of the row. The first time the sheet opens with voice fill offered, a tip SHALL appear at the top of the sheet: a sparkle icon, "Fill by voice", "Tap the mic below and say the details. You review before saving.", and a dismiss action. Once dismissed, the tip SHALL NOT appear again on this device.
 
 #### Scenario: Mic on a phone
 - **WHEN** a voice engine is available and the user opens New record on a 390px-wide screen
@@ -17,9 +17,9 @@ Voice fill SHALL be offered only in the New record sheet on screens narrower tha
 - **WHEN** no voice engine is available to the build
 - **THEN** the New record sheet shows no mic, no tip and no voice panel
 
-#### Scenario: No mic in Edit record or on desktop
+#### Scenario: No footer mic in Edit record or on desktop
 - **WHEN** the user opens Edit record on a phone, or New record on a 1240px-wide screen
-- **THEN** no mic is shown
+- **THEN** no whole-form fill mic is shown in the footer, and no voice fill tip or panel is shown
 
 #### Scenario: Tip shown once
 - **WHEN** the user dismisses the "Fill by voice" tip and later opens New record again

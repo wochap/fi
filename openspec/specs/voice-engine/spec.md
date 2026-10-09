@@ -177,12 +177,37 @@ The engine SHALL keep an entry only when its evidence, after normalizing case, w
 - **WHEN** every proposed entry fails the evidence check
 - **THEN** the turn fails with `nothingMatched`
 
+### Requirement: Dictation turn with delete-only cleanup
+The engine SHALL offer a dictation turn alongside the fill turn. A dictation turn SHALL capture and transcribe audio exactly as a fill turn does (same capture, cap, voice language, speech model and failures), report the transcript as soon as it exists, and then return a cleaned text. Cleanup SHALL run the instruction model with a prompt that asks it to remove self-corrections, retracted words and filler (for example "no wait", "I mean", "scratch that", "nevermind", "um", and in Spanish "digo", "perdón", "mejor dicho", "este") and to keep every other word unchanged and in order. Generation SHALL use greedy sampling with thinking off, and output SHALL be capped at 256 tokens.
+
+The engine SHALL accept the cleaned text only when its words, compared after normalizing case and accents and ignoring punctuation, are a subsequence of the transcript's words and at least one word remains. Otherwise the cleaned text SHALL equal the transcript. The engine SHALL also return the indexes of the transcript words the cleanup removed, so the app can strike them through. A dictation turn SHALL NOT fail with `nothingMatched`. When the cleanup itself fails with `lowMemory` or `modelLoadFailed`, the turn SHALL fail with that error.
+
+#### Scenario: Self-correction removed
+- **WHEN** an English dictation turn's transcript is “Lunch at Nando's, scratch that, lunch at Wagamama with Sam”
+- **THEN** the cleaned text is “Lunch at Wagamama with Sam” and the removed indexes cover “Lunch at Nando's, scratch that,”
+
+#### Scenario: Invented word rejected
+- **WHEN** the model returns “Lunch at the Wagamama” for the transcript “Lunch at Wagamama”
+- **THEN** “the” is not in the transcript, and the cleaned text equals the transcript
+
+#### Scenario: Nothing to clean
+- **WHEN** the transcript is “Team lunch at Wagamama” and the model returns it unchanged
+- **THEN** the cleaned text equals the transcript and no index is removed
+
+#### Scenario: Spanish cleanup
+- **WHEN** a Spanish dictation turn's transcript is “Comprar leche de avena, digo, leche de almendra”
+- **THEN** the cleaned text is “Comprar leche de almendra”
+
 ### Requirement: Model lifecycle and failures
-The engine SHALL load the instruction model when a New record sheet opens with the models ready, without blocking the sheet, and SHALL keep it loaded while the app is in the foreground. It SHALL release the model after 5 minutes in the background or when Android reports memory pressure. A turn that needs the model while it is loading SHALL wait for the load. A missing or unreadable model file SHALL fail the turn with `modelLoadFailed`. An allocation failure while loading or running SHALL fail with `lowMemory` and release the partial state. Cancel SHALL stop transcription or generation at the next opportunity and return within one second. Model files, audio and transcripts SHALL never be sent over the network or written to logs.
+The engine SHALL load the instruction model, without blocking the form, when a New record sheet opens with whole-form voice fill offered or a record form opens that offers field dictation, in both cases with the models ready. It SHALL keep the model loaded while the app is in the foreground. It SHALL release the model after 5 minutes in the background or when Android reports memory pressure. A turn that needs the model while it is loading SHALL wait for the load. A missing or unreadable model file SHALL fail the turn with `modelLoadFailed`. An allocation failure while loading or running SHALL fail with `lowMemory` and release the partial state. Cancel SHALL stop transcription or generation at the next opportunity and return within one second. Model files, audio and transcripts SHALL never be sent over the network or written to logs.
 
 #### Scenario: Warm on sheet open
 - **WHEN** the models are ready and the user opens New record
 - **THEN** the instruction model starts loading in the background, and the sheet stays usable
+
+#### Scenario: Warm on Edit record with dictation
+- **WHEN** the models are ready and the user opens Edit record on Android for a collection with a Text field
+- **THEN** the instruction model starts loading in the background, and the form stays usable
 
 #### Scenario: Released in the background
 - **WHEN** the app stays in the background for 5 minutes
