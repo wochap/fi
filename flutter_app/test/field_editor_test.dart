@@ -1133,7 +1133,11 @@ void main() {
   testWidgets('the New field panel shows Name at the normal height above the '
       'type grid', (tester) async {
     final seeded = await seed(tester);
-    await pumpPage(tester, seeded.controller, theme: nocturneTheme());
+    await pumpPage(
+      tester,
+      seeded.controller,
+      theme: nocturneTheme(NocturneColors.mocha),
+    );
     await tester.tap(find.text('Schema'));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('new-field')));

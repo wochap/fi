@@ -4,65 +4,365 @@ import 'package:flutter/material.dart';
 ///
 /// Every color, radius and shadow in the app comes from here. The accent is a line and a glow,
 /// never a flood: primary actions are outlined, and tinted fills use the dark ramp steps.
+/// One theme's colors and shadows, taken from the design system's `styles.css`.
+///
+/// Read it with `context.nocturne`. Call sites use the theme tokens and the theme-relative
+/// roles; the numbered ramps exist for the theme builder only.
+@immutable
+class NocturneColors extends ThemeExtension<NocturneColors> {
+  const NocturneColors({
+    required this.brightness,
+    required this.bg,
+    required this.surface,
+    required this.text,
+    required this.accent,
+    required this.divider,
+    required this.danger,
+    required this.dangerTint,
+    required this.success,
+    required this.warning,
+    required this.scrim,
+    required this.section,
+    required this.sectionGlow,
+    required this.sectionGhost,
+    required this.neutral100,
+    required this.neutral200,
+    required this.neutral300,
+    required this.neutral400,
+    required this.neutral500,
+    required this.neutral600,
+    required this.neutral700,
+    required this.neutral800,
+    required this.neutral900,
+    required this.accent100,
+    required this.accent200,
+    required this.accent300,
+    required this.accent400,
+    required this.accent500,
+    required this.accent600,
+    required this.accent700,
+    required this.accent800,
+    required this.accent900,
+    required this.accentFill,
+    required this.accentEdge,
+    required this.accentText,
+    required this.accentInk,
+    required this.accentInkStrong,
+    required this.neutralFill,
+    required this.neutralFillStrong,
+    required this.neutralEdge,
+    required this.neutralGhost,
+    required this.neutralMuted,
+    required this.shadowSm,
+    required this.shadowMd,
+    required this.shadowLg,
+  });
+
+  final Brightness brightness;
+  final Color bg;
+  final Color surface;
+  final Color text;
+  final Color accent;
+
+  /// `color-mix(in srgb, surface2 60%, transparent)`.
+  final Color divider;
+  final Color danger;
+
+  /// [danger] at low alpha, the fill behind danger-tinted marks.
+  final Color dangerTint;
+  final Color success;
+  final Color warning;
+
+  /// The backdrop behind dialogs and sheets.
+  final Color scrim;
+  final Color section;
+  final Color sectionGlow;
+  final Color sectionGhost;
+  final Color neutral100;
+  final Color neutral200;
+  final Color neutral300;
+  final Color neutral400;
+  final Color neutral500;
+  final Color neutral600;
+  final Color neutral700;
+  final Color neutral800;
+  final Color neutral900;
+  final Color accent100;
+  final Color accent200;
+  final Color accent300;
+  final Color accent400;
+  final Color accent500;
+  final Color accent600;
+  final Color accent700;
+  final Color accent800;
+  final Color accent900;
+
+  /// A tinted accent fill (selected rows, chips, the switch track).
+  final Color accentFill;
+
+  /// An accent border or inner ring.
+  final Color accentEdge;
+
+  /// Accent text at paragraph size.
+  final Color accentText;
+
+  /// Small accent labels and icons on a fill.
+  final Color accentInk;
+
+  /// Text on an accent fill.
+  final Color accentInkStrong;
+
+  /// A quiet neutral fill.
+  final Color neutralFill;
+
+  /// A stronger neutral fill (neutral tags, tooltips).
+  final Color neutralFillStrong;
+
+  /// A neutral border.
+  final Color neutralEdge;
+
+  /// A dim or ghosted mark.
+  final Color neutralGhost;
+
+  /// Muted chrome.
+  final Color neutralMuted;
+
+  /// A hairline edge: `--shadow-sm`.
+  final List<BoxShadow> shadowSm;
+
+  /// An edge plus ambient darkness: `--shadow-md`.
+  final List<BoxShadow> shadowMd;
+
+  /// The top elevation: `--shadow-lg`.
+  final List<BoxShadow> shadowLg;
+
+  /// The text color at [opacity], the `color-mix(text N%, transparent)` of the mocks.
+  Color muted(double opacity) => text.withValues(alpha: opacity);
+
+  /// Catppuccin Mocha, the dark theme.
+  static const mocha = NocturneColors(
+    brightness: Brightness.dark,
+    bg: Color(0xFF1E1E2E),
+    surface: Color(0xFF313244),
+    text: Color(0xFFCDD6F4),
+    accent: Color(0xFFCBA6F7),
+    divider: Color(0x99585B70),
+    danger: Color(0xFFF38BA8),
+    dangerTint: Color(0x29F38BA8),
+    success: Color(0xFFA6E3A1),
+    warning: Color(0xFFF9E2AF),
+    scrim: Color(0xA611111B),
+    section: Color(0xFF181825),
+    sectionGlow: Color(0xFF45475A),
+    sectionGhost: Color(0xFF6C7086),
+    neutral100: Color(0xFFCDD6F4),
+    neutral200: Color(0xFFBAC2DE),
+    neutral300: Color(0xFFA6ADC8),
+    neutral400: Color(0xFF9399B2),
+    neutral500: Color(0xFF7F849C),
+    neutral600: Color(0xFF6C7086),
+    neutral700: Color(0xFF585B70),
+    neutral800: Color(0xFF45475A),
+    neutral900: Color(0xFF313244),
+    accent100: Color(0xFFF5EEFE),
+    accent200: Color(0xFFECDDFF),
+    accent300: Color(0xFFD9C2F6),
+    accent400: Color(0xFFD2B4F6),
+    accent500: Color(0xFFCBA6F7),
+    accent600: Color(0xFF9377B5),
+    accent700: Color(0xFF5F4A76),
+    accent800: Color(0xFF413350),
+    accent900: Color(0xFF251E2D),
+    accentFill: Color(0xFF251E2D),
+    accentEdge: Color(0xFF5F4A76),
+    accentText: Color(0xFFD9C2F6),
+    accentInk: Color(0xFFECDDFF),
+    accentInkStrong: Color(0xFFF5EEFE),
+    neutralFill: Color(0xFF313244),
+    neutralFillStrong: Color(0xFF45475A),
+    neutralEdge: Color(0xFF585B70),
+    neutralGhost: Color(0xFF6C7086),
+    neutralMuted: Color(0xFF7F849C),
+    shadowSm: [BoxShadow(color: Color(0xFF585B70), spreadRadius: 1)],
+    shadowMd: [
+      BoxShadow(color: Color(0xFF6C7086), spreadRadius: 1),
+      BoxShadow(color: Color(0x8C000000), offset: Offset(0, 6), blurRadius: 18),
+    ],
+    shadowLg: [
+      BoxShadow(color: Color(0xFF7F849C), spreadRadius: 1),
+      BoxShadow(
+        color: Color(0xA6000000),
+        offset: Offset(0, 16),
+        blurRadius: 40,
+      ),
+    ],
+  );
+
+  @override
+  NocturneColors copyWith({
+    Brightness? brightness,
+    Color? bg,
+    Color? surface,
+    Color? text,
+    Color? accent,
+    Color? divider,
+    Color? danger,
+    Color? dangerTint,
+    Color? success,
+    Color? warning,
+    Color? scrim,
+    Color? section,
+    Color? sectionGlow,
+    Color? sectionGhost,
+    Color? neutral100,
+    Color? neutral200,
+    Color? neutral300,
+    Color? neutral400,
+    Color? neutral500,
+    Color? neutral600,
+    Color? neutral700,
+    Color? neutral800,
+    Color? neutral900,
+    Color? accent100,
+    Color? accent200,
+    Color? accent300,
+    Color? accent400,
+    Color? accent500,
+    Color? accent600,
+    Color? accent700,
+    Color? accent800,
+    Color? accent900,
+    Color? accentFill,
+    Color? accentEdge,
+    Color? accentText,
+    Color? accentInk,
+    Color? accentInkStrong,
+    Color? neutralFill,
+    Color? neutralFillStrong,
+    Color? neutralEdge,
+    Color? neutralGhost,
+    Color? neutralMuted,
+    List<BoxShadow>? shadowSm,
+    List<BoxShadow>? shadowMd,
+    List<BoxShadow>? shadowLg,
+  }) => NocturneColors(
+    brightness: brightness ?? this.brightness,
+    bg: bg ?? this.bg,
+    surface: surface ?? this.surface,
+    text: text ?? this.text,
+    accent: accent ?? this.accent,
+    divider: divider ?? this.divider,
+    danger: danger ?? this.danger,
+    dangerTint: dangerTint ?? this.dangerTint,
+    success: success ?? this.success,
+    warning: warning ?? this.warning,
+    scrim: scrim ?? this.scrim,
+    section: section ?? this.section,
+    sectionGlow: sectionGlow ?? this.sectionGlow,
+    sectionGhost: sectionGhost ?? this.sectionGhost,
+    neutral100: neutral100 ?? this.neutral100,
+    neutral200: neutral200 ?? this.neutral200,
+    neutral300: neutral300 ?? this.neutral300,
+    neutral400: neutral400 ?? this.neutral400,
+    neutral500: neutral500 ?? this.neutral500,
+    neutral600: neutral600 ?? this.neutral600,
+    neutral700: neutral700 ?? this.neutral700,
+    neutral800: neutral800 ?? this.neutral800,
+    neutral900: neutral900 ?? this.neutral900,
+    accent100: accent100 ?? this.accent100,
+    accent200: accent200 ?? this.accent200,
+    accent300: accent300 ?? this.accent300,
+    accent400: accent400 ?? this.accent400,
+    accent500: accent500 ?? this.accent500,
+    accent600: accent600 ?? this.accent600,
+    accent700: accent700 ?? this.accent700,
+    accent800: accent800 ?? this.accent800,
+    accent900: accent900 ?? this.accent900,
+    accentFill: accentFill ?? this.accentFill,
+    accentEdge: accentEdge ?? this.accentEdge,
+    accentText: accentText ?? this.accentText,
+    accentInk: accentInk ?? this.accentInk,
+    accentInkStrong: accentInkStrong ?? this.accentInkStrong,
+    neutralFill: neutralFill ?? this.neutralFill,
+    neutralFillStrong: neutralFillStrong ?? this.neutralFillStrong,
+    neutralEdge: neutralEdge ?? this.neutralEdge,
+    neutralGhost: neutralGhost ?? this.neutralGhost,
+    neutralMuted: neutralMuted ?? this.neutralMuted,
+    shadowSm: shadowSm ?? this.shadowSm,
+    shadowMd: shadowMd ?? this.shadowMd,
+    shadowLg: shadowLg ?? this.shadowLg,
+  );
+
+  @override
+  NocturneColors lerp(NocturneColors? other, double t) {
+    if (other == null) return this;
+    Color c(Color a, Color b) => Color.lerp(a, b, t)!;
+    List<BoxShadow> s(List<BoxShadow> a, List<BoxShadow> b) =>
+        BoxShadow.lerpList(a, b, t)!;
+    return NocturneColors(
+      brightness: t < .5 ? brightness : other.brightness,
+      bg: c(bg, other.bg),
+      surface: c(surface, other.surface),
+      text: c(text, other.text),
+      accent: c(accent, other.accent),
+      divider: c(divider, other.divider),
+      danger: c(danger, other.danger),
+      dangerTint: c(dangerTint, other.dangerTint),
+      success: c(success, other.success),
+      warning: c(warning, other.warning),
+      scrim: c(scrim, other.scrim),
+      section: c(section, other.section),
+      sectionGlow: c(sectionGlow, other.sectionGlow),
+      sectionGhost: c(sectionGhost, other.sectionGhost),
+      neutral100: c(neutral100, other.neutral100),
+      neutral200: c(neutral200, other.neutral200),
+      neutral300: c(neutral300, other.neutral300),
+      neutral400: c(neutral400, other.neutral400),
+      neutral500: c(neutral500, other.neutral500),
+      neutral600: c(neutral600, other.neutral600),
+      neutral700: c(neutral700, other.neutral700),
+      neutral800: c(neutral800, other.neutral800),
+      neutral900: c(neutral900, other.neutral900),
+      accent100: c(accent100, other.accent100),
+      accent200: c(accent200, other.accent200),
+      accent300: c(accent300, other.accent300),
+      accent400: c(accent400, other.accent400),
+      accent500: c(accent500, other.accent500),
+      accent600: c(accent600, other.accent600),
+      accent700: c(accent700, other.accent700),
+      accent800: c(accent800, other.accent800),
+      accent900: c(accent900, other.accent900),
+      accentFill: c(accentFill, other.accentFill),
+      accentEdge: c(accentEdge, other.accentEdge),
+      accentText: c(accentText, other.accentText),
+      accentInk: c(accentInk, other.accentInk),
+      accentInkStrong: c(accentInkStrong, other.accentInkStrong),
+      neutralFill: c(neutralFill, other.neutralFill),
+      neutralFillStrong: c(neutralFillStrong, other.neutralFillStrong),
+      neutralEdge: c(neutralEdge, other.neutralEdge),
+      neutralGhost: c(neutralGhost, other.neutralGhost),
+      neutralMuted: c(neutralMuted, other.neutralMuted),
+      shadowSm: s(shadowSm, other.shadowSm),
+      shadowMd: s(shadowMd, other.shadowMd),
+      shadowLg: s(shadowLg, other.shadowLg),
+    );
+  }
+}
+
+extension NocturneContext on BuildContext {
+  /// The color set of the current theme; Mocha under a theme built without one.
+  NocturneColors get nocturne =>
+      Theme.of(this).extension<NocturneColors>() ?? NocturneColors.mocha;
+}
+
+/// Nocturne's theme-independent tokens: radii, fonts, sizes and breakpoints.
 abstract final class Nocturne {
-  static const bg = Color(0xFF161826);
-  static const surface = Color(0xFF232532);
-  static const text = Color(0xFFE9E9ED);
-  static const accent = Color(0xFF9184D9);
-
-  /// `color-mix(in srgb, text 16%, transparent)`.
-  static const divider = Color(0x29E9E9ED);
-
-  static const neutral100 = Color(0xFFF3F5FE);
-  static const neutral200 = Color(0xFFE4E7F5);
-  static const neutral300 = Color(0xFFCFD3E5);
-  static const neutral400 = Color(0xFFB2B6CA);
-  static const neutral500 = Color(0xFF9397AB);
-  static const neutral600 = Color(0xFF75798C);
-  static const neutral700 = Color(0xFF595D6C);
-  static const neutral800 = Color(0xFF3F424D);
-  static const neutral900 = Color(0xFF292B31);
-
-  static const accent100 = Color(0xFFF5F4FF);
-  static const accent200 = Color(0xFFE7E5FE);
-  static const accent300 = Color(0xFFD2CEFD);
-  static const accent400 = Color(0xFFB5ABFC);
-  static const accent500 = Color(0xFF968AE0);
-  static const accent600 = Color(0xFF796CBF);
-  static const accent700 = Color(0xFF5D5294);
-  static const accent800 = Color(0xFF423A6A);
-  static const accent900 = Color(0xFF2B2741);
-
-  /// The design has no error role; this muted red sits on the shared lightness scale.
-  static const error = Color(0xFFE8797F);
-
-  /// [error] at low alpha, the fill behind error-tinted text.
-  static const errorTint = Color(0x29E8797F);
-
   static const radiusSm = 4.0;
   static const radius = 8.0;
   static const radiusLg = 14.0;
 
   static const fontFamily = 'Inter';
   static const monoFamily = 'JetBrains Mono';
-
-  /// The text color at [opacity], the `color-mix(text N%, transparent)` of the mocks.
-  static Color muted(double opacity) => text.withValues(alpha: opacity);
-
-  /// A hairline edge: `--shadow-sm`.
-  static const shadowSm = [BoxShadow(color: neutral800, spreadRadius: 1)];
-
-  /// An edge plus ambient darkness: `--shadow-md`.
-  static const shadowMd = [
-    BoxShadow(color: neutral700, spreadRadius: 1),
-    BoxShadow(color: Color(0x8C000000), offset: Offset(0, 6), blurRadius: 18),
-  ];
-
-  /// The top elevation: `--shadow-lg`.
-  static const shadowLg = [
-    BoxShadow(color: neutral500, spreadRadius: 1),
-    BoxShadow(color: Color(0xA6000000), offset: Offset(0, 16), blurRadius: 40),
-  ];
 
   static const tabular = [FontFeature.tabularFigures()];
 
@@ -97,38 +397,39 @@ abstract final class Nocturne {
 /// (expression builder nodes, query builder conditions).
 enum InputSize { small, normal }
 
-/// The one app theme. Dark only: the design has no light variant.
-ThemeData nocturneTheme() {
-  const scheme = ColorScheme.dark(
-    primary: Nocturne.accent,
-    onPrimary: Nocturne.bg,
-    primaryContainer: Nocturne.accent900,
-    onPrimaryContainer: Nocturne.accent200,
-    secondary: Nocturne.accent300,
-    onSecondary: Nocturne.bg,
-    secondaryContainer: Nocturne.neutral800,
-    onSecondaryContainer: Nocturne.neutral100,
-    tertiary: Nocturne.accent400,
-    surface: Nocturne.surface,
-    onSurface: Nocturne.text,
-    onSurfaceVariant: Color(0x99E9E9ED),
-    surfaceContainerLowest: Nocturne.bg,
-    surfaceContainerLow: Nocturne.bg,
-    surfaceContainer: Nocturne.surface,
-    surfaceContainerHigh: Nocturne.surface,
-    surfaceContainerHighest: Nocturne.neutral800,
+/// The app theme built from the color set [c].
+ThemeData nocturneTheme(NocturneColors c) {
+  final scheme = ColorScheme(
+    brightness: c.brightness,
+    primary: c.accent,
+    onPrimary: c.bg,
+    primaryContainer: c.accentFill,
+    onPrimaryContainer: c.accentInk,
+    secondary: c.accentText,
+    onSecondary: c.bg,
+    secondaryContainer: c.neutralFillStrong,
+    onSecondaryContainer: c.text,
+    tertiary: c.accentText,
+    surface: c.surface,
+    onSurface: c.text,
+    onSurfaceVariant: c.muted(.6),
+    surfaceContainerLowest: c.bg,
+    surfaceContainerLow: c.bg,
+    surfaceContainer: c.surface,
+    surfaceContainerHigh: c.surface,
+    surfaceContainerHighest: c.neutralFillStrong,
     surfaceTint: Colors.transparent,
-    outline: Nocturne.divider,
-    outlineVariant: Nocturne.neutral800,
-    error: Nocturne.error,
-    onError: Nocturne.bg,
-    errorContainer: Color(0xFF4A2A30),
-    onErrorContainer: Color(0xFFF6D3D5),
-    inverseSurface: Nocturne.neutral200,
-    onInverseSurface: Nocturne.bg,
-    inversePrimary: Nocturne.accent700,
-    shadow: Colors.black,
-    scrim: Nocturne.neutral900,
+    outline: c.divider,
+    outlineVariant: c.neutralFillStrong,
+    error: c.danger,
+    onError: c.bg,
+    errorContainer: c.dangerTint,
+    onErrorContainer: c.danger,
+    inverseSurface: c.text,
+    onInverseSurface: c.bg,
+    inversePrimary: c.accentEdge,
+    shadow: const Color(0xFF000000),
+    scrim: c.scrim,
   );
 
   TextStyle style(double size, {FontWeight weight = FontWeight.w400}) =>
@@ -162,7 +463,7 @@ ThemeData nocturneTheme() {
     labelLarge: style(14, weight: FontWeight.w500),
     labelMedium: style(13),
     labelSmall: style(11),
-  ).apply(bodyColor: Nocturne.text, displayColor: Nocturne.text);
+  ).apply(bodyColor: c.text, displayColor: c.text);
 
   const radius = BorderRadius.all(Radius.circular(Nocturne.radius));
   const shape = RoundedRectangleBorder(borderRadius: radius);
@@ -186,20 +487,20 @@ ThemeData nocturneTheme() {
     backgroundColor: const WidgetStatePropertyAll(Colors.transparent),
     foregroundColor: WidgetStateProperty.resolveWith(
       (states) => states.contains(WidgetState.disabled)
-          ? Nocturne.accent.withValues(alpha: .45)
-          : Nocturne.accent,
+          ? c.accent.withValues(alpha: .45)
+          : c.accent,
     ),
     iconColor: WidgetStateProperty.resolveWith(
       (states) => states.contains(WidgetState.disabled)
-          ? Nocturne.accent.withValues(alpha: .45)
-          : Nocturne.accent,
+          ? c.accent.withValues(alpha: .45)
+          : c.accent,
     ),
-    overlayColor: overlay(Nocturne.accent, .12, .22),
+    overlayColor: overlay(c.accent, .12, .22),
     side: WidgetStateProperty.resolveWith(
       (states) => BorderSide(
         color: states.contains(WidgetState.disabled)
-            ? Nocturne.accent.withValues(alpha: .45)
-            : Nocturne.accent,
+            ? c.accent.withValues(alpha: .45)
+            : c.accent,
       ),
     ),
     shape: const WidgetStatePropertyAll(shape),
@@ -216,16 +517,14 @@ ThemeData nocturneTheme() {
   // `.btn-secondary`: a divider outline in the text color.
   final secondary = ButtonStyle(
     foregroundColor: WidgetStateProperty.resolveWith(
-      (states) => states.contains(WidgetState.disabled)
-          ? Nocturne.muted(.45)
-          : Nocturne.text,
+      (states) => states.contains(WidgetState.disabled) ? c.muted(.45) : c.text,
     ),
-    overlayColor: overlay(Nocturne.text, .07, .14),
+    overlayColor: overlay(c.text, .07, .14),
     side: WidgetStateProperty.resolveWith(
       (states) => BorderSide(
         color: states.contains(WidgetState.disabled)
-            ? Nocturne.divider.withValues(alpha: .08)
-            : Nocturne.divider,
+            ? c.divider.withValues(alpha: .08)
+            : c.divider,
       ),
     ),
     shape: const WidgetStatePropertyAll(shape),
@@ -241,10 +540,10 @@ ThemeData nocturneTheme() {
   final ghost = ButtonStyle(
     foregroundColor: WidgetStateProperty.resolveWith(
       (states) => states.contains(WidgetState.disabled)
-          ? Nocturne.accent.withValues(alpha: .45)
-          : Nocturne.accent,
+          ? c.accent.withValues(alpha: .45)
+          : c.accent,
     ),
-    overlayColor: overlay(Nocturne.accent, .10, .18),
+    overlayColor: overlay(c.accent, .10, .18),
     shape: const WidgetStatePropertyAll(shape),
     minimumSize: const WidgetStatePropertyAll(Size(0, 36)),
     padding: const WidgetStatePropertyAll(
@@ -258,15 +557,15 @@ ThemeData nocturneTheme() {
     final Color color;
     if (states.contains(WidgetState.error)) {
       // A field error is marked by the accent border, beside its warning icon and message.
-      color = Nocturne.accent;
+      color = c.accent;
     } else if (states.contains(WidgetState.focused)) {
-      color = Nocturne.accent;
+      color = c.accent;
     } else if (states.contains(WidgetState.disabled)) {
-      color = Nocturne.divider.withValues(alpha: .08);
+      color = c.divider.withValues(alpha: .08);
     } else if (states.contains(WidgetState.hovered)) {
-      color = Nocturne.muted(.45);
+      color = c.muted(.45);
     } else {
-      color = Nocturne.divider;
+      color = c.divider;
     }
     return OutlineInputBorder(
       borderRadius: radius,
@@ -275,24 +574,25 @@ ThemeData nocturneTheme() {
   });
 
   return ThemeData(
+    extensions: [c],
     useMaterial3: true,
-    brightness: Brightness.dark,
+    brightness: c.brightness,
     colorScheme: scheme,
     fontFamily: Nocturne.fontFamily,
     textTheme: textTheme,
-    scaffoldBackgroundColor: Nocturne.bg,
-    canvasColor: Nocturne.surface,
-    cardColor: Nocturne.surface,
-    dividerColor: Nocturne.divider,
-    hoverColor: Nocturne.muted(.04),
-    focusColor: Nocturne.accent.withValues(alpha: .12),
+    scaffoldBackgroundColor: c.bg,
+    canvasColor: c.surface,
+    cardColor: c.surface,
+    dividerColor: c.divider,
+    hoverColor: c.muted(.04),
+    focusColor: c.accent.withValues(alpha: .12),
     highlightColor: Colors.transparent,
     splashFactory: NoSplash.splashFactory,
-    iconTheme: const IconThemeData(color: Nocturne.text, size: 20),
+    iconTheme: IconThemeData(color: c.text, size: 20),
     textSelectionTheme: TextSelectionThemeData(
-      cursorColor: Nocturne.accent,
-      selectionColor: Nocturne.accent.withValues(alpha: .3),
-      selectionHandleColor: Nocturne.accent,
+      cursorColor: c.accent,
+      selectionColor: c.accent.withValues(alpha: .3),
+      selectionHandleColor: c.accent,
     ),
     filledButtonTheme: FilledButtonThemeData(style: primary),
     elevatedButtonTheme: ElevatedButtonThemeData(style: primary),
@@ -302,18 +602,18 @@ ThemeData nocturneTheme() {
       style: ButtonStyle(
         foregroundColor: WidgetStateProperty.resolveWith(
           (states) => states.contains(WidgetState.disabled)
-              ? Nocturne.muted(.3)
-              : Nocturne.muted(.75),
+              ? c.muted(.3)
+              : c.muted(.75),
         ),
-        overlayColor: overlay(Nocturne.text, .07, .14),
+        overlayColor: overlay(c.text, .07, .14),
         shape: const WidgetStatePropertyAll(shape),
         minimumSize: const WidgetStatePropertyAll(Size(36, 36)),
         iconSize: const WidgetStatePropertyAll(18),
       ),
     ),
-    floatingActionButtonTheme: const FloatingActionButtonThemeData(
-      backgroundColor: Nocturne.bg,
-      foregroundColor: Nocturne.accent,
+    floatingActionButtonTheme: FloatingActionButtonThemeData(
+      backgroundColor: c.bg,
+      foregroundColor: c.accent,
       elevation: 0,
       focusElevation: 0,
       hoverElevation: 0,
@@ -325,84 +625,84 @@ ThemeData nocturneTheme() {
       ),
       shape: RoundedRectangleBorder(
         borderRadius: radius,
-        side: BorderSide(color: Nocturne.accent),
+        side: BorderSide(color: c.accent),
       ),
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: Nocturne.surface,
+      fillColor: c.surface,
       hoverColor: Colors.transparent,
       isDense: true,
       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       border: inputBorder,
-      labelStyle: style(14).copyWith(color: Nocturne.muted(.7)),
+      labelStyle: style(14).copyWith(color: c.muted(.7)),
       floatingLabelStyle: WidgetStateTextStyle.resolveWith(
         (states) => style(13).copyWith(
           color: states.contains(WidgetState.error)
-              ? Nocturne.error
+              ? c.danger
               : states.contains(WidgetState.focused)
-              ? Nocturne.accent
-              : Nocturne.muted(.7),
+              ? c.accent
+              : c.muted(.7),
         ),
       ),
-      hintStyle: style(14).copyWith(color: Nocturne.muted(.45)),
-      helperStyle: style(11).copyWith(color: Nocturne.muted(.5)),
-      errorStyle: style(12).copyWith(color: Nocturne.error),
-      iconColor: Nocturne.muted(.6),
-      prefixIconColor: Nocturne.muted(.6),
-      suffixIconColor: Nocturne.muted(.6),
+      hintStyle: style(14).copyWith(color: c.muted(.45)),
+      helperStyle: style(11).copyWith(color: c.muted(.5)),
+      errorStyle: style(12).copyWith(color: c.danger),
+      iconColor: c.muted(.6),
+      prefixIconColor: c.muted(.6),
+      suffixIconColor: c.muted(.6),
     ),
     dropdownMenuTheme: DropdownMenuThemeData(
       menuStyle: MenuStyle(
-        backgroundColor: const WidgetStatePropertyAll(Nocturne.surface),
-        shape: const WidgetStatePropertyAll(
+        backgroundColor: WidgetStatePropertyAll(c.surface),
+        shape: WidgetStatePropertyAll(
           RoundedRectangleBorder(
             borderRadius: radius,
-            side: BorderSide(color: Nocturne.neutral700),
+            side: BorderSide(color: c.neutralEdge),
           ),
         ),
       ),
     ),
-    cardTheme: const CardThemeData(
-      color: Nocturne.surface,
+    cardTheme: CardThemeData(
+      color: c.surface,
       surfaceTintColor: Colors.transparent,
       shadowColor: Colors.transparent,
       elevation: 0,
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
         borderRadius: radius,
-        side: BorderSide(color: Nocturne.neutral800),
+        side: BorderSide(color: c.neutralFillStrong),
       ),
     ),
     dialogTheme: DialogThemeData(
-      backgroundColor: Nocturne.surface,
+      backgroundColor: c.surface,
       surfaceTintColor: Colors.transparent,
       elevation: 24,
-      shadowColor: Colors.black,
-      barrierColor: Nocturne.neutral900.withValues(alpha: .5),
-      shape: const RoundedRectangleBorder(
+      shadowColor: const Color(0xFF000000),
+      barrierColor: c.scrim,
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.all(Radius.circular(Nocturne.radiusLg)),
-        side: BorderSide(color: Nocturne.neutral700),
+        side: BorderSide(color: c.neutralEdge),
       ),
-      titleTextStyle: heading(20).copyWith(color: Nocturne.text),
-      contentTextStyle: style(14).copyWith(color: Nocturne.muted(.85)),
+      titleTextStyle: heading(20).copyWith(color: c.text),
+      contentTextStyle: style(14).copyWith(color: c.muted(.85)),
       actionsPadding: const EdgeInsets.fromLTRB(22, 0, 22, 20),
     ),
     bottomSheetTheme: BottomSheetThemeData(
-      backgroundColor: Nocturne.surface,
-      modalBackgroundColor: Nocturne.surface,
+      backgroundColor: c.surface,
+      modalBackgroundColor: c.surface,
       surfaceTintColor: Colors.transparent,
-      modalBarrierColor: Nocturne.neutral900.withValues(alpha: .7),
+      modalBarrierColor: c.scrim,
       showDragHandle: true,
-      dragHandleColor: Nocturne.divider,
+      dragHandleColor: c.divider,
       dragHandleSize: const Size(36, 4),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
     ),
     chipTheme: ChipThemeData(
-      backgroundColor: Nocturne.accent800,
-      labelStyle: style(11).copyWith(color: Nocturne.accent100),
+      backgroundColor: c.accentFill,
+      labelStyle: style(11).copyWith(color: c.accentInkStrong),
       side: BorderSide.none,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.all(Radius.circular(6)),
@@ -412,17 +712,15 @@ ThemeData nocturneTheme() {
     segmentedButtonTheme: SegmentedButtonThemeData(
       style: ButtonStyle(
         foregroundColor: WidgetStateProperty.resolveWith(
-          (states) => states.contains(WidgetState.selected)
-              ? Nocturne.accent
-              : Nocturne.text,
+          (states) => states.contains(WidgetState.selected) ? c.accent : c.text,
         ),
         backgroundColor: WidgetStateProperty.resolveWith(
           (states) => states.contains(WidgetState.selected)
-              ? Nocturne.accent.withValues(alpha: .10)
+              ? c.accent.withValues(alpha: .10)
               : Colors.transparent,
         ),
-        overlayColor: overlay(Nocturne.text, .07, .14),
-        side: const WidgetStatePropertyAll(BorderSide(color: Nocturne.divider)),
+        overlayColor: overlay(c.text, .07, .14),
+        side: WidgetStatePropertyAll(BorderSide(color: c.divider)),
         shape: const WidgetStatePropertyAll(shape),
         textStyle: WidgetStatePropertyAll(style(13)),
         minimumSize: const WidgetStatePropertyAll(Size(0, 36)),
@@ -430,62 +728,58 @@ ThemeData nocturneTheme() {
       ),
     ),
     navigationBarTheme: NavigationBarThemeData(
-      backgroundColor: Nocturne.surface,
+      backgroundColor: c.surface,
       surfaceTintColor: Colors.transparent,
       elevation: 0,
       height: 64,
-      indicatorColor: Nocturne.accent900,
+      indicatorColor: c.accentFill,
       indicatorShape: const StadiumBorder(),
       labelTextStyle: WidgetStateProperty.resolveWith(
         (states) => style(11).copyWith(
           color: states.contains(WidgetState.selected)
-              ? Nocturne.accent200
-              : Nocturne.muted(.6),
+              ? c.accentInk
+              : c.muted(.6),
         ),
       ),
       iconTheme: WidgetStateProperty.resolveWith(
         (states) => IconThemeData(
           size: 20,
           color: states.contains(WidgetState.selected)
-              ? Nocturne.accent200
-              : Nocturne.muted(.6),
+              ? c.accentInk
+              : c.muted(.6),
         ),
       ),
     ),
     navigationRailTheme: NavigationRailThemeData(
-      backgroundColor: Nocturne.surface,
-      indicatorColor: Nocturne.accent900,
-      selectedIconTheme: const IconThemeData(color: Nocturne.accent200),
-      unselectedIconTheme: IconThemeData(color: Nocturne.muted(.6)),
+      backgroundColor: c.surface,
+      indicatorColor: c.accentFill,
+      selectedIconTheme: IconThemeData(color: c.accentInk),
+      unselectedIconTheme: IconThemeData(color: c.muted(.6)),
     ),
     switchTheme: SwitchThemeData(
       thumbColor: WidgetStateProperty.resolveWith(
-        (states) => states.contains(WidgetState.selected)
-            ? Nocturne.accent
-            : Nocturne.muted(.55),
+        (states) =>
+            states.contains(WidgetState.selected) ? c.accent : c.muted(.55),
       ),
       trackColor: WidgetStateProperty.resolveWith(
         (states) => states.contains(WidgetState.selected)
-            ? Nocturne.accent900
+            ? c.accentFill
             : Colors.transparent,
       ),
       trackOutlineColor: WidgetStateProperty.resolveWith(
-        (states) => states.contains(WidgetState.selected)
-            ? Nocturne.accent
-            : Nocturne.divider,
+        (states) =>
+            states.contains(WidgetState.selected) ? c.accent : c.divider,
       ),
       trackOutlineWidth: const WidgetStatePropertyAll(1),
       thumbIcon: const WidgetStatePropertyAll(null),
     ),
     checkboxTheme: CheckboxThemeData(
       fillColor: const WidgetStatePropertyAll(Colors.transparent),
-      checkColor: const WidgetStatePropertyAll(Nocturne.accent),
+      checkColor: WidgetStatePropertyAll(c.accent),
       side: WidgetStateBorderSide.resolveWith(
         (states) => BorderSide(
           width: 1.5,
-          color: states.contains(WidgetState.selected)
-              ? Nocturne.accent
-              : Nocturne.divider,
+          color: states.contains(WidgetState.selected) ? c.accent : c.divider,
         ),
       ),
       shape: const RoundedRectangleBorder(
@@ -494,91 +788,86 @@ ThemeData nocturneTheme() {
     ),
     radioTheme: RadioThemeData(
       fillColor: WidgetStateProperty.resolveWith(
-        (states) => states.contains(WidgetState.selected)
-            ? Nocturne.accent
-            : Nocturne.divider,
+        (states) =>
+            states.contains(WidgetState.selected) ? c.accent : c.divider,
       ),
     ),
-    dividerTheme: const DividerThemeData(
-      color: Nocturne.divider,
-      space: 1,
-      thickness: 1,
-    ),
+    dividerTheme: DividerThemeData(color: c.divider, space: 1, thickness: 1),
     listTileTheme: ListTileThemeData(
       contentPadding: const EdgeInsets.symmetric(horizontal: 12),
       shape: shape,
-      iconColor: Nocturne.muted(.6),
-      textColor: Nocturne.text,
-      titleTextStyle: style(14).copyWith(color: Nocturne.text),
-      subtitleTextStyle: style(12).copyWith(color: Nocturne.muted(.55)),
-      selectedColor: Nocturne.accent200,
-      selectedTileColor: Nocturne.accent900,
+      iconColor: c.muted(.6),
+      textColor: c.text,
+      titleTextStyle: style(14).copyWith(color: c.text),
+      subtitleTextStyle: style(12).copyWith(color: c.muted(.55)),
+      selectedColor: c.accentInk,
+      selectedTileColor: c.accentFill,
     ),
     appBarTheme: AppBarTheme(
-      backgroundColor: Nocturne.bg,
-      foregroundColor: Nocturne.text,
+      backgroundColor: c.bg,
+      foregroundColor: c.text,
       surfaceTintColor: Colors.transparent,
       elevation: 0,
       scrolledUnderElevation: 0,
       titleTextStyle: style(16, weight: FontWeight.w500),
     ),
     popupMenuTheme: PopupMenuThemeData(
-      color: Nocturne.surface,
+      color: c.surface,
       surfaceTintColor: Colors.transparent,
       elevation: 8,
-      shape: const RoundedRectangleBorder(
+      shape: RoundedRectangleBorder(
         borderRadius: radius,
-        side: BorderSide(color: Nocturne.neutral700),
+        side: BorderSide(color: c.neutralEdge),
       ),
-      textStyle: style(14).copyWith(color: Nocturne.text),
+      textStyle: style(14).copyWith(color: c.text),
     ),
-    menuTheme: const MenuThemeData(
+    menuTheme: MenuThemeData(
       style: MenuStyle(
-        backgroundColor: WidgetStatePropertyAll(Nocturne.surface),
+        backgroundColor: WidgetStatePropertyAll(c.surface),
         shape: WidgetStatePropertyAll(
           RoundedRectangleBorder(
             borderRadius: radius,
-            side: BorderSide(color: Nocturne.neutral700),
+            side: BorderSide(color: c.neutralEdge),
           ),
         ),
       ),
     ),
     snackBarTheme: SnackBarThemeData(
-      backgroundColor: Nocturne.neutral800,
-      contentTextStyle: style(14).copyWith(color: Nocturne.text),
-      actionTextColor: Nocturne.accent300,
+      backgroundColor: c.neutralFillStrong,
+      contentTextStyle: style(14).copyWith(color: c.text),
+      actionTextColor: c.accentText,
       behavior: SnackBarBehavior.floating,
       shape: shape,
       elevation: 0,
     ),
     tooltipTheme: TooltipThemeData(
-      decoration: const BoxDecoration(
-        color: Nocturne.neutral800,
+      decoration: BoxDecoration(
+        color: c.neutralFillStrong,
         borderRadius: BorderRadius.all(Radius.circular(Nocturne.radiusSm)),
       ),
-      textStyle: style(12).copyWith(color: Nocturne.text),
+      textStyle: style(12).copyWith(color: c.text),
     ),
-    progressIndicatorTheme: const ProgressIndicatorThemeData(
-      color: Nocturne.accent,
-      linearTrackColor: Nocturne.neutral800,
+    progressIndicatorTheme: ProgressIndicatorThemeData(
+      color: c.accent,
+      linearTrackColor: c.neutralFillStrong,
       circularTrackColor: Colors.transparent,
     ),
     bannerTheme: MaterialBannerThemeData(
-      backgroundColor: Nocturne.surface,
+      backgroundColor: c.surface,
       surfaceTintColor: Colors.transparent,
-      contentTextStyle: style(14).copyWith(color: Nocturne.text),
-      dividerColor: Nocturne.divider,
+      contentTextStyle: style(14).copyWith(color: c.text),
+      dividerColor: c.divider,
     ),
-    datePickerTheme: const DatePickerThemeData(
-      backgroundColor: Nocturne.surface,
+    datePickerTheme: DatePickerThemeData(
+      backgroundColor: c.surface,
       surfaceTintColor: Colors.transparent,
-      headerBackgroundColor: Nocturne.surface,
+      headerBackgroundColor: c.surface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.all(Radius.circular(Nocturne.radiusLg)),
       ),
     ),
-    timePickerTheme: const TimePickerThemeData(
-      backgroundColor: Nocturne.surface,
+    timePickerTheme: TimePickerThemeData(
+      backgroundColor: c.surface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.all(Radius.circular(Nocturne.radiusLg)),
       ),

@@ -190,7 +190,7 @@ class FormSurface extends StatelessWidget {
   final FormHeaderAction? leadingFooterAction;
 
   /// In a dialog, a muted line at the leading edge of the footer, such as
-  /// "* Required · Ctrl+Enter to save". A leading `*` is drawn in accent300.
+  /// "* Required · Ctrl+Enter to save". A leading `*` is drawn in accentText.
   final String? footerHint;
 
   /// On a phone, the footer holds only the primary action, full width and 52px tall.
@@ -269,21 +269,21 @@ class FormSurface extends StatelessWidget {
           ],
         );
 
-  Widget _hint(String hint) {
+  Widget _hint(BuildContext context, String hint) {
     final starred = hint.startsWith('*');
     return Text.rich(
       key: const Key('form-footer-hint'),
       TextSpan(
         children: [
           if (starred)
-            const TextSpan(
+            TextSpan(
               text: '*',
-              style: TextStyle(color: Nocturne.accent300),
+              style: TextStyle(color: context.nocturne.accentText),
             ),
           TextSpan(text: starred ? hint.substring(1) : hint),
         ],
       ),
-      style: TextStyle(fontSize: 12, color: Nocturne.muted(.55)),
+      style: TextStyle(fontSize: 12, color: context.nocturne.muted(.55)),
     );
   }
 
@@ -349,7 +349,7 @@ class FormSurface extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               fontSize: 12,
-                              color: Nocturne.muted(.55),
+                              color: context.nocturne.muted(.55),
                             ),
                           ),
                         ),
@@ -462,7 +462,10 @@ class FormSurface extends StatelessWidget {
               label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 12, color: Nocturne.muted(.55)),
+              style: TextStyle(
+                fontSize: 12,
+                color: context.nocturne.muted(.55),
+              ),
             ),
           ),
         ],
@@ -487,7 +490,9 @@ class FormSurface extends StatelessWidget {
             const SizedBox(width: 12),
           ],
           // The hint gives way (wrapping) before the buttons do.
-          Expanded(child: hint == null ? const SizedBox() : _hint(hint)),
+          Expanded(
+            child: hint == null ? const SizedBox() : _hint(context, hint),
+          ),
           const SizedBox(width: 8),
           TextButton(
             onPressed: () => _cancel(context),
@@ -596,7 +601,7 @@ class FormSurface extends StatelessWidget {
             ),
             Container(
               width: 280,
-              color: Nocturne.bg,
+              color: context.nocturne.bg,
               padding: const EdgeInsets.all(22),
               child: aside,
             ),

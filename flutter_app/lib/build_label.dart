@@ -15,7 +15,7 @@ class BuildLabel extends StatelessWidget {
     style: TextStyle(
       fontSize: 11,
       fontFamily: Nocturne.monoFamily,
-      color: Nocturne.muted(.45),
+      color: context.nocturne.muted(.45),
     ),
   );
 }

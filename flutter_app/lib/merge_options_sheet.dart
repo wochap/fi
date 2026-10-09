@@ -113,7 +113,7 @@ class _MergeOptionsSheetState extends State<_MergeOptionsSheet> {
         .where((ids) => ids.where(checked.contains).length > 1)
         .length;
     final keptLabel = checked.contains(keep) ? _label(keep) : '';
-    final muted = TextStyle(fontSize: 12, color: Nocturne.muted(.55));
+    final muted = TextStyle(fontSize: 12, color: context.nocturne.muted(.55));
     return FormSurface(
       title: l.mergeOptionsTitle,
       contextLabel: l.mergeOptionsSubtitle(
@@ -190,7 +190,11 @@ class _MergeOptionsSheetState extends State<_MergeOptionsSheet> {
             child: Row(
               spacing: 6,
               children: [
-                Icon(FiIcons.warning, size: 14, color: Nocturne.muted(.55)),
+                Icon(
+                  FiIcons.warning,
+                  size: 14,
+                  color: context.nocturne.muted(.55),
+                ),
                 Text(l.mergeOptionsCantUndo, style: muted),
               ],
             ),

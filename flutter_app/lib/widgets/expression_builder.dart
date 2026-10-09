@@ -759,7 +759,7 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
           ? null
           : BoxDecoration(
               borderRadius: BorderRadius.circular(Nocturne.radius),
-              border: Border.all(color: Nocturne.muted(.12)),
+              border: Border.all(color: context.nocturne.muted(.12)),
             ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -783,7 +783,7 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
                     child: Icon(
                       FiIcons.dragHandle,
                       size: 18,
-                      color: Nocturne.muted(.5),
+                      color: context.nocturne.muted(.5),
                     ),
                   ),
                 ),
@@ -823,7 +823,7 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
                         style: TextStyle(
                           fontFamily: Nocturne.monoFamily,
                           fontSize: 13,
-                          color: Nocturne.muted(.7),
+                          color: context.nocturne.muted(.7),
                         ),
                       )
                     : Align(
@@ -900,15 +900,15 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(FiIcons.warning, size: 16, color: Nocturne.accent),
+                Icon(FiIcons.warning, size: 16, color: context.nocturne.danger),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     errorText,
                     key: Key('expr-error-term-$index'),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
-                      color: Nocturne.accent300,
+                      color: context.nocturne.text,
                     ),
                   ),
                 ),
@@ -918,7 +918,7 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
       ),
     );
     return errorTerm == index
-        ? DashedOutline(color: Nocturne.accent, child: card)
+        ? DashedOutline(color: context.nocturne.danger, child: card)
         : card;
   }
 
@@ -1006,20 +1006,20 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
   /// The whole expression as one line of formula, so the tree of cards below reads as an edit of
   /// something visible (mock computed-field-editor). Unfinished leaves show as dashed slots.
   Widget _formulaStrip() {
-    const paren = TextStyle(color: Nocturne.accent300);
+    final paren = TextStyle(color: context.nocturne.accentText);
     Widget symbol(String text, [TextStyle? style]) => Text(text, style: style);
     Widget slot(String text) => Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 1),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(Nocturne.radiusSm),
-        border: Border.all(color: Nocturne.accent),
+        border: Border.all(color: context.nocturne.accent),
       ),
       child: Text(
         text,
-        style: const TextStyle(
+        style: TextStyle(
           fontFamily: Nocturne.fontFamily,
           fontSize: 12,
-          color: Nocturne.accent300,
+          color: context.nocturne.accentText,
         ),
       ),
     );
@@ -1052,14 +1052,14 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
       key: const Key('computed-formula'),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: Nocturne.bg,
+        color: context.nocturne.bg,
         borderRadius: BorderRadius.circular(Nocturne.radius),
       ),
       child: DefaultTextStyle.merge(
-        style: const TextStyle(
+        style: TextStyle(
           fontFamily: Nocturne.monoFamily,
           fontSize: 14,
-          color: Nocturne.text,
+          color: context.nocturne.text,
         ),
         child: Wrap(
           spacing: 6,
@@ -1078,14 +1078,14 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
     return Row(
       children: [
         if (missing > 0) ...[
-          const Icon(FiIcons.error, size: 16, color: Nocturne.accent300),
+          Icon(FiIcons.error, size: 16, color: context.nocturne.warning),
           const SizedBox(width: 6),
         ] else if (_inferred != null && !isError) ...[
-          const Icon(
+          Icon(
             FiIcons.check,
-            key: Key('computed-result-ok'),
+            key: const Key('computed-result-ok'),
             size: 16,
-            color: Nocturne.accent,
+            color: context.nocturne.success,
           ),
           const SizedBox(width: 6),
         ],
@@ -1098,8 +1098,8 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
               color: isError
                   ? theme.colorScheme.error
                   : missing > 0
-                  ? Nocturne.accent300
-                  : Nocturne.muted(.7),
+                  ? context.nocturne.text
+                  : context.nocturne.muted(.7),
             ),
           ),
         ),
@@ -1162,7 +1162,9 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
       decoration: BoxDecoration(
         border: Border(
           left: BorderSide(
-            color: highlighted ? theme.colorScheme.error : Nocturne.accent700,
+            color: highlighted
+                ? theme.colorScheme.error
+                : context.nocturne.accentEdge,
             width: highlighted ? 2 : 1,
           ),
         ),
@@ -1428,16 +1430,19 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: Nocturne.accent),
+              border: Border.all(color: context.nocturne.accent),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(FiIcons.formula, size: 12, color: Nocturne.accent),
+                Icon(FiIcons.formula, size: 12, color: context.nocturne.accent),
                 const SizedBox(width: 4),
                 Text(
                   context.l10n.exprAbsoluteValue,
-                  style: const TextStyle(fontSize: 11, color: Nocturne.accent),
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: context.nocturne.accent,
+                  ),
                 ),
               ],
             ),
@@ -1446,7 +1451,10 @@ class _ExpressionBuilderState extends State<ExpressionBuilder> {
           Expanded(
             child: Text(
               context.l10n.exprOf,
-              style: TextStyle(fontSize: 13, color: Nocturne.muted(.55)),
+              style: TextStyle(
+                fontSize: 13,
+                color: context.nocturne.muted(.55),
+              ),
             ),
           ),
           IconButton(

@@ -8,8 +8,8 @@ import 'package:fi/theme/nocturne_widgets.dart';
 import 'package:fi/voice/services.dart';
 import 'package:flutter/material.dart';
 
-TextStyle _muted(double opacity, [double size = 12]) =>
-    TextStyle(fontSize: size, color: Nocturne.muted(opacity), height: 1.4);
+TextStyle _muted(NocturneColors c, double opacity, [double size = 12]) =>
+    TextStyle(fontSize: size, color: c.muted(opacity), height: 1.4);
 
 /// The display name of a model role.
 String modelRoleName(AppLocalizations l, ModelRoleDto role) => switch (role) {
@@ -221,7 +221,7 @@ class _VoiceModelsCardState extends State<VoiceModelsCard> {
               children: [
                 Text(
                   context.l10n.modelOtherLanguages,
-                  style: SectionLabel.style,
+                  style: SectionLabel.styleOf(context),
                 ),
                 for (final file in status.otherSpeechModels) _otherRow(file),
               ],
@@ -268,7 +268,7 @@ class _VoiceModelsCardState extends State<VoiceModelsCard> {
     };
     return Row(
       children: [
-        const Icon(FiIcons.waveform, size: 20, color: Nocturne.accent),
+        Icon(FiIcons.waveform, size: 20, color: context.nocturne.accent),
         const SizedBox(width: 12),
         Expanded(
           child: Column(
@@ -279,7 +279,7 @@ class _VoiceModelsCardState extends State<VoiceModelsCard> {
               Text(
                 summary,
                 key: const Key('settings-model-summary'),
-                style: _muted(.55),
+                style: _muted(context.nocturne, .55),
               ),
             ],
           ),
@@ -320,15 +320,12 @@ class _VoiceModelsCardState extends State<VoiceModelsCard> {
       context.l10n.modelTagPaused,
       leading: FiIcons.paused,
     ),
-    ModelStatusKindDto.failed => Tag(
+    ModelStatusKindDto.failed => Tag.danger(
       context.l10n.modelTagFailed,
-      background: Nocturne.neutral800,
-      color: Nocturne.error,
       leading: FiIcons.error,
     ),
-    ModelStatusKindDto.ready => Tag(
+    ModelStatusKindDto.ready => Tag.success(
       context.l10n.modelTagReady,
-      background: Nocturne.accent900,
       leading: FiIcons.check,
     ),
   };
@@ -352,7 +349,7 @@ class _VoiceModelsCardState extends State<VoiceModelsCard> {
             children: [
               Text(
                 modelRoleName(context.l10n, file.role),
-                style: _muted(.55, 11),
+                style: _muted(context.nocturne, .55, 11),
               ),
               Text(
                 modelDisplayLabel(context.l10n, file),
@@ -366,8 +363,8 @@ class _VoiceModelsCardState extends State<VoiceModelsCard> {
           style: TextStyle(
             fontSize: 12,
             color: file.state == ModelFileStateDto.damaged
-                ? Nocturne.error
-                : Nocturne.muted(.6),
+                ? context.nocturne.danger
+                : context.nocturne.muted(.6),
             fontFeatures: Nocturne.tabular,
           ),
         ),
@@ -388,7 +385,7 @@ class _VoiceModelsCardState extends State<VoiceModelsCard> {
             children: [
               Text(
                 modelRoleName(context.l10n, file.role),
-                style: _muted(.55, 11),
+                style: _muted(context.nocturne, .55, 11),
               ),
               Text(
                 modelDisplayLabel(context.l10n, file),
@@ -404,7 +401,10 @@ class _VoiceModelsCardState extends State<VoiceModelsCard> {
                   formatBytes(file.storedBytes),
                   size,
                 ),
-          style: _muted(.6).copyWith(fontFeatures: Nocturne.tabular),
+          style: _muted(
+            context.nocturne,
+            .6,
+          ).copyWith(fontFeatures: Nocturne.tabular),
         ),
         TextButton(
           key: Key('settings-model-delete-speech-$language'),
@@ -424,8 +424,8 @@ class _VoiceModelsCardState extends State<VoiceModelsCard> {
       child: LinearProgressIndicator(
         value: status.kind == ModelStatusKindDto.verifying ? null : value,
         minHeight: 4,
-        color: frozen ? Nocturne.neutral500 : Nocturne.accent,
-        backgroundColor: Nocturne.neutral700,
+        color: frozen ? context.nocturne.neutralMuted : context.nocturne.accent,
+        backgroundColor: context.nocturne.neutralEdge,
       ),
     );
   }
@@ -440,10 +440,13 @@ class _VoiceModelsCardState extends State<VoiceModelsCard> {
         child: Text(
           context.l10n.modelPercent(_percent(status)),
           key: const Key('settings-model-progress'),
-          style: _muted(.6).copyWith(fontFeatures: Nocturne.tabular),
+          style: _muted(
+            context.nocturne,
+            .6,
+          ).copyWith(fontFeatures: Nocturne.tabular),
         ),
       ),
-      if (trailing != null) Text(trailing, style: _muted(.6)),
+      if (trailing != null) Text(trailing, style: _muted(context.nocturne, .6)),
     ],
   );
 
@@ -471,16 +474,19 @@ class _VoiceModelsCardState extends State<VoiceModelsCard> {
         return [
           Row(
             children: [
-              Icon(FiIcons.wifi, size: 16, color: Nocturne.muted(.7)),
+              Icon(FiIcons.wifi, size: 16, color: context.nocturne.muted(.7)),
               const SizedBox(width: 8),
-              Text(context.l10n.modelWifiRecommended, style: _muted(.7)),
+              Text(
+                context.l10n.modelWifiRecommended,
+                style: _muted(context.nocturne, .7),
+              ),
             ],
           ),
           Text(
             free == null
                 ? context.l10n.modelNeeds(remaining)
                 : context.l10n.modelNeedsWithFree(remaining, free),
-            style: _muted(.55),
+            style: _muted(context.nocturne, .55),
           ),
           Align(
             alignment: AlignmentDirectional.centerStart,
@@ -507,7 +513,11 @@ class _VoiceModelsCardState extends State<VoiceModelsCard> {
         return [
           Row(
             children: [
-              Icon(FiIcons.offline, size: 16, color: Nocturne.muted(.7)),
+              Icon(
+                FiIcons.offline,
+                size: 16,
+                color: context.nocturne.muted(.7),
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -518,8 +528,14 @@ class _VoiceModelsCardState extends State<VoiceModelsCard> {
             ],
           ),
           _bar(status, frozen: true),
-          Text(context.l10n.modelReconnectingResumes, style: _muted(.6)),
-          Text(context.l10n.modelReconnectingKeepOpen, style: _muted(.55)),
+          Text(
+            context.l10n.modelReconnectingResumes,
+            style: _muted(context.nocturne, .6),
+          ),
+          Text(
+            context.l10n.modelReconnectingKeepOpen,
+            style: _muted(context.nocturne, .55),
+          ),
           _buttons([_pauseButton(), _cancelButton(status)]),
         ];
       case ModelStatusKindDto.verifying:
@@ -533,7 +549,10 @@ class _VoiceModelsCardState extends State<VoiceModelsCard> {
                 ),
               ),
               if (status.secondsLeft case final seconds?)
-                Text(formatTimeLeft(context.l10n, seconds), style: _muted(.6)),
+                Text(
+                  formatTimeLeft(context.l10n, seconds),
+                  style: _muted(context.nocturne, .6),
+                ),
             ],
           ),
           _bar(status, frozen: false),
@@ -560,14 +579,14 @@ class _VoiceModelsCardState extends State<VoiceModelsCard> {
             key: const Key('settings-model-failure'),
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Nocturne.neutral900,
+              color: context.nocturne.neutralFill,
               borderRadius: BorderRadius.circular(Nocturne.radiusSm),
-              border: Border.all(color: Nocturne.neutral700),
+              border: Border.all(color: context.nocturne.neutralEdge),
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(FiIcons.warning, size: 18, color: Nocturne.error),
+                Icon(FiIcons.warning, size: 18, color: context.nocturne.danger),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(
@@ -575,7 +594,7 @@ class _VoiceModelsCardState extends State<VoiceModelsCard> {
                     spacing: 2,
                     children: [
                       Text(title, style: const TextStyle(fontSize: 13)),
-                      Text(line, style: _muted(.6)),
+                      Text(line, style: _muted(context.nocturne, .6)),
                     ],
                   ),
                 ),

@@ -164,7 +164,10 @@ class _QueryEditorDialogState extends State<QueryEditorDialog> {
                   ? l.queryUsedByApplies(widget.referencingWidgets)
                   : l.queryUsedBy(0),
               key: const Key('query-editor-usage'),
-              style: TextStyle(fontSize: 12, color: Nocturne.muted(.55)),
+              style: TextStyle(
+                fontSize: 12,
+                color: context.nocturne.muted(.55),
+              ),
             ),
           ],
         ],
@@ -212,7 +215,7 @@ class _QueryEditorDialogState extends State<QueryEditorDialog> {
                           l.queryResultNow,
                           style: TextStyle(
                             fontSize: 12,
-                            color: Nocturne.muted(.55),
+                            color: context.nocturne.muted(.55),
                           ),
                         ),
                         const SizedBox(width: 10),

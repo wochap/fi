@@ -51,38 +51,50 @@ class VoiceMicButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (icon, iconColor, iconSize) = switch (state) {
-      MicState.idle => (FiIcons.microphone, Nocturne.accent, 24.0),
-      MicState.ready => (FiIcons.microphone, Nocturne.accent, 24.0),
-      MicState.listening => (FiIcons.stop, Nocturne.accent100, 22.0),
-      MicState.processing => (FiIcons.moreHorizontal, Nocturne.accent200, 22.0),
-      MicState.downloading => (FiIcons.download, Nocturne.muted(.7), 20.0),
+      MicState.idle => (FiIcons.microphone, context.nocturne.accent, 24.0),
+      MicState.ready => (FiIcons.microphone, context.nocturne.accent, 24.0),
+      MicState.listening => (
+        FiIcons.stop,
+        context.nocturne.accentInkStrong,
+        22.0,
+      ),
+      MicState.processing => (
+        FiIcons.moreHorizontal,
+        context.nocturne.accentInk,
+        22.0,
+      ),
+      MicState.downloading => (
+        FiIcons.download,
+        context.nocturne.muted(.7),
+        20.0,
+      ),
     };
     final decoration = switch (state) {
       MicState.idle => BoxDecoration(
         shape: BoxShape.circle,
-        border: Border.all(color: Nocturne.accent),
+        border: Border.all(color: context.nocturne.accent),
       ),
       MicState.ready => BoxDecoration(
         shape: BoxShape.circle,
-        color: Nocturne.accent900,
-        border: Border.all(color: Nocturne.accent),
+        color: context.nocturne.accentFill,
+        border: Border.all(color: context.nocturne.accent),
         boxShadow: [
           BoxShadow(
-            color: Nocturne.accent.withValues(alpha: .18),
+            color: context.nocturne.accent.withValues(alpha: .18),
             spreadRadius: 5,
           ),
         ],
       ),
       MicState.listening => BoxDecoration(
         shape: BoxShape.circle,
-        color: Nocturne.accent900,
-        border: Border.all(color: Nocturne.accent, width: 2),
+        color: context.nocturne.accentFill,
+        border: Border.all(color: context.nocturne.accent, width: 2),
         boxShadow: [
           BoxShadow(
-            color: Nocturne.accent.withValues(alpha: .22),
+            color: context.nocturne.accent.withValues(alpha: .22),
             spreadRadius: 6,
           ),
-          const BoxShadow(color: Nocturne.accent700, blurRadius: 24),
+          BoxShadow(color: context.nocturne.accentEdge, blurRadius: 24),
         ],
       ),
       _ => const BoxDecoration(shape: BoxShape.circle),
@@ -114,7 +126,9 @@ class VoiceMicButton extends StatelessWidget {
             child: DecoratedBox(
               decoration: decoration,
               child: CustomPaint(
-                painter: ring == null ? null : _RingPainter(ring),
+                painter: ring == null
+                    ? null
+                    : _RingPainter(ring, context.nocturne),
                 child: Center(
                   child: Icon(icon, size: iconSize, color: iconColor),
                 ),
@@ -127,11 +141,12 @@ class VoiceMicButton extends StatelessWidget {
   }
 }
 
-/// A 2px conic ring: accent for [fraction], neutral700 for the rest.
+/// A 2px conic ring: accent for [fraction], neutralEdge for the rest.
 class _RingPainter extends CustomPainter {
-  const _RingPainter(this.fraction);
+  const _RingPainter(this.fraction, this.colors);
 
   final double fraction;
+  final NocturneColors colors;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -140,20 +155,20 @@ class _RingPainter extends CustomPainter {
     final track = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = stroke
-      ..color = Nocturne.neutral700;
+      ..color = colors.neutralEdge;
     canvas.drawArc(rect, 0, math.pi * 2, false, track);
     canvas.drawArc(
       rect,
       -math.pi / 2,
       math.pi * 2 * fraction.clamp(0, 1),
       false,
-      track..color = Nocturne.accent,
+      track..color = colors.accent,
     );
   }
 
   @override
   bool shouldRepaint(_RingPainter oldDelegate) =>
-      oldDelegate.fraction != fraction;
+      oldDelegate.fraction != fraction || oldDelegate.colors != colors;
 }
 
 /// A small conic progress ring, as the processing panel's "Filling fields…" step shows.
@@ -166,6 +181,6 @@ class VoiceProgressRing extends StatelessWidget {
   @override
   Widget build(BuildContext context) => SizedBox.square(
     dimension: size,
-    child: CustomPaint(painter: _RingPainter(fraction)),
+    child: CustomPaint(painter: _RingPainter(fraction, context.nocturne)),
   );
 }

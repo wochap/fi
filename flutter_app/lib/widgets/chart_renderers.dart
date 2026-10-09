@@ -15,8 +15,8 @@ import 'package:flutter/material.dart';
 const int _maxAxisLabels = 4;
 
 /// Grid lines are the divider token, never a series color.
-FlLine _gridLine(double _) =>
-    const FlLine(color: Nocturne.divider, strokeWidth: 1, dashArray: [3, 4]);
+FlLine _gridLine(NocturneColors c) =>
+    FlLine(color: c.divider, strokeWidth: 1, dashArray: [3, 4]);
 
 final class _ChartPoint {
   const _ChartPoint({required this.x, required this.y});
@@ -267,49 +267,54 @@ Widget renderLineChart(WidgetRenderContext context) {
     child: _ChartFrame(
       plot: plot,
       yName: config.textAt('y_axis_label'),
-      chart: LineChart(
-        LineChartData(
-          minX: xRange.min,
-          maxX: xRange.max,
-          minY: yRange.min,
-          maxY: yRange.max,
-          lineBarsData: [
-            LineChartBarData(
-              spots: plot.spots,
-              isCurved: false,
-              barWidth: 2,
-              color: Nocturne.accent,
-              belowBarData: BarAreaData(
-                show: true,
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Nocturne.accent.withValues(alpha: .18),
-                    Nocturne.accent.withValues(alpha: 0),
-                  ],
-                ),
-              ),
-              dotData: FlDotData(
-                show: config.booleanAt('show_points'),
-                getDotPainter: (spot, percent, bar, index) =>
-                    FlDotCirclePainter(
-                      radius: 3,
-                      color: Nocturne.accent,
-                      strokeWidth: 2,
-                      strokeColor: Nocturne.surface,
+      chart: Builder(
+        builder: (context) {
+          final c = context.nocturne;
+          return LineChart(
+            LineChartData(
+              minX: xRange.min,
+              maxX: xRange.max,
+              minY: yRange.min,
+              maxY: yRange.max,
+              lineBarsData: [
+                LineChartBarData(
+                  spots: plot.spots,
+                  isCurved: false,
+                  barWidth: 2,
+                  color: c.accent,
+                  belowBarData: BarAreaData(
+                    show: true,
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        c.accent.withValues(alpha: .18),
+                        c.accent.withValues(alpha: 0),
+                      ],
                     ),
+                  ),
+                  dotData: FlDotData(
+                    show: config.booleanAt('show_points'),
+                    getDotPainter: (spot, percent, bar, index) =>
+                        FlDotCirclePainter(
+                          radius: 3,
+                          color: c.accent,
+                          strokeWidth: 2,
+                          strokeColor: c.surface,
+                        ),
+                  ),
+                ),
+              ],
+              titlesData: const FlTitlesData(),
+              gridData: FlGridData(
+                drawVerticalLine: false,
+                getDrawingHorizontalLine: (_) => _gridLine(c),
               ),
+              borderData: FlBorderData(show: false),
+              lineTouchData: LineTouchData(enabled: false),
             ),
-          ],
-          titlesData: const FlTitlesData(),
-          gridData: const FlGridData(
-            drawVerticalLine: false,
-            getDrawingHorizontalLine: _gridLine,
-          ),
-          borderData: FlBorderData(show: false),
-          lineTouchData: LineTouchData(enabled: false),
-        ),
+          );
+        },
       ),
     ),
   );
@@ -340,35 +345,40 @@ Widget renderBarChart(WidgetRenderContext context) {
     child: _ChartFrame(
       plot: plot,
       yName: config.textAt('y_axis_label'),
-      chart: BarChart(
-        BarChartData(
-          alignment: BarChartAlignment.spaceBetween,
-          minY: yRange.min < 0 ? yRange.min : 0,
-          maxY: yRange.max,
-          barGroups: [
-            for (var i = 0; i < plot.points.length; i++)
-              BarChartGroupData(
-                x: i,
-                barRods: [
-                  BarChartRodData(
-                    toY: plot.points[i].y.coordinate,
-                    width: width == null ? 8 : width.toDouble(),
-                    color: Nocturne.accent,
-                    borderRadius: const BorderRadius.vertical(
-                      top: Radius.circular(Nocturne.radiusSm / 2),
-                    ),
+      chart: Builder(
+        builder: (context) {
+          final c = context.nocturne;
+          return BarChart(
+            BarChartData(
+              alignment: BarChartAlignment.spaceBetween,
+              minY: yRange.min < 0 ? yRange.min : 0,
+              maxY: yRange.max,
+              barGroups: [
+                for (var i = 0; i < plot.points.length; i++)
+                  BarChartGroupData(
+                    x: i,
+                    barRods: [
+                      BarChartRodData(
+                        toY: plot.points[i].y.coordinate,
+                        width: width == null ? 8 : width.toDouble(),
+                        color: c.accent,
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(Nocturne.radiusSm / 2),
+                        ),
+                      ),
+                    ],
                   ),
-                ],
+              ],
+              titlesData: const FlTitlesData(),
+              gridData: FlGridData(
+                drawVerticalLine: false,
+                getDrawingHorizontalLine: (_) => _gridLine(c),
               ),
-          ],
-          titlesData: const FlTitlesData(),
-          gridData: const FlGridData(
-            drawVerticalLine: false,
-            getDrawingHorizontalLine: _gridLine,
-          ),
-          borderData: FlBorderData(show: false),
-          barTouchData: BarTouchData(enabled: false),
-        ),
+              borderData: FlBorderData(show: false),
+              barTouchData: BarTouchData(enabled: false),
+            ),
+          );
+        },
       ),
     ),
   );
@@ -400,32 +410,37 @@ Widget renderScatterPlot(WidgetRenderContext context) {
     child: _ChartFrame(
       plot: plot,
       yName: config.textAt('y_axis_label'),
-      chart: ScatterChart(
-        ScatterChartData(
-          minX: xRange.min,
-          maxX: xRange.max,
-          minY: yRange.min,
-          maxY: yRange.max,
-          scatterSpots: [
-            for (final spot in plot.spots)
-              ScatterSpot(
-                spot.x,
-                spot.y,
-                dotPainter: FlDotCirclePainter(
-                  radius: radius == null ? 5 : radius.toDouble(),
-                  color: Nocturne.accent.withValues(alpha: .85),
-                  strokeWidth: 0,
-                ),
+      chart: Builder(
+        builder: (context) {
+          final c = context.nocturne;
+          return ScatterChart(
+            ScatterChartData(
+              minX: xRange.min,
+              maxX: xRange.max,
+              minY: yRange.min,
+              maxY: yRange.max,
+              scatterSpots: [
+                for (final spot in plot.spots)
+                  ScatterSpot(
+                    spot.x,
+                    spot.y,
+                    dotPainter: FlDotCirclePainter(
+                      radius: radius == null ? 5 : radius.toDouble(),
+                      color: c.accent.withValues(alpha: .85),
+                      strokeWidth: 0,
+                    ),
+                  ),
+              ],
+              titlesData: const FlTitlesData(),
+              gridData: FlGridData(
+                getDrawingHorizontalLine: (_) => _gridLine(c),
+                getDrawingVerticalLine: (_) => _gridLine(c),
               ),
-          ],
-          titlesData: const FlTitlesData(),
-          gridData: const FlGridData(
-            getDrawingHorizontalLine: _gridLine,
-            getDrawingVerticalLine: _gridLine,
-          ),
-          borderData: FlBorderData(show: false),
-          scatterTouchData: ScatterTouchData(enabled: false),
-        ),
+              borderData: FlBorderData(show: false),
+              scatterTouchData: ScatterTouchData(enabled: false),
+            ),
+          );
+        },
       ),
     ),
   );

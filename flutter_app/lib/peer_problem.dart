@@ -71,7 +71,7 @@ class PeerGuidanceBox extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        border: Border.all(color: Nocturne.muted(.2)),
+        border: Border.all(color: context.nocturne.muted(.2)),
         borderRadius: BorderRadius.circular(Nocturne.radius),
       ),
       child: Column(

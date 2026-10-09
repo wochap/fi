@@ -1,7 +1,7 @@
 # Fi UI design guide (Nocturne)
 
 Read this before adding or changing any Flutter UI. The app follows **Nocturne**: a quiet, dense,
-dark interface. Inter at weight 500 for headings, soft 8px corners, and an accent used as a line or a
+interface on Catppuccin (Mocha is the dark theme). Inter at weight 500 for headings, soft 8px corners, and an accent used as a line or a
 glow, never as a flood of color. Follow these rules so new screens match the existing ones.
 
 ## Design source
@@ -19,8 +19,8 @@ guide disagree, update this guide to match.
 
 | File | What it holds |
 | --- | --- |
-| `lib/theme/nocturne.dart` | `Nocturne` tokens (colors, radii, shadows, fonts, input heights via `Nocturne.inputHeight`) and `nocturneTheme()`, the only `ThemeData` |
-| `lib/theme/nocturne_widgets.dart` | Shared pieces: `FadedRule`, `Kicker`, `SectionLabel`, `GlowDot`, `IconTile`, `Tag` (accent, `Tag.neutral`, `Tag.outline`, optional leading icon), `NocturneCard`, `nocturneGlow()`, `DashedSlot`, `FiLogoMark`, `FiLogoTile`, `ClearMark`, the field status markers `VoiceChip` / `DefaultMarker` / `NeededMarker`, `FiSwitch` / `FiSwitchTile`, `FiIconButton`, `CardListRow` |
+| `lib/theme/nocturne.dart` | `NocturneColors` (the theme's colors, roles, status colors, scrim and shadows; `NocturneColors.mocha`), read with `context.nocturne`; `Nocturne` constants (radii, fonts, breakpoints, input heights via `Nocturne.inputHeight`); `nocturneTheme(NocturneColors)`, the only `ThemeData` builder |
+| `lib/theme/nocturne_widgets.dart` | Shared pieces: `FadedRule`, `Kicker`, `SectionLabel`, `GlowDot`, `IconTile`, `Tag` (accent, `Tag.neutral`, `Tag.outline`, `Tag.danger`, `Tag.success`, optional leading icon), `NocturneCard`, `nocturneGlow()`, `DashedSlot`, `FiLogoMark`, `FiLogoTile`, `ClearMark`, the field status markers `VoiceChip` / `DefaultMarker` / `NeededMarker`, `FiSwitch` / `FiSwitchTile`, `FiIconButton`, `CardListRow` |
 | `lib/theme/fi_icons.dart` | `FiIcons`: every icon the app draws, named by meaning and pointing at a Phosphor glyph; `fieldTypeIcon()` for the nine field types |
 | `lib/theme/side_sheet.dart` | `showSideSheet()`: a 480px sheet from the right, or a bottom sheet on a phone |
 | `lib/theme/form_surface.dart` | `showFormSurface()` + `FormSurface`: every create/edit form, a bottom sheet on a phone and a dialog (optionally two-pane with an aside) otherwise |
@@ -42,10 +42,12 @@ widget to `nocturne_widgets.dart` only when a second screen needs it.
 
 ## Hard rules
 
-1. **Take every color from the tokens.** Use `Nocturne.*` or `Theme.of(context).colorScheme`,
-   never `Colors.red`, `Colors.green` or hex literals in feature code. Muted text is
-   `Nocturne.muted(opacity)`. The only `Colors.*` allowed outside `lib/theme/` is
-   `Colors.transparent`.
+1. **Take every color from the theme.** Read `final c = context.nocturne;` (or
+   `Theme.of(context).colorScheme`), never `Colors.red`, `Colors.green` or hex literals. Muted
+   text is `c.muted(opacity)`. Outside `lib/theme/nocturne.dart` there are no numbered ramp steps
+   (`accent100…900`, `neutral100…900`), no `Color(0x…)` literals and no `Colors.*` other than
+   `Colors.transparent`; `test/design_rules_test.dart` enforces this. Painters and helpers without
+   a `BuildContext` take a `NocturneColors` from their widget's `build`.
 2. **Never fill a primary button.** `FilledButton` is the primary action, and the theme draws it
    as an accent outline on transparent. Don't pass a `backgroundColor` that fills it. Use at most
    one primary button per surface.
@@ -60,10 +62,11 @@ widget to `nocturne_widgets.dart` only when a second screen needs it.
 5. **Keep weights at 400 and 500.** Nothing bolder: hierarchy comes from size and space, not
    weight. Don't use `FontWeight.w600` or `w700`.
 6. **Keep the accent to lines and small marks:** borders, icons, tags, a 2px selection edge, and
-   glows. For tinted fills use the dark ramp steps (`accent900`, `accent800`, `neutral800`), never
-   the accent itself on a large area. Text drawn in the accent at paragraph size should be
-   `accent300`.
-7. **Dark only.** There is no light theme; don't add `brightness` branches.
+   glows. For tinted fills use the fill roles (`accentFill`, `neutralFill`, `neutralFillStrong`),
+   never the accent itself on a large area. Text drawn in the accent at paragraph size is
+   `accentText`.
+7. **Never branch on brightness; use roles.** A role resolves to the right step on each theme, so
+   one widget reads right on dark and light grounds.
 8. **Use Phosphor icons through `FiIcons`** (`lib/theme/fi_icons.dart`), in the regular weight
    unless a mock names fill or bold. Never reference Material `Icons.*` anywhere in `lib/` (the
    generated `lib/src/` excepted); `test/design_rules_test.dart` enforces this. Where a framework
@@ -87,6 +90,38 @@ widget to `nocturne_widgets.dart` only when a second screen needs it.
    input (the dictation mic) goes in `FiTextInput.trailingAction`, after the clear mark, with its
    own 44px target; in a multiline input the slot stays pinned to the top.
 
+## Colors: Catppuccin Mocha, roles and statuses
+
+Colors live in `NocturneColors` (`lib/theme/nocturne.dart`), a `ThemeExtension` read with
+`context.nocturne`. The values come from the `:root` block of `design/project/_ds/nocturne-*/styles.css`
+(Catppuccin Mocha: base `#1e1e2e`, surface0 `#313244`, text `#cdd6f4`, mauve accent `#cba6f7`).
+Theme tokens: `bg`, `surface`, `text`, `accent`, `divider`, `section`, `sectionGlow`, `sectionGhost`,
+`scrim` (the backdrop behind dialogs and sheets), `shadowSm/Md/Lg`, `muted(opacity)`.
+
+Numbered ramp steps never flip, but the direction of use does between a dark and a light ground,
+so call sites use roles:
+
+| Role | Use |
+| --- | --- |
+| `accentFill` | A tinted accent fill: selection bar, selected rows, accent tags, switch track, glows |
+| `accentEdge` | An accent border or inner ring: edit panels, the voice field mark |
+| `accentText` | Accent text at paragraph size; the required `*` |
+| `accentInk` | Small accent labels and icons on a fill (selected nav items, Needed marker) |
+| `accentInkStrong` | Text on an accent fill (accent tag label, voice chip) |
+| `neutralFill` | A quiet neutral fill |
+| `neutralFillStrong` | A stronger neutral fill or a card edge: neutral tags, tooltips, snackbars |
+| `neutralEdge` | A neutral border: menus, dialogs, the clear mark |
+| `neutralGhost` | A dim or ghosted mark: the offline dot, placeholder icons |
+| `neutralMuted` | Muted chrome |
+
+**Status colors** are `danger` (errors, invalid inputs, Revoked and Failed), `success` (Synced,
+Ready) and `warning` (expired, locked, attention). They draw icons, marks, outlines and tag edges or
+fills only; every word, tag labels included, stays in `text`. Never fake an error, failed,
+revoked, synced, ready, expired or locked state with the accent or a faded text color. The accent
+stays the color of active, selected, connected and syncing states. Tags: `Tag` (accent),
+`Tag.neutral`, `Tag.outline`, `Tag.danger` (1px danger edge, danger icon), `Tag.success` (success
+fill, success icon); there is no warning tag.
+
 ## Input sizes
 
 Every shared input of one size has the same box height on a screen, whatever its kind, label,
@@ -104,7 +139,7 @@ in a fixed-height box; if a size looks wrong, change the token.
 
 ## Type scale
 
-The type scale lives in `nocturneTheme().textTheme`. Prefer it over ad-hoc `TextStyle`s; if you
+The type scale lives in `nocturneTheme(...).textTheme`. Prefer it over ad-hoc `TextStyle`s; if you
 must write one, use these sizes:
 
 | Use | Style |
@@ -114,7 +149,7 @@ must write one, use these sizes:
 | Dialog or sheet title | `titleLarge`: 20/500 |
 | Card title | 17/500, set explicitly (`titleMedium` is deliberately 14 because Material uses it for dropdown values) |
 | Body / inputs | 14 |
-| Meta / secondary line | 12–13 at `Nocturne.muted(.55–.6)` |
+| Meta / secondary line | 12–13 at `c.muted(.55–.6)` |
 | Section heading | `SectionLabel('…')`: 13/500, uppercase, 0.08em letter spacing, 60% opacity |
 | Card kicker | `Kicker('…')`: 10px, uppercase, accent (widget tiles keep the title's own case) |
 | Table header | 11px uppercase, 60% opacity, with the field kind after it at lower opacity |
@@ -123,12 +158,12 @@ must write one, use these sizes:
 
 ## Surfaces and elevation
 
-- The page ground is `Nocturne.bg`. Cards and sheets are `Nocturne.surface` with a 1px
-  `neutral800` edge: use `NocturneCard` or the themed `Card` (zero margin, no shadow).
-- Rows inside a sheet sit on `Nocturne.bg` with radius 8 (see `_SheetRow` and `_schemaRow` in
+- The page ground is `c.bg`. Cards and sheets are `c.surface` with a 1px
+  `neutralFillStrong` edge: use `NocturneCard` or the themed `Card` (zero margin, no shadow).
+- Rows inside a sheet sit on `c.bg` with radius 8 (see `_SheetRow` and `_schemaRow` in
   `collections_page.dart`).
-- Use `Nocturne.shadowSm`, `shadowMd` or `shadowLg` for elevation, never ad-hoc heavy shadows.
-- For depth, use `nocturneGlow()` on cards: an elliptical `accent900` glow in one corner. Only
+- Use `c.shadowSm`, `shadowMd` or `shadowLg` for elevation, never ad-hoc heavy shadows.
+- For depth, use `nocturneGlow()` on cards: an elliptical `accentFill` glow in one corner. Only
   headline cards get it (stat tiles, the pairing card); charts and lists stay flat.
 - **Rules fade.** For a freestanding horizontal rule use `FadedRule()`, which fades out over 48px
   at each end. Box outlines, dividers inside a control, and the top border of a sheet footer stay
@@ -157,7 +192,7 @@ must write one, use these sizes:
 - **Secondary editors are side sheets, not dialogs.** Collection-level editors (Schema, Queries)
   open through `showSideSheet(kicker: collectionName, title: …)`, which has a footer note and a
   primary Done. Don't stack dialogs: add or create inline inside the sheet (see the "New field"
-  and field edit panels, which have an `accent700` border). On a phone, where the sheet is too
+  and field edit panels, which have an `accentEdge` border). On a phone, where the sheet is too
   short for a form, an item opens as its own pushed screen instead (`FieldEditorScreen`).
 - **Dialogs** are for focused edits and confirmations. The title is 20/500, and actions are
   Cancel (`TextButton`) then the primary (`FilledButton`), right-aligned.
@@ -187,7 +222,7 @@ must write one, use these sizes:
 - **Form errors** follow one model, `FormIssues` (`controllers.dart`), built from a `BridgeError`
   with `FormIssues.from(error)` or from a list of issues:
   - An issue that names exactly one field (or form key) shows directly under that input: an
-    accent border on the control, a warning icon and the message in `Nocturne.error`, the same
+    accent border on the control, a warning icon and the message in `danger`, the same
     red as the form-level slot. Pass the lines as `errors:` to the shared input, which draws them
     with `FieldErrorMessage` so each issue is its own line; controls without a decoration (a switch, a segmented choice) use
     `FieldErrorLines`. Several issues on one field are several lines, in Rust's order, with no
@@ -209,7 +244,7 @@ must write one, use these sizes:
   `validateRecordDraft` dry run, debounced ~200ms, dropping stale answers; other forms clear an
   input's issues when it changes and recompute client blockers). A record opened because the list
   marks it invalid starts in the attempted state.
-- **Required inputs** get an `*` after the label in `accent300`, never the error color, via
+- **Required inputs** get an `*` after the label in `accentText`, never the error color, via
   `requiredLabel(name)` (the shared inputs apply it with `required: true`; a switch row uses it as
   its title; it reads "name, required" to screen readers). A form with any marked input shows one `RequiredLegend` ("* required") line; the record editor
   says it in its desktop footer hint instead. A required schema field with a default, fixed or
@@ -228,9 +263,9 @@ must write one, use these sizes:
   Date & time editor always shows local time as `yyyy-MM-dd HH:mm` (`formatDateTime`).
 - **Wrap bottom sheet content in `BottomSheetInsets`** (`lib/theme/side_sheet.dart`) so it clears
   both the keyboard and Android's navigation bar. `useSafeArea` alone leaves the bottom uncovered.
-- **Selection mode** swaps the header for an `accent900` action bar with an `accent700` border.
+- **Selection mode** swaps the header for an `accentFill` action bar with an `accentEdge` border.
   The content behind it drops to 40% opacity and ignores taps.
-- **Status** is shown with `GlowDot` (lit accent while reaching peers, dim `neutral600` when
+- **Status** is shown with `GlowDot` (lit accent while reaching peers, dim `neutralGhost` when
   offline, error color on error) plus a short label.
 - **Empty and missing values** are "—" at 40% opacity. Invalid items get a small `warning_amber`
   icon in the error color.
@@ -247,9 +282,9 @@ must write one, use these sizes:
   so `_recordEditor` carries the shell's `VoiceScope` into it. `FormSurface.phoneFooterLeading`
   holds the 56px `VoiceMicButton` beside a flexible Save; `FormSurface.top` holds the `VoicePanel`.
   Each mic state has its own icon and label, never color alone. Panels use `bg` cards with 8px
-  radius; the primer and listening panels use the accent900→bg radial glow with an accent700 edge.
-  A voice-filled field shows `VoiceChip` in its label row and `VoiceFieldMark` (accent900 tint,
-  accent700 border) on its control; a field a turn asks for gets the Needed marker and a dashed
+  radius; the primer and listening panels use the accentFill→bg radial glow with an accentEdge edge.
+  A voice-filled field shows `VoiceChip` in its label row and `VoiceFieldMark` (accentFill tint,
+  accentEdge border) on its control; a field a turn asks for gets the Needed marker and a dashed
   accent border. The evidence popover is inline under the label row, not an overlay. Save is
   disabled only while listening or processing, and closing with changes asks "Discard this
   record?". Transcripts stay in the controller's memory and die with the sheet: never log, persist
@@ -271,7 +306,7 @@ must write one, use these sizes:
 
 ## Charts
 
-All `fl_chart` code stays in `lib/widgets/chart_renderers.dart`. Series use `Nocturne.accent`;
+All `fl_chart` code stays in `lib/widgets/chart_renderers.dart`. Series use `c.accent`;
 grid lines use `_gridLine` (dashed divider). Axis labels are exact values rendered by the app, never
 chart-package ticks.
 

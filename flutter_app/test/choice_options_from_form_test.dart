@@ -134,10 +134,9 @@ void main() {
     final (recordId, values, pending) = bridge.draftSaves.single;
     expect(recordId, isNull);
     expect(pending.single.label, 'coffee');
-    expect(
-      values.firstWhere((item) => item.fieldId == _tags).value.listValue,
-      [pending.single.key],
-    );
+    expect(values.firstWhere((item) => item.fieldId == _tags).value.listValue, [
+      pending.single.key,
+    ]);
     expect(_labels(bridge), contains('coffee'));
     final coffee = bridge.schemas[_collection]!.fields[1].enumOptions
         .firstWhere((option) => option.label == 'coffee')
@@ -161,10 +160,9 @@ void main() {
     await _save(tester);
     final (_, values, pending) = bridge.draftSaves.single;
     expect(pending, isEmpty);
-    expect(
-      values.firstWhere((item) => item.fieldId == _tags).value.listValue,
-      ['work'],
-    );
+    expect(values.firstWhere((item) => item.fieldId == _tags).value.listValue, [
+      'work',
+    ]);
   });
 
   testWidgets('unpicking a new option drops it', (tester) async {
@@ -218,7 +216,7 @@ void main() {
       final added = <String>[];
       await tester.pumpWidget(
         MaterialApp(
-          theme: nocturneTheme(),
+          theme: nocturneTheme(NocturneColors.mocha),
           home: Scaffold(
             body: Padding(
               padding: const EdgeInsets.all(16),

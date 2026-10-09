@@ -3,12 +3,8 @@ import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/theme/nocturne.dart';
 import 'package:flutter/material.dart';
 
-/// The color of a field's error message and warning icon, the same red as the form-level slot;
-/// its control gets an accent border.
-const Color fieldErrorColor = Nocturne.error;
-
 /// A field's error message under its control: a warning icon, then one line per issue in
-/// [fieldErrorColor]. [text] is the lines joined by newlines, as one `Text`.
+/// the theme's danger color; its control gets an accent border. [text] is the lines joined by newlines, as one `Text`.
 class FieldErrorMessage extends StatelessWidget {
   const FieldErrorMessage(this.lines, {super.key});
 
@@ -17,22 +13,22 @@ class FieldErrorMessage extends StatelessWidget {
   String get text => lines.join('\n');
 
   @override
-  Widget build(BuildContext context) => Row(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      const Padding(
-        padding: EdgeInsets.only(top: 1),
-        child: Icon(FiIcons.error, size: 14, color: fieldErrorColor),
-      ),
-      const SizedBox(width: 6),
-      Flexible(
-        child: Text(
-          text,
-          style: const TextStyle(fontSize: 12, color: fieldErrorColor),
+  Widget build(BuildContext context) {
+    final danger = context.nocturne.danger;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 1),
+          child: Icon(FiIcons.error, size: 14, color: danger),
         ),
-      ),
-    ],
-  );
+        const SizedBox(width: 6),
+        Flexible(
+          child: Text(text, style: TextStyle(fontSize: 12, color: danger)),
+        ),
+      ],
+    );
+  }
 }
 
 /// Error lines under a control that has no `InputDecoration` (a switch, a segmented choice),
@@ -72,18 +68,18 @@ class FormErrorSummary extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(12, 4, 4, 4),
       constraints: const BoxConstraints(minHeight: 44),
       decoration: BoxDecoration(
-        color: Nocturne.bg,
+        color: context.nocturne.bg,
         borderRadius: BorderRadius.circular(Nocturne.radius),
-        border: Border.all(color: Nocturne.accent700),
+        border: Border.all(color: context.nocturne.danger),
       ),
       child: Row(
         children: [
-          const Icon(FiIcons.error, size: 18, color: Nocturne.accent),
+          Icon(FiIcons.error, size: 18, color: context.nocturne.danger),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
               context.l10n.formCouldntSave(count),
-              style: const TextStyle(fontSize: 13, color: Nocturne.text),
+              style: TextStyle(fontSize: 13, color: context.nocturne.text),
             ),
           ),
           TextButton(onPressed: onShow, child: Text(context.l10n.commonShow)),
@@ -108,10 +104,7 @@ class FormErrorLines extends StatelessWidget {
       for (final line in lines)
         Text(
           line,
-          style: TextStyle(
-            fontSize: 13,
-            color: Theme.of(context).colorScheme.error,
-          ),
+          style: TextStyle(fontSize: 13, color: context.nocturne.danger),
         ),
     ],
   );
@@ -128,7 +121,7 @@ String? decorationErrorText(InputDecoration? decoration) =>
       _ => decoration?.errorText,
     };
 
-/// An input label for a required value: the name, then an `*` in `accent300` (not the error
+/// An input label for a required value: the name, then an `*` in `accentText` (not the error
 /// color). Screen readers hear "name, required". Use as `InputDecoration.label`.
 Widget requiredLabel(String name) => Builder(
   builder: (context) => Semantics(
@@ -138,7 +131,7 @@ Widget requiredLabel(String name) => Builder(
       mainAxisSize: MainAxisSize.min,
       children: [
         Flexible(child: Text(name, overflow: TextOverflow.ellipsis)),
-        const Text(' *', style: TextStyle(color: Nocturne.accent300)),
+        Text(' *', style: TextStyle(color: context.nocturne.accentText)),
       ],
     ),
   ),
@@ -152,13 +145,13 @@ class RequiredLegend extends StatelessWidget {
   Widget build(BuildContext context) => Text.rich(
     TextSpan(
       children: [
-        const TextSpan(
+        TextSpan(
           text: '*',
-          style: TextStyle(color: Nocturne.accent300),
+          style: TextStyle(color: context.nocturne.accentText),
         ),
         TextSpan(
           text: context.l10n.formRequiredLegend,
-          style: TextStyle(color: Nocturne.muted(.55)),
+          style: TextStyle(color: context.nocturne.muted(.55)),
         ),
       ],
     ),

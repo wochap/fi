@@ -238,7 +238,7 @@ class FiTextInput extends StatelessWidget {
           right: Nocturne.touchTarget + 1,
           height: height - 2,
           child: ColoredBox(
-            color: Nocturne.surface,
+            color: context.nocturne.surface,
             child: Padding(
               padding: EdgeInsets.symmetric(
                 horizontal: size == InputSize.small ? 9 : 11,
@@ -478,7 +478,7 @@ class FiPickerInput extends StatelessWidget {
           TextButton(
             key: quickActionKey,
             style: TextButton.styleFrom(
-              foregroundColor: Nocturne.accent300,
+              foregroundColor: context.nocturne.accentText,
               visualDensity: VisualDensity.compact,
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -581,7 +581,9 @@ class FiSegmented<T> extends StatelessWidget {
       height: height,
       decoration: BoxDecoration(
         borderRadius: radius,
-        border: Border.all(color: error ? Nocturne.accent : Nocturne.divider),
+        border: Border.all(
+          color: error ? context.nocturne.accent : context.nocturne.divider,
+        ),
       ),
       padding: const EdgeInsets.all(3),
       child: Row(
@@ -593,12 +595,12 @@ class FiSegmented<T> extends StatelessWidget {
                 selected: segment.value == value,
                 child: Material(
                   color: segment.value == value
-                      ? Nocturne.accent900
+                      ? context.nocturne.accentFill
                       : Colors.transparent,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(Nocturne.radius - 3),
                     side: segment.value == value
-                        ? const BorderSide(color: Nocturne.accent700)
+                        ? BorderSide(color: context.nocturne.accentEdge)
                         : BorderSide.none,
                   ),
                   clipBehavior: Clip.antiAlias,
@@ -613,8 +615,8 @@ class FiSegmented<T> extends StatelessWidget {
                         style: TextStyle(
                           fontSize: _fontSize,
                           color: segment.value == value
-                              ? Nocturne.accent100
-                              : Nocturne.muted(enabled ? .7 : .4),
+                              ? context.nocturne.accentInkStrong
+                              : context.nocturne.muted(enabled ? .7 : .4),
                         ),
                       ),
                     ),
@@ -633,7 +635,7 @@ class FiSegmented<T> extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(bottom: 6),
             child: DefaultTextStyle.merge(
-              style: TextStyle(fontSize: 12, color: Nocturne.muted(.7)),
+              style: TextStyle(fontSize: 12, color: context.nocturne.muted(.7)),
               child: required ? requiredLabel(label) : Text(label),
             ),
           ),
@@ -817,7 +819,7 @@ class _FiDurationInputState extends State<FiDurationInput> {
                   key: const Key('duration-preview'),
                   style: TextStyle(
                     fontSize: 12,
-                    color: Nocturne.muted(.55),
+                    color: context.nocturne.muted(.55),
                     fontFeatures: Nocturne.tabular,
                   ),
                 ),
@@ -842,7 +844,7 @@ class _FiDurationInputState extends State<FiDurationInput> {
           Padding(
             padding: const EdgeInsets.only(bottom: 6),
             child: DefaultTextStyle.merge(
-              style: TextStyle(fontSize: 12, color: Nocturne.muted(.7)),
+              style: TextStyle(fontSize: 12, color: context.nocturne.muted(.7)),
               child: widget.required ? requiredLabel(label) : Text(label),
             ),
           ),
@@ -878,7 +880,7 @@ class _FiDurationInputState extends State<FiDurationInput> {
                       unit,
                       style: TextStyle(
                         fontSize: 12,
-                        color: Nocturne.muted(.55),
+                        color: context.nocturne.muted(.55),
                       ),
                     ),
                   ),
@@ -1008,7 +1010,7 @@ class FiSlider extends StatelessWidget {
                 child: CustomPaint(
                   key: const Key('slider-dashed-track'),
                   painter: _DashedTrackPainter(
-                    color: Nocturne.muted(enabled ? .35 : .2),
+                    color: context.nocturne.muted(enabled ? .35 : .2),
                   ),
                 ),
               ),
@@ -1021,7 +1023,7 @@ class FiSlider extends StatelessWidget {
         TextButton.icon(
           key: const Key('slider-set-action'),
           style: TextButton.styleFrom(
-            foregroundColor: Nocturne.accent300,
+            foregroundColor: context.nocturne.accentText,
             visualDensity: VisualDensity.compact,
             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             padding: const EdgeInsets.symmetric(horizontal: 8),

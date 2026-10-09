@@ -68,7 +68,10 @@ final class _CollectionDashboardState extends State<CollectionDashboard> {
               Expanded(
                 child: Text(
                   bridgeMessage(context.l10n, failure),
-                  style: const TextStyle(fontSize: 12, color: Nocturne.error),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: context.nocturne.danger,
+                  ),
                 ),
               ),
             if (inReorder)
@@ -82,7 +85,7 @@ final class _CollectionDashboardState extends State<CollectionDashboard> {
                 child: TextButton.icon(
                   key: const Key('reorder-widgets'),
                   style: TextButton.styleFrom(
-                    foregroundColor: Nocturne.muted(.6),
+                    foregroundColor: context.nocturne.muted(.6),
                   ),
                   onPressed: definitions.length < 2 ? null : _startReorder,
                   icon: const Icon(FiIcons.reorder),
@@ -105,7 +108,7 @@ final class _CollectionDashboardState extends State<CollectionDashboard> {
         if (definitions.isEmpty)
           Text(
             l.widgetEmptyDashboard,
-            style: TextStyle(fontSize: 12, color: Nocturne.muted(.55)),
+            style: TextStyle(fontSize: 12, color: context.nocturne.muted(.55)),
           )
         else
           LayoutBuilder(
@@ -206,7 +209,7 @@ final class _CollectionDashboardState extends State<CollectionDashboard> {
     padding: EdgeInsets.zero,
     // The glow marks a headline number; charts keep a flat ground.
     gradient: definition.widgetType == 'core.aggregate-number'
-        ? nocturneGlow()
+        ? nocturneGlow(context.nocturne)
         : null,
     // Tile taps are inert while reordering.
     onTap: reordering ? null : () => _edit(definition),
@@ -248,7 +251,7 @@ final class _CollectionDashboardState extends State<CollectionDashboard> {
             key: Key('widget-overlap-${definition.id}'),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: 11, color: Nocturne.muted(.5)),
+            style: TextStyle(fontSize: 11, color: context.nocturne.muted(.5)),
           ),
         ),
       ],
@@ -299,7 +302,7 @@ final class _ReorderTile extends StatelessWidget {
     final handle = Icon(
       FiIcons.dragHandle,
       size: 18,
-      color: Nocturne.muted(.7),
+      color: context.nocturne.muted(.7),
     );
     final feedback = Material(
       color: Colors.transparent,
@@ -308,9 +311,9 @@ final class _ReorderTile extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
-            color: Nocturne.surface,
+            color: context.nocturne.surface,
             borderRadius: BorderRadius.circular(Nocturne.radius),
-            border: Border.all(color: Nocturne.accent),
+            border: Border.all(color: context.nocturne.accent),
           ),
           child: Text(definition.title),
         ),
@@ -339,7 +342,10 @@ final class _ReorderTile extends StatelessWidget {
                 child: DecoratedBox(
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(Nocturne.radius),
-                    border: Border.all(color: Nocturne.accent, width: 2),
+                    border: Border.all(
+                      color: context.nocturne.accent,
+                      width: 2,
+                    ),
                   ),
                 ),
               ),
@@ -350,9 +356,9 @@ final class _ReorderTile extends StatelessWidget {
             child: DecoratedBox(
               key: Key('reorder-controls-${definition.id}'),
               decoration: BoxDecoration(
-                color: Nocturne.surface,
+                color: context.nocturne.surface,
                 borderRadius: BorderRadius.circular(Nocturne.radiusSm),
-                border: Border.all(color: Nocturne.muted(.12)),
+                border: Border.all(color: context.nocturne.muted(.12)),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -698,7 +704,7 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
           ),
         Text(
           l.widgetSize,
-          style: TextStyle(fontSize: 12, color: Nocturne.muted(.7)),
+          style: TextStyle(fontSize: 12, color: context.nocturne.muted(.7)),
         ),
         SegmentedButton<WidgetSizeDto>(
           key: const Key('widget-size'),
@@ -789,7 +795,7 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
           child: NocturneCard(
             padding: EdgeInsets.zero,
             gradient: widgetType == 'core.aggregate-number'
-                ? nocturneGlow()
+                ? nocturneGlow(context.nocturne)
                 : null,
             child: definition != null && evaluation != null && supported
                 ? CollectionDashboard._registry.build(
@@ -811,7 +817,7 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
                             child: Icon(
                               _typeIcon(widgetType),
                               size: 32,
-                              color: Nocturne.muted(.35),
+                              color: context.nocturne.muted(.35),
                             ),
                           ),
                         ),
@@ -821,7 +827,7 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             fontSize: 11,
-                            color: Nocturne.muted(.5),
+                            color: context.nocturne.muted(.5),
                           ),
                         ),
                       ],
@@ -835,7 +841,7 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
           WidgetSizeDto.medium => l.widgetSizeMediumHint,
           WidgetSizeDto.large => l.widgetSizeLargeHint,
           WidgetSizeDto.full => l.widgetSizeFullHint,
-        }, style: TextStyle(fontSize: 12, color: Nocturne.muted(.5))),
+        }, style: TextStyle(fontSize: 12, color: context.nocturne.muted(.5))),
       ],
     );
   }
@@ -863,10 +869,14 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
           child: Container(
             height: 72,
             decoration: BoxDecoration(
-              color: selected ? Nocturne.accent.withValues(alpha: .12) : null,
+              color: selected
+                  ? context.nocturne.accent.withValues(alpha: .12)
+                  : null,
               borderRadius: BorderRadius.circular(Nocturne.radius),
               border: Border.all(
-                color: selected ? Nocturne.accent : Nocturne.muted(.15),
+                color: selected
+                    ? context.nocturne.accent
+                    : context.nocturne.muted(.15),
               ),
             ),
             padding: const EdgeInsets.symmetric(horizontal: 6),
@@ -877,7 +887,9 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
                 Icon(
                   _typeIcon(type),
                   size: 22,
-                  color: selected ? Nocturne.accent : Nocturne.muted(.7),
+                  color: selected
+                      ? context.nocturne.accent
+                      : context.nocturne.muted(.7),
                 ),
                 Text(
                   widgetTypeName(l, type, descriptor.label),
@@ -886,7 +898,9 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 12,
-                    color: selected ? Nocturne.accent : Nocturne.muted(.8),
+                    color: selected
+                        ? context.nocturne.accent
+                        : context.nocturne.muted(.8),
                   ),
                 ),
               ],
@@ -905,7 +919,7 @@ final class _WidgetEditorState extends State<_WidgetEditor> {
           children: [
             Text(
               l.widgetType,
-              style: TextStyle(fontSize: 12, color: Nocturne.muted(.7)),
+              style: TextStyle(fontSize: 12, color: context.nocturne.muted(.7)),
             ),
             const HelpButton(HelpId.widgetType),
           ],

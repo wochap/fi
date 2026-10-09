@@ -47,16 +47,16 @@ Future<void> showSideSheet(
     context: context,
     barrierDismissible: true,
     barrierLabel: title,
-    barrierColor: Nocturne.neutral900.withValues(alpha: .7),
+    barrierColor: context.nocturne.scrim,
     transitionDuration: const Duration(milliseconds: 220),
     pageBuilder: (sheet, _, _) => Align(
       alignment: Alignment.centerRight,
       child: Container(
         width: math.min(480, size.width),
         height: double.infinity,
-        decoration: const BoxDecoration(
-          color: Nocturne.surface,
-          boxShadow: Nocturne.shadowLg,
+        decoration: BoxDecoration(
+          color: context.nocturne.surface,
+          boxShadow: context.nocturne.shadowLg,
         ),
         child: Material(type: MaterialType.transparency, child: frame(sheet)),
       ),
@@ -132,15 +132,18 @@ class _SideSheetFrame extends StatelessWidget {
       Expanded(child: body),
       Container(
         padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
-        decoration: const BoxDecoration(
-          border: Border(top: BorderSide(color: Nocturne.divider)),
+        decoration: BoxDecoration(
+          border: Border(top: BorderSide(color: context.nocturne.divider)),
         ),
         child: Row(
           children: [
             Expanded(
               child: Text(
                 footerNote ?? '',
-                style: TextStyle(fontSize: 12, color: Nocturne.muted(.55)),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: context.nocturne.muted(.55),
+                ),
               ),
             ),
             FilledButton(

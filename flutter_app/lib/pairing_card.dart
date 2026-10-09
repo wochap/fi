@@ -105,12 +105,12 @@ class _PairingCardBody extends StatelessWidget {
             ? const EdgeInsets.all(16)
             : const EdgeInsets.fromLTRB(20, 18, 20, 18),
         decoration: BoxDecoration(
-          gradient: nocturneGlow(rx: .9, ry: 1.8, stop: .55),
+          gradient: nocturneGlow(context.nocturne, rx: .9, ry: 1.8, stop: .55),
           borderRadius: BorderRadius.circular(Nocturne.radius),
-          border: Border.all(color: Nocturne.neutral800),
+          border: Border.all(color: context.nocturne.neutralEdge),
         ),
         child: DefaultTextStyle.merge(
-          style: TextStyle(fontSize: 13, color: Nocturne.muted(.8)),
+          style: TextStyle(fontSize: 13, color: context.nocturne.muted(.8)),
           child: idle
               ? _idle(context, compact)
               : Column(
@@ -128,19 +128,19 @@ class _PairingCardBody extends StatelessWidget {
     },
   );
 
-  Widget _mark(bool compact) => compact
-      ? const Icon(FiIcons.link, size: 20, color: Nocturne.accent)
-      : const IconTile(
+  Widget _mark(BuildContext context, bool compact) => compact
+      ? Icon(FiIcons.link, size: 20, color: context.nocturne.accent)
+      : IconTile(
           FiIcons.link,
           size: 44,
           fill: null,
-          outline: Nocturne.accent700,
-          color: Nocturne.accent,
+          outline: context.nocturne.accentEdge,
+          color: context.nocturne.accent,
         );
 
   Widget _heading(BuildContext context, bool compact) => Row(
     children: [
-      _mark(compact),
+      _mark(context, compact),
       SizedBox(width: compact ? 10 : 16),
       Expanded(child: Text(context.l10n.pairingTitle, style: _title)),
     ],
@@ -168,7 +168,7 @@ class _PairingCardBody extends StatelessWidget {
           children: [
             Row(
               children: [
-                _mark(true),
+                _mark(context, true),
                 const SizedBox(width: 10),
                 Expanded(child: Text(context.l10n.pairingTitle, style: _title)),
                 const HelpButton(HelpId.pairingStartPairing),
@@ -182,7 +182,7 @@ class _PairingCardBody extends StatelessWidget {
         )
       : Row(
           children: [
-            _mark(false),
+            _mark(context, false),
             const SizedBox(width: 16),
             Expanded(
               child: Column(
@@ -238,7 +238,7 @@ class _PairingCardBody extends StatelessWidget {
           locked: false,
         ),
         PairingKindDto.trusted => [
-          const Icon(FiIcons.verified, color: Nocturne.accent, size: 40),
+          Icon(FiIcons.verified, color: context.nocturne.accent, size: 40),
           Text(context.l10n.pairingSuccess, textAlign: TextAlign.center),
           TextButton(
             onPressed: controller.beginPairing,
@@ -270,8 +270,8 @@ class _PairingCardBody extends StatelessWidget {
               key: const Key('pairing-countdown-ring'),
               value: (remaining / _windowSeconds).clamp(0.0, 1.0),
               strokeWidth: 3,
-              color: Nocturne.accent,
-              backgroundColor: Nocturne.neutral800,
+              color: context.nocturne.accent,
+              backgroundColor: context.nocturne.neutralFillStrong,
             ),
           ),
           const SizedBox(width: 14),
@@ -287,7 +287,7 @@ class _PairingCardBody extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 12,
                     fontFeatures: Nocturne.tabular,
-                    color: Nocturne.muted(.6),
+                    color: context.nocturne.muted(.6),
                   ),
                 ),
               ],
@@ -323,7 +323,11 @@ class _PairingCardBody extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 2),
           child: Row(
             children: [
-              Icon(FiIcons.devices, size: 16, color: Nocturne.muted(.6)),
+              Icon(
+                FiIcons.devices,
+                size: 16,
+                color: context.nocturne.muted(.6),
+              ),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
@@ -359,7 +363,7 @@ class _PairingCardBody extends StatelessWidget {
         Text(
           l.pairingHiddenPaired,
           key: const Key('candidates-hidden-note'),
-          style: TextStyle(fontSize: 12, color: Nocturne.muted(.5)),
+          style: TextStyle(fontSize: 12, color: context.nocturne.muted(.5)),
         ),
       ],
     ];
@@ -413,7 +417,7 @@ class _PairingCardBody extends StatelessWidget {
         const SizedBox(height: 2),
         Text(
           l.pairingWith(name),
-          style: TextStyle(fontSize: 12, color: Nocturne.muted(.6)),
+          style: TextStyle(fontSize: 12, color: context.nocturne.muted(.6)),
         ),
       ],
       const SizedBox(height: 8),
@@ -439,16 +443,16 @@ class _PairingCardBody extends StatelessWidget {
                   height: 48,
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    color: Nocturne.bg,
+                    color: context.nocturne.bg,
                     borderRadius: BorderRadius.circular(Nocturne.radius),
-                    border: Border.all(color: Nocturne.accent700),
+                    border: Border.all(color: context.nocturne.accentEdge),
                   ),
                   child: Text(
                     digit,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontFamily: Nocturne.monoFamily,
                       fontSize: 24,
-                      color: Nocturne.accent200,
+                      color: context.nocturne.accentInk,
                     ),
                   ),
                 ),
@@ -461,7 +465,7 @@ class _PairingCardBody extends StatelessWidget {
         Text(
           l.pairingPeerIdOf(name ?? l.devicesOtherDevice),
           key: const Key('pairing-peer-id-label'),
-          style: TextStyle(fontSize: 12, color: Nocturne.muted(.6)),
+          style: TextStyle(fontSize: 12, color: context.nocturne.muted(.6)),
         ),
         const SizedBox(height: 4),
         SelectableText(
@@ -510,12 +514,13 @@ class _PairingCardBody extends StatelessWidget {
     required Key key,
     required IconData icon,
     required String title,
+    Color? iconColor,
     required String body,
   }) => [
     Row(
       key: key,
       children: [
-        Icon(icon, size: 22, color: Nocturne.muted(.7)),
+        Icon(icon, size: 22, color: iconColor ?? context.nocturne.muted(.7)),
         const SizedBox(width: 10),
         Expanded(child: Text(title, style: _title)),
       ],
@@ -548,6 +553,7 @@ class _PairingCardBody extends StatelessWidget {
           context,
           key: const Key('pairing-expired'),
           icon: FiIcons.duration,
+          iconColor: context.nocturne.warning,
           title: context.l10n.pairingExpiredTitle,
           body: context.l10n.pairingExpiredBody,
         ),
@@ -559,14 +565,17 @@ class _PairingCardBody extends StatelessWidget {
           body: context.l10n.pairingRejectedBody,
         ),
         PairingFailureKindDto.other || null => [
-          const Icon(FiIcons.error, color: Nocturne.error, size: 40),
+          Icon(FiIcons.error, color: context.nocturne.danger, size: 40),
           Text(context.l10n.pairingDidNotComplete, textAlign: TextAlign.center),
           if (controller.pairing.message case final detail?)
             Text(
               detail,
               key: const Key('pairing-failure-detail'),
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 12, color: Nocturne.muted(.55)),
+              style: TextStyle(
+                fontSize: 12,
+                color: context.nocturne.muted(.55),
+              ),
             ),
           TextButton(
             onPressed: controller.beginPairing,

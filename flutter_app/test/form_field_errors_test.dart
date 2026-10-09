@@ -173,17 +173,20 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      const MaterialApp(home: Scaffold(body: FieldErrorMessage(['Required']))),
+      MaterialApp(
+        theme: nocturneTheme(NocturneColors.mocha),
+        home: const Scaffold(body: FieldErrorMessage(['Required'])),
+      ),
     );
     final text = tester.widget<Text>(find.text('Required'));
-    expect(text.style?.color, Nocturne.error);
+    expect(text.style?.color, NocturneColors.mocha.danger);
     final icon = tester.widget<Icon>(
       find.descendant(
         of: find.byType(FieldErrorMessage),
         matching: find.byType(Icon),
       ),
     );
-    expect(icon.color, Nocturne.error);
+    expect(icon.color, NocturneColors.mocha.danger);
   });
 
   testWidgets('Save jumps to the first field with an error', (tester) async {

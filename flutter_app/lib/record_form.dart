@@ -81,7 +81,7 @@ class RecordFormBody extends StatelessWidget {
 
   Widget _layout(BuildContext context, RecordFormRow row, bool wide) {
     final name = DefaultTextStyle.merge(
-      style: TextStyle(fontSize: 13, color: Nocturne.muted(.75)),
+      style: TextStyle(fontSize: 13, color: context.nocturne.muted(.75)),
       child: row.required ? requiredLabel(row.name) : Text(row.name),
     );
     final markers = [
@@ -113,7 +113,7 @@ class RecordFormBody extends StatelessWidget {
           control,
           Text(
             context.l10n.formNeeded,
-            style: TextStyle(fontSize: 12, color: fieldErrorColor),
+            style: TextStyle(fontSize: 12, color: context.nocturne.danger),
           ),
         ],
       );

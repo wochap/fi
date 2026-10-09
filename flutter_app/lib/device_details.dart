@@ -62,22 +62,21 @@ class DeviceStateTag extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (peerProblemOf(device) case final problem?) {
-      return Tag.error(
+      return Tag.danger(
         peerProblemTag(context.l10n, problem),
         leading: FiIcons.error,
       );
     }
     return switch ((device.revoked, device.connection)) {
-      (true, _) => Tag.neutral(
+      (true, _) => Tag.danger(
         context.l10n.devicesStatusRevoked,
         leading: FiIcons.blocked,
       ),
-      (
-        _,
-        PeerConnectionKindDto.connected ||
-            PeerConnectionKindDto.syncing ||
-            PeerConnectionKindDto.synced,
-      ) =>
+      (_, PeerConnectionKindDto.synced) => Tag.success(
+        connectionLabel(context.l10n, device.connection),
+        leading: connectionIcon(device.connection),
+      ),
+      (_, PeerConnectionKindDto.connected || PeerConnectionKindDto.syncing) =>
         Tag(
           connectionLabel(context.l10n, device.connection),
           leading: connectionIcon(device.connection),
@@ -215,7 +214,7 @@ class _DeviceDetailsState extends State<DeviceDetails> {
     final label = TextStyle(
       fontSize: 11,
       letterSpacing: .88,
-      color: Nocturne.muted(.5),
+      color: context.nocturne.muted(.5),
     );
     const value = TextStyle(fontSize: 13, fontFeatures: Nocturne.tabular);
     const mono = TextStyle(fontFamily: Nocturne.monoFamily, fontSize: 12);
@@ -361,7 +360,7 @@ class _DeviceDetailsState extends State<DeviceDetails> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(FiIcons.error, size: 15, color: Nocturne.error),
+              Icon(FiIcons.error, size: 15, color: context.nocturne.danger),
               const SizedBox(width: 8),
               if (!compact && device.failureKind != null) ...[
                 Text(
@@ -433,9 +432,9 @@ class _DeviceDetailsState extends State<DeviceDetails> {
           key: Key('device-log-$id'),
           constraints: const BoxConstraints(maxHeight: 240),
           decoration: BoxDecoration(
-            color: Nocturne.bg,
+            color: context.nocturne.bg,
             borderRadius: BorderRadius.circular(Nocturne.radius),
-            border: Border.all(color: Nocturne.divider),
+            border: Border.all(color: context.nocturne.divider),
           ),
           child: logs == null
               ? Padding(
@@ -447,7 +446,7 @@ class _DeviceDetailsState extends State<DeviceDetails> {
                   padding: const EdgeInsets.all(10),
                   child: Text(
                     l.devicesNoEvents,
-                    style: mono.copyWith(color: Nocturne.muted(.5)),
+                    style: mono.copyWith(color: context.nocturne.muted(.5)),
                   ),
                 )
               : SingleChildScrollView(
@@ -500,14 +499,14 @@ class LogLineRow extends StatelessWidget {
         width: 70,
         child: Text(
           _time.format(DateTime.fromMillisecondsSinceEpoch(event.atMs)),
-          style: _mono.copyWith(color: Nocturne.muted(.5)),
+          style: _mono.copyWith(color: context.nocturne.muted(.5)),
         ),
       ),
       SizedBox(
         width: 64,
         child: Text(
           logCategory(event).name,
-          style: _mono.copyWith(color: Nocturne.accent300),
+          style: _mono.copyWith(color: context.nocturne.accentText),
         ),
       ),
       Expanded(child: Text(logMessage(event), style: _mono)),

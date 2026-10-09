@@ -409,7 +409,7 @@ void main() {
         const registry = FieldRendererRegistry();
         await tester.pumpWidget(
           MaterialApp(
-            theme: nocturneTheme(),
+            theme: nocturneTheme(NocturneColors.mocha),
             home: Scaffold(
               body: Padding(
                 padding: const EdgeInsets.all(16),
@@ -530,7 +530,7 @@ void main() {
       final emitted = <FieldValueDto>[];
       await tester.pumpWidget(
         MaterialApp(
-          theme: nocturneTheme(),
+          theme: nocturneTheme(NocturneColors.mocha),
           home: Scaffold(
             body: SingleChildScrollView(
               padding: const EdgeInsets.all(16),
@@ -798,7 +798,7 @@ void main() {
     ) async {
       await tester.pumpWidget(
         MaterialApp(
-          theme: nocturneTheme(),
+          theme: nocturneTheme(NocturneColors.mocha),
           home: const Scaffold(
             body: Align(
               alignment: Alignment.topLeft,

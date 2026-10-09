@@ -5,35 +5,39 @@ import 'package:flutter/material.dart';
 
 /// A freestanding rule that fades to transparent over 48px at each end (`.hr`).
 class FadedRule extends StatelessWidget {
-  const FadedRule({this.color = Nocturne.divider, this.indent = 0, super.key});
+  const FadedRule({this.color, this.indent = 0, super.key});
 
-  final Color color;
+  /// Defaults to the theme's divider.
+  final Color? color;
   final double indent;
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: EdgeInsets.symmetric(horizontal: indent),
-    child: LayoutBuilder(
-      builder: (context, constraints) {
-        final width = constraints.maxWidth;
-        final ramp = width <= 96 ? .5 : 48 / width;
-        return DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                color.withValues(alpha: 0),
-                color,
-                color,
-                color.withValues(alpha: 0),
-              ],
-              stops: [0, ramp, 1 - ramp, 1],
+  Widget build(BuildContext context) {
+    final color = this.color ?? context.nocturne.divider;
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: indent),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final width = constraints.maxWidth;
+          final ramp = width <= 96 ? .5 : 48 / width;
+          return DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  color.withValues(alpha: 0),
+                  color,
+                  color,
+                  color.withValues(alpha: 0),
+                ],
+                stops: [0, ramp, 1 - ramp, 1],
+              ),
             ),
-          ),
-          child: const SizedBox(height: 1, width: double.infinity),
-        );
-      },
-    ),
-  );
+            child: const SizedBox(height: 1, width: double.infinity),
+          );
+        },
+      ),
+    );
+  }
 }
 
 /// The small uppercase accent label above a card title (`.card-kicker`).
@@ -46,10 +50,10 @@ class Kicker extends StatelessWidget {
     text.toUpperCase(),
     maxLines: 1,
     overflow: TextOverflow.ellipsis,
-    style: const TextStyle(
+    style: TextStyle(
       fontSize: 10,
       letterSpacing: 1,
-      color: Nocturne.accent,
+      color: context.nocturne.accent,
       height: 1.4,
     ),
   );
@@ -60,44 +64,47 @@ class SectionLabel extends StatelessWidget {
   const SectionLabel(this.text, {super.key});
   final String text;
 
-  static const style = TextStyle(
+  /// The label's text style, in the theme's text at 60%.
+  static TextStyle styleOf(BuildContext context) => TextStyle(
     fontSize: 13,
     fontWeight: FontWeight.w500,
     letterSpacing: 1.04,
     height: 1.12,
-    color: Color(0x99E9E9ED),
+    color: context.nocturne.muted(.6),
   );
 
   @override
-  Widget build(BuildContext context) => Text(text.toUpperCase(), style: style);
+  Widget build(BuildContext context) =>
+      Text(text.toUpperCase(), style: styleOf(context));
 }
 
 /// The live status dot: an accent point with a ring and a glow.
 class GlowDot extends StatelessWidget {
-  const GlowDot({
-    this.size = 8,
-    this.ring = true,
-    this.color = Nocturne.accent,
-    super.key,
-  });
+  const GlowDot({this.size = 8, this.ring = true, this.color, super.key});
 
   final double size;
   final bool ring;
-  final Color color;
+
+  /// Defaults to the theme's accent.
+  final Color? color;
 
   @override
-  Widget build(BuildContext context) => Container(
-    width: size,
-    height: size,
-    decoration: BoxDecoration(
-      color: color,
-      shape: BoxShape.circle,
-      boxShadow: [
-        if (ring) const BoxShadow(color: Nocturne.accent900, spreadRadius: 4),
-        BoxShadow(color: color, blurRadius: 12),
-      ],
-    ),
-  );
+  Widget build(BuildContext context) {
+    final c = context.nocturne;
+    final color = this.color ?? c.accent;
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: color,
+        shape: BoxShape.circle,
+        boxShadow: [
+          if (ring) BoxShadow(color: c.accentFill, spreadRadius: 4),
+          BoxShadow(color: color, blurRadius: 12),
+        ],
+      ),
+    );
+  }
 }
 
 /// A rounded square holding one icon, tinted or outlined.
@@ -105,79 +112,125 @@ class IconTile extends StatelessWidget {
   const IconTile(
     this.icon, {
     this.size = 36,
-    this.fill = Nocturne.accent900,
-    this.color = Nocturne.accent200,
+    this.fill = _accentFill,
+    this.color,
     this.outline,
     super.key,
   });
 
+  // Sentinel: [fill] left unset takes the theme's accentFill; an explicit null means no fill.
+  static const _accentFill = Color.fromARGB(0, 0, 0, 1);
+
   final IconData icon;
   final double size;
   final Color? fill;
-  final Color color;
+
+  /// Defaults to the theme's accentInk.
+  final Color? color;
   final Color? outline;
 
   @override
-  Widget build(BuildContext context) => Container(
-    width: size,
-    height: size,
-    alignment: Alignment.center,
-    decoration: BoxDecoration(
-      color: fill,
-      borderRadius: BorderRadius.circular(Nocturne.radius),
-      border: outline == null ? null : Border.all(color: outline!),
-    ),
-    child: Icon(icon, size: size / 2, color: color),
-  );
+  Widget build(BuildContext context) {
+    final c = context.nocturne;
+    return Container(
+      width: size,
+      height: size,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: identical(fill, _accentFill) ? c.accentFill : fill,
+        borderRadius: BorderRadius.circular(Nocturne.radius),
+        border: outline == null ? null : Border.all(color: outline!),
+      ),
+      child: Icon(icon, size: size / 2, color: color ?? c.accentInk),
+    );
+  }
 }
 
-/// A small label (`.tag`): accent by default, [Tag.neutral] or [Tag.outline].
+/// A small label (`.tag`): accent by default, [Tag.neutral], [Tag.outline],
+/// [Tag.danger] or [Tag.success].
+///
+/// The label is drawn in the theme's text (accentInkStrong on the accent tag); a status
+/// color only draws the icon and the edge or fill.
 class Tag extends StatelessWidget {
+  /// `.tag`: an accentFill fill and an accentInkStrong label.
   const Tag(
     this.text, {
-    this.background = Nocturne.accent800,
-    this.color = Nocturne.accent100,
+    this.background,
+    this.color,
     this.fontSize = 11,
     this.leading,
     super.key,
-  }) : border = null;
+  }) : _kind = _TagKind.accent;
 
-  /// `.tag-neutral`.
+  /// `.tag-neutral`: a neutralFillStrong fill and a text label.
   const Tag.neutral(this.text, {this.fontSize = 11, this.leading, super.key})
-    : background = Nocturne.neutral800,
-      color = Nocturne.neutral100,
-      border = null;
+    : _kind = _TagKind.neutral,
+      background = null,
+      color = null;
 
-  /// Error state: an error-tinted fill and error text, no border.
-  const Tag.error(this.text, {this.fontSize = 11, this.leading, super.key})
-    : background = Nocturne.errorTint,
-      color = Nocturne.error,
-      border = null;
+  /// Danger: a 1px danger border, a text-colored label and a danger icon.
+  const Tag.danger(this.text, {this.fontSize = 11, this.leading, super.key})
+    : _kind = _TagKind.danger,
+      background = null,
+      color = null;
+
+  /// Success: a success fill at 22%, a text-colored label and a success icon.
+  const Tag.success(this.text, {this.fontSize = 11, this.leading, super.key})
+    : _kind = _TagKind.success,
+      background = null,
+      color = null;
 
   /// `.tag-outline`: no fill, a 1px accent border and accent text.
   const Tag.outline(this.text, {this.fontSize = 11, this.leading, super.key})
-    : background = Colors.transparent,
-      color = Nocturne.accent,
-      border = Nocturne.accent;
+    : _kind = _TagKind.outline,
+      background = null,
+      color = null;
 
   final String text;
-  final Color background;
-  final Color color;
-  final Color? border;
+  final _TagKind _kind;
+
+  /// Overrides the accent tag's fill.
+  final Color? background;
+
+  /// Overrides the accent tag's label and icon color.
+  final Color? color;
   final double fontSize;
 
-  /// An icon drawn 4px before the text, in the text color.
+  /// An icon drawn 4px before the text.
   final IconData? leading;
 
   @override
   Widget build(BuildContext context) {
+    final c = context.nocturne;
+    final (
+      Color fill,
+      Color label,
+      Color icon,
+      Color? border,
+    ) = switch (_kind) {
+      _TagKind.accent => (
+        background ?? c.accentFill,
+        color ?? c.accentInkStrong,
+        color ?? c.accentInkStrong,
+        null,
+      ),
+      _TagKind.neutral => (c.neutralFillStrong, c.text, c.text, null),
+      _TagKind.danger => (Colors.transparent, c.text, c.danger, c.danger),
+      _TagKind.success => (
+        c.success.withValues(alpha: .22),
+        c.text,
+        c.success,
+        null,
+      ),
+      _TagKind.outline => (Colors.transparent, c.accent, c.accent, c.accent),
+    };
     // Never cut short: a long (translated) tag wraps instead.
-    final label = Text(
-      text,
+    final text = Text(
+      this.text,
       style: TextStyle(
         fontSize: fontSize,
         letterSpacing: fontSize * .02,
-        color: color,
+        color: label,
         height: 1.3,
       ),
     );
@@ -187,23 +240,25 @@ class Tag extends StatelessWidget {
         vertical: fontSize < 11 ? 1 : 3,
       ),
       decoration: BoxDecoration(
-        color: background,
+        color: fill,
         borderRadius: BorderRadius.circular(6),
-        border: border == null ? null : Border.all(color: border!),
+        border: border == null ? null : Border.all(color: border),
       ),
       child: leading == null
-          ? label
+          ? text
           : Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(leading, size: fontSize + 1, color: color),
+                Icon(leading, size: fontSize + 1, color: icon),
                 const SizedBox(width: 4),
-                Flexible(child: label),
+                Flexible(child: text),
               ],
             ),
     );
   }
 }
+
+enum _TagKind { accent, neutral, danger, success, outline }
 
 /// The one clear (✕) mark: a 22px neutral-700 circle holding an 11px `x`.
 ///
@@ -215,6 +270,7 @@ class ClearMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.nocturne;
     final hit = Nocturne.isPhone(context)
         ? Nocturne.touchTarget
         : Nocturne.clearMarkSize;
@@ -233,11 +289,11 @@ class ClearMark extends StatelessWidget {
               width: Nocturne.clearMarkSize,
               height: Nocturne.clearMarkSize,
               alignment: Alignment.center,
-              decoration: const BoxDecoration(
-                color: Nocturne.neutral700,
+              decoration: BoxDecoration(
+                color: c.neutralEdge,
                 shape: BoxShape.circle,
               ),
-              child: const Icon(FiIcons.clear, size: 11, color: Nocturne.text),
+              child: Icon(FiIcons.clear, size: 11, color: c.text),
             ),
           ),
         ),
@@ -255,42 +311,42 @@ class VoiceChip extends StatelessWidget {
   final VoidCallback? onTap;
 
   @override
-  Widget build(BuildContext context) => Semantics(
-    button: true,
-    label: context.l10n.themeFilledByVoice(fieldLabel),
-    excludeSemantics: true,
-    child: Material(
-      color: Nocturne.accent900,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: const BorderSide(color: Nocturne.accent700),
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: onTap,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 28),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(FiIcons.voice, size: 12, color: Nocturne.accent100),
-                const SizedBox(width: 4),
-                Text(
-                  context.l10n.themeVoice,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: Nocturne.accent100,
+  Widget build(BuildContext context) {
+    final c = context.nocturne;
+    return Semantics(
+      button: true,
+      label: context.l10n.themeFilledByVoice(fieldLabel),
+      excludeSemantics: true,
+      child: Material(
+        color: c.accentFill,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(color: c.accentEdge),
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: onTap,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 28),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(FiIcons.voice, size: 12, color: c.accentInkStrong),
+                  const SizedBox(width: 4),
+                  Text(
+                    context.l10n.themeVoice,
+                    style: TextStyle(fontSize: 11, color: c.accentInkStrong),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 /// The trailing label-row marker for a field holding its default value.
@@ -301,7 +357,7 @@ class DefaultMarker extends StatelessWidget {
   Widget build(BuildContext context) => _Marker(
     FiIcons.defaultValue,
     context.l10n.themeDefault,
-    Nocturne.muted(.55),
+    context.nocturne.muted(.55),
   );
 }
 
@@ -310,8 +366,11 @@ class NeededMarker extends StatelessWidget {
   const NeededMarker({super.key});
 
   @override
-  Widget build(BuildContext context) =>
-      _Marker(FiIcons.needed, context.l10n.themeNeeded, Nocturne.accent200);
+  Widget build(BuildContext context) => _Marker(
+    FiIcons.needed,
+    context.l10n.themeNeeded,
+    context.nocturne.accentInk,
+  );
 }
 
 class _Marker extends StatelessWidget {
@@ -346,6 +405,7 @@ class FiSwitch extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.nocturne;
     final phone = Nocturne.isPhone(context);
     final width = phone ? 44.0 : 38.0;
     final height = phone ? 26.0 : 22.0;
@@ -371,18 +431,16 @@ class FiSwitch extends StatelessWidget {
                 ? AlignmentDirectional.centerEnd
                 : AlignmentDirectional.centerStart,
             decoration: BoxDecoration(
-              color: value ? Nocturne.accent900 : Colors.transparent,
+              color: value ? c.accentFill : Colors.transparent,
               borderRadius: BorderRadius.circular(height / 2),
-              border: Border.all(
-                color: value ? Nocturne.accent : Nocturne.divider,
-              ),
+              border: Border.all(color: value ? c.accent : c.divider),
             ),
             child: Container(
               key: const Key('fi-switch-knob'),
               width: knob,
               height: knob,
               decoration: BoxDecoration(
-                color: value ? Nocturne.accent : Nocturne.muted(.55),
+                color: value ? c.accent : c.muted(.55),
                 shape: BoxShape.circle,
               ),
             ),
@@ -492,7 +550,8 @@ class CardListRow extends StatelessWidget {
 ///
 /// [rx] and [ry] are the ellipse radii as fractions of the box, as in CSS
 /// `radial-gradient(rx ry at …)`; [stop] is where the surface takes over.
-Gradient nocturneGlow({
+Gradient nocturneGlow(
+  NocturneColors c, {
   Alignment center = Alignment.topLeft,
   double rx = 1.2,
   double ry = 1.4,
@@ -500,7 +559,7 @@ Gradient nocturneGlow({
 }) => RadialGradient(
   center: center,
   radius: 1,
-  colors: const [Nocturne.accent900, Nocturne.surface],
+  colors: [c.accentFill, c.surface],
   stops: [0, stop],
   transform: _EllipseTransform(center, rx, ry),
 );
@@ -542,15 +601,16 @@ class NocturneCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.nocturne;
     const radius = BorderRadius.all(Radius.circular(Nocturne.radius));
     return Material(
       color: Colors.transparent,
       child: Ink(
         decoration: BoxDecoration(
-          color: gradient == null ? Nocturne.surface : null,
+          color: gradient == null ? c.surface : null,
           gradient: gradient,
           borderRadius: radius,
-          border: Border.all(color: Nocturne.neutral800),
+          border: Border.all(color: c.neutralFillStrong),
         ),
         child: InkWell(
           borderRadius: radius,
@@ -570,23 +630,26 @@ class DashedSlot extends StatelessWidget {
   final VoidCallback? onTap;
 
   @override
-  Widget build(BuildContext context) => CustomPaint(
-    painter: const _DashedRRectPainter(),
-    child: Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(Nocturne.radius),
-        onTap: onTap,
-        child: DefaultTextStyle.merge(
-          style: TextStyle(fontSize: 13, color: Nocturne.muted(.5)),
-          child: IconTheme.merge(
-            data: IconThemeData(color: Nocturne.muted(.5), size: 18),
-            child: Center(child: child),
+  Widget build(BuildContext context) {
+    final c = context.nocturne;
+    return CustomPaint(
+      painter: _DashedRRectPainter(color: c.divider),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(Nocturne.radius),
+          onTap: onTap,
+          child: DefaultTextStyle.merge(
+            style: TextStyle(fontSize: 13, color: c.muted(.5)),
+            child: IconTheme.merge(
+              data: IconThemeData(color: c.muted(.5), size: 18),
+              child: Center(child: child),
+            ),
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 /// A dashed rounded outline in [color] around [child], marking something that needs attention.
@@ -604,7 +667,7 @@ class DashedOutline extends StatelessWidget {
 }
 
 final class _DashedRRectPainter extends CustomPainter {
-  const _DashedRRectPainter({this.color = Nocturne.divider});
+  const _DashedRRectPainter({required this.color});
 
   final Color color;
 
@@ -641,12 +704,16 @@ class FiLogoMark extends StatelessWidget {
   final double size;
 
   @override
-  Widget build(BuildContext context) =>
-      CustomPaint(size: Size.square(size), painter: const _FiMarkPainter());
+  Widget build(BuildContext context) => CustomPaint(
+    size: Size.square(size),
+    painter: _FiMarkPainter(context.nocturne),
+  );
 }
 
 final class _FiMarkPainter extends CustomPainter {
-  const _FiMarkPainter();
+  const _FiMarkPainter(this.c);
+
+  final NocturneColors c;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -660,19 +727,15 @@ final class _FiMarkPainter extends CustomPainter {
           ),
           Paint()..color = color,
         );
-    bar(12, 12, 7, 40, Nocturne.text);
-    bar(24, 12, 28, 7, Nocturne.text);
-    bar(24, 28.5, 16, 7, Nocturne.text);
-    bar(24, 45, 10, 7, Nocturne.neutral600);
-    canvas.drawCircle(
-      const Offset(48.5, 32),
-      4,
-      Paint()..color = Nocturne.accent,
-    );
+    bar(12, 12, 7, 40, c.text);
+    bar(24, 12, 28, 7, c.text);
+    bar(24, 28.5, 16, 7, c.text);
+    bar(24, 45, 10, 7, c.neutralGhost);
+    canvas.drawCircle(const Offset(48.5, 32), 4, Paint()..color = c.accent);
   }
 
   @override
-  bool shouldRepaint(_FiMarkPainter oldDelegate) => false;
+  bool shouldRepaint(_FiMarkPainter oldDelegate) => c != oldDelegate.c;
 }
 
 /// The mark in its 28px tile with an inset accent ring, as in the sidebar and mobile header.
@@ -687,7 +750,7 @@ class FiLogoTile extends StatelessWidget {
     alignment: Alignment.center,
     decoration: BoxDecoration(
       borderRadius: BorderRadius.circular(Nocturne.radius),
-      border: Border.all(color: Nocturne.accent),
+      border: Border.all(color: context.nocturne.accent),
     ),
     child: FiLogoMark(size: size * .72),
   );

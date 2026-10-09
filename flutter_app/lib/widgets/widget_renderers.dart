@@ -175,11 +175,13 @@ Widget renderAggregateNumber(WidgetRenderContext context) {
           ),
         ),
         if (context.summary case final summary?)
-          Text(
-            summary,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: 11, color: Nocturne.muted(.5)),
+          Builder(
+            builder: (context) => Text(
+              summary,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 11, color: context.nocturne.muted(.5)),
+            ),
           ),
       ],
     ),
@@ -267,10 +269,10 @@ final class WidgetTile extends StatelessWidget {
                   title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
                     letterSpacing: 1.1,
-                    color: Nocturne.accent,
+                    color: context.nocturne.accent,
                     height: 1.4,
                   ),
                 ),
@@ -339,7 +341,7 @@ final class _TileMenu extends StatelessWidget {
         icon: FiIcons.more,
         size: 16,
         tooltip: l.widgetMenuTooltip,
-        color: Nocturne.muted(.6),
+        color: context.nocturne.muted(.6),
         onPressed: () async {
           final chosen = await showActionSheet<_TileAction>(
             context,
@@ -382,7 +384,7 @@ final class _TileMenu extends StatelessWidget {
         minimumSize: WidgetStatePropertyAll(Size(28, 28)),
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
       ),
-      icon: Icon(FiIcons.more, size: 16, color: Nocturne.muted(.6)),
+      icon: Icon(FiIcons.more, size: 16, color: context.nocturne.muted(.6)),
       onSelected: _run,
       itemBuilder: (context) => [
         PopupMenuItem(
@@ -415,7 +417,7 @@ final class WidgetLoading extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = Nocturne.muted(.08);
+    final color = context.nocturne.muted(.08);
     Widget block(double width, double height) => Container(
       width: width,
       height: height,

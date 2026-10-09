@@ -145,7 +145,10 @@ class FiChoiceInput extends StatelessWidget {
                   child: Text(
                     _selectedLabel ?? '',
                     key: const Key('choice-held'),
-                    style: TextStyle(fontSize: 12, color: Nocturne.muted(.7)),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: context.nocturne.muted(.7),
+                    ),
                   ),
                 ),
                 if (allowClear)
@@ -261,7 +264,7 @@ extension on FiChoiceInput {
             Text(
               _selectedLabelOrHeld ?? '',
               key: const Key('choice-held'),
-              style: TextStyle(fontSize: 12, color: Nocturne.muted(.7)),
+              style: TextStyle(fontSize: 12, color: context.nocturne.muted(.7)),
             ),
           Wrap(
             spacing: 8,
@@ -392,14 +395,14 @@ class _AddOptionChipState extends State<AddOptionChip> {
           key: const Key('choice-add-confirm'),
           icon: FiIcons.check,
           tooltip: l.choiceAddChip,
-          color: Nocturne.accent,
+          color: context.nocturne.accent,
           onPressed: _submit,
         ),
         FiIconButton(
           key: const Key('choice-add-cancel'),
           icon: FiIcons.close,
           tooltip: l.commonCancel,
-          color: Nocturne.muted(.65),
+          color: context.nocturne.muted(.65),
           onPressed: () => setState(() {
             _editing = false;
             _text.clear();
@@ -429,13 +432,16 @@ class _AddRow extends StatelessWidget {
         child: Row(
           spacing: 10,
           children: [
-            const Icon(FiIcons.add, size: 18, color: Nocturne.accent300),
+            Icon(FiIcons.add, size: 18, color: context.nocturne.accentText),
             Expanded(
               child: Text(
                 context.l10n.choiceAddOption(text),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 15, color: Nocturne.accent300),
+                style: TextStyle(
+                  fontSize: 15,
+                  color: context.nocturne.accentText,
+                ),
               ),
             ),
           ],
@@ -525,8 +531,9 @@ class _ChoiceSheetFieldState extends State<_ChoiceSheetField> {
   );
 }
 
-/// Text spans for [label] with every case-insensitive occurrence of [query] highlighted.
-List<TextSpan> highlightMatches(String label, String query) {
+/// Text spans for [label] with every case-insensitive occurrence of [query] highlighted in
+/// [c]'s accentText.
+List<TextSpan> highlightMatches(NocturneColors c, String label, String query) {
   if (query.isEmpty) return [TextSpan(text: label)];
   final spans = <TextSpan>[];
   final lower = label.toLowerCase();
@@ -539,10 +546,7 @@ List<TextSpan> highlightMatches(String label, String query) {
     spans.add(
       TextSpan(
         text: label.substring(index, index + needle.length),
-        style: const TextStyle(
-          color: Nocturne.accent300,
-          fontWeight: FontWeight.w600,
-        ),
+        style: TextStyle(color: c.accentText, fontWeight: FontWeight.w600),
       ),
     );
     start = index + needle.length;
@@ -659,7 +663,7 @@ class _ChoiceSearchFieldState extends State<_ChoiceSearchField> {
       return Align(
         alignment: AlignmentDirectional.topStart,
         child: Material(
-          color: Nocturne.surface,
+          color: context.nocturne.surface,
           elevation: 8,
           borderRadius: BorderRadius.circular(Nocturne.radius),
           child: ConstrainedBox(
@@ -695,6 +699,7 @@ class _ChoiceSearchFieldState extends State<_ChoiceSearchField> {
                                     child: Text.rich(
                                       TextSpan(
                                         children: highlightMatches(
+                                          context.nocturne,
                                           option.label,
                                           query,
                                         ),
@@ -724,7 +729,10 @@ class _ChoiceSearchFieldState extends State<_ChoiceSearchField> {
                           .length,
                       widget.options.length,
                     ),
-                    style: TextStyle(fontSize: 11, color: Nocturne.muted(.5)),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: context.nocturne.muted(.5),
+                    ),
                   ),
                 ),
               ],
@@ -868,10 +876,16 @@ class _ChoiceRow extends StatelessWidget {
           children: [
             Expanded(
               child: Text.rich(
-                TextSpan(children: highlightMatches(option.label, query)),
+                TextSpan(
+                  children: highlightMatches(
+                    context.nocturne,
+                    option.label,
+                    query,
+                  ),
+                ),
                 style: TextStyle(
                   fontSize: 15,
-                  color: selected ? Nocturne.accent200 : null,
+                  color: selected ? context.nocturne.accentInk : null,
                 ),
               ),
             ),
@@ -887,11 +901,11 @@ class _ChoiceRow extends StatelessWidget {
               ),
             ],
             if (selected)
-              const Icon(
+              Icon(
                 FiIcons.check,
-                key: Key('choice-selected'),
+                key: const Key('choice-selected'),
                 size: 18,
-                color: Nocturne.accent,
+                color: context.nocturne.accent,
               ),
           ],
         ),
@@ -995,7 +1009,7 @@ class _ChoiceSearchSheetState extends State<_ChoiceSearchSheet> {
                           '${widget.options.length} options',
                           style: TextStyle(
                             fontSize: 12,
-                            color: Nocturne.muted(.55),
+                            color: context.nocturne.muted(.55),
                           ),
                         ),
                       ],
@@ -1050,7 +1064,10 @@ class _ChoiceSearchSheetState extends State<_ChoiceSearchSheet> {
                 child: Text(
                   '${matches.length} of ${widget.options.length} match',
                   key: const Key('choice-match-count'),
-                  style: TextStyle(fontSize: 12, color: Nocturne.muted(.55)),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: context.nocturne.muted(.55),
+                  ),
                 ),
               ),
           ],
@@ -1217,7 +1234,7 @@ class FiChoicesInput extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(bottom: 6),
             child: DefaultTextStyle.merge(
-              style: TextStyle(fontSize: 12, color: Nocturne.muted(.7)),
+              style: TextStyle(fontSize: 12, color: context.nocturne.muted(.7)),
               child: required ? requiredLabel(label) : Text(label),
             ),
           ),
@@ -1258,15 +1275,15 @@ class ChoicesToggleChip extends StatelessWidget {
       button: true,
       selected: selected,
       child: Material(
-        color: selected ? Nocturne.accent900 : Colors.transparent,
+        color: selected ? context.nocturne.accentFill : Colors.transparent,
         shape: RoundedRectangleBorder(
           borderRadius: radius,
           side: BorderSide(
             color: selected
-                ? Nocturne.accent700
+                ? context.nocturne.accentEdge
                 : error
-                ? Nocturne.accent
-                : Nocturne.divider,
+                ? context.nocturne.accent
+                : context.nocturne.divider,
           ),
         ),
         child: InkWell(
@@ -1282,15 +1299,15 @@ class ChoicesToggleChip extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   if (selected) ...[
-                    const Icon(
+                    Icon(
                       FiIcons.check,
-                      key: Key('choices-chip-check'),
+                      key: const Key('choices-chip-check'),
                       size: 14,
-                      color: Nocturne.accent200,
+                      color: context.nocturne.accentInk,
                     ),
                     const SizedBox(width: 6),
                   ] else if (leading case final icon?) ...[
-                    Icon(icon, size: 14, color: Nocturne.accent300),
+                    Icon(icon, size: 14, color: context.nocturne.accentText),
                     const SizedBox(width: 6),
                   ],
                   Flexible(
@@ -1301,10 +1318,10 @@ class ChoicesToggleChip extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 13,
                         color: selected
-                            ? Nocturne.accent100
+                            ? context.nocturne.accentInkStrong
                             : leading != null
-                            ? Nocturne.accent300
-                            : Nocturne.muted(.75),
+                            ? context.nocturne.accentText
+                            : context.nocturne.muted(.75),
                       ),
                     ),
                   ),
@@ -1516,7 +1533,7 @@ class _ChoicesSheetState extends State<_ChoicesSheet> {
                           key: const Key('choices-sheet-count'),
                           style: TextStyle(
                             fontSize: 12,
-                            color: Nocturne.muted(.55),
+                            color: context.nocturne.muted(.55),
                           ),
                         ),
                       ],
@@ -1582,6 +1599,7 @@ class _ChoicesSheetState extends State<_ChoicesSheet> {
                               child: Text.rich(
                                 TextSpan(
                                   children: highlightMatches(
+                                    context.nocturne,
                                     option.label,
                                     query,
                                   ),

@@ -46,11 +46,15 @@ void showOutcomeToastOn(
         content: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(
-              success ? FiIcons.check : FiIcons.warning,
-              key: Key(success ? 'outcome-check' : 'outcome-warning'),
-              size: 18,
-              color: Nocturne.accent,
+            Builder(
+              builder: (context) => Icon(
+                success ? FiIcons.check : FiIcons.warning,
+                key: Key(success ? 'outcome-check' : 'outcome-warning'),
+                size: 18,
+                color: success
+                    ? context.nocturne.success
+                    : context.nocturne.warning,
+              ),
             ),
             const SizedBox(width: 10),
             Expanded(child: Text(message)),

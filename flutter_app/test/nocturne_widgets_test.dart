@@ -10,7 +10,7 @@ Future<void> pumpAt(WidgetTester tester, double width, Widget child) async {
   addTearDown(tester.view.reset);
   await tester.pumpWidget(
     MaterialApp(
-      theme: nocturneTheme(),
+      theme: nocturneTheme(NocturneColors.mocha),
       home: Scaffold(body: Center(child: child)),
     ),
   );
@@ -31,7 +31,10 @@ void main() {
       await pumpAt(tester, 390, ClearMark(onPressed: () => taps++));
       final circle = find.byKey(const Key('clear-mark-circle'));
       expect(tester.getSize(circle), const Size.square(22));
-      expect(decorationOf(tester, circle).color, Nocturne.neutral700);
+      expect(
+        decorationOf(tester, circle).color,
+        NocturneColors.mocha.neutralEdge,
+      );
       expect(tester.widget<Icon>(find.byIcon(FiIcons.clear)).size, 11);
       expect(tester.getSize(find.byType(ClearMark)), const Size.square(44));
       expect(find.bySemanticsLabel('Clear'), findsOneWidget);
@@ -61,36 +64,58 @@ void main() {
       expect(box.color, Colors.transparent);
       expect(box.borderRadius, BorderRadius.circular(6));
       final border = box.border! as Border;
-      expect(border.top.color, Nocturne.accent);
+      expect(border.top.color, NocturneColors.mocha.accent);
       expect(border.top.width, 1);
       final text = tester.widget<Text>(find.text('Incomplete'));
-      expect(text.style!.color, Nocturne.accent);
+      expect(text.style!.color, NocturneColors.mocha.accent);
       expect(text.style!.fontSize, 11);
       expect(
         tester.widget<Icon>(find.byIcon(FiIcons.needed)).color,
-        Nocturne.accent,
+        NocturneColors.mocha.accent,
       );
     });
 
-    testWidgets('error tag colors', (tester) async {
+    testWidgets('danger tag colors', (tester) async {
       await pumpAt(
         tester,
         1240,
-        const Tag.error('Not reachable', leading: FiIcons.error),
+        const Tag.danger('Revoked', leading: FiIcons.blocked),
       );
       final box = decorationOf(
         tester,
         find.descendant(of: find.byType(Tag), matching: find.byType(Container)),
       );
-      expect(box.color, Nocturne.errorTint);
-      expect(box.border, isNull);
+      expect(box.color, Colors.transparent);
+      expect((box.border! as Border).top.color, NocturneColors.mocha.danger);
       expect(
-        tester.widget<Text>(find.text('Not reachable')).style!.color,
-        Nocturne.error,
+        tester.widget<Text>(find.text('Revoked')).style!.color,
+        NocturneColors.mocha.text,
       );
       expect(
-        tester.widget<Icon>(find.byIcon(FiIcons.error)).color,
-        Nocturne.error,
+        tester.widget<Icon>(find.byIcon(FiIcons.blocked)).color,
+        NocturneColors.mocha.danger,
+      );
+    });
+
+    testWidgets('success tag colors', (tester) async {
+      await pumpAt(
+        tester,
+        1240,
+        const Tag.success('Synced', leading: FiIcons.synced),
+      );
+      final box = decorationOf(
+        tester,
+        find.descendant(of: find.byType(Tag), matching: find.byType(Container)),
+      );
+      expect(box.color, NocturneColors.mocha.success.withValues(alpha: .22));
+      expect(box.border, isNull);
+      expect(
+        tester.widget<Text>(find.text('Synced')).style!.color,
+        NocturneColors.mocha.text,
+      );
+      expect(
+        tester.widget<Icon>(find.byIcon(FiIcons.synced)).color,
+        NocturneColors.mocha.success,
       );
     });
 
@@ -100,11 +125,11 @@ void main() {
         tester,
         find.descendant(of: find.byType(Tag), matching: find.byType(Container)),
       );
-      expect(box.color, Nocturne.accent800);
+      expect(box.color, NocturneColors.mocha.accentFill);
       expect(box.border, isNull);
       expect(
         tester.widget<Text>(find.text('Required')).style!.color,
-        Nocturne.accent100,
+        NocturneColors.mocha.accentInkStrong,
       );
     });
   });
@@ -155,9 +180,9 @@ void main() {
         closeTo(tester.getRect(track).right - 5, .01),
       );
       final box = decorationOf(tester, track);
-      expect(box.color, Nocturne.accent900);
-      expect((box.border! as Border).top.color, Nocturne.accent);
-      expect(decorationOf(tester, knob).color, Nocturne.accent);
+      expect(box.color, NocturneColors.mocha.accentFill);
+      expect((box.border! as Border).top.color, NocturneColors.mocha.accent);
+      expect(decorationOf(tester, knob).color, NocturneColors.mocha.accent);
     });
 
     testWidgets('off switch on a phone', (tester) async {
@@ -175,8 +200,8 @@ void main() {
       );
       final box = decorationOf(tester, track);
       expect(box.color, Colors.transparent);
-      expect((box.border! as Border).top.color, Nocturne.divider);
-      expect(decorationOf(tester, knob).color, Nocturne.muted(.55));
+      expect((box.border! as Border).top.color, NocturneColors.mocha.divider);
+      expect(decorationOf(tester, knob).color, NocturneColors.mocha.muted(.55));
       await tester.tap(track);
       expect(changed, isTrue);
     });

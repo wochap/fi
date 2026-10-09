@@ -121,10 +121,10 @@ class _SortButton extends StatelessWidget {
               SizedBox(
                 width: 24,
                 child: value == sort
-                    ? const Icon(
+                    ? Icon(
                         FiIcons.check,
                         size: 16,
-                        color: Nocturne.accent,
+                        color: context.nocturne.accent,
                       )
                     : null,
               ),
@@ -138,13 +138,13 @@ class _SortButton extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(FiIcons.sort, size: 16, color: Nocturne.muted(.7)),
+          Icon(FiIcons.sort, size: 16, color: context.nocturne.muted(.7)),
           if (!compact) ...[
             const SizedBox(width: 6),
             Text(
               label(context.l10n, sort),
               key: const Key('collections-sort-label'),
-              style: TextStyle(fontSize: 13, color: Nocturne.muted(.7)),
+              style: TextStyle(fontSize: 13, color: context.nocturne.muted(.7)),
             ),
           ],
         ],
@@ -229,7 +229,7 @@ class CollectionsPage extends StatelessWidget {
                   ? Center(
                       child: Text(
                         l.collectionsEmpty,
-                        style: TextStyle(color: Nocturne.muted(.6)),
+                        style: TextStyle(color: context.nocturne.muted(.6)),
                       ),
                     )
                   : ListView.separated(
@@ -297,7 +297,7 @@ class CollectionsPage extends StatelessWidget {
         key: const Key('collections-transfer-menu'),
         icon: FiIcons.importExport,
         tooltip: l.collectionsImportExport,
-        color: Nocturne.muted(.7),
+        color: context.nocturne.muted(.7),
         onPressed: () async {
           final chosen = await showActionSheet<String>(
             context,
@@ -334,7 +334,11 @@ class CollectionsPage extends StatelessWidget {
       tooltip: labelled ? '' : l.collectionsImportExport,
       icon: labelled
           ? null
-          : Icon(FiIcons.importExport, size: 18, color: Nocturne.muted(.7)),
+          : Icon(
+              FiIcons.importExport,
+              size: 18,
+              color: context.nocturne.muted(.7),
+            ),
       onSelected: run,
       itemBuilder: (_) => [
         PopupMenuItem(
@@ -360,7 +364,7 @@ class CollectionsPage extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 14),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(Nocturne.radius),
-                border: Border.all(color: Nocturne.neutral700),
+                border: Border.all(color: context.nocturne.neutralEdge),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -383,6 +387,7 @@ class CollectionsPage extends StatelessWidget {
   /// The row menu on wide screens: Rename (F2), Clone, the "Export" and "Import" groups, then
   /// Delete….
   static List<PopupMenuEntry<_CollectionAction>> _collectionMenuItems(
+    BuildContext context,
     AppLocalizations l,
   ) => [
     PopupMenuItem(
@@ -396,7 +401,7 @@ class CollectionsPage extends StatelessWidget {
             style: TextStyle(
               fontSize: 12,
               fontFamily: Nocturne.monoFamily,
-              color: Nocturne.muted(.45),
+              color: context.nocturne.muted(.45),
             ),
           ),
         ],
@@ -534,7 +539,10 @@ class CollectionsPage extends StatelessWidget {
             children: [
               Text(
                 l.collectionsExportLine,
-                style: TextStyle(fontSize: 13, color: Nocturne.muted(.6)),
+                style: TextStyle(
+                  fontSize: 13,
+                  color: context.nocturne.muted(.6),
+                ),
               ),
               const SizedBox(height: 8),
               for (final item in controller.collections)
@@ -549,7 +557,7 @@ class CollectionsPage extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 12,
                       fontFeatures: Nocturne.tabular,
-                      color: Nocturne.muted(.55),
+                      color: context.nocturne.muted(.55),
                     ),
                   ),
                   onChanged: (value) => setState(
@@ -738,7 +746,7 @@ class CollectionsPage extends StatelessWidget {
                             textAlign: TextAlign.right,
                             style: TextStyle(
                               fontSize: 12,
-                              color: Nocturne.muted(.5),
+                              color: context.nocturne.muted(.5),
                             ),
                           ),
                         ),
@@ -760,7 +768,7 @@ class CollectionsPage extends StatelessWidget {
                   child: Center(
                     child: Text(
                       l.recordsEmpty,
-                      style: TextStyle(color: Nocturne.muted(.55)),
+                      style: TextStyle(color: context.nocturne.muted(.55)),
                     ),
                   ),
                 ),
@@ -829,7 +837,7 @@ class CollectionsPage extends StatelessWidget {
               child: DecoratedBox(
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(Nocturne.radius),
-                  boxShadow: Nocturne.shadowMd,
+                  boxShadow: context.nocturne.shadowMd,
                 ),
                 child: SizedBox(
                   height: 52,
@@ -936,14 +944,14 @@ class CollectionsPage extends StatelessWidget {
                         Icon(
                           FiIcons.back,
                           size: 13,
-                          color: Nocturne.muted(.55),
+                          color: context.nocturne.muted(.55),
                         ),
                         const SizedBox(width: 6),
                         Text(
                           l.recordsBreadcrumb,
                           style: TextStyle(
                             fontSize: 12,
-                            color: Nocturne.muted(.55),
+                            color: context.nocturne.muted(.55),
                           ),
                         ),
                       ],
@@ -975,7 +983,7 @@ class CollectionsPage extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 13,
                         fontFeatures: Nocturne.tabular,
-                        color: Nocturne.muted(.55),
+                        color: context.nocturne.muted(.55),
                       ),
                     ),
                   ),
@@ -1145,7 +1153,7 @@ class CollectionsPage extends StatelessWidget {
         icon: const Icon(FiIcons.more, size: 20),
         style: IconButton.styleFrom(
           minimumSize: const Size(Nocturne.touchTarget, Nocturne.touchTarget),
-          foregroundColor: Nocturne.text,
+          foregroundColor: context.nocturne.text,
         ),
         onSelected: (action) {
           switch (action) {
@@ -1206,7 +1214,7 @@ class CollectionsPage extends StatelessWidget {
         style: TextStyle(
           fontSize: 11,
           fontFeatures: Nocturne.tabular,
-          color: Nocturne.muted(.55),
+          color: context.nocturne.muted(.55),
         ),
       ),
     ],
@@ -1241,14 +1249,16 @@ class CollectionsPage extends StatelessWidget {
       if (more > 0) l.recordsMoreFields(more),
       ?created,
     ].join(' · ');
-    final muted = TextStyle(fontSize: 12, color: Nocturne.muted(.55));
+    final muted = TextStyle(fontSize: 12, color: context.nocturne.muted(.55));
     return Material(
       key: ValueKey(record.id),
-      color: selected ? Nocturne.accent900 : Nocturne.surface,
+      color: selected ? context.nocturne.accentFill : context.nocturne.surface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(Nocturne.radius),
         side: BorderSide(
-          color: selected ? Nocturne.accent : Nocturne.neutral800,
+          color: selected
+              ? context.nocturne.accent
+              : context.nocturne.neutralFillStrong,
         ),
       ),
       child: InkWell(
@@ -1293,7 +1303,7 @@ class CollectionsPage extends StatelessWidget {
                           Icon(
                             fieldTypeIcon(field.fieldType.kind),
                             size: 14,
-                            color: Nocturne.muted(.5),
+                            color: context.nocturne.muted(.5),
                           ),
                           const SizedBox(width: 8),
                           SizedBox(
@@ -1317,6 +1327,7 @@ class CollectionsPage extends StatelessWidget {
                                         _recordValue(record, field.id),
                                       ) ??
                                       _cell(
+                                        context.nocturne,
                                         registry.displayText(
                                           field,
                                           _recordValue(record, field.id),
@@ -1346,7 +1357,7 @@ class CollectionsPage extends StatelessWidget {
                 FiIconButton(
                   icon: FiIcons.delete,
                   tooltip: l.recordsDeleteRecord,
-                  color: Nocturne.muted(.45),
+                  color: context.nocturne.muted(.45),
                   onPressed: () =>
                       unawaited(controller.deleteRecord(record.id)),
                 ),
@@ -1357,7 +1368,11 @@ class CollectionsPage extends StatelessWidget {
     );
   }
 
-  static Widget _cell(String? text, {bool selected = false}) => Text(
+  static Widget _cell(
+    NocturneColors c,
+    String? text, {
+    bool selected = false,
+  }) => Text(
     text ?? '—',
     maxLines: 1,
     overflow: TextOverflow.ellipsis,
@@ -1365,10 +1380,10 @@ class CollectionsPage extends StatelessWidget {
       fontSize: 14,
       fontFeatures: Nocturne.tabular,
       color: text == null
-          ? Nocturne.muted(.4)
+          ? c.muted(.4)
           : selected
-          ? Nocturne.accent100
-          : Nocturne.text,
+          ? c.accentInkStrong
+          : c.text,
     ),
   );
 
@@ -1664,7 +1679,7 @@ class CollectionsPage extends StatelessWidget {
           fieldSummary(context.l10n, field),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: TextStyle(fontSize: 12, color: Nocturne.muted(.55)),
+          style: TextStyle(fontSize: 12, color: context.nocturne.muted(.55)),
         ),
       ),
     ],
@@ -1674,7 +1689,7 @@ class CollectionsPage extends StatelessWidget {
   /// pushes the field's screen; a long press drags it.
   Widget _phoneSchemaRow(BuildContext sheet, FieldDefinitionDto field) =>
       Material(
-        color: Nocturne.bg,
+        color: sheet.nocturne.bg,
         borderRadius: BorderRadius.circular(Nocturne.radius),
         child: InkWell(
           borderRadius: BorderRadius.circular(Nocturne.radius),
@@ -1691,7 +1706,7 @@ class CollectionsPage extends StatelessWidget {
                   Icon(
                     FiIcons.chevronRight,
                     size: 16,
-                    color: Nocturne.muted(.45),
+                    color: sheet.nocturne.muted(.45),
                   ),
                 ],
               ),
@@ -1779,7 +1794,7 @@ class CollectionsPage extends StatelessWidget {
           padding: const EdgeInsets.only(bottom: 6),
           child: Text(
             description,
-            style: TextStyle(fontSize: 12, color: Nocturne.muted(.55)),
+            style: TextStyle(fontSize: 12, color: context.nocturne.muted(.55)),
           ),
         ),
       ],
@@ -1904,10 +1919,12 @@ class CollectionsPage extends StatelessWidget {
         .where((record) => !controller.selectedRecordIds.contains(record.id))
         .map((record) => record.id)
         .toList();
-    final onAccent = IconButton.styleFrom(foregroundColor: Nocturne.accent100);
+    final onAccent = IconButton.styleFrom(
+      foregroundColor: context.nocturne.accentInkStrong,
+    );
     final outlined = OutlinedButton.styleFrom(
-      foregroundColor: Nocturne.accent100,
-      side: const BorderSide(color: Nocturne.accent700),
+      foregroundColor: context.nocturne.accentInkStrong,
+      side: BorderSide(color: context.nocturne.accentEdge),
     );
     void selectAll() {
       for (final id in unselected) {
@@ -1921,9 +1938,9 @@ class CollectionsPage extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(4, 6, 12, 6),
       decoration: BoxDecoration(
-        color: Nocturne.accent900,
+        color: context.nocturne.accentFill,
         borderRadius: BorderRadius.circular(Nocturne.radius),
-        border: Border.all(color: Nocturne.accent700),
+        border: Border.all(color: context.nocturne.accentEdge),
       ),
       child: Row(
         children: [
@@ -1941,10 +1958,10 @@ class CollectionsPage extends StatelessWidget {
               l.recordsSelected(count),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w500,
-                color: Nocturne.accent100,
+                color: context.nocturne.accentInkStrong,
               ),
             ),
           ),
@@ -1954,12 +1971,14 @@ class CollectionsPage extends StatelessWidget {
               l.recordsInCollection(schema.name),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 13, color: Nocturne.accent200),
+              style: TextStyle(fontSize: 13, color: context.nocturne.accentInk),
             ),
           ),
           if (wide) ...[
             TextButton.icon(
-              style: TextButton.styleFrom(foregroundColor: Nocturne.accent100),
+              style: TextButton.styleFrom(
+                foregroundColor: context.nocturne.accentInkStrong,
+              ),
               onPressed: unselected.isEmpty ? null : selectAll,
               icon: const Icon(FiIcons.selectAll),
               label: Text(l.recordsSelectAll),
@@ -2209,7 +2228,10 @@ class CollectionsPage extends StatelessWidget {
               ),
               Text(
                 l.recordsNewValueHelp,
-                style: TextStyle(fontSize: 12, color: Nocturne.muted(.55)),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: context.nocturne.muted(.55),
+                ),
               ),
             ],
           ),
@@ -2293,7 +2315,10 @@ class _CollectionRow extends StatefulWidget {
   final CollectionDto item;
   final DateTime now;
   final bool phone;
-  final List<PopupMenuEntry<_CollectionAction>> Function(AppLocalizations)
+  final List<PopupMenuEntry<_CollectionAction>> Function(
+    BuildContext,
+    AppLocalizations,
+  )
   menuItems;
   final VoidCallback onOpen;
   final Future<void> Function(String name) onRename;
@@ -2434,7 +2459,7 @@ class _CollectionRowState extends State<_CollectionRow> {
             style: TextStyle(
               fontSize: 12,
               fontFeatures: Nocturne.tabular,
-              color: Nocturne.muted(.55),
+              color: context.nocturne.muted(.55),
             ),
           ),
         ],
@@ -2444,15 +2469,15 @@ class _CollectionRowState extends State<_CollectionRow> {
           FiIconButton(
             icon: FiIcons.more,
             tooltip: l.collectionsActions,
-            color: Nocturne.muted(.7),
+            color: context.nocturne.muted(.7),
             onPressed: widget.onMore,
           )
         else
           PopupMenuButton<_CollectionAction>(
             tooltip: l.collectionsActions,
-            icon: Icon(FiIcons.more, color: Nocturne.muted(.7)),
+            icon: Icon(FiIcons.more, color: context.nocturne.muted(.7)),
             onSelected: _action,
-            itemBuilder: (_) => widget.menuItems(l),
+            itemBuilder: (_) => widget.menuItems(context, l),
           ),
       ];
     }
@@ -3292,7 +3317,7 @@ Widget _withCloneLine(String? title, Widget body) {
           key: const Key('record-clone-of'),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: TextStyle(fontSize: 12, color: Nocturne.muted(.55)),
+          style: TextStyle(fontSize: 12, color: context.nocturne.muted(.55)),
         ),
         const SizedBox(height: 12),
         body,
@@ -3498,16 +3523,16 @@ class _RecordTableState extends State<_RecordTable> {
         ),
         backgroundDecoration: TableSpanDecoration(
           color: index == 0
-              ? Nocturne.bg
+              ? context.nocturne.bg
               : widget.selectedIds.contains(widget.records[index - 1].id)
-              ? Nocturne.accent900
+              ? context.nocturne.accentFill
               : null,
         ),
         foregroundDecoration: TableSpanDecoration(
           border: TableSpanBorder(
             trailing: index == 0
-                ? const BorderSide(color: Nocturne.divider)
-                : BorderSide(color: Nocturne.muted(.08)),
+                ? BorderSide(color: context.nocturne.divider)
+                : BorderSide(color: context.nocturne.muted(.08)),
           ),
         ),
       ),
@@ -3536,8 +3561,8 @@ class _RecordTableState extends State<_RecordTable> {
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           colors: [
-                            Nocturne.bg.withValues(alpha: 0),
-                            Nocturne.bg,
+                            context.nocturne.bg.withValues(alpha: 0),
+                            context.nocturne.bg,
                           ],
                         ),
                       ),
@@ -3554,7 +3579,7 @@ class _RecordTableState extends State<_RecordTable> {
               context.l10n.recordScrollMore,
               key: const Key('table-scroll-hint'),
               textAlign: TextAlign.right,
-              style: TextStyle(fontSize: 12, color: Nocturne.muted(.5)),
+              style: TextStyle(fontSize: 12, color: context.nocturne.muted(.5)),
             ),
           ),
       ],
@@ -3568,7 +3593,7 @@ class _RecordTableState extends State<_RecordTable> {
     final field = widget.fields[column];
     return Container(
       key: Key('column-header-${field.id}'),
-      color: Nocturne.bg,
+      color: context.nocturne.bg,
       padding: EdgeInsets.only(
         left: column == 0 && widget.selecting ? 52 : 12,
         right: 8,
@@ -3579,7 +3604,7 @@ class _RecordTableState extends State<_RecordTable> {
           Icon(
             fieldTypeIcon(field.fieldType.kind),
             size: 13,
-            color: Nocturne.muted(.5),
+            color: context.nocturne.muted(.5),
           ),
           const SizedBox(width: 6),
           Flexible(
@@ -3590,15 +3615,18 @@ class _RecordTableState extends State<_RecordTable> {
               style: TextStyle(
                 fontSize: 11,
                 letterSpacing: .88,
-                color: Nocturne.muted(.6),
+                color: context.nocturne.muted(.6),
               ),
             ),
           ),
           if (FieldRendererRegistry.marksRequired(field))
-            const Text(
+            Text(
               ' *',
               key: Key('required-mark'),
-              style: TextStyle(fontSize: 11, color: Nocturne.accent300),
+              style: TextStyle(
+                fontSize: 11,
+                color: context.nocturne.accentText,
+              ),
             ),
         ],
       ),
@@ -3617,7 +3645,7 @@ class _RecordTableState extends State<_RecordTable> {
           icon: Icon(
             FiIcons.moreHorizontal,
             size: 18,
-            color: Nocturne.muted(.5),
+            color: context.nocturne.muted(.5),
           ),
           onSelected: (action) => action == 'clone'
               ? widget.onClone(record)
@@ -3641,7 +3669,11 @@ class _RecordTableState extends State<_RecordTable> {
         ? missingRequiredFields(record, widget.fields).map((f) => f.id).toSet()
         : const <String>{};
     if (widget.fields.isEmpty) {
-      content = CollectionsPage._cell(record.id, selected: selected);
+      content = CollectionsPage._cell(
+        context.nocturne,
+        record.id,
+        selected: selected,
+      );
     } else {
       final field = widget.fields[column];
       content = missing.contains(field.id)
@@ -3654,6 +3686,7 @@ class _RecordTableState extends State<_RecordTable> {
             )
           : _choicesTags(field, _recordValue(record, field.id)) ??
                 CollectionsPage._cell(
+                  context.nocturne,
                   const FieldRendererRegistry().displayText(
                     field,
                     _recordValue(record, field.id),
@@ -3677,9 +3710,13 @@ class _RecordTableState extends State<_RecordTable> {
               ),
             ),
           if (!record.valid)
-            const Padding(
+            Padding(
               padding: EdgeInsets.only(right: 6),
-              child: Icon(FiIcons.warning, size: 15, color: Nocturne.accent),
+              child: Icon(
+                FiIcons.warning,
+                size: 15,
+                color: context.nocturne.warning,
+              ),
             ),
           Expanded(child: content),
         ],
@@ -3693,10 +3730,15 @@ class _RecordTableState extends State<_RecordTable> {
         // The pinned column is opaque so scrolled cells pass beneath it.
         decoration: first
             ? BoxDecoration(
-                color: selected ? Nocturne.accent900 : Nocturne.bg,
+                color: selected
+                    ? context.nocturne.accentFill
+                    : context.nocturne.bg,
                 border: !record.valid || selected
-                    ? const Border(
-                        left: BorderSide(color: Nocturne.accent, width: 2),
+                    ? Border(
+                        left: BorderSide(
+                          color: context.nocturne.accent,
+                          width: 2,
+                        ),
                       )
                     : null,
               )
@@ -3726,14 +3768,18 @@ class _IncompleteLine extends StatelessWidget {
     final action = phone
         ? l.recordTapToFinish(count)
         : l.recordClickToFinish(count);
-    const style = TextStyle(fontSize: 13, color: Nocturne.accent300);
+    final style = TextStyle(fontSize: 13, color: context.nocturne.accentText);
     return Row(
       key: const Key('incomplete-status'),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Padding(
+        Padding(
           padding: EdgeInsets.only(top: 1),
-          child: Icon(FiIcons.warning, size: 15, color: Nocturne.accent),
+          child: Icon(
+            FiIcons.warning,
+            size: 15,
+            color: context.nocturne.warning,
+          ),
         ),
         const SizedBox(width: 8),
         Expanded(
@@ -3746,7 +3792,7 @@ class _IncompleteLine extends StatelessWidget {
                       action,
                       style: TextStyle(
                         fontSize: 12,
-                        color: Nocturne.muted(.55),
+                        color: context.nocturne.muted(.55),
                       ),
                     ),
                   ],
@@ -3780,7 +3826,7 @@ class _SheetRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Material(
-    color: Nocturne.bg,
+    color: context.nocturne.bg,
     borderRadius: BorderRadius.circular(Nocturne.radius),
     child: InkWell(
       borderRadius: BorderRadius.circular(Nocturne.radius),
@@ -3789,11 +3835,13 @@ class _SheetRow extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(12, 4, 4, 4),
         child: IconButtonTheme(
           data: IconButtonThemeData(
-            style: IconButton.styleFrom(foregroundColor: Nocturne.muted(.5)),
+            style: IconButton.styleFrom(
+              foregroundColor: context.nocturne.muted(.5),
+            ),
           ),
           child: Row(
             children: [
-              Icon(icon, size: 18, color: Nocturne.accent),
+              Icon(icon, size: 18, color: context.nocturne.accent),
               const SizedBox(width: 10),
               Expanded(
                 child: Padding(
@@ -3807,7 +3855,7 @@ class _SheetRow extends StatelessWidget {
                           subtitle,
                           style: TextStyle(
                             fontSize: 12,
-                            color: Nocturne.muted(.55),
+                            color: context.nocturne.muted(.55),
                           ),
                         ),
                     ],
@@ -3909,7 +3957,7 @@ final class _DesktopSchemaRowState extends State<_DesktopSchemaRow> {
       skipTraversal: true,
       onFocusChange: (value) => setState(() => focused = value),
       child: Material(
-        color: Nocturne.bg,
+        color: context.nocturne.bg,
         borderRadius: BorderRadius.circular(Nocturne.radius),
         child: InkWell(
           borderRadius: BorderRadius.circular(Nocturne.radius),
@@ -3925,7 +3973,7 @@ final class _DesktopSchemaRowState extends State<_DesktopSchemaRow> {
                     child: Icon(
                       FiIcons.dragHandle,
                       size: 18,
-                      color: Nocturne.muted(.45),
+                      color: context.nocturne.muted(.45),
                     ),
                   ),
                 ),
@@ -3938,7 +3986,7 @@ final class _DesktopSchemaRowState extends State<_DesktopSchemaRow> {
                     key: widget.deleteKey,
                     icon: FiIcons.delete,
                     tooltip: widget.deleteTooltip,
-                    color: Nocturne.muted(.6),
+                    color: context.nocturne.muted(.6),
                     onPressed: widget.onDelete,
                   ),
                 ),
@@ -3946,7 +3994,7 @@ final class _DesktopSchemaRowState extends State<_DesktopSchemaRow> {
                 Icon(
                   FiIcons.chevronRight,
                   size: 16,
-                  color: Nocturne.muted(.45),
+                  color: context.nocturne.muted(.45),
                 ),
               ],
             ),

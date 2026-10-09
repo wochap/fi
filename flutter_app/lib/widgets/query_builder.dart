@@ -1189,7 +1189,7 @@ class _QueryBuilderState extends State<QueryBuilder> {
           QueryFilterStyle.row => [
             Text(
               l.queryOnlyRecordsWhere,
-              style: TextStyle(fontSize: 12, color: Nocturne.muted(.7)),
+              style: TextStyle(fontSize: 12, color: context.nocturne.muted(.7)),
             ),
             _conditionRow(l),
           ],
@@ -1208,7 +1208,7 @@ class _QueryBuilderState extends State<QueryBuilder> {
         children: [
           Text(
             label,
-            style: TextStyle(fontSize: 12, color: Nocturne.muted(.7)),
+            style: TextStyle(fontSize: 12, color: context.nocturne.muted(.7)),
           ),
           help,
         ],

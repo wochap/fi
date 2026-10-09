@@ -39,13 +39,13 @@ class SetupScaffold extends StatelessWidget {
     return Scaffold(
       body: DecoratedBox(
         decoration: BoxDecoration(
-          color: Nocturne.bg,
+          color: context.nocturne.bg,
           gradient: phone
               ? null
-              : const RadialGradient(
+              : RadialGradient(
                   center: Alignment(-.8, -1),
                   radius: 1.3,
-                  colors: [Nocturne.accent900, Nocturne.bg],
+                  colors: [context.nocturne.accentFill, context.nocturne.bg],
                   stops: [0, .6],
                 ),
         ),
@@ -93,7 +93,7 @@ class SetupScaffold extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 15,
                           height: 1.45,
-                          color: Nocturne.muted(.65),
+                          color: context.nocturne.muted(.65),
                         ),
                       ),
                     ],
@@ -115,13 +115,13 @@ class SetupRing extends StatelessWidget {
   const SetupRing({super.key});
 
   @override
-  Widget build(BuildContext context) => const SizedBox.square(
+  Widget build(BuildContext context) => SizedBox.square(
     dimension: 28,
     child: CircularProgressIndicator(
       key: Key('setup-ring'),
       strokeWidth: 3,
-      color: Nocturne.accent,
-      backgroundColor: Nocturne.neutral800,
+      color: context.nocturne.accent,
+      backgroundColor: context.nocturne.neutralFillStrong,
     ),
   );
 }
@@ -155,8 +155,8 @@ class SetupActions extends StatelessWidget {
 }
 
 /// The muted paragraph style of the pre-shell screens.
-TextStyle setupBodyStyle() =>
-    TextStyle(fontSize: 14, height: 1.5, color: Nocturne.muted(.8));
+TextStyle setupBodyStyle(BuildContext context) =>
+    TextStyle(fontSize: 14, height: 1.5, color: context.nocturne.muted(.8));
 
 /// One choice on "Set up this device" (mock onboarding-first-run). The card is the action:
 /// tapping it chooses. [selected] draws the accent border and fill; [lockedReason] replaces the
@@ -186,20 +186,26 @@ class ChoiceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const radius = BorderRadius.all(Radius.circular(Nocturne.radius));
-    final titleColor = locked ? Nocturne.muted(.5) : Nocturne.text;
+    final titleColor = locked
+        ? context.nocturne.muted(.5)
+        : context.nocturne.text;
     final muted = TextStyle(
       fontSize: 13,
       height: 1.45,
-      color: Nocturne.muted(locked ? .45 : .65),
+      color: context.nocturne.muted(locked ? .45 : .65),
     );
     return Material(
       color: Colors.transparent,
       child: Ink(
         decoration: BoxDecoration(
-          color: selected ? Nocturne.accent900 : Nocturne.surface,
+          color: selected
+              ? context.nocturne.accentFill
+              : context.nocturne.surface,
           borderRadius: radius,
           border: Border.all(
-            color: selected ? Nocturne.accent : Nocturne.divider,
+            color: selected
+                ? context.nocturne.accent
+                : context.nocturne.divider,
           ),
         ),
         child: InkWell(
@@ -213,8 +219,12 @@ class ChoiceCard extends StatelessWidget {
                 IconTile(
                   icon,
                   size: 36,
-                  fill: locked ? Nocturne.neutral900 : Nocturne.accent900,
-                  color: locked ? Nocturne.muted(.45) : Nocturne.accent,
+                  fill: locked
+                      ? context.nocturne.neutralFill
+                      : context.nocturne.accentFill,
+                  color: locked
+                      ? context.nocturne.muted(.45)
+                      : context.nocturne.accent,
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -248,7 +258,7 @@ class ChoiceCard extends StatelessWidget {
                                   child: Icon(
                                     FiIcons.check,
                                     size: 14,
-                                    color: Nocturne.muted(.55),
+                                    color: context.nocturne.muted(.55),
                                   ),
                                 ),
                                 const SizedBox(width: 8),
@@ -264,7 +274,7 @@ class ChoiceCard extends StatelessWidget {
                 Icon(
                   locked ? FiIcons.locked : FiIcons.chevronRight,
                   size: 18,
-                  color: Nocturne.muted(.5),
+                  color: context.nocturne.muted(.5),
                 ),
               ],
             ),
@@ -330,10 +340,10 @@ class DatasetMismatchScreen extends StatelessWidget {
             null => l.mismatchBody,
           },
           key: const Key('dataset-mismatch-body'),
-          style: setupBodyStyle(),
+          style: setupBodyStyle(context),
         ),
         const SizedBox(height: 10),
-        Text(l.mismatchResetNote, style: setupBodyStyle()),
+        Text(l.mismatchResetNote, style: setupBodyStyle(context)),
         const SizedBox(height: 24),
         SetupActions(
           children: [
@@ -403,7 +413,7 @@ class PairingStatusRow extends StatelessWidget {
         const SizedBox(height: 6),
         Text(
           l.setupPairingWaiting,
-          style: TextStyle(fontSize: 13, color: Nocturne.muted(.6)),
+          style: TextStyle(fontSize: 13, color: context.nocturne.muted(.6)),
         ),
       ],
     );

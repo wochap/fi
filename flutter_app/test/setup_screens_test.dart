@@ -20,7 +20,7 @@ void _size(WidgetTester tester, Size size) {
 }
 
 Widget _host(Widget child, {Locale locale = const Locale('en')}) => MaterialApp(
-  theme: nocturneTheme(),
+  theme: nocturneTheme(NocturneColors.mocha),
   locale: locale,
   supportedLocales: AppLocalizations.supportedLocales,
   localizationsDelegates: AppLocalizations.localizationsDelegates,

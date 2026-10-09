@@ -352,7 +352,7 @@ class DictationMic extends StatelessWidget {
         width: 12,
         height: 12,
         decoration: BoxDecoration(
-          color: Nocturne.accent,
+          color: context.nocturne.accent,
           borderRadius: BorderRadius.circular(2),
         ),
       ),
@@ -360,7 +360,7 @@ class DictationMic extends StatelessWidget {
       DictationPhase.idle => Icon(
         FiIcons.microphone,
         size: 18,
-        color: enabled ? Nocturne.accent : Nocturne.muted(.3),
+        color: enabled ? context.nocturne.accent : context.nocturne.muted(.3),
       ),
     };
     return Semantics(
@@ -422,7 +422,10 @@ class DictationStateRow extends StatelessWidget {
             const VoiceProgressRing(size: 14),
             Text(
               l.dictationCleaningUp,
-              style: TextStyle(fontSize: 13, color: Nocturne.muted(.75)),
+              style: TextStyle(
+                fontSize: 13,
+                color: context.nocturne.muted(.75),
+              ),
             ),
           ],
         ),
@@ -456,7 +459,7 @@ class DictationStateRow extends StatelessWidget {
                                 ? 0
                                 : recent[i - (5 - recent.length)]),
                     decoration: BoxDecoration(
-                      color: Nocturne.accent,
+                      color: context.nocturne.accent,
                       borderRadius: BorderRadius.circular(1.5),
                     ),
                   ),
@@ -467,7 +470,7 @@ class DictationStateRow extends StatelessWidget {
             child: Text(
               '${l.dictationListening} $timer',
               key: const Key('dictation-timer'),
-              style: const TextStyle(fontSize: 13, color: Nocturne.accent200),
+              style: TextStyle(fontSize: 13, color: context.nocturne.accentInk),
             ),
           ),
         ],
@@ -492,14 +495,17 @@ class DictationErrorLine extends StatelessWidget {
     final copy = voiceErrorCopy(context.l10n, kind);
     return Row(
       children: [
-        Icon(copy.icon, size: 14, color: Nocturne.accent),
+        Icon(copy.icon, size: 14, color: context.nocturne.danger),
         const SizedBox(width: 6),
         Expanded(
           child: Semantics(
             liveRegion: true,
             child: Text(
               copy.title,
-              style: TextStyle(fontSize: 12, color: Nocturne.muted(.75)),
+              style: TextStyle(
+                fontSize: 12,
+                color: context.nocturne.muted(.75),
+              ),
             ),
           ),
         ),
@@ -675,10 +681,12 @@ class _DictationReviewState extends State<DictationReview> {
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: selected ? Nocturne.accent900 : Nocturne.bg,
+          color: selected ? context.nocturne.accentFill : context.nocturne.bg,
           borderRadius: BorderRadius.circular(Nocturne.radius),
           border: Border.all(
-            color: selected ? Nocturne.accent : Nocturne.divider,
+            color: selected
+                ? context.nocturne.accent
+                : context.nocturne.divider,
             width: selected ? 1.5 : 1,
           ),
         ),
@@ -692,7 +700,9 @@ class _DictationReviewState extends State<DictationReview> {
                 Icon(
                   selected ? FiIcons.radioOn : FiIcons.radioOff,
                   size: 14,
-                  color: selected ? Nocturne.accent : Nocturne.muted(.4),
+                  color: selected
+                      ? context.nocturne.accent
+                      : context.nocturne.muted(.4),
                 ),
                 Text(
                   title,
@@ -709,13 +719,13 @@ class _DictationReviewState extends State<DictationReview> {
                     ),
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: Nocturne.accent700),
+                      border: Border.all(color: context.nocturne.accentEdge),
                     ),
                     child: Text(
                       tag,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 11,
-                        color: Nocturne.accent200,
+                        color: context.nocturne.accentInk,
                       ),
                     ),
                   ),
@@ -756,9 +766,9 @@ class _DictationReviewState extends State<DictationReview> {
               ? TextSpan(
                   text: word,
                   style: TextStyle(
-                    color: Nocturne.muted(.45),
+                    color: context.nocturne.muted(.45),
                     decoration: TextDecoration.lineThrough,
-                    decorationColor: Nocturne.muted(.6),
+                    decorationColor: context.nocturne.muted(.6),
                   ),
                 )
               : TextSpan(text: word),
@@ -781,7 +791,7 @@ class _DictationReviewState extends State<DictationReview> {
       children: [
         Row(
           children: [
-            const Icon(FiIcons.microphone, size: 20, color: Nocturne.accent),
+            Icon(FiIcons.microphone, size: 20, color: context.nocturne.accent),
             const SizedBox(width: 10),
             Expanded(
               child: Column(
@@ -796,7 +806,10 @@ class _DictationReviewState extends State<DictationReview> {
                   ),
                   Text(
                     l.dictatedInto(widget.fieldName),
-                    style: TextStyle(fontSize: 12, color: Nocturne.muted(.6)),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: context.nocturne.muted(.6),
+                    ),
                   ),
                 ],
               ),
@@ -805,7 +818,11 @@ class _DictationReviewState extends State<DictationReview> {
               key: const Key('dictation-review-dismiss'),
               tooltip: l.commonClose,
               onPressed: () => Navigator.pop(context),
-              icon: Icon(FiIcons.close, size: 18, color: Nocturne.muted(.6)),
+              icon: Icon(
+                FiIcons.close,
+                size: 18,
+                color: context.nocturne.muted(.6),
+              ),
             ),
           ],
         ),
@@ -820,7 +837,7 @@ class _DictationReviewState extends State<DictationReview> {
           Text(
             l.dictatedNothingToClean,
             key: const Key('dictation-nothing-to-clean'),
-            style: TextStyle(fontSize: 12, color: Nocturne.muted(.6)),
+            style: TextStyle(fontSize: 12, color: context.nocturne.muted(.6)),
           ),
         ] else ...[
           _version(
@@ -845,7 +862,7 @@ class _DictationReviewState extends State<DictationReview> {
           key: const Key('dictation-field-now'),
           maxLines: 3,
           overflow: TextOverflow.ellipsis,
-          style: TextStyle(fontSize: 12, color: Nocturne.muted(.6)),
+          style: TextStyle(fontSize: 12, color: context.nocturne.muted(.6)),
         ),
         if (empty)
           FilledButton(

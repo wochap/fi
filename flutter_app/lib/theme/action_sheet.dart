@@ -75,7 +75,7 @@ class ActionSheet<T> extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 12,
                             fontFeatures: Nocturne.tabular,
-                            color: Nocturne.muted(.55),
+                            color: context.nocturne.muted(.55),
                           ),
                         ),
                     ],
@@ -105,7 +105,11 @@ class ActionSheet<T> extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     child: Row(
                       children: [
-                        Icon(item.icon, size: 18, color: Nocturne.muted(.7)),
+                        Icon(
+                          item.icon,
+                          size: 18,
+                          color: context.nocturne.muted(.7),
+                        ),
                         const SizedBox(width: 14),
                         Expanded(
                           child: Text(

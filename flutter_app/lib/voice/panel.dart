@@ -12,27 +12,31 @@ import 'package:flutter/material.dart';
 
 const _panelPadding = EdgeInsets.symmetric(horizontal: 14, vertical: 12);
 
-BoxDecoration _plain({bool outlined = false}) => BoxDecoration(
-  color: Nocturne.bg,
-  borderRadius: BorderRadius.circular(Nocturne.radius),
-  border: outlined ? Border.all(color: Nocturne.accent700) : null,
-);
-
-/// The `nocturneGlow` of the primer and listening panels: accent900 fading into bg.
-BoxDecoration _glow({required AlignmentGeometry center, double radius = 1}) =>
+BoxDecoration _plain(NocturneColors c, {bool outlined = false}) =>
     BoxDecoration(
-      gradient: RadialGradient(
-        center: center,
-        radius: radius,
-        colors: const [Nocturne.accent900, Nocturne.bg],
-        stops: const [0, .65],
-      ),
+      color: c.bg,
       borderRadius: BorderRadius.circular(Nocturne.radius),
-      border: Border.all(color: Nocturne.accent700),
+      border: outlined ? Border.all(color: c.accentEdge) : null,
     );
 
-TextStyle _muted(double opacity, [double size = 12]) =>
-    TextStyle(fontSize: size, color: Nocturne.muted(opacity), height: 1.4);
+/// The `nocturneGlow` of the primer and listening panels: accentFill fading into bg.
+BoxDecoration _glow(
+  NocturneColors c, {
+  required AlignmentGeometry center,
+  double radius = 1,
+}) => BoxDecoration(
+  gradient: RadialGradient(
+    center: center,
+    radius: radius,
+    colors: [c.accentFill, c.bg],
+    stops: const [0, .65],
+  ),
+  borderRadius: BorderRadius.circular(Nocturne.radius),
+  border: Border.all(color: c.accentEdge),
+);
+
+TextStyle _muted(NocturneColors c, double opacity, [double size = 12]) =>
+    TextStyle(fontSize: size, color: c.muted(opacity), height: 1.4);
 
 const _title = TextStyle(fontSize: 14, fontWeight: FontWeight.w500);
 
@@ -114,7 +118,7 @@ class VoicePrimerCard extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     key: const Key('voice-primer'),
     padding: const EdgeInsets.all(16),
-    decoration: _glow(center: Alignment.topLeft, radius: 1.4),
+    decoration: _glow(context.nocturne, center: Alignment.topLeft, radius: 1.4),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       spacing: 12,
@@ -124,12 +128,12 @@ class VoicePrimerCard extends StatelessWidget {
           height: 44,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            border: Border.all(color: Nocturne.accent),
+            border: Border.all(color: context.nocturne.accent),
           ),
-          child: const Icon(
+          child: Icon(
             FiIcons.microphone,
             size: 22,
-            color: Nocturne.accent,
+            color: context.nocturne.accent,
           ),
         ),
         Column(
@@ -140,10 +144,16 @@ class VoicePrimerCard extends StatelessWidget {
               context.l10n.voicePrimerTitle,
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
             ),
-            Text(context.l10n.voicePrivacyLine, style: _muted(.7, 13)),
+            Text(
+              context.l10n.voicePrivacyLine,
+              style: _muted(context.nocturne, .7, 13),
+            ),
           ],
         ),
-        Text(context.l10n.voicePrimerNext, style: _muted(.55)),
+        Text(
+          context.l10n.voicePrimerNext,
+          style: _muted(context.nocturne, .55),
+        ),
         _twoButtons(
           secondaryKey: const Key('voice-primer-not-now'),
           secondary: context.l10n.voiceNotNow,
@@ -211,14 +221,14 @@ class _VoiceOfferCardState extends State<VoiceOfferCard> {
     return Container(
       key: const Key('voice-offer'),
       padding: const EdgeInsets.all(16),
-      decoration: _plain(outlined: true),
+      decoration: _plain(context.nocturne, outlined: true),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         spacing: 12,
         children: [
           Row(
             children: [
-              const Icon(FiIcons.download, size: 22, color: Nocturne.accent),
+              Icon(FiIcons.download, size: 22, color: context.nocturne.accent),
               const SizedBox(width: 10),
               Expanded(
                 child: _announced(
@@ -238,7 +248,7 @@ class _VoiceOfferCardState extends State<VoiceOfferCard> {
                     size,
                   )
                 : context.l10n.modelOfferLine(language, size),
-            style: _muted(.7, 13),
+            style: _muted(context.nocturne, .7, 13),
           ),
           Column(
             spacing: 6,
@@ -253,7 +263,7 @@ class _VoiceOfferCardState extends State<VoiceOfferCard> {
                         children: [
                           Text(
                             modelRoleName(context.l10n, file.role),
-                            style: _muted(.55, 11),
+                            style: _muted(context.nocturne, .55, 11),
                           ),
                           Text(
                             modelDisplayLabel(context.l10n, file),
@@ -267,6 +277,7 @@ class _VoiceOfferCardState extends State<VoiceOfferCard> {
                           ? context.l10n.modelOnThisPhone
                           : formatBytes(file.sizeBytes),
                       style: _muted(
+                        context.nocturne,
                         .6,
                       ).copyWith(fontFeatures: Nocturne.tabular),
                     ),
@@ -281,22 +292,24 @@ class _VoiceOfferCardState extends State<VoiceOfferCard> {
                 _infoRow(
                   key: const Key('voice-offer-network'),
                   icon: mobile ? FiIcons.mobileData : FiIcons.wifi,
-                  iconColor: mobile ? Nocturne.accent300 : Nocturne.muted(.7),
+                  iconColor: mobile
+                      ? context.nocturne.accentText
+                      : context.nocturne.muted(.7),
                   text: mobile
                       ? context.l10n.modelOnMobileData
                       : context.l10n.modelOnWifi,
                   trailing: mobile ? context.l10n.modelWifiRecommended : null,
-                  trailingColor: Nocturne.accent300,
+                  trailingColor: context.nocturne.accentText,
                 ),
               _infoRow(
                 key: const Key('voice-offer-storage'),
                 icon: FiIcons.storage,
-                iconColor: Nocturne.muted(.7),
+                iconColor: context.nocturne.muted(.7),
                 text: context.l10n.modelStorage,
                 trailing: _freeBytes == null
                     ? null
                     : context.l10n.modelFree(formatBytes(_freeBytes!)),
-                trailingColor: Nocturne.muted(.6),
+                trailingColor: context.nocturne.muted(.6),
               ),
             ],
           ),
@@ -325,7 +338,7 @@ class _VoiceOfferCardState extends State<VoiceOfferCard> {
     return Text(
       context.l10n.modelErrorLine(title, line),
       key: const Key('voice-download-error'),
-      style: const TextStyle(fontSize: 12, color: Nocturne.error),
+      style: TextStyle(fontSize: 12, color: context.nocturne.danger),
     );
   }
 }
@@ -385,10 +398,10 @@ class _VoicePanelState extends State<VoicePanel> {
   Widget _tip() => Container(
     key: const Key('voice-tip'),
     padding: _panelPadding,
-    decoration: _plain(),
+    decoration: _plain(context.nocturne),
     child: Row(
       children: [
-        const Icon(FiIcons.sparkle, size: 20, color: Nocturne.accent),
+        Icon(FiIcons.sparkle, size: 20, color: context.nocturne.accent),
         const SizedBox(width: 12),
         Expanded(
           child: Column(
@@ -396,7 +409,10 @@ class _VoicePanelState extends State<VoicePanel> {
             children: [
               Text(context.l10n.voiceFillByVoice, style: _title),
               const SizedBox(height: 2),
-              Text(context.l10n.voiceTipLine, style: _muted(.6)),
+              Text(
+                context.l10n.voiceTipLine,
+                style: _muted(context.nocturne, .6),
+              ),
             ],
           ),
         ),
@@ -404,7 +420,11 @@ class _VoicePanelState extends State<VoicePanel> {
           key: const Key('voice-tip-dismiss'),
           tooltip: context.l10n.voiceDismissTip,
           onPressed: () => c.services.prefs.dismissTip(),
-          icon: Icon(FiIcons.close, size: 18, color: Nocturne.muted(.6)),
+          icon: Icon(
+            FiIcons.close,
+            size: 18,
+            color: context.nocturne.muted(.6),
+          ),
         ),
       ],
     ),
@@ -420,7 +440,7 @@ class _VoicePanelState extends State<VoicePanel> {
     return Text(
       context.l10n.modelErrorLine(title, line),
       key: const Key('voice-download-error'),
-      style: const TextStyle(fontSize: 12, color: Nocturne.error),
+      style: TextStyle(fontSize: 12, color: context.nocturne.danger),
     );
   }
 
@@ -435,7 +455,7 @@ class _VoicePanelState extends State<VoicePanel> {
     return Text(
       line,
       key: const Key('voice-download-error'),
-      style: const TextStyle(fontSize: 12, color: Nocturne.error),
+      style: TextStyle(fontSize: 12, color: context.nocturne.danger),
     );
   }
 
@@ -460,14 +480,14 @@ class _VoicePanelState extends State<VoicePanel> {
     return Container(
       key: const Key('voice-downloading'),
       padding: _panelPadding,
-      decoration: _plain(),
+      decoration: _plain(context.nocturne),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         spacing: 10,
         children: [
           Row(
             children: [
-              const Icon(FiIcons.download, size: 18, color: Nocturne.accent),
+              Icon(FiIcons.download, size: 18, color: context.nocturne.accent),
               const SizedBox(width: 10),
               Expanded(child: _announced(title)),
               if (stopped)
@@ -498,7 +518,7 @@ class _VoicePanelState extends State<VoicePanel> {
                 icon: Icon(
                   FiIcons.collapse,
                   size: 18,
-                  color: Nocturne.muted(.6),
+                  color: context.nocturne.muted(.6),
                 ),
               ),
             ],
@@ -512,9 +532,9 @@ class _VoicePanelState extends State<VoicePanel> {
                 value: verifying ? null : progress,
                 minHeight: 4,
                 color: stopped || status.kind == ModelStatusKindDto.reconnecting
-                    ? Nocturne.neutral500
-                    : Nocturne.accent,
-                backgroundColor: Nocturne.neutral700,
+                    ? context.nocturne.neutralMuted
+                    : context.nocturne.accent,
+                backgroundColor: context.nocturne.neutralEdge,
               ),
             ),
           ),
@@ -533,22 +553,31 @@ class _VoicePanelState extends State<VoicePanel> {
                           percent,
                         ),
                   key: const Key('voice-download-progress'),
-                  style: _muted(.6).copyWith(fontFeatures: Nocturne.tabular),
+                  style: _muted(
+                    context.nocturne,
+                    .6,
+                  ).copyWith(fontFeatures: Nocturne.tabular),
                 ),
               ),
               if (status.secondsLeft case final seconds? when !stopped)
-                Text(formatTimeLeft(context.l10n, seconds), style: _muted(.6)),
+                Text(
+                  formatTimeLeft(context.l10n, seconds),
+                  style: _muted(context.nocturne, .6),
+                ),
             ],
           ),
           if (status.kind == ModelStatusKindDto.reconnecting)
             Text(
               context.l10n.modelReconnectingResumesLong,
               key: const Key('voice-download-reconnecting'),
-              style: _muted(.6),
+              style: _muted(context.nocturne, .6),
             ),
           if (error != null)
             failed ? _failureReasonLine(error) : _downloadErrorLine(error),
-          Text(context.l10n.modelKeepFilling, style: _muted(.55)),
+          Text(
+            context.l10n.modelKeepFilling,
+            style: _muted(context.nocturne, .55),
+          ),
         ],
       ),
     );
@@ -562,7 +591,11 @@ class _VoicePanelState extends State<VoicePanel> {
     return Container(
       key: const Key('voice-listening'),
       padding: const EdgeInsets.all(14),
-      decoration: _glow(center: Alignment.topCenter, radius: 1.6),
+      decoration: _glow(
+        context.nocturne,
+        center: Alignment.topCenter,
+        radius: 1.6,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         spacing: 12,
@@ -572,12 +605,15 @@ class _VoicePanelState extends State<VoicePanel> {
               Container(
                 width: 8,
                 height: 8,
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: Nocturne.accent,
+                  color: context.nocturne.accent,
                   boxShadow: [
-                    BoxShadow(color: Nocturne.accent900, spreadRadius: 4),
-                    BoxShadow(color: Nocturne.accent, blurRadius: 10),
+                    BoxShadow(
+                      color: context.nocturne.accentFill,
+                      spreadRadius: 4,
+                    ),
+                    BoxShadow(color: context.nocturne.accent, blurRadius: 10),
                   ],
                 ),
               ),
@@ -586,10 +622,10 @@ class _VoicePanelState extends State<VoicePanel> {
               Text(
                 timer,
                 key: const Key('voice-timer'),
-                style: const TextStyle(
+                style: TextStyle(
                   fontFamily: Nocturne.monoFamily,
                   fontSize: 13,
-                  color: Nocturne.accent200,
+                  color: context.nocturne.accentInk,
                 ),
               ),
             ],
@@ -610,13 +646,15 @@ class _VoicePanelState extends State<VoicePanel> {
                     else ...[
                       TextSpan(
                         text: example,
-                        style: const TextStyle(color: Nocturne.accent100),
+                        style: TextStyle(
+                          color: context.nocturne.accentInkStrong,
+                        ),
                       ),
                       TextSpan(text: part),
                     ],
                 ],
               ),
-              style: _muted(.7, 13),
+              style: _muted(context.nocturne, .7, 13),
             ),
           Row(
             children: [
@@ -625,11 +663,14 @@ class _VoicePanelState extends State<VoicePanel> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   spacing: 2,
                   children: [
-                    Text(context.l10n.voiceListeningHint, style: _muted(.55)),
+                    Text(
+                      context.l10n.voiceListeningHint,
+                      style: _muted(context.nocturne, .55),
+                    ),
                     Text(
                       context.l10n.voiceListeningCap(maxTurnDuration.inSeconds),
                       key: const Key('voice-listening-cap'),
-                      style: _muted(.45, 11),
+                      style: _muted(context.nocturne, .45, 11),
                     ),
                   ],
                 ),
@@ -655,9 +696,9 @@ class _VoicePanelState extends State<VoicePanel> {
               Container(
                 width: 20,
                 height: 20,
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: Nocturne.neutral800,
+                  color: context.nocturne.neutralFillStrong,
                 ),
                 child: const Icon(FiIcons.check, size: 11),
               )
@@ -671,7 +712,9 @@ class _VoicePanelState extends State<VoicePanel> {
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: active ? FontWeight.w500 : FontWeight.w400,
-                color: done ? Nocturne.muted(.6) : Nocturne.text,
+                color: done
+                    ? context.nocturne.muted(.6)
+                    : context.nocturne.text,
               ),
             ),
           ],
@@ -679,7 +722,7 @@ class _VoicePanelState extends State<VoicePanel> {
     return Container(
       key: const Key('voice-processing'),
       padding: const EdgeInsets.all(14),
-      decoration: _plain(outlined: true),
+      decoration: _plain(context.nocturne, outlined: true),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         spacing: 12,
@@ -714,7 +757,7 @@ class _VoicePanelState extends State<VoicePanel> {
               key: const Key('voice-transcript'),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
-                color: Nocturne.surface,
+                color: context.nocturne.surface,
                 borderRadius: BorderRadius.circular(Nocturne.radiusSm),
               ),
               child: Text(
@@ -727,7 +770,7 @@ class _VoicePanelState extends State<VoicePanel> {
               Expanded(
                 child: Text(
                   context.l10n.voiceUsuallySeconds,
-                  style: _muted(.55),
+                  style: _muted(context.nocturne, .55),
                 ),
               ),
               TextButton(
@@ -747,7 +790,7 @@ class _VoicePanelState extends State<VoicePanel> {
     key: const Key('voice-error-heard'),
     padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
     decoration: BoxDecoration(
-      color: Nocturne.neutral800,
+      color: context.nocturne.neutralFillStrong,
       borderRadius: BorderRadius.circular(Nocturne.radius),
     ),
     child: Column(
@@ -757,14 +800,14 @@ class _VoicePanelState extends State<VoicePanel> {
         ExcludeSemantics(
           child: Row(
             children: [
-              const Icon(FiIcons.voice, size: 12, color: Nocturne.accent),
+              Icon(FiIcons.voice, size: 12, color: context.nocturne.accent),
               const SizedBox(width: 6),
               Text(
                 context.l10n.voiceHeardCaps,
                 style: TextStyle(
                   fontSize: 11,
                   letterSpacing: .66,
-                  color: Nocturne.muted(.55),
+                  color: context.nocturne.muted(.55),
                 ),
               ),
             ],
@@ -786,7 +829,7 @@ class _VoicePanelState extends State<VoicePanel> {
     icon: Icon(_heardOpen ? FiIcons.collapse : FiIcons.expand, size: 14),
     label: Text(
       context.l10n.voiceHeard,
-      style: TextStyle(color: Nocturne.muted(.65)),
+      style: TextStyle(color: context.nocturne.muted(.65)),
     ),
   );
 
@@ -806,7 +849,7 @@ class _VoicePanelState extends State<VoicePanel> {
                   style: TextStyle(
                     fontSize: 11,
                     letterSpacing: .66,
-                    color: Nocturne.muted(.55),
+                    color: context.nocturne.muted(.55),
                   ),
                 ),
                 TextSpan(text: '“$transcript”'),
@@ -815,7 +858,9 @@ class _VoicePanelState extends State<VoicePanel> {
             style: TextStyle(
               fontSize: 13,
               height: 1.4,
-              color: index == c.heard.length - 1 ? null : Nocturne.muted(.55),
+              color: index == c.heard.length - 1
+                  ? null
+                  : context.nocturne.muted(.55),
             ),
           ),
       ],
@@ -824,7 +869,7 @@ class _VoicePanelState extends State<VoicePanel> {
 
   Widget _headline(IconData icon, String text, {Widget? trailing}) => Row(
     children: [
-      Icon(icon, size: 18, color: Nocturne.accent),
+      Icon(icon, size: 18, color: context.nocturne.accent),
       const SizedBox(width: 10),
       Expanded(child: _announced(text, key: const Key('voice-headline'))),
       ?trailing,
@@ -839,7 +884,7 @@ class _VoicePanelState extends State<VoicePanel> {
             c.namesOf(c.lastKeptTyped),
           ),
           key: const Key('voice-kept'),
-          style: _muted(.55),
+          style: _muted(context.nocturne, .55),
         );
 
   String _filledCount(int n) => context.l10n.voiceFilledCount(n);
@@ -855,7 +900,7 @@ class _VoicePanelState extends State<VoicePanel> {
   Widget _filled() => Container(
     key: const Key('voice-filled'),
     padding: _panelPadding,
-    decoration: _plain(),
+    decoration: _plain(context.nocturne),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: 10,
@@ -870,7 +915,10 @@ class _VoicePanelState extends State<VoicePanel> {
         Row(
           children: [
             Expanded(
-              child: Text(context.l10n.voiceCheckThenSave, style: _muted(.55)),
+              child: Text(
+                context.l10n.voiceCheckThenSave,
+                style: _muted(context.nocturne, .55),
+              ),
             ),
             _speakAgain(context.l10n.voiceSpeakAgain),
           ],
@@ -882,7 +930,7 @@ class _VoicePanelState extends State<VoicePanel> {
   Widget _need() => Container(
     key: const Key('voice-need'),
     padding: _panelPadding,
-    decoration: _plain(outlined: true),
+    decoration: _plain(context.nocturne, outlined: true),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: 10,
@@ -893,12 +941,12 @@ class _VoicePanelState extends State<VoicePanel> {
           trailing: Text(
             context.l10n.voiceRound(c.round, maxAskingRounds),
             key: const Key('voice-round'),
-            style: _muted(.5, 11),
+            style: _muted(context.nocturne, .5, 11),
           ),
         ),
         Text(
           context.l10n.voiceNeedLine(_filledCount(c.lastApplied.length)),
-          style: _muted(.6),
+          style: _muted(context.nocturne, .6),
         ),
         ?_keptLine(),
         Align(
@@ -918,7 +966,7 @@ class _VoicePanelState extends State<VoicePanel> {
   Widget _exhausted() => Container(
     key: const Key('voice-exhausted'),
     padding: _panelPadding,
-    decoration: _plain(),
+    decoration: _plain(context.nocturne),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: 8,
@@ -929,7 +977,10 @@ class _VoicePanelState extends State<VoicePanel> {
             c.missingRequired.map((field) => field.name).join(', '),
           ),
         ),
-        Text(context.l10n.voiceExhaustedLine, style: _muted(.6)),
+        Text(
+          context.l10n.voiceExhaustedLine,
+          style: _muted(context.nocturne, .6),
+        ),
       ],
     ),
   );
@@ -937,7 +988,7 @@ class _VoicePanelState extends State<VoicePanel> {
   Widget _followup() => Container(
     key: const Key('voice-followup'),
     padding: _panelPadding,
-    decoration: _plain(),
+    decoration: _plain(context.nocturne),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: 10,
@@ -956,7 +1007,7 @@ class _VoicePanelState extends State<VoicePanel> {
   Widget _speaking() => Container(
     key: const Key('voice-speaking'),
     padding: _panelPadding,
-    decoration: _plain(outlined: true),
+    decoration: _plain(context.nocturne, outlined: true),
     child: Row(
       children: [
         const ExcludeSemantics(child: _SpeakingBars()),
@@ -967,7 +1018,10 @@ class _VoicePanelState extends State<VoicePanel> {
             children: [
               Text(
                 context.l10n.voiceSpeaking,
-                style: TextStyle(fontSize: 12, color: Nocturne.accent200),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: context.nocturne.accentInk,
+                ),
               ),
               const SizedBox(height: 2),
               Text(c.spokenLine ?? '', style: const TextStyle(fontSize: 14)),
@@ -1062,19 +1116,19 @@ class VoiceErrorCard extends StatelessWidget {
     return Container(
       key: Key('voice-error-${kind.name}'),
       padding: _panelPadding,
-      decoration: _plain(outlined: true),
+      decoration: _plain(context.nocturne, outlined: true),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         spacing: 8,
         children: [
           Row(
             children: [
-              Icon(copy.icon, size: 18, color: Nocturne.accent),
+              Icon(copy.icon, size: 18, color: context.nocturne.danger),
               const SizedBox(width: 10),
               Expanded(child: _announced(copy.title)),
             ],
           ),
-          Text(copy.line, style: _muted(.6, 13)),
+          Text(copy.line, style: _muted(context.nocturne, .6, 13)),
           ?extra,
           Wrap(
             alignment: WrapAlignment.end,
@@ -1171,7 +1225,7 @@ class _LevelBars extends StatelessWidget {
                           ? 0
                           : recent[i - (count - recent.length)]),
               decoration: BoxDecoration(
-                color: Nocturne.accent,
+                color: context.nocturne.accent,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -1196,7 +1250,7 @@ class _SpeakingBars extends StatelessWidget {
             width: 3,
             height: height,
             decoration: BoxDecoration(
-              color: Nocturne.accent,
+              color: context.nocturne.accent,
               borderRadius: BorderRadius.circular(2),
             ),
           ),
@@ -1241,9 +1295,9 @@ class VoiceEvidencePopover extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
         decoration: BoxDecoration(
-          color: Nocturne.neutral800,
+          color: context.nocturne.neutralFillStrong,
           borderRadius: BorderRadius.circular(Nocturne.radius),
-          boxShadow: Nocturne.shadowMd,
+          boxShadow: context.nocturne.shadowMd,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1251,14 +1305,14 @@ class VoiceEvidencePopover extends StatelessWidget {
           children: [
             Row(
               children: [
-                const Icon(FiIcons.voice, size: 12, color: Nocturne.accent),
+                Icon(FiIcons.voice, size: 12, color: context.nocturne.accent),
                 const SizedBox(width: 6),
                 Text(
                   context.l10n.voiceHeardCaps,
                   style: TextStyle(
                     fontSize: 11,
                     letterSpacing: .66,
-                    color: Nocturne.muted(.55),
+                    color: context.nocturne.muted(.55),
                   ),
                 ),
               ],
@@ -1270,9 +1324,9 @@ class VoiceEvidencePopover extends StatelessWidget {
                   TextSpan(text: '“$before'),
                   TextSpan(
                     text: match,
-                    style: const TextStyle(
-                      color: Nocturne.accent100,
-                      backgroundColor: Nocturne.accent900,
+                    style: TextStyle(
+                      color: context.nocturne.accentInkStrong,
+                      backgroundColor: context.nocturne.accentFill,
                       decoration: TextDecoration.underline,
                     ),
                   ),
@@ -1321,15 +1375,20 @@ class VoiceFieldMark extends StatelessWidget {
   Widget build(BuildContext context) {
     if (!voice && !needed) return child;
     return CustomPaint(
-      painter: voice ? const _TintPainter() : null,
-      foregroundPainter: _BorderPainter(dashed: needed && !voice),
+      painter: voice ? _TintPainter(context.nocturne) : null,
+      foregroundPainter: _BorderPainter(
+        dashed: needed && !voice,
+        colors: context.nocturne,
+      ),
       child: child,
     );
   }
 }
 
 class _TintPainter extends CustomPainter {
-  const _TintPainter();
+  const _TintPainter(this.colors);
+
+  final NocturneColors colors;
 
   @override
   void paint(Canvas canvas, Size size) => canvas.drawRRect(
@@ -1337,24 +1396,25 @@ class _TintPainter extends CustomPainter {
       Offset.zero & size,
       const Radius.circular(Nocturne.radius),
     ),
-    Paint()..color = Nocturne.accent900,
+    Paint()..color = colors.accentFill,
   );
 
   @override
-  bool shouldRepaint(_TintPainter oldDelegate) => false;
+  bool shouldRepaint(_TintPainter oldDelegate) => oldDelegate.colors != colors;
 }
 
 class _BorderPainter extends CustomPainter {
-  const _BorderPainter({required this.dashed});
+  const _BorderPainter({required this.dashed, required this.colors});
 
   final bool dashed;
+  final NocturneColors colors;
 
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1
-      ..color = dashed ? Nocturne.accent : Nocturne.accent700;
+      ..color = dashed ? colors.accent : colors.accentEdge;
     final path = Path()
       ..addRRect(
         RRect.fromRectAndRadius(

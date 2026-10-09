@@ -138,7 +138,10 @@ class _SettingsPageState extends State<SettingsPage>
                   Text(
                     context.l10n.settingsSubtitle,
                     key: const Key('settings-subtitle'),
-                    style: TextStyle(fontSize: 13, color: Nocturne.muted(.6)),
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: context.nocturne.muted(.6),
+                    ),
                   ),
                 for (final (index, section) in sections.indexed) ...[
                   SizedBox(height: index == 0 ? 22 : 26),
@@ -202,17 +205,21 @@ class _SettingsPageState extends State<SettingsPage>
       MicPermission.granted => (
         l.settingsMicAllowed,
         null,
-        const Icon(FiIcons.allowed, size: 16, color: Nocturne.accent200),
+        Icon(FiIcons.allowed, size: 16, color: context.nocturne.accentInk),
       ),
       MicPermission.notGranted => (
         l.settingsMicNotAllowed,
         l.settingsMicAsksFirst,
-        Icon(FiIcons.notAllowedYet, size: 16, color: Nocturne.muted(.7)),
+        Icon(
+          FiIcons.notAllowedYet,
+          size: 16,
+          color: context.nocturne.muted(.7),
+        ),
       ),
       MicPermission.permanentlyDenied => (
         l.settingsMicOff,
         l.settingsMicTurnOn,
-        Icon(FiIcons.blocked, size: 16, color: Nocturne.muted(.7)),
+        Icon(FiIcons.blocked, size: 16, color: context.nocturne.muted(.7)),
       ),
       null => (_permissionKnown ? l.settingsMicUnknown : '…', null, null),
     };
@@ -224,21 +231,31 @@ class _SettingsPageState extends State<SettingsPage>
         children: [
           Row(
             children: [
-              Icon(FiIcons.microphone, size: 18, color: Nocturne.muted(.7)),
+              Icon(
+                FiIcons.microphone,
+                size: 18,
+                color: context.nocturne.muted(.7),
+              ),
               const SizedBox(width: 10),
               Expanded(child: Text(l.settingsMicAccess)),
               if (icon != null) ...[icon, const SizedBox(width: 6)],
               Text(
                 text,
                 key: const Key('settings-microphone-status'),
-                style: TextStyle(fontSize: 13, color: Nocturne.muted(.7)),
+                style: TextStyle(
+                  fontSize: 13,
+                  color: context.nocturne.muted(.7),
+                ),
               ),
             ],
           ),
           if (detail != null)
             Text(
               detail,
-              style: TextStyle(fontSize: 12, color: Nocturne.muted(.55)),
+              style: TextStyle(
+                fontSize: 12,
+                color: context.nocturne.muted(.55),
+              ),
             ),
           Align(
             alignment: AlignmentDirectional.centerStart,
@@ -311,7 +328,7 @@ class _LanguageSectionState extends State<_LanguageSection> {
           Text(l.langAppLanguage),
           Text(
             l.langAppLanguageHint,
-            style: TextStyle(fontSize: 13, color: Nocturne.muted(.6)),
+            style: TextStyle(fontSize: 13, color: context.nocturne.muted(.6)),
           ),
         ],
       );
@@ -398,7 +415,7 @@ class _LanguageSectionState extends State<_LanguageSection> {
       final l = context.l10n;
       final lang = services.language;
       final status = services.models.status;
-      final muted = TextStyle(fontSize: 13, color: Nocturne.muted(.6));
+      final muted = TextStyle(fontSize: 13, color: context.nocturne.muted(.6));
       if (status.kind == ModelStatusKindDto.ready) {
         return Text(
           l.langVoiceReady(lang),
@@ -423,9 +440,9 @@ class _LanguageSectionState extends State<_LanguageSection> {
         key: const Key('language-voice-offer'),
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: Nocturne.bg,
+          color: context.nocturne.bg,
           borderRadius: BorderRadius.circular(Nocturne.radius),
-          border: Border.all(color: Nocturne.accent700),
+          border: Border.all(color: context.nocturne.accentEdge),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -538,11 +555,11 @@ class _ThisDeviceAddressesState extends State<_ThisDeviceAddresses> {
   @override
   Widget build(BuildContext context) {
     final l = context.l10n;
-    final muted = TextStyle(fontSize: 12, color: Nocturne.muted(.55));
+    final muted = TextStyle(fontSize: 12, color: context.nocturne.muted(.55));
     if (widget.addresses.isEmpty) {
       return Text(
         l.aboutNotOnLocalNetwork,
-        style: TextStyle(fontSize: 13, color: Nocturne.muted(.55)),
+        style: TextStyle(fontSize: 13, color: context.nocturne.muted(.55)),
       );
     }
     return Column(
@@ -577,16 +594,16 @@ class _ThisDeviceAddressesState extends State<_ThisDeviceAddresses> {
                       mainAxisSize: MainAxisSize.min,
                       spacing: 4,
                       children: [
-                        const Icon(
+                        Icon(
                           FiIcons.check,
                           size: 16,
-                          color: Nocturne.accent200,
+                          color: context.nocturne.accentInk,
                         ),
                         Text(
                           l.aboutAddressCopied,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
-                            color: Nocturne.accent200,
+                            color: context.nocturne.accentInk,
                           ),
                         ),
                       ],
@@ -638,7 +655,10 @@ class _AboutRow extends StatelessWidget {
               if (detail case final detail?)
                 Text(
                   detail,
-                  style: TextStyle(fontSize: 12, color: Nocturne.muted(.55)),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: context.nocturne.muted(.55),
+                  ),
                 ),
             ],
           ),
@@ -665,7 +685,7 @@ class _VoiceInputSection extends StatelessWidget {
     listenable: Listenable.merge([models, services.prefs]),
     builder: (context, _) {
       final status = models.status;
-      final muted = TextStyle(fontSize: 12, color: Nocturne.muted(.55));
+      final muted = TextStyle(fontSize: 12, color: context.nocturne.muted(.55));
       return Column(
         key: const Key('settings-voice'),
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -683,7 +703,10 @@ class _VoiceInputSection extends StatelessWidget {
                   formatBytes(speech.sizeBytes),
                 ),
                 key: const Key('settings-voice-needs-model'),
-                style: TextStyle(fontSize: 13, color: Nocturne.muted(.7)),
+                style: TextStyle(
+                  fontSize: 13,
+                  color: context.nocturne.muted(.7),
+                ),
               ),
           NocturneCard(
             key: const Key('settings-voice-models'),

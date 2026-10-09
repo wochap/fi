@@ -279,12 +279,12 @@ void main() {
         (tester.widget<Material>(find.byKey(ValueKey(id))).shape!
                 as RoundedRectangleBorder)
             .side;
-    expect(side('record-0').color, Nocturne.accent);
+    expect(side('record-0').color, NocturneColors.mocha.accent);
     expect(side('record-0').width, 1);
-    expect(side('record-1').color, isNot(Nocturne.accent));
+    expect(side('record-1').color, isNot(NocturneColors.mocha.accent));
     expect(
       tester.widget<Material>(find.byKey(const ValueKey('record-0'))).color,
-      Nocturne.accent900,
+      NocturneColors.mocha.accentFill,
     );
     expect(
       tester

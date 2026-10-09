@@ -203,11 +203,13 @@ class FieldOptionChip extends StatelessWidget {
       child: Opacity(
         opacity: enabled ? 1 : .45,
         child: Material(
-          color: selected ? Nocturne.accent900 : Colors.transparent,
+          color: selected ? context.nocturne.accentFill : Colors.transparent,
           shape: RoundedRectangleBorder(
             borderRadius: radius,
             side: BorderSide(
-              color: selected ? Nocturne.accent700 : Nocturne.divider,
+              color: selected
+                  ? context.nocturne.accentEdge
+                  : context.nocturne.divider,
             ),
           ),
           child: InkWell(
@@ -225,10 +227,10 @@ class FieldOptionChip extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     if (selected) ...[
-                      const Icon(
+                      Icon(
                         FiIcons.check,
                         size: 14,
-                        color: Nocturne.accent200,
+                        color: context.nocturne.accentInk,
                       ),
                       const SizedBox(width: 6),
                     ],
@@ -237,8 +239,8 @@ class FieldOptionChip extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 13,
                         color: selected
-                            ? Nocturne.accent100
-                            : Nocturne.muted(.75),
+                            ? context.nocturne.accentInkStrong
+                            : context.nocturne.muted(.75),
                       ),
                     ),
                   ],
@@ -270,9 +272,9 @@ class _SettingsBlock extends StatelessWidget {
     margin: const EdgeInsets.only(top: 12),
     padding: const EdgeInsets.fromLTRB(14, 6, 6, 14),
     decoration: BoxDecoration(
-      color: Nocturne.bg,
+      color: context.nocturne.bg,
       borderRadius: BorderRadius.circular(Nocturne.radius),
-      border: Border.all(color: Nocturne.neutral800),
+      border: Border.all(color: context.nocturne.neutralFillStrong),
     ),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -763,16 +765,20 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
             padding: const EdgeInsets.only(bottom: 14),
             child: Row(
               children: [
-                const Icon(FiIcons.addCircle, size: 18, color: Nocturne.accent),
+                Icon(
+                  FiIcons.addCircle,
+                  size: 18,
+                  color: context.nocturne.accent,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     context.l10n.fieldEditorNewField,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w500,
-                      color: Nocturne.accent200,
+                      color: context.nocturne.accentInk,
                     ),
                   ),
                 ),
@@ -845,7 +851,7 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
             child: Text(
               context.l10n.fieldEditorChoicesRequiredHelp,
               key: const Key('choices-required-help'),
-              style: TextStyle(fontSize: 12, color: Nocturne.muted(.5)),
+              style: TextStyle(fontSize: 12, color: context.nocturne.muted(.5)),
             ),
           ),
         if (kind == FieldTypeKindDto.integer && !_sliderAvailable)
@@ -853,7 +859,7 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
             padding: const EdgeInsets.only(top: 6),
             child: Text(
               context.l10n.fieldEditorSliderNeedsRange,
-              style: TextStyle(fontSize: 12, color: Nocturne.muted(.5)),
+              style: TextStyle(fontSize: 12, color: context.nocturne.muted(.5)),
             ),
           ),
         ?_requiredWarning(),
@@ -870,7 +876,10 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
               title: Text(context.l10n.fieldEditorAllowAddingOptions),
               subtitle: Text(
                 context.l10n.fieldEditorAllowAddingOptionsHelp,
-                style: TextStyle(fontSize: 12, color: Nocturne.muted(.55)),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: context.nocturne.muted(.55),
+                ),
               ),
             ),
           ),
@@ -915,7 +924,7 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(Nocturne.radius),
-        border: Border.all(color: Nocturne.accent700),
+        border: Border.all(color: context.nocturne.accentEdge),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -929,7 +938,7 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
                   key: const Key('field-delete'),
                   icon: FiIcons.delete,
                   tooltip: context.l10n.fieldEditorDeleteField,
-                  color: Nocturne.muted(.6),
+                  color: context.nocturne.muted(.6),
                   onPressed: () async {
                     if (await confirmDeleteField(context, controller, field)) {
                       widget.onClosed();
@@ -971,11 +980,15 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
             selected: selected,
             enabled: enabled,
             child: Material(
-              color: selected ? Nocturne.accent900 : Colors.transparent,
+              color: selected
+                  ? context.nocturne.accentFill
+                  : Colors.transparent,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(Nocturne.radius),
                 side: BorderSide(
-                  color: selected ? Nocturne.accent : Nocturne.divider,
+                  color: selected
+                      ? context.nocturne.accent
+                      : context.nocturne.divider,
                 ),
               ),
               child: InkWell(
@@ -994,8 +1007,8 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
                         fieldTypeIcon(value),
                         size: 18,
                         color: selected
-                            ? Nocturne.accent200
-                            : Nocturne.muted(.6),
+                            ? context.nocturne.accentInk
+                            : context.nocturne.muted(.6),
                       ),
                       Text(
                         fieldKindLabel(context.l10n, value),
@@ -1004,8 +1017,8 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
                         style: TextStyle(
                           fontSize: 11,
                           color: selected
-                              ? Nocturne.accent100
-                              : Nocturne.muted(.7),
+                              ? context.nocturne.accentInkStrong
+                              : context.nocturne.muted(.7),
                         ),
                       ),
                     ],
@@ -1040,12 +1053,12 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
         key: const Key('required-warning'),
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(FiIcons.warning, size: 16, color: Nocturne.accent300),
+          Icon(FiIcons.warning, size: 16, color: context.nocturne.warning),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               context.l10n.fieldEditorRequiredWarning(missing),
-              style: const TextStyle(fontSize: 12, color: Nocturne.accent300),
+              style: TextStyle(fontSize: 12, color: context.nocturne.text),
             ),
           ),
         ],
@@ -1218,16 +1231,16 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
               ),
               Text(
                 context.l10n.fieldEditorDays,
-                style: TextStyle(color: Nocturne.muted(.6)),
+                style: TextStyle(color: context.nocturne.muted(.6)),
               ),
               Expanded(
                 child: Text(
                   '→ ${formatDateHuman(_localEpochDay() + _signedRelativeDays)}',
                   key: const Key('default-preview'),
                   textAlign: TextAlign.end,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
-                    color: Nocturne.accent200,
+                    color: context.nocturne.accentInk,
                     fontFeatures: Nocturne.tabular,
                   ),
                 ),
@@ -1240,7 +1253,7 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
           Text(
             context.l10n.fieldEditorChoicesDefaultHelp,
             key: const Key('choices-default-help'),
-            style: TextStyle(fontSize: 12, color: Nocturne.muted(.55)),
+            style: TextStyle(fontSize: 12, color: context.nocturne.muted(.55)),
           ),
         if (text && (min != null || max != null))
           Text(
@@ -1250,7 +1263,9 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
             textAlign: TextAlign.end,
             style: TextStyle(
               fontSize: 12,
-              color: issue == null ? Nocturne.muted(.55) : fieldErrorColor,
+              color: issue == null
+                  ? context.nocturne.muted(.55)
+                  : context.nocturne.danger,
               fontFeatures: Nocturne.tabular,
             ),
           ),
@@ -1423,7 +1438,7 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
         key: key,
         icon: FiIcons.moreHorizontal,
         tooltip: tooltip,
-        color: Nocturne.muted(.55),
+        color: context.nocturne.muted(.55),
         onPressed: () async {
           final chosen = await showActionSheet<String>(
             context,
@@ -1459,7 +1474,11 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
         padding: WidgetStatePropertyAll(EdgeInsets.zero),
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
       ),
-      icon: Icon(FiIcons.moreHorizontal, size: 16, color: Nocturne.muted(.55)),
+      icon: Icon(
+        FiIcons.moreHorizontal,
+        size: 16,
+        color: context.nocturne.muted(.55),
+      ),
       onSelected: run,
       itemBuilder: (_) => [
         PopupMenuItem(
@@ -1487,7 +1506,7 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
     margin: const EdgeInsets.only(bottom: 8),
     padding: const EdgeInsets.fromLTRB(12, 4, 4, 4),
     decoration: BoxDecoration(
-      color: Nocturne.accent900.withValues(alpha: .4),
+      color: context.nocturne.accentFill.withValues(alpha: .4),
       borderRadius: BorderRadius.circular(Nocturne.radius),
     ),
     child: Row(
@@ -1553,7 +1572,7 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
                       padding: const EdgeInsets.all(8),
                       child: Icon(
                         FiIcons.dragHandle,
-                        color: Nocturne.muted(.45),
+                        color: context.nocturne.muted(.45),
                       ),
                     ),
                   ),
@@ -1596,7 +1615,7 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
         child: Text(
           context.l10n.fieldEditorDeletedOptionNote(example),
           key: const Key('deleted-option-note'),
-          style: TextStyle(fontSize: 12, color: Nocturne.muted(.55)),
+          style: TextStyle(fontSize: 12, color: context.nocturne.muted(.55)),
         ),
       ),
     ];
@@ -1728,7 +1747,7 @@ class FieldEditorScreen extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             fontSize: 12,
-                            color: Nocturne.muted(.55),
+                            color: context.nocturne.muted(.55),
                           ),
                         ),
                       ],

@@ -1,4 +1,5 @@
 import 'package:clock/clock.dart';
+import 'package:fi/l10n/app_localizations.dart';
 import 'package:fi/device_details.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/theme/fi_icons.dart';
@@ -47,6 +48,37 @@ Future<void> emit(
 }
 
 void main() {
+  testWidgets('Connected and Syncing are accent tags', (tester) async {
+    const m = NocturneColors.mocha;
+    for (final kind in [
+      PeerConnectionKindDto.connected,
+      PeerConnectionKindDto.syncing,
+    ]) {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: nocturneTheme(m),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          home: Scaffold(
+            body: DeviceStateTag(device: _device('a', 'Tablet', kind)),
+          ),
+        ),
+      );
+      final box =
+          tester
+                  .widget<Container>(
+                    find
+                        .descendant(
+                          of: find.byType(Tag),
+                          matching: find.byType(Container),
+                        )
+                        .first,
+                  )
+                  .decoration!
+              as BoxDecoration;
+      expect(box.color, m.accentFill, reason: kind.name);
+    }
+  });
+
   testWidgets('sections read Trusted devices, This device, Connections', (
     tester,
   ) async {
@@ -61,56 +93,81 @@ void main() {
     expect(local.dy, lessThan(connections.dy));
   });
 
-  testWidgets('every tag has an icon and only Synced is accented', (
-    tester,
-  ) async {
-    final now = clock.now();
-    final bridge = FakeCollectionBridge()
-      ..devices.addAll([
-        _device('a', 'Synced one', PeerConnectionKindDto.synced),
-        _device('b', 'Offline one', PeerConnectionKindDto.offline),
-        _device(
-          'c',
-          'Paused one',
-          PeerConnectionKindDto.paused,
-          lastSyncMs: now
-              .subtract(const Duration(hours: 2))
-              .millisecondsSinceEpoch,
-        ),
-        _device(
-          'd',
-          'Revoked one',
-          PeerConnectionKindDto.offline,
-          revoked: true,
-        ),
-      ]);
-    await openDevices(tester, bridge);
-    await tester.pumpAndSettle();
-    final tags = tester
-        .widgetList<Tag>(
-          find.descendant(
-            of: find.byKey(const Key('devices-page')),
-            matching: find.byType(Tag),
+  testWidgets(
+    'every tag has an icon; Synced success, Revoked danger, Offline neutral',
+    (tester) async {
+      final now = clock.now();
+      final bridge = FakeCollectionBridge()
+        ..devices.addAll([
+          _device('a', 'Synced one', PeerConnectionKindDto.synced),
+          _device('b', 'Offline one', PeerConnectionKindDto.offline),
+          _device(
+            'c',
+            'Paused one',
+            PeerConnectionKindDto.paused,
+            lastSyncMs: now
+                .subtract(const Duration(hours: 2))
+                .millisecondsSinceEpoch,
           ),
-        )
-        .toList();
-    expect(tags, hasLength(4));
-    for (final tag in tags) {
-      expect(tag.leading, isNotNull, reason: tag.text);
-    }
-    final accented = tags.where((tag) => tag.background == Nocturne.accent800);
-    expect(accented.map((tag) => tag.text), ['Synced']);
-    expect(tags.map((tag) => tag.leading), [
-      FiIcons.synced,
-      FiIcons.offline,
-      FiIcons.paused,
-      FiIcons.blocked,
-    ]);
-    expect(
-      find.text('Paused on this device · last synced 2 h ago'),
-      findsOneWidget,
-    );
-  });
+          _device(
+            'd',
+            'Revoked one',
+            PeerConnectionKindDto.offline,
+            revoked: true,
+          ),
+        ]);
+      await openDevices(tester, bridge);
+      await tester.pumpAndSettle();
+      final tags = tester
+          .widgetList<Tag>(
+            find.descendant(
+              of: find.byKey(const Key('devices-page')),
+              matching: find.byType(Tag),
+            ),
+          )
+          .toList();
+      expect(tags, hasLength(4));
+      for (final tag in tags) {
+        expect(tag.leading, isNotNull, reason: tag.text);
+      }
+      BoxDecoration boxOf(String text) =>
+          tester
+                  .widget<Container>(
+                    find
+                        .descendant(
+                          of: find.byWidgetPredicate(
+                            (w) => w is Tag && w.text == text,
+                          ),
+                          matching: find.byType(Container),
+                        )
+                        .first,
+                  )
+                  .decoration!
+              as BoxDecoration;
+      const m = NocturneColors.mocha;
+      expect(boxOf('Synced').color, m.success.withValues(alpha: .22));
+      expect(boxOf('Offline').color, m.neutralFillStrong);
+      final revoked = tags.last.text;
+      expect((boxOf(revoked).border! as Border).top.color, m.danger);
+      for (final tag in tags) {
+        final label = find.descendant(
+          of: find.byWidget(tag),
+          matching: find.text(tag.text),
+        );
+        expect(tester.widget<Text>(label).style!.color, m.text);
+      }
+      expect(tags.map((tag) => tag.leading), [
+        FiIcons.synced,
+        FiIcons.offline,
+        FiIcons.paused,
+        FiIcons.blocked,
+      ]);
+      expect(
+        find.text('Paused on this device · last synced 2 h ago'),
+        findsOneWidget,
+      );
+    },
+  );
 
   testWidgets('a phone row is one tap target with a chevron and no menu', (
     tester,

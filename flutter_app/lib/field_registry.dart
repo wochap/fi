@@ -679,7 +679,10 @@ final class _FieldEditorState extends State<_FieldEditor> {
               child: Text(
                 '$scale dp',
                 key: const Key('decimal-scale'),
-                style: TextStyle(fontSize: 12, color: Nocturne.muted(.55)),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: context.nocturne.muted(.55),
+                ),
               ),
             )
           : null,

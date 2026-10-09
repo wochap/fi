@@ -19,7 +19,7 @@ Future<void> _pump(
   addTearDown(tester.view.reset);
   await tester.pumpWidget(
     MaterialApp(
-      theme: nocturneTheme(),
+      theme: nocturneTheme(NocturneColors.mocha),
       home: Scaffold(
         body: Padding(
           padding: const EdgeInsets.all(16),

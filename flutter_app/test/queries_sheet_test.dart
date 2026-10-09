@@ -187,7 +187,7 @@ Future<Headaches> openSheet(WidgetTester tester) async {
   );
   await tester.pumpWidget(
     MaterialApp(
-      theme: nocturneTheme(),
+      theme: nocturneTheme(NocturneColors.mocha),
       home: Scaffold(
         body: ListenableBuilder(
           listenable: controller,

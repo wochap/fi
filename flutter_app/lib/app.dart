@@ -199,7 +199,7 @@ class _CollectionAppState extends State<CollectionApp>
   Widget _app() => MaterialApp(
     title: 'Fi',
     debugShowCheckedModeBanner: false,
-    theme: nocturneTheme(),
+    theme: nocturneTheme(NocturneColors.mocha),
     locale: _language.locale,
     supportedLocales: AppLocalizations.supportedLocales,
     localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -309,6 +309,9 @@ class _NetworkingDeferredBanner extends StatelessWidget {
       onPressed: busy ? null : onRetry,
       child: Text(l.commonRetry),
     );
+    final tone = deferred.kind == NetworkingDeferredKindDto.secureStoreLocked
+        ? context.nocturne.warning
+        : context.nocturne.danger;
     return Padding(
       padding: phone
           ? const EdgeInsets.fromLTRB(12, 10, 12, 4)
@@ -317,9 +320,9 @@ class _NetworkingDeferredBanner extends StatelessWidget {
         key: const Key('networking-deferred-banner'),
         padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
         decoration: BoxDecoration(
-          color: Nocturne.errorTint,
+          color: context.nocturne.surface,
           borderRadius: BorderRadius.circular(Nocturne.radius),
-          border: Border.all(color: Nocturne.error.withValues(alpha: .45)),
+          border: Border.all(color: tone.withValues(alpha: .45)),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -334,7 +337,7 @@ class _NetworkingDeferredBanner extends StatelessWidget {
                     FiIcons.offline,
                 },
                 size: 18,
-                color: Nocturne.error,
+                color: tone,
               ),
             ),
             const SizedBox(width: 10),
@@ -355,16 +358,19 @@ class _NetworkingDeferredBanner extends StatelessWidget {
                   Text(
                     networkingDeferredBody(l, deferred),
                     key: const Key('networking-deferred-message'),
-                    style: TextStyle(fontSize: 13, color: Nocturne.muted(.75)),
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: context.nocturne.muted(.75),
+                    ),
                   ),
                   if (retryFailure case final failure?) ...[
                     const SizedBox(height: 6),
                     Text(
                       bridgeMessage(l, failure),
                       key: const Key('networking-retry-error'),
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: Nocturne.error,
+                        color: context.nocturne.text,
                       ),
                     ),
                   ],
@@ -432,7 +438,7 @@ class FatalSurface extends StatelessWidget {
         Text(
           resetResolvable && !secureStoreLocked ? l.fatalResetBody : localized,
           key: const Key('bootstrap-error-body'),
-          style: setupBodyStyle(),
+          style: setupBodyStyle(context),
         ),
         const SizedBox(height: 24),
         SetupActions(
@@ -509,7 +515,7 @@ class RecoverySurface extends StatelessWidget {
         key: const Key('recovery-no-peer'),
         title: l.recoveryNeedsDevice,
         children: [
-          Text(l.recoveryNeedsDeviceBody, style: setupBodyStyle()),
+          Text(l.recoveryNeedsDeviceBody, style: setupBodyStyle(context)),
           const SizedBox(height: 24),
           SetupActions(
             children: [
@@ -531,7 +537,7 @@ class RecoverySurface extends StatelessWidget {
         key: const Key('recovery-recovering'),
         leading: const SetupRing(),
         title: l.recoveringTitle,
-        children: [Text(l.recoveringBody, style: setupBodyStyle())],
+        children: [Text(l.recoveringBody, style: setupBodyStyle(context))],
       ),
     };
   }
@@ -557,7 +563,7 @@ class JoiningSurface extends StatelessWidget {
         children: [
           Text(
             name == null ? l.joiningBody : l.joiningBodyNamed(name),
-            style: setupBodyStyle(),
+            style: setupBodyStyle(context),
           ),
         ],
       );
@@ -686,7 +692,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
           Text(
             l.onboardQuarantined,
             key: const Key('recovery-quarantined'),
-            style: TextStyle(fontSize: 13, color: Nocturne.muted(.55)),
+            style: TextStyle(fontSize: 13, color: context.nocturne.muted(.55)),
           ),
         ],
       ],
@@ -864,8 +870,8 @@ class _CollectionShellState extends State<CollectionShell> {
         ),
       ),
       bottomNavigationBar: DecoratedBox(
-        decoration: const BoxDecoration(
-          border: Border(top: BorderSide(color: Nocturne.divider)),
+        decoration: BoxDecoration(
+          border: Border(top: BorderSide(color: context.nocturne.divider)),
         ),
         child: NavigationBar(
           selectedIndex: selected,
@@ -909,13 +915,13 @@ class _Sidebar extends StatelessWidget {
     key: const Key('sidebar'),
     width: 216,
     padding: const EdgeInsets.fromLTRB(12, 18, 12, 18),
-    decoration: const BoxDecoration(
+    decoration: BoxDecoration(
       gradient: LinearGradient(
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
-        colors: [Nocturne.surface, Nocturne.bg],
+        colors: [context.nocturne.surface, context.nocturne.bg],
       ),
-      border: Border(right: BorderSide(color: Nocturne.divider)),
+      border: Border(right: BorderSide(color: context.nocturne.divider)),
     ),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -977,9 +983,11 @@ class _NavRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = selected ? Nocturne.accent200 : Nocturne.muted(.7);
+    final color = selected
+        ? context.nocturne.accentInk
+        : context.nocturne.muted(.7);
     return Material(
-      color: selected ? Nocturne.accent900 : Colors.transparent,
+      color: selected ? context.nocturne.accentFill : Colors.transparent,
       borderRadius: BorderRadius.circular(Nocturne.radius),
       child: InkWell(
         borderRadius: BorderRadius.circular(Nocturne.radius),
@@ -1029,7 +1037,7 @@ class _SidebarStatus extends StatelessWidget {
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(Nocturne.radius),
-        border: Border.all(color: Nocturne.neutral800),
+        border: Border.all(color: context.nocturne.neutralFillStrong),
       ),
       child: Row(
         children: [
@@ -1061,7 +1069,7 @@ class _SidebarStatus extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 12,
                     height: 1.35,
-                    color: Nocturne.muted(.55),
+                    color: context.nocturne.muted(.55),
                   ),
                 ),
               ],
@@ -1096,12 +1104,12 @@ class _StatusDot extends StatelessWidget {
     SyncStatusDto.offline || SyncStatusDto.paused => GlowDot(
       size: size,
       ring: false,
-      color: Nocturne.neutral600,
+      color: context.nocturne.neutralGhost,
     ),
     SyncStatusDto.error => GlowDot(
       size: size,
       ring: false,
-      color: Nocturne.error,
+      color: context.nocturne.danger,
     ),
     _ => GlowDot(size: size, ring: ring),
   };
@@ -1144,7 +1152,10 @@ class _MobileTopRow extends StatelessWidget {
                     },
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 12, color: Nocturne.muted(.6)),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: context.nocturne.muted(.6),
+                    ),
                   ),
                 ),
               ],
@@ -1262,7 +1273,10 @@ class _DevicesPageState extends State<DevicesPage> {
                     padding: const EdgeInsets.only(bottom: 4),
                     child: Text(
                       l.devicesIntro,
-                      style: TextStyle(fontSize: 13, color: Nocturne.muted(.6)),
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: context.nocturne.muted(.6),
+                      ),
                     ),
                   ),
                 _SyncChip(status: controller.syncStatus, phone: phone),
@@ -1316,7 +1330,7 @@ class _DevicesPageState extends State<DevicesPage> {
                             textAlign: TextAlign.right,
                             style: TextStyle(
                               fontSize: 12,
-                              color: Nocturne.muted(.5),
+                              color: context.nocturne.muted(.5),
                             ),
                           ),
                         ),
@@ -1343,7 +1357,10 @@ class _DevicesPageState extends State<DevicesPage> {
                     child: Text(
                       PairingCard.discoveryOffNote(context.l10n),
                       key: const Key('discovery-off-note'),
-                      style: TextStyle(fontSize: 12, color: Nocturne.muted(.5)),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: context.nocturne.muted(.5),
+                      ),
                     ),
                   ),
                 const SizedBox(height: 10),
@@ -1406,8 +1423,8 @@ class _DevicesPageState extends State<DevicesPage> {
       children: [
         IconTile(
           device.revoked ? FiIcons.blocked : FiIcons.devices,
-          fill: Nocturne.neutral800,
-          color: Nocturne.text,
+          fill: context.nocturne.neutralFillStrong,
+          color: context.nocturne.text,
         ),
         const SizedBox(width: 14),
         Expanded(
@@ -1441,7 +1458,7 @@ class _DevicesPageState extends State<DevicesPage> {
                 style: TextStyle(
                   fontSize: 12,
                   fontFeatures: Nocturne.tabular,
-                  color: Nocturne.muted(.55),
+                  color: context.nocturne.muted(.55),
                 ),
               ),
             ],
@@ -1452,7 +1469,7 @@ class _DevicesPageState extends State<DevicesPage> {
             FiIcons.chevronRight,
             key: Key('device-chevron-${device.deviceId}'),
             size: 18,
-            color: Nocturne.muted(.5),
+            color: context.nocturne.muted(.5),
           )
         else ...[
           TextButton.icon(
@@ -1677,7 +1694,7 @@ class _DevicesPageState extends State<DevicesPage> {
           children: [
             Text(
               l.devicesRenameSubtitle,
-              style: TextStyle(fontSize: 13, color: Nocturne.muted(.6)),
+              style: TextStyle(fontSize: 13, color: context.nocturne.muted(.6)),
             ),
             const SizedBox(height: 14),
             FiTextInput(
@@ -1803,12 +1820,12 @@ class _SwitchError extends StatelessWidget {
     padding: const EdgeInsets.fromLTRB(60, 0, 16, 12),
     child: Row(
       children: [
-        const Icon(FiIcons.error, size: 14, color: Nocturne.error),
+        Icon(FiIcons.error, size: 14, color: context.nocturne.danger),
         const SizedBox(width: 6),
         Expanded(
           child: Text(
             context.l10n.devicesSwitchError,
-            style: const TextStyle(fontSize: 12, color: Nocturne.error),
+            style: TextStyle(fontSize: 12, color: context.nocturne.text),
           ),
         ),
       ],
@@ -1839,7 +1856,7 @@ class _SyncChip extends StatelessWidget {
     key: const Key('sync-status'),
     mainAxisSize: MainAxisSize.min,
     children: [
-      Icon(_statusIcon(status), size: 14, color: Nocturne.accent),
+      Icon(_statusIcon(status), size: 14, color: context.nocturne.accent),
       const SizedBox(width: 6),
       Flexible(
         child: Text(switch (status) {
@@ -1847,7 +1864,7 @@ class _SyncChip extends StatelessWidget {
             context.l10n.devicesChipPausedShort,
           SyncStatusDto.paused => context.l10n.devicesChipPaused,
           _ => _statusText(context.l10n, status),
-        }, style: TextStyle(fontSize: 12, color: Nocturne.muted(.6))),
+        }, style: TextStyle(fontSize: 12, color: context.nocturne.muted(.6))),
       ),
     ],
   );
@@ -1896,7 +1913,7 @@ class _NoDevices extends StatelessWidget {
                 : context.l10n.devicesNoneBody,
             key: const Key('no-devices-body'),
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 13, color: Nocturne.muted(.6)),
+            style: TextStyle(fontSize: 13, color: context.nocturne.muted(.6)),
           ),
           if (discoveryOff) ...[
             const SizedBox(height: 6),
@@ -1904,7 +1921,7 @@ class _NoDevices extends StatelessWidget {
               PairingCard.discoveryOffNote(context.l10n),
               key: const Key('discovery-off-note'),
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 12, color: Nocturne.muted(.5)),
+              style: TextStyle(fontSize: 12, color: context.nocturne.muted(.5)),
             ),
           ],
           const SizedBox(height: 14),
@@ -1940,18 +1957,21 @@ class _PairedBanner extends StatelessWidget {
     key: const Key('paired-banner'),
     padding: const EdgeInsets.fromLTRB(14, 8, 4, 8),
     decoration: BoxDecoration(
-      color: Nocturne.accent900,
+      color: context.nocturne.accentFill,
       borderRadius: BorderRadius.circular(Nocturne.radius),
-      border: Border.all(color: Nocturne.accent700),
+      border: Border.all(color: context.nocturne.accentEdge),
     ),
     child: Row(
       children: [
-        const Icon(FiIcons.verified, size: 18, color: Nocturne.accent),
+        Icon(FiIcons.verified, size: 18, color: context.nocturne.accent),
         const SizedBox(width: 10),
         Expanded(
           child: Text(
             context.l10n.devicesPairedBanner(name),
-            style: const TextStyle(fontSize: 13, color: Nocturne.accent100),
+            style: TextStyle(
+              fontSize: 13,
+              color: context.nocturne.accentInkStrong,
+            ),
           ),
         ),
         TextButton(
@@ -1963,7 +1983,7 @@ class _PairedBanner extends StatelessWidget {
           key: const Key('dismiss-paired-banner'),
           icon: FiIcons.close,
           tooltip: context.l10n.devicesDismiss,
-          color: Nocturne.accent100,
+          color: context.nocturne.accentInkStrong,
           onPressed: onDismiss,
         ),
       ],
@@ -2028,11 +2048,11 @@ class _LocalIdentityState extends State<_LocalIdentity> {
                 ? Row(
                     key: const Key('local-device-missing'),
                     children: [
-                      const IconTile(
+                      IconTile(
                         FiIcons.offline,
                         size: 32,
-                        fill: Nocturne.neutral800,
-                        color: Nocturne.text,
+                        fill: context.nocturne.neutralFillStrong,
+                        color: context.nocturne.text,
                       ),
                       const SizedBox(width: 12),
                       Expanded(
@@ -2051,7 +2071,7 @@ class _LocalIdentityState extends State<_LocalIdentity> {
                               context.l10n.devicesNetworkingMissingBody,
                               style: TextStyle(
                                 fontSize: 12,
-                                color: Nocturne.muted(.6),
+                                color: context.nocturne.muted(.6),
                               ),
                             ),
                           ],
@@ -2080,7 +2100,7 @@ class _LocalIdentityState extends State<_LocalIdentity> {
                               key: const Key('local-device-name-hint'),
                               style: TextStyle(
                                 fontSize: 12,
-                                color: Nocturne.muted(.55),
+                                color: context.nocturne.muted(.55),
                               ),
                             ),
                             const SizedBox(height: 2),
@@ -2094,7 +2114,7 @@ class _LocalIdentityState extends State<_LocalIdentity> {
                               style: TextStyle(
                                 fontSize: 12,
                                 fontFamily: Nocturne.monoFamily,
-                                color: Nocturne.muted(.7),
+                                color: context.nocturne.muted(.7),
                               ),
                             ),
                           ],
@@ -2107,17 +2127,17 @@ class _LocalIdentityState extends State<_LocalIdentity> {
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Icon(
+                              Icon(
                                 FiIcons.check,
                                 size: 16,
-                                color: Nocturne.accent,
+                                color: context.nocturne.accent,
                               ),
                               const SizedBox(width: 6),
                               Text(
                                 context.l10n.devicesIdCopied,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 13,
-                                  color: Nocturne.accent200,
+                                  color: context.nocturne.accentInk,
                                 ),
                               ),
                             ],
@@ -2145,11 +2165,11 @@ class _LocalIdentityState extends State<_LocalIdentity> {
                 padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
                 child: Row(
                   children: [
-                    const IconTile(
+                    IconTile(
                       FiIcons.reset,
                       size: 32,
-                      fill: Nocturne.neutral800,
-                      color: Nocturne.text,
+                      fill: context.nocturne.neutralFillStrong,
+                      color: context.nocturne.text,
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -2168,7 +2188,7 @@ class _LocalIdentityState extends State<_LocalIdentity> {
                             context.l10n.devicesResetBody,
                             style: TextStyle(
                               fontSize: 12,
-                              color: Nocturne.muted(.6),
+                              color: context.nocturne.muted(.6),
                             ),
                           ),
                         ],
@@ -2177,7 +2197,7 @@ class _LocalIdentityState extends State<_LocalIdentity> {
                     Icon(
                       FiIcons.chevronRight,
                       size: 16,
-                      color: Nocturne.muted(.5),
+                      color: context.nocturne.muted(.5),
                     ),
                   ],
                 ),

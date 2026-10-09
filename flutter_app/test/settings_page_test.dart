@@ -1,6 +1,7 @@
 import 'package:fi/platform_capabilities.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/theme/fi_icons.dart';
+import 'package:fi/theme/nocturne.dart';
 import 'package:fi/ui_prefs.dart';
 import 'package:fi/voice/engine.dart';
 import 'package:fi/voice/fakes.dart';
@@ -95,6 +96,25 @@ ModelStatusDto _downloading() => modelStatusOf(
   done: 612000000,
   secondsLeft: 240,
 );
+
+/// The model tag's label color, icon color and box.
+(Color?, Color?, BoxDecoration) _tagColors(WidgetTester tester, String text) {
+  final tag = find.byKey(const Key('settings-model-tag'));
+  final label = tester.widget<Text>(_tag(text)).style!.color;
+  final icon = tester
+      .widget<Icon>(find.descendant(of: tag, matching: find.byType(Icon)))
+      .color;
+  final box =
+      tester
+              .widget<Container>(
+                find
+                    .descendant(of: tag, matching: find.byType(Container))
+                    .first,
+              )
+              .decoration!
+          as BoxDecoration;
+  return (label, icon, box);
+}
 
 Finder _tag(String text) => find.descendant(
   of: find.byKey(const Key('settings-model-tag')),
@@ -541,6 +561,13 @@ void main() {
     );
     await _openSettings(tester, voice: fakeVoiceServices(models: models));
     expect(_tag('Failed'), findsOneWidget);
+    final (failedLabel, failedIcon, failedBox) = _tagColors(tester, 'Failed');
+    expect(failedLabel, NocturneColors.mocha.text);
+    expect(failedIcon, NocturneColors.mocha.danger);
+    expect(
+      (failedBox.border! as Border).top.color,
+      NocturneColors.mocha.danger,
+    );
     expect(find.text('No connection'), findsOneWidget);
     expect(find.text('English · stopped at 612 MB'), findsOneWidget);
     expect(
@@ -608,6 +635,10 @@ void main() {
       voice: fakeVoiceServices(models: models, prefs: prefs),
     );
     expect(_tag('Ready'), findsOneWidget);
+    final (readyLabel, readyIcon, readyBox) = _tagColors(tester, 'Ready');
+    expect(readyLabel, NocturneColors.mocha.text);
+    expect(readyIcon, NocturneColors.mocha.success);
+    expect(readyBox.color, NocturneColors.mocha.success.withValues(alpha: .22));
     expect(find.text('English · 1.43 GB used on this phone'), findsOneWidget);
     _expectRow('ggml-base.en.bin', ['Whisper Base (English)', '148 MB']);
     _expectRow('qwen2.5-1.5b-instruct-q5_k_m.gguf', [
