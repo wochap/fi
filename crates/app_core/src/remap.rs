@@ -249,13 +249,21 @@ fn remap_reference(
 fn remap_typed_value(value: &TypedValue, remap: &IdRemap) -> Result<TypedValue, DomainError> {
     Ok(match value {
         TypedValue::Enum(id) => TypedValue::Enum(remap.option(*id)?),
-        TypedValue::EnumOptionSet { field, options } => TypedValue::EnumOptionSet {
-            field: remap.field(*field)?,
-            options: options
-                .iter()
-                .map(|id| remap.option(*id))
-                .collect::<Result<_, _>>()?,
-        },
+        TypedValue::EnumOptionSet { field, options } => {
+            // A merge maps several options to one; keep each target once, in first-seen order.
+            let mut seen = std::collections::HashSet::new();
+            let mut remapped = Vec::with_capacity(options.len());
+            for id in options {
+                let target = remap.option(*id)?;
+                if seen.insert(target) {
+                    remapped.push(target);
+                }
+            }
+            TypedValue::EnumOptionSet {
+                field: remap.field(*field)?,
+                options: remapped,
+            }
+        }
         TypedValue::Null
         | TypedValue::Text(_)
         | TypedValue::Integer(_)
@@ -516,6 +524,7 @@ mod tests {
 
     fn field(name: &str, field_type: FieldType, order: i64) -> FieldDefinition {
         FieldDefinition {
+            allow_options_from_records: false,
             id: FieldId::new(),
             name: name.into(),
             field_type,
@@ -532,6 +541,7 @@ mod tests {
 
     fn option(label: &str, order: i64, deleted: bool) -> EnumOption {
         EnumOption {
+            merged_into: None,
             id: EnumOptionId::new(),
             label: label.into(),
             order,

@@ -13,6 +13,7 @@ use crate::{
     error::DomainError,
     hlc::HlcStamp,
     import_export::ImportedCollection,
+    option_edits::{DraftTarget, PendingOption, plan_merge, plan_record_draft},
     query::{
         ComputedFieldDefinition, ComputedFieldId, QueryDefinition, QueryId,
         validate_computed_field, validate_query,
@@ -164,6 +165,23 @@ pub enum GenericCommand {
     /// restricted to `CreateRecord`, `UpdateRecordField` and `DeleteRecord` over
     /// distinct records of one collection; see `validate_against`.
     Batch(Vec<GenericCommand>),
+    /// One record saved together with options the record form added. `plan` is filled by
+    /// `validate_against` with the option creations and record writes to apply.
+    SaveRecordDraft {
+        collection_id: CollectionSchemaId,
+        record: DraftTarget,
+        pending_options: Vec<PendingOption>,
+        plan: Option<Vec<GenericCommand>>,
+    },
+    /// Merges `merge` into `keep` on one Choice or Choices field, moving records, the default and
+    /// option references in queries and computed fields. `plan` is filled by `validate_against`.
+    MergeEnumOptions {
+        collection_id: CollectionSchemaId,
+        field_id: FieldId,
+        keep: EnumOptionId,
+        merge: Vec<EnumOptionId>,
+        plan: Option<Vec<GenericCommand>>,
+    },
 }
 
 impl GenericCommand {
@@ -514,6 +532,34 @@ impl GenericCommand {
                         .map(|item| item.id),
                     "widget_ids",
                 )?;
+            }
+            Self::SaveRecordDraft {
+                collection_id,
+                record,
+                pending_options,
+                plan,
+            } => {
+                *plan = Some(plan_record_draft(
+                    snapshot,
+                    *collection_id,
+                    record,
+                    pending_options,
+                )?);
+            }
+            Self::MergeEnumOptions {
+                collection_id,
+                field_id,
+                keep,
+                merge,
+                plan,
+            } => {
+                *plan = Some(plan_merge(
+                    snapshot,
+                    *collection_id,
+                    *field_id,
+                    *keep,
+                    merge,
+                )?);
             }
             Self::Batch(members) => {
                 if members.is_empty() {
@@ -992,6 +1038,15 @@ pub fn apply_generic_command(
         }
         GenericCommand::Batch(members) => {
             for member in members {
+                apply_generic_command(tx, member, stamp)?;
+            }
+        }
+        GenericCommand::SaveRecordDraft { plan, .. }
+        | GenericCommand::MergeEnumOptions { plan, .. } => {
+            let plan = plan
+                .as_ref()
+                .ok_or_else(|| repo_change("option edit was not validated"))?;
+            for member in plan {
                 apply_generic_command(tx, member, stamp)?;
             }
         }
@@ -2040,6 +2095,7 @@ mod tests {
             name: "Headaches".into(),
             description: String::new(),
             fields: vec![FieldDefinition {
+                allow_options_from_records: false,
                 id: FieldId::new(),
                 name: "Intensity".into(),
                 field_type: FieldType::Integer,
@@ -2140,6 +2196,7 @@ mod tests {
         let mut doc = initialized();
         let mut schema = schema();
         let note = FieldDefinition {
+            allow_options_from_records: false,
             id: FieldId::new(),
             name: "Note".into(),
             field_type: FieldType::Text,
@@ -2456,6 +2513,7 @@ mod tests {
         let mut collection = schema();
         let options: Vec<_> = (1..=3)
             .map(|index| EnumOption {
+                merged_into: None,
                 id: EnumOptionId::new(),
                 label: format!("option {index}"),
                 order: index,
@@ -2463,6 +2521,7 @@ mod tests {
             })
             .collect();
         collection.fields.push(FieldDefinition {
+            allow_options_from_records: false,
             id: FieldId::new(),
             name: "Kind".into(),
             field_type: FieldType::Enum,
@@ -2873,6 +2932,7 @@ mod tests {
             2,
         );
         let due = FieldDefinition {
+            allow_options_from_records: false,
             id: FieldId::new(),
             name: "Due".into(),
             field_type: FieldType::Date,
@@ -3335,6 +3395,7 @@ mod tests {
     fn batch_schema() -> CollectionSchema {
         let mut schema = schema();
         schema.fields.push(FieldDefinition {
+            allow_options_from_records: false,
             id: FieldId::new(),
             name: "Note".into(),
             field_type: FieldType::Text,
@@ -3657,18 +3718,21 @@ mod tests {
         let mut collection = schema();
         let options = vec![
             EnumOption {
+                merged_into: None,
                 id: EnumOptionId::new(),
                 label: "Mild".into(),
                 order: 0,
                 deleted: false,
             },
             EnumOption {
+                merged_into: None,
                 id: EnumOptionId::new(),
                 label: "Gone".into(),
                 order: 1,
                 deleted: true,
             },
             EnumOption {
+                merged_into: None,
                 id: EnumOptionId::new(),
                 label: "Severe".into(),
                 order: 2,
@@ -3677,6 +3741,7 @@ mod tests {
         ];
         collection.description = "Daily log".into();
         collection.fields.push(FieldDefinition {
+            allow_options_from_records: false,
             id: FieldId::new(),
             name: "Kind".into(),
             field_type: FieldType::Enum,
@@ -3690,6 +3755,7 @@ mod tests {
             enum_options: options.clone(),
         });
         collection.fields.push(FieldDefinition {
+            allow_options_from_records: false,
             id: FieldId::new(),
             name: "Removed".into(),
             field_type: FieldType::Text,

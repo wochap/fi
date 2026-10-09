@@ -38,6 +38,7 @@ abstract final class FiIcons {
   static const IconData clear = PhosphorIconsRegular.x;
   static const IconData more = PhosphorIconsRegular.dotsThreeVertical;
   static const IconData moreHorizontal = PhosphorIconsRegular.dotsThree;
+  static const IconData merge = PhosphorIconsRegular.arrowsMerge;
   static const IconData expand = PhosphorIconsRegular.caretDown;
   static const IconData collapse = PhosphorIconsRegular.caretUp;
   static const IconData unfold = PhosphorIconsRegular.caretUpDown;

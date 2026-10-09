@@ -5641,6 +5641,150 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'+{count}'**
   String recordsMoreTags(int count);
+
+  /// Switch on Choice and Choices fields
+  ///
+  /// In en, this message translates to:
+  /// **'Allow adding options from records'**
+  String get fieldEditorAllowAddingOptions;
+
+  /// Helper under the allow-adding switch
+  ///
+  /// In en, this message translates to:
+  /// **'New options are added to this field when the record is saved.'**
+  String get fieldEditorAllowAddingOptionsHelp;
+
+  /// Tooltip of an option row's ⋯ button
+  ///
+  /// In en, this message translates to:
+  /// **'Actions for “{label}”'**
+  String fieldEditorOptionActions(String label);
+
+  /// Option row menu item
+  ///
+  /// In en, this message translates to:
+  /// **'Merge…'**
+  String get fieldEditorMergeEllipsis;
+
+  /// Option row menu item
+  ///
+  /// In en, this message translates to:
+  /// **'Delete…'**
+  String get fieldEditorDeleteEllipsis;
+
+  /// Banner when active options share a label ignoring case
+  ///
+  /// In en, this message translates to:
+  /// **'{count} options are named “{label}”. Merge them?'**
+  String fieldEditorDuplicateBanner(int count, String label);
+
+  /// Button that merges options
+  ///
+  /// In en, this message translates to:
+  /// **'Merge'**
+  String get fieldEditorMerge;
+
+  /// Banner when records hold a merged-away option
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 record still uses merged options.} other{{count} records still use merged options.}}'**
+  String fieldEditorMergedStill(int count);
+
+  /// Button moving records off merged options
+  ///
+  /// In en, this message translates to:
+  /// **'Move them'**
+  String get fieldEditorMoveThem;
+
+  /// Merge sheet title
+  ///
+  /// In en, this message translates to:
+  /// **'Merge options'**
+  String get mergeOptionsTitle;
+
+  /// Merge sheet subtitle
+  ///
+  /// In en, this message translates to:
+  /// **'in {field} · {kind}'**
+  String mergeOptionsSubtitle(String field, String kind);
+
+  /// Merge sheet section
+  ///
+  /// In en, this message translates to:
+  /// **'Options to merge'**
+  String get mergeOptionsToMerge;
+
+  /// Records holding an option
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 record} other{{count} records}}'**
+  String mergeOptionsRecords(int count);
+
+  /// Merge sheet section
+  ///
+  /// In en, this message translates to:
+  /// **'Keep'**
+  String get mergeOptionsKeep;
+
+  /// Under the kept option
+  ///
+  /// In en, this message translates to:
+  /// **'Its label stays'**
+  String get mergeOptionsLabelStays;
+
+  /// Merge result line
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 record will use “{label}”} other{{count} records will use “{label}”}}'**
+  String mergeOptionsWillUse(int count, String label);
+
+  /// Choices merge: records holding several merged options
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 record had both. It keeps one “{label}”.} other{{count} records had both. Each keeps one “{label}”.}}'**
+  String mergeOptionsHadBoth(int count, String label);
+
+  /// Merge sheet warning
+  ///
+  /// In en, this message translates to:
+  /// **'This can\'t be undone.'**
+  String get mergeOptionsCantUndo;
+
+  /// Merge sheet when the editor holds unsaved option edits
+  ///
+  /// In en, this message translates to:
+  /// **'Save the field first. Options with unsaved changes can\'t be merged.'**
+  String get mergeOptionsSaveFirst;
+
+  /// Last row of a picker when no option matches
+  ///
+  /// In en, this message translates to:
+  /// **'Add “{label}”'**
+  String choiceAddOption(String label);
+
+  /// Trailing chip that adds an option
+  ///
+  /// In en, this message translates to:
+  /// **'Add'**
+  String get choiceAddChip;
+
+  /// Tag on an option added from the record form
+  ///
+  /// In en, this message translates to:
+  /// **'New'**
+  String get choiceNewTag;
+
+  /// Tag on the option matching the typed text
+  ///
+  /// In en, this message translates to:
+  /// **'existing'**
+  String get choiceExistingTag;
+
+  /// Hint of the inline add input
+  ///
+  /// In en, this message translates to:
+  /// **'New option'**
+  String get choiceNewOptionHint;
 }
 
 class _AppLocalizationsDelegate

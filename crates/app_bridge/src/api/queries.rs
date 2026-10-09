@@ -1084,6 +1084,7 @@ mod tests {
             ValidationMetadata, infer_expression,
         };
         let field = |name: &str, scale: u8| FieldDefinition {
+            allow_options_from_records: false,
             id: FieldId::new(),
             name: name.into(),
             field_type: FieldType::FixedDecimal { scale },

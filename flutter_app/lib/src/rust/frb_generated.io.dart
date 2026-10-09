@@ -427,6 +427,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<PairingCandidateDto> dco_decode_list_pairing_candidate_dto(dynamic raw);
 
   @protected
+  List<PendingOptionDto> dco_decode_list_pending_option_dto(dynamic raw);
+
+  @protected
   List<int> dco_decode_list_prim_i_16_loose(dynamic raw);
 
   @protected
@@ -712,6 +715,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   PeerConnectionKindDto dco_decode_peer_connection_kind_dto(dynamic raw);
+
+  @protected
+  PendingOptionDto dco_decode_pending_option_dto(dynamic raw);
 
   @protected
   PlatformSecretSlotDto dco_decode_platform_secret_slot_dto(dynamic raw);
@@ -1398,6 +1404,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  List<PendingOptionDto> sse_decode_list_pending_option_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   List<int> sse_decode_list_prim_i_16_loose(SseDeserializer deserializer);
 
   @protected
@@ -1763,6 +1774,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   PeerConnectionKindDto sse_decode_peer_connection_kind_dto(
     SseDeserializer deserializer,
   );
+
+  @protected
+  PendingOptionDto sse_decode_pending_option_dto(SseDeserializer deserializer);
 
   @protected
   PlatformSecretSlotDto sse_decode_platform_secret_slot_dto(
@@ -2631,6 +2645,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_list_pending_option_dto(
+    List<PendingOptionDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_list_prim_i_16_loose(
     List<int> self,
     SseSerializer serializer,
@@ -3083,6 +3103,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_peer_connection_kind_dto(
     PeerConnectionKindDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_pending_option_dto(
+    PendingOptionDto self,
     SseSerializer serializer,
   );
 

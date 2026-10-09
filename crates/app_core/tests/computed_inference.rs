@@ -6,6 +6,7 @@ use app_core::{
 
 fn field(name: &str, field_type: FieldType, required: bool, order: i64) -> FieldDefinition {
     FieldDefinition {
+        allow_options_from_records: false,
         id: FieldId::new(),
         name: name.into(),
         field_type,

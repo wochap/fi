@@ -1885,6 +1885,7 @@ mod tests {
                 deleted: false,
                 fields: vec![
                     FieldDefinition {
+                        allow_options_from_records: false,
                         id: integer,
                         name: "intensity".into(),
                         field_type: FieldType::Integer,
@@ -1898,6 +1899,7 @@ mod tests {
                         enum_options: vec![],
                     },
                     FieldDefinition {
+                        allow_options_from_records: false,
                         id: optional,
                         name: "ended".into(),
                         field_type: FieldType::DateTime,
@@ -2235,6 +2237,7 @@ mod tests {
             .iter()
             .enumerate()
             .map(|(index, kind)| FieldDefinition {
+                allow_options_from_records: false,
                 id: FieldId::new(),
                 name: format!("field {index}"),
                 field_type: kind.clone(),
@@ -2647,6 +2650,7 @@ mod tests {
         let ended = FieldId::new();
         let intensity = FieldId::new();
         let field = |id, name: &str, field_type, required, order| FieldDefinition {
+            allow_options_from_records: false,
             id,
             name: name.into(),
             field_type,
@@ -2849,6 +2853,7 @@ mod tests {
             deleted: false,
             fields: vec![
                 FieldDefinition {
+                    allow_options_from_records: false,
                     id: occurred,
                     name: "occurred".into(),
                     field_type: FieldType::DateTime,
@@ -2862,6 +2867,7 @@ mod tests {
                     enum_options: vec![],
                 },
                 FieldDefinition {
+                    allow_options_from_records: false,
                     id: amount,
                     name: "amount".into(),
                     field_type: FieldType::FixedDecimal { scale: 2 },
@@ -2875,6 +2881,7 @@ mod tests {
                     enum_options: vec![],
                 },
                 FieldDefinition {
+                    allow_options_from_records: false,
                     id: other_scale,
                     name: "tax".into(),
                     field_type: FieldType::FixedDecimal { scale: 3 },

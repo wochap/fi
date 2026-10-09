@@ -138,10 +138,31 @@ abstract interface class CollectionBridge {
 
   /// Validates a draft with create (no [recordId]) or merged-update semantics, committing
   /// nothing. Returns every issue; empty when the draft is valid.
+  ///
+  /// [pendingOptions] are options the form added; values pick them by key (`pending:<n>`) in
+  /// place of an option id.
   Future<List<BridgeIssueDto>> validateRecordDraft(
     String collectionId,
     String? recordId,
+    List<RecordValueDto> values, {
+    List<PendingOptionDto> pendingOptions = const [],
+  });
+
+  /// Saves a new record (no [recordId]) or the changed fields of an existing one together with
+  /// the options the form added, in one Rust command. Returns the record id.
+  Future<String> saveRecordDraft(
+    String collectionId,
+    String? recordId,
     List<RecordValueDto> values,
+    List<PendingOptionDto> pendingOptions,
+  );
+
+  /// Merges [merge] into [keep] on one Choice or Choices field, moving records and references.
+  Future<void> mergeEnumOptions(
+    String collectionId,
+    String fieldId,
+    String keep,
+    List<String> merge,
   );
   Future<void> updateRecordField(
     String recordId,
@@ -435,11 +456,37 @@ final class RustCollectionBridge implements CollectionBridge {
   Future<List<BridgeIssueDto>> validateRecordDraft(
     String collectionId,
     String? recordId,
-    List<RecordValueDto> values,
-  ) => collections.validateRecordDraft(
+    List<RecordValueDto> values, {
+    List<PendingOptionDto> pendingOptions = const [],
+  }) => collections.validateRecordDraft(
     collectionId: collectionId,
     recordId: recordId,
     values: values,
+    pendingOptions: pendingOptions,
+  );
+  @override
+  Future<String> saveRecordDraft(
+    String collectionId,
+    String? recordId,
+    List<RecordValueDto> values,
+    List<PendingOptionDto> pendingOptions,
+  ) => collections.saveRecordDraft(
+    collectionId: collectionId,
+    recordId: recordId,
+    values: values,
+    pendingOptions: pendingOptions,
+  );
+  @override
+  Future<void> mergeEnumOptions(
+    String collectionId,
+    String fieldId,
+    String keep,
+    List<String> merge,
+  ) => collections.mergeEnumOptions(
+    collectionId: collectionId,
+    fieldId: fieldId,
+    keep: keep,
+    merge: merge,
   );
   @override
   Future<void> updateRecordField(

@@ -286,6 +286,7 @@ mod tests {
 
     fn definition(name: &str, field_type: FieldType, order: i64, deleted: bool) -> FieldDefinition {
         FieldDefinition {
+            allow_options_from_records: false,
             id: FieldId::new(),
             name: name.into(),
             field_type,
@@ -307,6 +308,7 @@ mod tests {
             .iter()
             .enumerate()
             .map(|(order, label)| EnumOption {
+                merged_into: None,
                 id: EnumOptionId::new(),
                 label: (*label).into(),
                 order: order as i64,
@@ -339,6 +341,7 @@ mod tests {
             .iter()
             .enumerate()
             .map(|(order, label)| EnumOption {
+                merged_into: None,
                 id: EnumOptionId::new(),
                 label: (*label).into(),
                 order: order as i64,

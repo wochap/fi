@@ -536,6 +536,7 @@ mod tests {
             description: String::new(),
             deleted: false,
             fields: vec![FieldDefinition {
+                allow_options_from_records: false,
                 id: field_id,
                 name: "Intensity".into(),
                 field_type: FieldType::Integer,
@@ -578,6 +579,7 @@ mod tests {
             description: String::new(),
             deleted: false,
             fields: vec![FieldDefinition {
+                allow_options_from_records: false,
                 id: field_id,
                 name: "When".into(),
                 field_type: FieldType::DateTime,
@@ -612,6 +614,7 @@ mod tests {
 
     fn field(name: &str, field_type: FieldType, required: bool) -> FieldDefinition {
         FieldDefinition {
+            allow_options_from_records: false,
             id: FieldId::new(),
             name: name.into(),
             field_type,

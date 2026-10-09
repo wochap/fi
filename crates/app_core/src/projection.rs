@@ -1042,6 +1042,7 @@ mod tests {
         let field_id = FieldId::new();
         let record_id = RecordId::new();
         let field = FieldDefinition {
+            allow_options_from_records: false,
             id: field_id,
             name: "Value".into(),
             field_type: FieldType::Integer,

@@ -3594,4 +3594,120 @@ class AppLocalizationsEs extends AppLocalizations {
   String recordsMoreTags(int count) {
     return '+$count';
   }
+
+  @override
+  String get fieldEditorAllowAddingOptions =>
+      'Permitir añadir opciones desde los registros';
+
+  @override
+  String get fieldEditorAllowAddingOptionsHelp =>
+      'Las opciones nuevas se añaden a este campo al guardar el registro.';
+
+  @override
+  String fieldEditorOptionActions(String label) {
+    return 'Acciones de «$label»';
+  }
+
+  @override
+  String get fieldEditorMergeEllipsis => 'Combinar…';
+
+  @override
+  String get fieldEditorDeleteEllipsis => 'Eliminar…';
+
+  @override
+  String fieldEditorDuplicateBanner(int count, String label) {
+    return '$count opciones se llaman «$label». ¿Combinarlas?';
+  }
+
+  @override
+  String get fieldEditorMerge => 'Combinar';
+
+  @override
+  String fieldEditorMergedStill(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count registros aún usan opciones combinadas.',
+      one: '1 registro aún usa opciones combinadas.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get fieldEditorMoveThem => 'Moverlos';
+
+  @override
+  String get mergeOptionsTitle => 'Combinar opciones';
+
+  @override
+  String mergeOptionsSubtitle(String field, String kind) {
+    return 'en $field · $kind';
+  }
+
+  @override
+  String get mergeOptionsToMerge => 'Opciones que combinar';
+
+  @override
+  String mergeOptionsRecords(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count registros',
+      one: '1 registro',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get mergeOptionsKeep => 'Conservar';
+
+  @override
+  String get mergeOptionsLabelStays => 'Su nombre se mantiene';
+
+  @override
+  String mergeOptionsWillUse(int count, String label) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count registros usarán «$label»',
+      one: '1 registro usará «$label»',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String mergeOptionsHadBoth(int count, String label) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          '$count registros tenían ambas. Cada uno conserva una sola «$label».',
+      one: '1 registro tenía ambas. Conserva una sola «$label».',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get mergeOptionsCantUndo => 'Esto no se puede deshacer.';
+
+  @override
+  String get mergeOptionsSaveFirst =>
+      'Guarda el campo primero. No se pueden combinar opciones con cambios sin guardar.';
+
+  @override
+  String choiceAddOption(String label) {
+    return 'Añadir «$label»';
+  }
+
+  @override
+  String get choiceAddChip => 'Añadir';
+
+  @override
+  String get choiceNewTag => 'Nueva';
+
+  @override
+  String get choiceExistingTag => 'existente';
+
+  @override
+  String get choiceNewOptionHint => 'Opción nueva';
 }

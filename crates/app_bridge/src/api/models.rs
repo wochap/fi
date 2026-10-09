@@ -273,12 +273,17 @@ pub struct DisplayMetadataDto {
     pub slider_step: Option<u32>,
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[frb]
 pub struct EnumOptionDto {
     pub id: String,
     pub label: String,
     pub order: i64,
     pub deleted: bool,
+    /// Set on a removed option that was merged into the option with this id.
+    #[frb(default = "null")]
+    pub merged_into: Option<String>,
 }
+#[frb]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FieldDefinitionDto {
     pub id: String,
@@ -293,6 +298,17 @@ pub struct FieldDefinitionDto {
     pub order: i64,
     pub deleted: bool,
     pub enum_options: Vec<EnumOptionDto>,
+    /// Choice/Choices only: the record form may add options to this field.
+    #[frb(default = "false")]
+    pub allow_options_from_records: bool,
+}
+/// An option the record form added, created only when the record is saved. Values pick it by
+/// `key` (`pending:<n>`) in place of an option id.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PendingOptionDto {
+    pub key: String,
+    pub field_id: String,
+    pub label: String,
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RecordValueDto {
@@ -1549,6 +1565,7 @@ impl From<app_core::FieldDefinition> for FieldDefinitionDto {
             order: value.order,
             deleted: value.deleted,
             enum_options: value.enum_options.into_iter().map(Into::into).collect(),
+            allow_options_from_records: value.allow_options_from_records,
         }
     }
 }
@@ -1556,6 +1573,7 @@ impl TryFrom<FieldDefinitionDto> for app_core::FieldDefinition {
     type Error = BridgeError;
     fn try_from(value: FieldDefinitionDto) -> Result<Self, Self::Error> {
         Ok(Self {
+            allow_options_from_records: value.allow_options_from_records,
             id: value
                 .id
                 .parse()
@@ -1596,6 +1614,7 @@ impl From<app_core::EnumOption> for EnumOptionDto {
             label: value.label,
             order: value.order,
             deleted: value.deleted,
+            merged_into: value.merged_into.map(|id| id.to_string()),
         }
     }
 }
@@ -1603,6 +1622,12 @@ impl TryFrom<EnumOptionDto> for app_core::EnumOption {
     type Error = BridgeError;
     fn try_from(value: EnumOptionDto) -> Result<Self, Self::Error> {
         Ok(Self {
+            merged_into: value
+                .merged_into
+                .filter(|id| !id.is_empty())
+                .map(|id| id.parse())
+                .transpose()
+                .map_err(|error: app_core::DomainError| BridgeError::from(AppError::from(error)))?,
             id: value
                 .id
                 .parse()
@@ -1862,12 +1887,14 @@ mod tests {
     fn field_dto_carries_removed_options_and_the_relative_default() {
         use super::FieldDefinitionDto;
         let removed = app_core::EnumOption {
+            merged_into: None,
             id: app_core::EnumOptionId::new(),
             label: "option 3".into(),
             order: 2,
             deleted: true,
         };
         let choice = app_core::FieldDefinition {
+            allow_options_from_records: false,
             id: app_core::FieldId::new(),
             name: "Kind".into(),
             field_type: app_core::FieldType::Enum,

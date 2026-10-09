@@ -20,6 +20,7 @@ impl WallTime for FixedTime {
 
 fn field(name: &str, field_type: FieldType, required: bool, order: i64) -> FieldDefinition {
     FieldDefinition {
+        allow_options_from_records: false,
         id: FieldId::new(),
         name: name.into(),
         field_type,
@@ -309,6 +310,7 @@ async fn every_field_kind_defaults_null_diagnostics_and_enum_operations_project(
         .await
         .unwrap();
     let option = EnumOption {
+        merged_into: None,
         id: EnumOptionId::new(),
         label: "Active".into(),
         order: 0,
@@ -362,6 +364,7 @@ async fn every_field_kind_defaults_null_diagnostics_and_enum_operations_project(
     );
 
     let unused = EnumOption {
+        merged_into: None,
         id: EnumOptionId::new(),
         label: "Archived".into(),
         order: 1,
@@ -951,6 +954,7 @@ async fn a_removed_option_stays_on_its_records_and_cannot_be_newly_picked() {
     app.add_field(collection, note.clone()).await.unwrap();
     let options: Vec<_> = (1..=3)
         .map(|index| EnumOption {
+            merged_into: None,
             id: EnumOptionId::new(),
             label: format!("option {index}"),
             order: index,
@@ -1063,12 +1067,14 @@ async fn seed_clone_source(app: &AppCore, records: i64) -> CloneSource {
     let mut kind = field("Kind", FieldType::Enum, false, 1);
     kind.enum_options = vec![
         EnumOption {
+            merged_into: None,
             id: EnumOptionId::new(),
             label: "Mild".into(),
             order: 0,
             deleted: false,
         },
         EnumOption {
+            merged_into: None,
             id: EnumOptionId::new(),
             label: "Severe".into(),
             order: 1,
@@ -1078,6 +1084,7 @@ async fn seed_clone_source(app: &AppCore, records: i64) -> CloneSource {
     app.add_field(collection, intensity.clone()).await.unwrap();
     app.add_field(collection, kind.clone()).await.unwrap();
     let retired = EnumOption {
+        merged_into: None,
         id: EnumOptionId::new(),
         label: "Retired".into(),
         order: 2,
@@ -1522,12 +1529,14 @@ async fn clone_records_copies_values_in_one_batch_and_rejects_incomplete_sources
     let day = field("Day", FieldType::Date, false, 1);
     let mut kind = field("Kind", FieldType::Enum, false, 2);
     let keep = EnumOption {
+        merged_into: None,
         id: EnumOptionId::new(),
         label: "option 1".into(),
         order: 0,
         deleted: false,
     };
     let gone = EnumOption {
+        merged_into: None,
         id: EnumOptionId::new(),
         label: "option 3".into(),
         order: 1,

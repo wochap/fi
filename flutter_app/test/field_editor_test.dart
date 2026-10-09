@@ -222,6 +222,7 @@ Future<void> pickType(WidgetTester tester, FieldTypeKindDto kind) async {
 }
 
 void main() {
+  mergeTests();
   _spanishHelpTest();
   testWidgets('the warning tracks Required, the default, and the record set', (
     tester,
@@ -825,7 +826,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     await dragOption(tester, ids['High']!, -2);
-    await tester.tap(find.byKey(ValueKey('remove-option-${ids['Low']}')));
+    await deleteOption(tester, ids['Low']!);
     await tester.pumpAndSettle();
     await save(tester);
 
@@ -848,7 +849,7 @@ void main() {
     await tester.pumpAndSettle();
 
     await addOption(tester, 'Urgent');
-    await tester.tap(find.byKey(ValueKey('remove-option-${ids['Low']}')));
+    await deleteOption(tester, ids['Low']!);
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
     await tester.pumpAndSettle();
@@ -873,7 +874,7 @@ void main() {
       findsOneWidget,
     );
 
-    await tester.tap(find.byKey(ValueKey('remove-option-${ids['Medium']}')));
+    await deleteOption(tester, ids['Medium']!);
     await tester.pumpAndSettle();
     expect(
       find.descendant(
@@ -1294,7 +1295,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('deleted-option-note')), findsOneWidget);
 
-    await tester.tap(find.byKey(ValueKey('remove-option-${ids['Low']}')));
+    await deleteOption(tester, ids['Low']!);
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('option-delete-confirmation')), findsOneWidget);
     expect(find.text('Delete option “Low”?'), findsOneWidget);
@@ -1309,7 +1310,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(ValueKey('option-label-${ids['Low']}')), findsOneWidget);
 
-    await tester.tap(find.byKey(ValueKey('remove-option-${ids['Low']}')));
+    await deleteOption(tester, ids['Low']!);
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('option-delete-confirm')));
     await tester.pumpAndSettle();
@@ -1594,5 +1595,229 @@ void _spanishHelpTest() {
       ),
       findsOneWidget,
     );
+  });
+}
+
+/// Opens the ⋯ of option [id] and picks Delete….
+Future<void> deleteOption(WidgetTester tester, String id) async {
+  await tester.tap(find.byKey(ValueKey('option-menu-$id')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(const Key('option-menu-delete')));
+}
+
+/// Adds a stored field Tags of [kind] with [labels], and returns option IDs in label order.
+Future<List<String>> seedTags(
+  Seeded seeded,
+  FieldTypeKindDto kind,
+  List<String> labels,
+) async {
+  await seeded.controller.saveFieldWithOptions(
+    FieldDefinitionDto(
+      id: '',
+      name: 'Tags',
+      fieldType: FieldTypeDto(kind: kind),
+      required_: false,
+      validation: const ValidationMetadataDto(),
+      display: const DisplayMetadataDto(
+        multiline: false,
+        slider: false,
+        sliderStep: null,
+      ),
+      order: 2,
+      deleted: false,
+      enumOptions: const [],
+    ),
+    [
+      for (final (index, label) in labels.indexed)
+        EnumOptionDto(
+          id: tempOptionId(index),
+          label: label,
+          order: index,
+          deleted: false,
+        ),
+    ],
+  );
+  final options = seeded.controller.schema!.fields
+      .firstWhere((field) => field.name == 'Tags')
+      .enumOptions;
+  return [
+    for (final label in labels)
+      options.firstWhere((option) => option.label == label).id,
+  ];
+}
+
+String tagsId(Seeded seeded) => seeded.controller.schema!.fields
+    .firstWhere((field) => field.name == 'Tags')
+    .id;
+
+Future<void> addTagRecords(
+  Seeded seeded,
+  int count,
+  List<String> ids, {
+  bool set = false,
+}) async {
+  for (var i = 0; i < count; i++) {
+    await seeded.controller.createRecord([
+      RecordValueDto(
+        fieldId: tagsId(seeded),
+        value: set
+            ? FieldValueDto(kind: FieldValueKindDto.enumSet, listValue: ids)
+            : FieldValueDto(kind: FieldValueKindDto.enum_, textValue: ids[0]),
+      ),
+    ]);
+  }
+}
+
+void mergeTests() {
+  group('adding options from records', () {
+    testWidgets('the switch is off, saved with the field, and Choice only', (
+      tester,
+    ) async {
+      final seeded = await seed(tester);
+      await seedTags(seeded, FieldTypeKindDto.enum_, ['A', 'B']);
+      await pumpPage(tester, seeded.controller);
+      await openFieldEditor(tester, 'Tags');
+      final toggle = find.byKey(const Key('allow-adding-options'));
+      expect(toggle, findsOneWidget);
+      expect(
+        find.text(
+          'New options are added to this field when the record is saved.',
+        ),
+        findsOneWidget,
+      );
+      expect(tester.widget<FiSwitchTile>(toggle).value, isFalse);
+      await tester.ensureVisible(toggle);
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+      await save(tester);
+      final tags = seeded.controller.schema!.fields.firstWhere(
+        (field) => field.name == 'Tags',
+      );
+      expect(tags.allowOptionsFromRecords, isTrue);
+
+      await tester.tap(find.text('Notes').last);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('allow-adding-options')), findsNothing);
+    });
+  });
+
+  group('merging options', () {
+    testWidgets('a phone ⋯ is 44px and opens Merge… and Delete…', (
+      tester,
+    ) async {
+      final seeded = await seed(tester);
+      final ids = await seedTags(seeded, FieldTypeKindDto.enum_, ['A', 'B']);
+      tester.view.physicalSize = const Size(390, 844);
+      await pumpPage(tester, seeded.controller);
+      await tester.tap(find.byTooltip('Schema').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Tags').last);
+      await tester.pumpAndSettle();
+      final menu = find.byKey(ValueKey('option-menu-${ids[0]}'));
+      await tester.ensureVisible(menu);
+      expect(tester.getSize(menu).height, greaterThanOrEqualTo(44));
+      await tester.tap(menu);
+      await tester.pumpAndSettle();
+      expect(find.text('Merge…'), findsOneWidget);
+      expect(find.text('Delete…'), findsOneWidget);
+    });
+
+    testWidgets('the duplicate banner opens the sheet with the bigger kept', (
+      tester,
+    ) async {
+      final seeded = await seed(tester);
+      final ids = await seedTags(seeded, FieldTypeKindDto.enum_, [
+        'groceries',
+        'Groceries',
+        'Rent',
+      ]);
+      await addTagRecords(seeded, 3, [ids[0]]);
+      await addTagRecords(seeded, 9, [ids[1]]);
+      await pumpPage(tester, seeded.controller);
+      await openFieldEditor(tester, 'Tags');
+      expect(
+        find.text('2 options are named “groceries”. Merge them?'),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const Key('duplicate-options-merge')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('merge-options-sheet')), findsOneWidget);
+      expect(find.text('9 records'), findsOneWidget);
+      expect(find.text('3 records'), findsOneWidget);
+      expect(find.text('12 records will use “Groceries”'), findsOneWidget);
+      expect(find.text('Its label stays'), findsOneWidget);
+      expect(find.text("This can't be undone."), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('merge-confirm')));
+      await tester.pumpAndSettle();
+      final (field, keep, merged) = seeded.bridge.merges.single;
+      expect((field, keep), (tagsId(seeded), ids[1]));
+      expect(merged, [ids[0]]);
+      expect(find.byKey(const Key('merge-options-sheet')), findsNothing);
+    });
+
+    testWidgets('a Choices sheet counts records that had both', (tester) async {
+      final seeded = await seed(tester);
+      final ids = await seedTags(seeded, FieldTypeKindDto.enumSet, [
+        'Groceries',
+        'groceries',
+      ]);
+      await addTagRecords(seeded, 7, [ids[0]], set: true);
+      await addTagRecords(seeded, 2, ids, set: true);
+      await addTagRecords(seeded, 1, [ids[1]], set: true);
+      await pumpPage(tester, seeded.controller);
+      await openFieldEditor(tester, 'Tags');
+      await tester.tap(find.byKey(const Key('duplicate-options-merge')));
+      await tester.pumpAndSettle();
+      expect(find.text('10 records will use “Groceries”'), findsOneWidget);
+      expect(
+        find.text('2 records had both. Each keeps one “Groceries”.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('Merge… pre-checks its row and needs a second option', (
+      tester,
+    ) async {
+      final seeded = await seed(tester);
+      final ids = await seedTags(seeded, FieldTypeKindDto.enum_, ['A', 'B']);
+      await pumpPage(tester, seeded.controller);
+      await openFieldEditor(tester, 'Tags');
+      await tester.tap(find.byKey(ValueKey('option-menu-${ids[0]}')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('option-menu-merge')));
+      await tester.pumpAndSettle();
+      FilledButton confirm() => tester.widget<FilledButton>(
+        find.ancestor(
+          of: find.text('Merge').last,
+          matching: find.byType(FilledButton),
+        ),
+      );
+      expect(confirm().onPressed, isNull);
+      await tester.tap(find.byKey(ValueKey('merge-check-${ids[1]}')));
+      await tester.pumpAndSettle();
+      expect(confirm().onPressed, isNotNull);
+    });
+
+    testWidgets('Move them merges records left on a merged option', (
+      tester,
+    ) async {
+      final seeded = await seed(tester);
+      final ids = await seedTags(seeded, FieldTypeKindDto.enum_, ['A', 'a']);
+      await seeded.controller.mergeEnumOptions(tagsId(seeded), ids[0], [
+        ids[1],
+      ]);
+      // Written offline before the merge arrived.
+      await addTagRecords(seeded, 3, [ids[1]]);
+      await pumpPage(tester, seeded.controller);
+      await openFieldEditor(tester, 'Tags');
+      expect(find.text('3 records still use merged options.'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('merged-options-move')));
+      await tester.pumpAndSettle();
+      final (field, keep, merged) = seeded.bridge.merges.last;
+      expect((field, keep), (tagsId(seeded), ids[0]));
+      expect(merged, [ids[1]]);
+      expect(find.byKey(const Key('merged-options-banner')), findsNothing);
+    });
   });
 }

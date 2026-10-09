@@ -359,6 +359,7 @@ mod tests {
 
     fn field(name: &str, field_type: FieldType, order: i64) -> FieldDefinition {
         FieldDefinition {
+            allow_options_from_records: false,
             id: FieldId::new(),
             name: name.into(),
             field_type,
@@ -379,6 +380,7 @@ mod tests {
         let id = CollectionSchemaId::new();
         let mut kind = field("Kind", FieldType::Enum, 7);
         kind.enum_options = vec![EnumOption {
+            merged_into: None,
             id: EnumOptionId::new(),
             label: "Mild".into(),
             order: 0,
@@ -531,6 +533,7 @@ mod tests {
         gone_field.deleted = true;
         entry.schema.fields.push(gone_field.clone());
         entry.schema.fields[7].enum_options.push(EnumOption {
+            merged_into: None,
             id: EnumOptionId::new(),
             label: "Removed".into(),
             order: 1,

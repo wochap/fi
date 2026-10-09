@@ -7,7 +7,7 @@ import '../frb_generated.dart';
 import 'models.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `core_error`, `parse_collection`, `parse_field`, `parse_record`, `parse_records`, `parse_values`
+// These functions are ignored because they are not marked as `pub`: `core_error`, `parse_collection`, `parse_draft_values`, `parse_field`, `parse_pending`, `parse_record`, `parse_records`, `parse_values`
 
 Future<BootstrapDto> createNewDataset() =>
     RustLib.instance.api.crateApiCollectionsCreateNewDataset();
@@ -132,14 +132,46 @@ Future<String> createRecord({
 /// Dry-run record validation with create (no `record_id`) or merged-update
 /// semantics. Returns every issue; empty when the draft is valid. Commits
 /// nothing. Errs only for non-validation failures.
+///
+/// `pending_options` are options the form added; values pick them by key in place of an option
+/// id, and their own problems are reported on their fields.
 Future<List<BridgeIssueDto>> validateRecordDraft({
   required String collectionId,
   String? recordId,
   required List<RecordValueDto> values,
+  required List<PendingOptionDto> pendingOptions,
 }) => RustLib.instance.api.crateApiCollectionsValidateRecordDraft(
   collectionId: collectionId,
   recordId: recordId,
   values: values,
+  pendingOptions: pendingOptions,
+);
+
+/// Saves a new record (no `record_id`) or the given changed fields of an existing one, together
+/// with the options the form added, in one change. Returns the record id.
+Future<String> saveRecordDraft({
+  required String collectionId,
+  String? recordId,
+  required List<RecordValueDto> values,
+  required List<PendingOptionDto> pendingOptions,
+}) => RustLib.instance.api.crateApiCollectionsSaveRecordDraft(
+  collectionId: collectionId,
+  recordId: recordId,
+  values: values,
+  pendingOptions: pendingOptions,
+);
+
+/// Merges the `merge` options into `keep` on one Choice or Choices field.
+Future<void> mergeEnumOptions({
+  required String collectionId,
+  required String fieldId,
+  required String keep,
+  required List<String> merge,
+}) => RustLib.instance.api.crateApiCollectionsMergeEnumOptions(
+  collectionId: collectionId,
+  fieldId: fieldId,
+  keep: keep,
+  merge: merge,
 );
 
 Future<void> updateRecordField({

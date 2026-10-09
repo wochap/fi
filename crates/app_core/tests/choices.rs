@@ -13,6 +13,7 @@ use app_core::{
 
 fn field(name: &str, field_type: FieldType, required: bool, order: i64) -> FieldDefinition {
     FieldDefinition {
+        allow_options_from_records: false,
         id: FieldId::new(),
         name: name.into(),
         field_type,
@@ -29,6 +30,7 @@ fn field(name: &str, field_type: FieldType, required: bool, order: i64) -> Field
 
 fn option(label: &str, order: i64) -> EnumOption {
     EnumOption {
+        merged_into: None,
         id: EnumOptionId::new(),
         label: label.into(),
         order,
@@ -843,4 +845,83 @@ async fn csv_writes_labels_in_option_order_and_parses_them_back() {
     };
     assert_eq!((row, column.as_str()), (1, "tags"));
     app.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn record_form_options_validate_save_and_merge_through_the_app() {
+    use app_core::{DraftValue, PendingOption};
+    let directory = tempfile::tempdir().unwrap();
+    let app = AppCore::open(directory.path()).await.unwrap();
+    app.create_new_dataset().await.unwrap();
+    let tasks = tasks(&app).await;
+    let mut tags = tasks.tags.clone();
+    tags.allow_options_from_records = true;
+    app.update_field(tasks.collection, tags.clone())
+        .await
+        .unwrap();
+    let values = BTreeMap::from([(
+        tags.id,
+        DraftValue::Choices {
+            options: vec![tasks.food],
+            pending: vec!["pending:1".into()],
+        },
+    )]);
+    let pending = |label: &str| {
+        vec![PendingOption {
+            key: "pending:1".into(),
+            field_id: tags.id,
+            label: label.into(),
+        }]
+    };
+    assert!(
+        app.validate_record_draft_with_options(
+            tasks.collection,
+            None,
+            values.clone(),
+            pending("coffee")
+        )
+        .unwrap()
+        .is_empty()
+    );
+    let issues = app
+        .validate_record_draft_with_options(tasks.collection, None, values.clone(), pending(""))
+        .unwrap();
+    assert_eq!(issues.len(), 1);
+    assert_eq!(issues[0].fields, vec![tags.id.to_string()]);
+    let schema_before = app.collection_schema(tasks.collection).unwrap().unwrap();
+    assert_eq!(
+        schema_before,
+        app.collection_schema(tasks.collection).unwrap().unwrap()
+    );
+
+    let id = app
+        .save_record_draft(tasks.collection, None, values, pending("coffee"))
+        .await
+        .unwrap();
+    let schema = app.collection_schema(tasks.collection).unwrap().unwrap();
+    let coffee = schema.fields[1]
+        .enum_options
+        .iter()
+        .find(|option| option.label == "coffee")
+        .unwrap()
+        .id;
+    assert_eq!(
+        value(&app, id, tags.id),
+        Some(FieldValue::enum_set([tasks.food, coffee]))
+    );
+
+    app.merge_enum_options(tasks.collection, tags.id, tasks.food, vec![coffee])
+        .await
+        .unwrap();
+    assert_eq!(
+        value(&app, id, tags.id),
+        Some(FieldValue::EnumSet(vec![tasks.food]))
+    );
+    let schema = app.collection_schema(tasks.collection).unwrap().unwrap();
+    let merged = schema.fields[1]
+        .enum_options
+        .iter()
+        .find(|option| option.id == coffee)
+        .unwrap();
+    assert_eq!(merged.merged_into, Some(tasks.food));
 }

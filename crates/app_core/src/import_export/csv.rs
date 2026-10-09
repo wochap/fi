@@ -416,6 +416,7 @@ mod tests {
 
     fn field(name: &str, field_type: FieldType, order: i64) -> FieldDefinition {
         FieldDefinition {
+            allow_options_from_records: false,
             id: FieldId::new(),
             name: name.into(),
             field_type,
@@ -432,6 +433,7 @@ mod tests {
 
     fn option(label: &str, order: i64) -> EnumOption {
         EnumOption {
+            merged_into: None,
             id: EnumOptionId::new(),
             label: label.into(),
             order,

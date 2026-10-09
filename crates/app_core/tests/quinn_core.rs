@@ -84,6 +84,7 @@ async fn wait_collections(app: &AppCore, count: usize) {
 }
 fn field(name: &str, order: i64) -> FieldDefinition {
     FieldDefinition {
+        allow_options_from_records: false,
         id: FieldId::new(),
         name: name.into(),
         field_type: FieldType::Text,

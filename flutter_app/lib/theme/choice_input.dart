@@ -9,19 +9,46 @@ import 'package:flutter/material.dart';
 
 /// One pickable option of a [FiChoiceInput].
 final class ChoiceOption {
-  const ChoiceOption({required this.id, required this.label});
+  const ChoiceOption({
+    required this.id,
+    required this.label,
+    this.isNew = false,
+  });
 
   final String id;
   final String label;
+
+  /// An option the record form added: created only when the record is saved, shown with a
+  /// "New" tag after the stored options.
+  final bool isNew;
 }
 
-/// What a choice sheet returned: an option id, or null when the user pressed Clear. The sheet
-/// itself returns null when dismissed without a pick.
+/// Adds an option labelled with the given text to the field (created when the record is saved)
+/// and returns the id the value picks it by.
+typedef AddChoiceOption = String Function(String label);
+
+/// The option of [options] whose label equals [text] ignoring case and surrounding spaces.
+ChoiceOption? exactChoiceOption(List<ChoiceOption> options, String text) {
+  final needle = text.trim().toLowerCase();
+  if (needle.isEmpty) return null;
+  return options
+      .where((option) => option.label.trim().toLowerCase() == needle)
+      .firstOrNull;
+}
+
+/// What a choice sheet returned: an option id, or null when the user pressed Clear, or
+/// [addLabel] when the user chose to add a new option. The sheet itself returns null when
+/// dismissed without a pick.
 final class ChoicePick {
-  const ChoicePick(this.id);
+  const ChoicePick(this.id) : addLabel = null;
+  const ChoicePick.add(String label) : id = null, addLabel = label;
 
   final String? id;
+  final String? addLabel;
 }
+
+/// Prefix of the ids a Choices sheet returns for options added in it, followed by the label.
+const String _addedPrefix = '\u0000add:';
 
 /// Up to this many options show as a [FiSegmented].
 const int choiceSegmentedMax = 4;
@@ -49,12 +76,18 @@ class FiChoiceInput extends StatelessWidget {
     this.label,
     this.required = false,
     this.errors = const [],
+    this.onAdd,
     super.key,
   });
 
   final List<ChoiceOption> options;
   final String? value;
   final String? heldLabel;
+
+  /// When set, the field allows adding options from the record form: every list gets a search
+  /// with an Add row, and a segmented choice a trailing "＋ Add" chip. [options] then end with
+  /// the added (new) ones; the layout follows the stored options only.
+  final AddChoiceOption? onAdd;
 
   /// Receives the picked id, or null when cleared.
   final ValueChanged<String?> onChanged;
@@ -70,8 +103,19 @@ class FiChoiceInput extends StatelessWidget {
       options.where((option) => option.id == value).firstOrNull?.label ??
       (value == null ? null : heldLabel);
 
+  /// Picks the option equal to [text] ignoring case, or adds a new one.
+  void _addOrPick(String text) {
+    final match = exactChoiceOption(options, text);
+    final id = match?.id ?? onAdd!(text.trim());
+    if (id != value) onChanged(id);
+  }
+
+  ChoiceOption? get _selected =>
+      options.where((option) => option.id == value).firstOrNull;
+
   @override
   Widget build(BuildContext context) {
+    if (onAdd != null) return _adding(context);
     final phone = Nocturne.isPhone(context);
     final held = value != null && !options.any((option) => option.id == value);
     if (options.length <= choiceSegmentedMax && options.isNotEmpty) {
@@ -182,10 +226,239 @@ class FiChoiceInput extends StatelessWidget {
   }
 }
 
+extension on FiChoiceInput {
+  /// The control when options can be added: the layout follows the stored options only.
+  Widget _adding(BuildContext context) {
+    final phone = Nocturne.isPhone(context);
+    final stored = [
+      for (final option in options)
+        if (!option.isNew) option,
+    ];
+    final added = [
+      for (final option in options)
+        if (option.isNew) option,
+    ];
+    final held = value != null && !options.any((option) => option.id == value);
+    if (stored.length <= choiceSegmentedMax) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        spacing: 8,
+        children: [
+          if (stored.isNotEmpty)
+            FiSegmented<String>(
+              segments: [
+                for (final option in stored) FiSegment(option.id, option.label),
+              ],
+              value: value,
+              allowClear: allowClear,
+              label: label,
+              required: this.required,
+              errors: errors,
+              onChanged: onChanged,
+            ),
+          if (held)
+            Text(
+              _selectedLabelOrHeld ?? '',
+              key: const Key('choice-held'),
+              style: TextStyle(fontSize: 12, color: Nocturne.muted(.7)),
+            ),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              for (final option in added)
+                ChoicesToggleChip(
+                  key: ValueKey('choice-chip-${option.id}'),
+                  label: option.label,
+                  isNew: true,
+                  selected: option.id == value,
+                  onTap: () => onChanged(option.id == value ? null : option.id),
+                ),
+              AddOptionChip(onSubmit: _addOrPick),
+            ],
+          ),
+          if (stored.isEmpty && errors.isNotEmpty) FieldErrorLines(errors),
+        ],
+      );
+    }
+    final selected = _selected;
+    if (!phone) {
+      return _ChoiceSearchField(
+        options: options,
+        selectedLabel: _selectedLabelOrHeld,
+        selectedIsNew: selected?.isNew ?? false,
+        label: label,
+        required: this.required,
+        errors: errors,
+        allowClear: allowClear && value != null,
+        onChanged: onChanged,
+        onAdd: _addOrPick,
+      );
+    }
+    return _ChoiceSheetField(
+      selectedLabel: _selectedLabelOrHeld,
+      selectedIsNew: selected?.isNew ?? false,
+      label: label,
+      required: this.required,
+      errors: errors,
+      hint: context.l10n.themeSearchOptions(stored.length),
+      search: true,
+      onClear: allowClear && value != null ? () => onChanged(null) : null,
+      onOpen: () async {
+        final pick = await showChoiceSearchSheet(
+          context,
+          title: title,
+          options: options,
+          selected: value,
+          allowClear: allowClear,
+          allowAdd: true,
+        );
+        if (pick == null) return;
+        if (pick.addLabel case final text?) {
+          _addOrPick(text);
+        } else if (pick.id != value) {
+          onChanged(pick.id);
+        }
+      },
+    );
+  }
+
+  String? get _selectedLabelOrHeld =>
+      options.where((option) => option.id == value).firstOrNull?.label ??
+      (value == null ? null : heldLabel);
+}
+
+/// The trailing "＋ Add" chip of a segmented choice or toggle chips: tapping it opens a small
+/// input in place; submitting a non-empty text calls [onSubmit] with it.
+class AddOptionChip extends StatefulWidget {
+  const AddOptionChip({required this.onSubmit, super.key});
+
+  final ValueChanged<String> onSubmit;
+
+  @override
+  State<AddOptionChip> createState() => _AddOptionChipState();
+}
+
+class _AddOptionChipState extends State<AddOptionChip> {
+  final TextEditingController _text = TextEditingController();
+  var _editing = false;
+
+  @override
+  void dispose() {
+    _text.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final text = _text.text.trim();
+    if (text.isEmpty) return;
+    widget.onSubmit(text);
+    setState(() {
+      _editing = false;
+      _text.clear();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = context.l10n;
+    if (!_editing) {
+      return ChoicesToggleChip(
+        key: const Key('choice-add-chip'),
+        label: l.choiceAddChip,
+        leading: FiIcons.add,
+        selected: false,
+        onTap: () => setState(() => _editing = true),
+      );
+    }
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          width: 180,
+          child: FiTextInput(
+            key: const Key('choice-add-input'),
+            controller: _text,
+            autofocus: true,
+            size: InputSize.small,
+            hint: l.choiceNewOptionHint,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) => _submit(),
+          ),
+        ),
+        FiIconButton(
+          key: const Key('choice-add-confirm'),
+          icon: FiIcons.check,
+          tooltip: l.choiceAddChip,
+          color: Nocturne.accent,
+          onPressed: _submit,
+        ),
+        FiIconButton(
+          key: const Key('choice-add-cancel'),
+          icon: FiIcons.close,
+          tooltip: l.commonCancel,
+          color: Nocturne.muted(.65),
+          onPressed: () => setState(() {
+            _editing = false;
+            _text.clear();
+          }),
+        ),
+      ],
+    );
+  }
+}
+
+/// The last row of a list that can add an option: "＋ Add “text”".
+class _AddRow extends StatelessWidget {
+  const _AddRow({required this.text, required this.onTap});
+
+  final String text;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+    key: const Key('choice-add-row'),
+    borderRadius: BorderRadius.circular(Nocturne.radius),
+    onTap: onTap,
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 48),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        child: Row(
+          spacing: 10,
+          children: [
+            const Icon(FiIcons.add, size: 18, color: Nocturne.accent300),
+            Expanded(
+              child: Text(
+                context.l10n.choiceAddOption(text),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 15, color: Nocturne.accent300),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+/// The "New" tag on an option added from the record form.
+class NewOptionTag extends StatelessWidget {
+  const NewOptionTag({super.key});
+
+  @override
+  Widget build(BuildContext context) =>
+      Tag(context.l10n.choiceNewTag, key: const Key('choice-new-tag'));
+}
+
 /// The phone field that opens a choice sheet: read-only, showing the selected label.
 class _ChoiceSheetField extends StatefulWidget {
   const _ChoiceSheetField({
     required this.selectedLabel,
+    this.selectedIsNew = false,
     required this.label,
     required this.required,
     required this.errors,
@@ -196,6 +469,7 @@ class _ChoiceSheetField extends StatefulWidget {
   });
 
   final String? selectedLabel;
+  final bool selectedIsNew;
   final String? label;
   final bool required;
   final List<String> errors;
@@ -237,9 +511,16 @@ class _ChoiceSheetFieldState extends State<_ChoiceSheetField> {
     errors: widget.errors,
     prefixIcon: widget.search ? const Icon(FiIcons.search, size: 18) : null,
     onClear: widget.onClear,
-    suffixIcon: const Padding(
-      padding: EdgeInsets.only(left: 4, right: 10),
-      child: Icon(FiIcons.expand, size: 18),
+    suffixIcon: Padding(
+      padding: const EdgeInsets.only(left: 4, right: 10),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        spacing: 6,
+        children: [
+          if (widget.selectedIsNew) const NewOptionTag(),
+          const Icon(FiIcons.expand, size: 18),
+        ],
+      ),
     ),
   );
 }
@@ -290,10 +571,17 @@ class _ChoiceSearchField extends StatefulWidget {
     required this.errors,
     required this.allowClear,
     required this.onChanged,
+    this.selectedIsNew = false,
+    this.onAdd,
   });
 
   final List<ChoiceOption> options;
   final String? selectedLabel;
+  final bool selectedIsNew;
+
+  /// When set, the list ends with "＋ Add “text”" while no option equals the typed text
+  /// ignoring case; picking it calls this with the text.
+  final ValueChanged<String>? onAdd;
   final String? label;
   final bool required;
   final List<String> errors;
@@ -330,12 +618,28 @@ class _ChoiceSearchFieldState extends State<_ChoiceSearchField> {
     textEditingController: _text,
     focusNode: _focus,
     displayStringForOption: (option) => option.label,
-    optionsBuilder: (value) =>
-        // The box shows the picked label; the full list opens until the user types.
-        value.text == widget.selectedLabel
-        ? widget.options
-        : _matching(widget.options, value.text),
-    onSelected: (option) => widget.onChanged(option.id),
+    optionsBuilder: (value) {
+      // The box shows the picked label; the full list opens until the user types.
+      if (value.text == widget.selectedLabel) return widget.options;
+      final matches = _matching(widget.options, value.text);
+      final text = value.text.trim();
+      if (widget.onAdd != null &&
+          text.isNotEmpty &&
+          exactChoiceOption(widget.options, text) == null) {
+        return [
+          ...matches,
+          ChoiceOption(id: '$_addedPrefix$text', label: text),
+        ];
+      }
+      return matches;
+    },
+    onSelected: (option) {
+      if (option.id.startsWith(_addedPrefix)) {
+        widget.onAdd!(option.label);
+      } else {
+        widget.onChanged(option.id);
+      }
+    },
     fieldViewBuilder: (context, controller, focusNode, onSubmitted) =>
         TextFieldTapRegion(
           child: _SearchBox(
@@ -347,6 +651,7 @@ class _ChoiceSearchFieldState extends State<_ChoiceSearchField> {
             errors: widget.errors,
             onClear: widget.allowClear ? () => widget.onChanged(null) : null,
             onSubmitted: onSubmitted,
+            selectedIsNew: widget.selectedIsNew,
           ),
         ),
     optionsViewBuilder: (context, onSelected, matches) {
@@ -369,20 +674,42 @@ class _ChoiceSearchFieldState extends State<_ChoiceSearchField> {
                     shrinkWrap: true,
                     children: [
                       for (final option in matches)
-                        InkWell(
-                          onTap: () => onSelected(option),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 8,
-                            ),
-                            child: Text.rich(
-                              TextSpan(
-                                children: highlightMatches(option.label, query),
+                        if (option.id.startsWith(_addedPrefix))
+                          _AddRow(
+                            text: option.label,
+                            onTap: () => onSelected(option),
+                          )
+                        else
+                          InkWell(
+                            key: ValueKey('choice-row-${option.id}'),
+                            onTap: () => onSelected(option),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
+                              child: Row(
+                                spacing: 6,
+                                children: [
+                                  Flexible(
+                                    child: Text.rich(
+                                      TextSpan(
+                                        children: highlightMatches(
+                                          option.label,
+                                          query,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  if (option.isNew) const NewOptionTag(),
+                                  if (widget.onAdd != null &&
+                                      exactChoiceOption([option], query) !=
+                                          null)
+                                    Tag.neutral(context.l10n.choiceExistingTag),
+                                ],
                               ),
                             ),
                           ),
-                        ),
                     ],
                   ),
                 ),
@@ -390,7 +717,11 @@ class _ChoiceSearchFieldState extends State<_ChoiceSearchField> {
                   padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
                   child: Text(
                     context.l10n.themeMatchesFooter(
-                      matches.length,
+                      matches
+                          .where(
+                            (option) => !option.id.startsWith(_addedPrefix),
+                          )
+                          .length,
                       widget.options.length,
                     ),
                     style: TextStyle(fontSize: 11, color: Nocturne.muted(.5)),
@@ -415,8 +746,10 @@ class _SearchBox extends StatelessWidget {
     required this.errors,
     required this.onClear,
     required this.onSubmitted,
+    this.selectedIsNew = false,
   });
 
+  final bool selectedIsNew;
   final TextEditingController controller;
   final FocusNode focusNode;
   final String? label;
@@ -435,6 +768,12 @@ class _SearchBox extends StatelessWidget {
     required: required,
     errors: errors,
     prefixIcon: const Icon(FiIcons.search, size: 18),
+    suffixIcon: selectedIsNew
+        ? const Padding(
+            padding: EdgeInsets.only(right: 10),
+            child: NewOptionTag(),
+          )
+        : null,
     onClear: onClear,
     onSubmitted: (_) => onSubmitted(),
   );
@@ -505,12 +844,16 @@ class _ChoiceRow extends StatelessWidget {
     required this.selected,
     required this.onTap,
     this.query = '',
+    this.existing = false,
   });
 
   final ChoiceOption option;
   final bool selected;
   final VoidCallback onTap;
   final String query;
+
+  /// Marks the option that equals the typed text, offered instead of adding a new one.
+  final bool existing;
 
   @override
   Widget build(BuildContext context) => InkWell(
@@ -532,6 +875,17 @@ class _ChoiceRow extends StatelessWidget {
                 ),
               ),
             ),
+            if (option.isNew) ...[
+              const SizedBox(width: 6),
+              const NewOptionTag(),
+            ],
+            if (existing) ...[
+              const SizedBox(width: 6),
+              Tag.neutral(
+                context.l10n.choiceExistingTag,
+                key: const Key('choice-existing-tag'),
+              ),
+            ],
             if (selected)
               const Icon(
                 FiIcons.check,
@@ -555,6 +909,7 @@ Future<ChoicePick?> showChoiceSearchSheet(
   required List<ChoiceOption> options,
   String? selected,
   bool allowClear = false,
+  bool allowAdd = false,
 }) => showModalBottomSheet<ChoicePick>(
   context: context,
   useSafeArea: true,
@@ -565,6 +920,7 @@ Future<ChoicePick?> showChoiceSearchSheet(
     options: options,
     selected: selected,
     allowClear: allowClear,
+    allowAdd: allowAdd,
   ),
 );
 
@@ -574,12 +930,16 @@ class _ChoiceSearchSheet extends StatefulWidget {
     required this.options,
     required this.selected,
     required this.allowClear,
+    this.allowAdd = false,
   });
 
   final String title;
   final List<ChoiceOption> options;
   final String? selected;
   final bool allowClear;
+
+  /// Ends the list with "＋ Add “text”" while no option equals the typed text ignoring case.
+  final bool allowAdd;
 
   @override
   State<_ChoiceSearchSheet> createState() => _ChoiceSearchSheetState();
@@ -598,6 +958,9 @@ class _ChoiceSearchSheetState extends State<_ChoiceSearchSheet> {
   Widget build(BuildContext context) {
     final query = _query.text.trim();
     final matches = _matching(widget.options, query);
+    final exact = widget.allowAdd
+        ? exactChoiceOption(widget.options, query)
+        : null;
     return SizedBox(
       key: const Key('choice-search-sheet'),
       height: MediaQuery.sizeOf(context).height,
@@ -667,9 +1030,16 @@ class _ChoiceSearchSheetState extends State<_ChoiceSearchSheet> {
                     _ChoiceRow(
                       option: option,
                       query: query,
+                      existing: exact?.id == option.id,
                       selected: option.id == widget.selected,
                       onTap: () =>
                           Navigator.pop(context, ChoicePick(option.id)),
+                    ),
+                  if (widget.allowAdd && query.isNotEmpty && exact == null)
+                    _AddRow(
+                      text: query,
+                      onTap: () =>
+                          Navigator.pop(context, ChoicePick.add(query)),
                     ),
                 ],
               ),
@@ -712,12 +1082,18 @@ class FiChoicesInput extends StatelessWidget {
     this.label,
     this.required = false,
     this.errors = const [],
+    this.onAdd,
     super.key,
   });
 
   final List<ChoiceOption> options;
   final List<String> value;
   final Map<String, String> heldLabels;
+
+  /// When set, the field allows adding options from the record form: toggle chips end with a
+  /// "＋ Add" chip and the sheet always has a search with an Add row. [options] then end with
+  /// the added (new) ones; the layout follows the stored options only.
+  final AddChoiceOption? onAdd;
   final ValueChanged<List<String>> onChanged;
   final String title;
   final bool allowClear;
@@ -733,12 +1109,21 @@ class FiChoicesInput extends StatelessWidget {
   ];
 
   /// [ids] ordered as the options are, held removed members last.
-  List<String> _ordered(Set<String> ids) => [
-    for (final option in options)
-      if (ids.contains(option.id)) option.id,
-    for (final held in _held)
-      if (ids.contains(held.id)) held.id,
-  ];
+  List<String> _ordered(Set<String> ids) {
+    final known = {
+      for (final option in options) option.id,
+      for (final held in _held) held.id,
+    };
+    return [
+      for (final option in options)
+        if (ids.contains(option.id)) option.id,
+      for (final held in _held)
+        if (ids.contains(held.id)) held.id,
+      // Options added just now are not in [options] until the parent rebuilds.
+      for (final id in ids)
+        if (!known.contains(id)) id,
+    ];
+  }
 
   List<String> get _pickedLabels {
     final picked = value.toSet();
@@ -754,11 +1139,17 @@ class FiChoicesInput extends StatelessWidget {
     onChanged(_ordered(next));
   }
 
+  /// The id picking [text]: the option equal to it ignoring case, or a newly added one.
+  String _addOrMatch(String text) =>
+      exactChoiceOption(options, text)?.id ?? onAdd!(text.trim());
+
   @override
   Widget build(BuildContext context) {
     final error = errors.isNotEmpty;
     final Widget control;
-    if (options.length <= choiceSegmentedMax) {
+    final storedCount = options.where((option) => !option.isNew).length;
+    final search = storedCount > choiceSelectMax || onAdd != null;
+    if (storedCount <= choiceSegmentedMax) {
       final picked = value.toSet();
       control = Wrap(
         key: const Key('choices-chips'),
@@ -769,19 +1160,30 @@ class FiChoicesInput extends StatelessWidget {
             ChoicesToggleChip(
               key: ValueKey('choices-chip-${option.id}'),
               label: option.label,
+              isNew: option.isNew,
               selected: picked.contains(option.id),
               error: error,
               onTap: () => _toggle(option.id),
+            ),
+          if (onAdd != null)
+            AddOptionChip(
+              onSubmit: (text) {
+                final id = _addOrMatch(text);
+                if (!value.contains(id)) onChanged(_ordered({...value, id}));
+              },
             ),
         ],
       );
     } else {
       control = _ChoicesSheetField(
         pickedLabels: _pickedLabels,
-        hint: options.length <= choiceSelectMax
-            ? context.l10n.themeChoose
-            : context.l10n.themeSearchOptions(options.length),
-        search: options.length > choiceSelectMax,
+        hasNew: options.any(
+          (option) => option.isNew && value.contains(option.id),
+        ),
+        hint: search
+            ? context.l10n.themeSearchOptions(storedCount)
+            : context.l10n.themeChoose,
+        search: search,
         errors: errors,
         onClear: allowClear && value.isNotEmpty
             ? () => onChanged(const [])
@@ -793,9 +1195,17 @@ class FiChoicesInput extends StatelessWidget {
             options: options,
             held: _held,
             selected: value,
-            search: options.length > choiceSelectMax,
+            search: search,
+            allowAdd: onAdd != null,
           );
-          if (picked != null) onChanged(_ordered(picked.toSet()));
+          if (picked == null) return;
+          final ids = <String>{
+            for (final id in picked)
+              id.startsWith(_addedPrefix)
+                  ? _addOrMatch(id.substring(_addedPrefix.length))
+                  : id,
+          };
+          onChanged(_ordered(ids));
         },
       );
     }
@@ -812,8 +1222,7 @@ class FiChoicesInput extends StatelessWidget {
             ),
           ),
         control,
-        if (error && options.length <= choiceSegmentedMax)
-          FieldErrorLines(errors),
+        if (error && storedCount <= choiceSegmentedMax) FieldErrorLines(errors),
       ],
     );
   }
@@ -826,6 +1235,8 @@ class ChoicesToggleChip extends StatelessWidget {
     required this.selected,
     required this.onTap,
     this.error = false,
+    this.isNew = false,
+    this.leading,
     super.key,
   });
 
@@ -833,6 +1244,12 @@ class ChoicesToggleChip extends StatelessWidget {
   final bool selected;
   final VoidCallback onTap;
   final bool error;
+
+  /// Shows the "New" tag after the label: an option added from the record form.
+  final bool isNew;
+
+  /// An icon before the label when not selected (the "＋ Add" chip).
+  final IconData? leading;
 
   @override
   Widget build(BuildContext context) {
@@ -872,6 +1289,9 @@ class ChoicesToggleChip extends StatelessWidget {
                       color: Nocturne.accent200,
                     ),
                     const SizedBox(width: 6),
+                  ] else if (leading case final icon?) ...[
+                    Icon(icon, size: 14, color: Nocturne.accent300),
+                    const SizedBox(width: 6),
                   ],
                   Flexible(
                     child: Text(
@@ -882,10 +1302,16 @@ class ChoicesToggleChip extends StatelessWidget {
                         fontSize: 13,
                         color: selected
                             ? Nocturne.accent100
+                            : leading != null
+                            ? Nocturne.accent300
                             : Nocturne.muted(.75),
                       ),
                     ),
                   ),
+                  if (isNew) ...[
+                    const SizedBox(width: 6),
+                    const NewOptionTag(),
+                  ],
                 ],
               ),
             ),
@@ -901,6 +1327,7 @@ class ChoicesToggleChip extends StatelessWidget {
 class _ChoicesSheetField extends StatefulWidget {
   const _ChoicesSheetField({
     required this.pickedLabels,
+    this.hasNew = false,
     required this.hint,
     required this.search,
     required this.errors,
@@ -909,6 +1336,9 @@ class _ChoicesSheetField extends StatefulWidget {
   });
 
   final List<String> pickedLabels;
+
+  /// Some picked option is new: the field shows the "New" tag.
+  final bool hasNew;
   final String hint;
   final bool search;
   final List<String> errors;
@@ -964,9 +1394,16 @@ class _ChoicesSheetFieldState extends State<_ChoicesSheetField> {
         errors: widget.errors,
         prefixIcon: widget.search ? const Icon(FiIcons.search, size: 18) : null,
         onClear: widget.onClear,
-        suffixIcon: const Padding(
-          padding: EdgeInsets.only(left: 4, right: 10),
-          child: Icon(FiIcons.expand, size: 18),
+        suffixIcon: Padding(
+          padding: const EdgeInsets.only(left: 4, right: 10),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            spacing: 6,
+            children: [
+              if (widget.hasNew) const NewOptionTag(),
+              const Icon(FiIcons.expand, size: 18),
+            ],
+          ),
         ),
       );
     },
@@ -983,6 +1420,7 @@ Future<List<String>?> showChoicesSheet(
   required List<String> selected,
   List<ChoiceOption> held = const [],
   bool search = false,
+  bool allowAdd = false,
 }) => showModalBottomSheet<List<String>>(
   context: context,
   useSafeArea: true,
@@ -992,7 +1430,8 @@ Future<List<String>?> showChoicesSheet(
     options: options,
     held: held,
     selected: selected,
-    search: search,
+    search: search || allowAdd,
+    allowAdd: allowAdd,
   ),
 );
 
@@ -1003,6 +1442,7 @@ class _ChoicesSheet extends StatefulWidget {
     required this.held,
     required this.selected,
     required this.search,
+    this.allowAdd = false,
   });
 
   final String title;
@@ -1011,6 +1451,10 @@ class _ChoicesSheet extends StatefulWidget {
   final List<String> selected;
   final bool search;
 
+  /// Ends the list with "＋ Add “text”" while no option equals the typed text ignoring case.
+  /// An added option is picked at once and returned as an id starting with [_addedPrefix].
+  final bool allowAdd;
+
   @override
   State<_ChoicesSheet> createState() => _ChoicesSheetState();
 }
@@ -1018,6 +1462,9 @@ class _ChoicesSheet extends StatefulWidget {
 class _ChoicesSheetState extends State<_ChoicesSheet> {
   late final Set<String> _picked = widget.selected.toSet();
   final TextEditingController _query = TextEditingController();
+
+  /// Options added in this sheet, picked until unpicked.
+  final List<ChoiceOption> _added = [];
 
   @override
   void dispose() {
@@ -1033,7 +1480,13 @@ class _ChoicesSheetState extends State<_ChoicesSheet> {
       for (final option in widget.held)
         if (_picked.contains(option.id)) option,
     ];
-    final matches = _matching([...widget.options, ...held], query);
+    final added = [
+      for (final option in _added)
+        if (_picked.contains(option.id)) option,
+    ];
+    final all = [...widget.options, ...added, ...held];
+    final matches = _matching(all, query);
+    final exact = widget.allowAdd ? exactChoiceOption(all, query) : null;
     return BottomSheetInsets(
       child: ConstrainedBox(
         key: const Key('choices-sheet'),
@@ -1072,7 +1525,11 @@ class _ChoicesSheetState extends State<_ChoicesSheet> {
                   TextButton(
                     key: const Key('choices-sheet-done'),
                     onPressed: () => Navigator.pop(context, [
-                      for (final option in [...widget.options, ...widget.held])
+                      for (final option in [
+                        ...widget.options,
+                        ..._added,
+                        ...widget.held,
+                      ])
                         if (_picked.contains(option.id)) option.id,
                     ]),
                     child: Text(context.l10n.commonDone),
@@ -1086,7 +1543,9 @@ class _ChoicesSheetState extends State<_ChoicesSheet> {
                 child: FiTextInput(
                   key: const Key('choices-search'),
                   controller: _query,
-                  hint: context.l10n.themeSearchOptions(widget.options.length),
+                  hint: context.l10n.themeSearchOptions(
+                    widget.options.where((option) => !option.isNew).length,
+                  ),
                   prefixIcon: const Icon(FiIcons.search, size: 18),
                   onClear: query.isEmpty
                       ? null
@@ -1130,9 +1589,35 @@ class _ChoicesSheetState extends State<_ChoicesSheet> {
                                 style: const TextStyle(fontSize: 15),
                               ),
                             ),
+                            if (option.isNew) ...[
+                              const SizedBox(width: 6),
+                              const NewOptionTag(),
+                            ],
+                            if (exact?.id == option.id) ...[
+                              const SizedBox(width: 6),
+                              Tag.neutral(
+                                context.l10n.choiceExistingTag,
+                                key: const Key('choice-existing-tag'),
+                              ),
+                            ],
+                            const SizedBox(width: 8),
                           ],
                         ),
                       ),
+                    ),
+                  if (widget.allowAdd && query.isNotEmpty && exact == null)
+                    _AddRow(
+                      text: query,
+                      onTap: () => setState(() {
+                        final option = ChoiceOption(
+                          id: '$_addedPrefix$query',
+                          label: query,
+                          isNew: true,
+                        );
+                        _added.add(option);
+                        _picked.add(option.id);
+                        _query.clear();
+                      }),
                     ),
                 ],
               ),

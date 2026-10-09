@@ -770,6 +770,156 @@ final class FakeCollectionBridge implements CollectionBridge {
     return id;
   }
 
+  /// Every [saveRecordDraft] call, oldest first: (record id or null, values, pending options).
+  final List<(String?, List<RecordValueDto>, List<PendingOptionDto>)>
+  draftSaves = [];
+
+  /// Mirrors Rust's record save with pending options: each pending option reuses an active
+  /// option of its field with the same label ignoring case or becomes a new one, keys in values
+  /// are swapped for option ids, then the record is created or its fields updated one by one.
+  @override
+  Future<String> saveRecordDraft(
+    String collectionId,
+    String? recordId,
+    List<RecordValueDto> values,
+    List<PendingOptionDto> pendingOptions,
+  ) async {
+    draftSaves.add((recordId, values, pendingOptions));
+    if (recordId == null) _fail();
+    final ids = <String, String>{};
+    for (final option in pendingOptions) {
+      final field = schemas[collectionId]!.fields.firstWhere(
+        (item) => item.id == option.fieldId,
+      );
+      final match = field.enumOptions
+          .where(
+            (item) =>
+                !item.deleted &&
+                item.label.toLowerCase() == option.label.trim().toLowerCase(),
+          )
+          .firstOrNull;
+      ids[option.key] =
+          match?.id ??
+          await upsertEnumOption(
+            collectionId,
+            option.fieldId,
+            EnumOptionDto(
+              id: '',
+              label: option.label.trim(),
+              order: field.enumOptions.length,
+              deleted: false,
+            ),
+          );
+    }
+    String swap(String id) => ids[id] ?? id;
+    final resolved = [
+      for (final item in values)
+        RecordValueDto(
+          fieldId: item.fieldId,
+          value: FieldValueDto(
+            kind: item.value.kind,
+            integerValue: item.value.integerValue,
+            textValue: item.value.kind == FieldValueKindDto.enum_
+                ? swap(item.value.textValue ?? '')
+                : item.value.textValue,
+            booleanValue: item.value.booleanValue,
+            listValue: [for (final id in item.value.listValue) swap(id)],
+          ),
+        ),
+    ];
+    if (recordId == null) return createRecord(collectionId, resolved);
+    for (final item in resolved) {
+      await updateRecordField(recordId, collectionId, item.fieldId, item.value);
+    }
+    return recordId;
+  }
+
+  /// Every [mergeEnumOptions] call, oldest first: (field id, keep, merged).
+  final List<(String, String, List<String>)> merges = [];
+
+  /// When set, the next [mergeEnumOptions] throws it and changes nothing.
+  Object? nextMergeError;
+
+  @override
+  Future<void> mergeEnumOptions(
+    String collectionId,
+    String fieldId,
+    String keep,
+    List<String> merge,
+  ) async {
+    merges.add((fieldId, keep, List.of(merge)));
+    if (nextMergeError case final error?) {
+      nextMergeError = null;
+      throw error;
+    }
+    final schema = schemas[collectionId]!;
+    schemas[collectionId] = CollectionSchemaDto(
+      id: schema.id,
+      description: schema.description,
+      name: schema.name,
+      fields: [
+        for (final field in schema.fields)
+          if (field.id == fieldId)
+            _copyField(
+              field,
+              enumOptions: [
+                for (final option in field.enumOptions)
+                  if (merge.contains(option.id))
+                    EnumOptionDto(
+                      id: option.id,
+                      label: option.label,
+                      order: option.order,
+                      deleted: true,
+                      mergedInto: keep,
+                    )
+                  else
+                    option,
+              ],
+            )
+          else
+            field,
+      ],
+    );
+    final items = records[collectionId] ?? [];
+    for (final (index, record) in items.indexed) {
+      items[index] = RecordDto(
+        id: record.id,
+        collectionId: record.collectionId,
+        values: [
+          for (final item in record.values)
+            if (item.fieldId != fieldId)
+              item
+            else if (item.value.kind == FieldValueKindDto.enum_ &&
+                merge.contains(item.value.textValue))
+              RecordValueDto(
+                fieldId: fieldId,
+                value: FieldValueDto(
+                  kind: FieldValueKindDto.enum_,
+                  textValue: keep,
+                ),
+              )
+            else if (item.value.kind == FieldValueKindDto.enumSet)
+              RecordValueDto(
+                fieldId: fieldId,
+                value: FieldValueDto(
+                  kind: FieldValueKindDto.enumSet,
+                  listValue: {
+                    for (final id in item.value.listValue)
+                      merge.contains(id) ? keep : id,
+                  }.toList(),
+                ),
+              )
+            else
+              item,
+        ],
+        valid: record.valid,
+        diagnostics: record.diagnostics,
+        createdAtMs: record.createdAtMs,
+      );
+    }
+    changed(collectionId);
+  }
+
   /// Every single-field record update, oldest first: (record id, field id, value).
   final List<(String, String, FieldValueDto)> fieldUpdates = [];
 
@@ -785,13 +935,18 @@ final class FakeCollectionBridge implements CollectionBridge {
   )?
   draftIssues;
 
+  /// The pending options handed to each [validateRecordDraft], newest last.
+  final List<List<PendingOptionDto>> draftPendingOptions = [];
+
   @override
   Future<List<BridgeIssueDto>> validateRecordDraft(
     String collectionId,
     String? recordId,
-    List<RecordValueDto> values,
-  ) async {
+    List<RecordValueDto> values, {
+    List<PendingOptionDto> pendingOptions = const [],
+  }) async {
     draftValidations.add(values);
+    draftPendingOptions.add(pendingOptions);
     if (draftIssues case final issues?) {
       return issues(collectionId, recordId, values);
     }
@@ -1452,6 +1607,7 @@ FieldDefinitionDto _copyField(
   order: order ?? field.order,
   deleted: field.deleted,
   enumOptions: enumOptions ?? field.enumOptions,
+  allowOptionsFromRecords: field.allowOptionsFromRecords,
 );
 
 /// A test-only mirror of the core computed-field typing rules, covering the

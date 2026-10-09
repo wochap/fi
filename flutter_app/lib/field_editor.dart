@@ -5,7 +5,9 @@ import 'package:fi/exact_format.dart';
 import 'package:fi/field_registry.dart';
 import 'package:fi/help_button.dart';
 import 'package:fi/help_copy.dart';
+import 'package:fi/merge_options_sheet.dart';
 import 'package:fi/src/rust/api/models.dart';
+import 'package:fi/theme/action_sheet.dart';
 import 'package:fi/theme/confirm_dialog.dart';
 import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/theme/form_errors.dart';
@@ -324,6 +326,9 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
   late var required = existing?.required_ ?? false;
   late var multiline = existing?.display.multiline ?? false;
   late var slider = existing?.display.slider ?? false;
+
+  /// "Allow adding options from records", held until Save like every other setting.
+  late var allowAdding = existing?.allowOptionsFromRecords ?? false;
   late final sliderStep = TextEditingController(
     text: existing?.display.sliderStep?.toString() ?? '',
   );
@@ -680,6 +685,7 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
         deleted: false,
         // Options travel separately; the controller keeps the stored ones here.
         enumOptions: const [],
+        allowOptionsFromRecords: _isChoiceKind(kind) && allowAdding,
       );
       await controller.saveFieldWithOptions(
         dto,
@@ -853,6 +859,21 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
         ?_requiredWarning(),
         for (final chip in _chipsFor(kind))
           if (open.contains(chip)) ?_block(chip),
+        if (_isChoiceKind(kind))
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: FiSwitchTile(
+              key: const Key('allow-adding-options'),
+              contentPadding: EdgeInsets.zero,
+              value: allowAdding,
+              onChanged: (value) => setState(() => allowAdding = value),
+              title: Text(context.l10n.fieldEditorAllowAddingOptions),
+              subtitle: Text(
+                context.l10n.fieldEditorAllowAddingOptionsHelp,
+                style: TextStyle(fontSize: 12, color: Nocturne.muted(.55)),
+              ),
+            ),
+          ),
         if (issues.form.isNotEmpty)
           Padding(
             key: const Key('field-editor-errors'),
@@ -1263,12 +1284,228 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
   FieldDefinitionDto _slotField(String slot, String label) =>
       _draftField(slot, label, kind, scale, const []);
 
+  /// How many loaded records hold [optionId] in this field.
+  int _recordCount(String optionId) => controller.records
+      .where((record) => _holdsOption(record, optionId))
+      .length;
+
+  /// Whether the options shown differ from the stored ones (added, removed, renamed, moved).
+  bool get _optionsEdited {
+    final stored = [
+      ...?existing?.enumOptions.where((option) => !option.deleted),
+    ]..sort(_optionOrder);
+    if (stored.length != options.length) return true;
+    for (final (index, option) in options.indexed) {
+      if (stored[index].id != option.id ||
+          stored[index].label != option.label.text) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// The first group of two or more options sharing a label ignoring case, or null.
+  List<_DraftOption>? _duplicateLabel() {
+    final groups = <String, List<_DraftOption>>{};
+    for (final option in options) {
+      final label = option.label.text.trim().toLowerCase();
+      if (label.isEmpty || isTempOptionId(option.id)) continue;
+      groups.putIfAbsent(label, () => []).add(option);
+    }
+    return groups.values.where((group) => group.length > 1).firstOrNull;
+  }
+
+  /// The final active option [id] was merged into, following merge chains; null when [id] is
+  /// not a merged option or its chain ends nowhere active.
+  String? _mergeTarget(String id) {
+    final byId = {
+      for (final option in existing?.enumOptions ?? const <EnumOptionDto>[])
+        option.id: option,
+    };
+    final seen = <String>{};
+    var current = byId[id];
+    if (current == null || !current.deleted || current.mergedInto == null) {
+      return null;
+    }
+    while (current != null && current.deleted && seen.add(current.id)) {
+      final next = current.mergedInto;
+      current = next == null ? null : byId[next];
+    }
+    return current != null && !current.deleted ? current.id : null;
+  }
+
+  /// How many loaded records still hold an option that was merged into another.
+  int _recordsOnMergedOptions() {
+    final field = existing;
+    if (field == null) return 0;
+    return controller.records
+        .where(
+          (record) => heldOptions(
+            record,
+            field.id,
+          ).any((id) => _mergeTarget(id) != null),
+        )
+        .length;
+  }
+
+  /// Merges the options records still hold into their final targets, one merge per target.
+  Future<void> _moveMerged() async {
+    final field = existing;
+    if (field == null) return;
+    final byTarget = <String, Set<String>>{};
+    for (final record in controller.records) {
+      for (final id in heldOptions(record, field.id)) {
+        final target = _mergeTarget(id);
+        if (target != null) byTarget.putIfAbsent(target, () => {}).add(id);
+      }
+    }
+    try {
+      for (final MapEntry(key: keep, value: merge) in byTarget.entries) {
+        await controller.mergeEnumOptions(field.id, keep, merge.toList());
+      }
+    } catch (failure) {
+      if (mounted) setState(() => issues = FormIssues.from(failure));
+    }
+  }
+
+  /// Opens the merge sheet with [checked] pre-checked and [keep] kept, or asks to save the
+  /// field first while it is new or has unsaved option edits.
+  Future<void> _openMerge(Set<String> checked, String keep) async {
+    final field = existing;
+    if (field == null || _optionsEdited) {
+      await showDialog<void>(
+        context: context,
+        builder: (dialog) => AlertDialog(
+          key: const Key('merge-save-first'),
+          title: Text(context.l10n.mergeOptionsTitle),
+          content: Text(context.l10n.mergeOptionsSaveFirst),
+          actions: [
+            TextButton(
+              key: const Key('merge-save-first-ok'),
+              onPressed: () => Navigator.pop(dialog),
+              child: Text(context.l10n.commonOk),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+    await showMergeOptionsSheet(
+      context,
+      controller: controller,
+      field: field,
+      checked: checked,
+      keep: keep,
+    );
+  }
+
+  /// The banner's Merge: the options sharing the label, keeping the one with the most records,
+  /// the lowest order breaking ties.
+  void _mergeDuplicates(List<_DraftOption> group) {
+    var keep = group.first;
+    for (final option in group.skip(1)) {
+      if (_recordCount(option.id) > _recordCount(keep.id)) keep = option;
+    }
+    _openMerge({for (final option in group) option.id}, keep.id);
+  }
+
+  /// The ⋯ at the end of an option row: Merge… and Delete…, a menu at 720px and wider and an
+  /// action sheet below.
+  Widget _optionMenu(_DraftOption option) {
+    final l = context.l10n;
+    void run(String action) => action == 'merge'
+        ? _openMerge({option.id}, option.id)
+        : _removeOption(option);
+    final key = ValueKey('option-menu-${option.id}');
+    final tooltip = l.fieldEditorOptionActions(option.label.text);
+    if (Nocturne.isPhone(context)) {
+      return FiIconButton(
+        key: key,
+        icon: FiIcons.moreHorizontal,
+        tooltip: tooltip,
+        color: Nocturne.muted(.55),
+        onPressed: () async {
+          final chosen = await showActionSheet<String>(
+            context,
+            icon: FiIcons.moreHorizontal,
+            title: option.label.text,
+            groups: [
+              ActionSheetGroup([
+                ActionSheetItem(
+                  value: 'merge',
+                  label: l.fieldEditorMergeEllipsis,
+                  icon: FiIcons.merge,
+                ),
+                ActionSheetItem(
+                  value: 'delete',
+                  label: l.fieldEditorDeleteEllipsis,
+                  icon: FiIcons.delete,
+                ),
+              ]),
+            ],
+          );
+          if (chosen != null && mounted) run(chosen);
+        },
+      );
+    }
+    return PopupMenuButton<String>(
+      key: key,
+      tooltip: tooltip,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 140),
+      style: const ButtonStyle(
+        fixedSize: WidgetStatePropertyAll(Size.square(28)),
+        minimumSize: WidgetStatePropertyAll(Size.square(28)),
+        padding: WidgetStatePropertyAll(EdgeInsets.zero),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+      icon: Icon(FiIcons.moreHorizontal, size: 16, color: Nocturne.muted(.55)),
+      onSelected: run,
+      itemBuilder: (_) => [
+        PopupMenuItem(
+          key: const Key('option-menu-merge'),
+          value: 'merge',
+          child: Text(l.fieldEditorMergeEllipsis),
+        ),
+        PopupMenuItem(
+          key: const Key('option-menu-delete'),
+          value: 'delete',
+          child: Text(l.fieldEditorDeleteEllipsis),
+        ),
+      ],
+    );
+  }
+
+  Widget _optionsBanner({
+    required Key key,
+    required String text,
+    required String action,
+    required Key actionKey,
+    required VoidCallback onPressed,
+  }) => Container(
+    key: key,
+    margin: const EdgeInsets.only(bottom: 8),
+    padding: const EdgeInsets.fromLTRB(12, 4, 4, 4),
+    decoration: BoxDecoration(
+      color: Nocturne.accent900.withValues(alpha: .4),
+      borderRadius: BorderRadius.circular(Nocturne.radius),
+    ),
+    child: Row(
+      children: [
+        Expanded(child: Text(text, style: const TextStyle(fontSize: 13))),
+        TextButton(key: actionKey, onPressed: onPressed, child: Text(action)),
+      ],
+    ),
+  );
+
   /// The Options section of a Choice field: one row per option in the order it will be saved,
   /// each with a drag handle, its label, and a delete action; then the note on deleted options.
   List<Widget> _optionsEditor() {
     final removed = existing?.enumOptions.where((option) => option.deleted);
     final example =
         removed?.lastOrNull?.label ?? context.l10n.fieldEditorOptionFallback;
+    final duplicate = _duplicateLabel();
+    final stillMerged = _recordsOnMergedOptions();
     return [
       Padding(
         padding: const EdgeInsets.only(top: 16, bottom: 6),
@@ -1276,6 +1513,25 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
           context.l10n.fieldEditorOptionsCount(options.length),
         ),
       ),
+      if (duplicate != null)
+        _optionsBanner(
+          key: const Key('duplicate-options-banner'),
+          text: context.l10n.fieldEditorDuplicateBanner(
+            duplicate.length,
+            duplicate.first.label.text,
+          ),
+          action: context.l10n.fieldEditorMerge,
+          actionKey: const Key('duplicate-options-merge'),
+          onPressed: () => _mergeDuplicates(duplicate),
+        ),
+      if (stillMerged > 0)
+        _optionsBanner(
+          key: const Key('merged-options-banner'),
+          text: context.l10n.fieldEditorMergedStill(stillMerged),
+          action: context.l10n.fieldEditorMoveThem,
+          actionKey: const Key('merged-options-move'),
+          onPressed: _moveMerged,
+        ),
       ReorderableListView(
         key: const Key('field-options'),
         shrinkWrap: true,
@@ -1318,13 +1574,7 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
                       onChanged: (_) => setState(() {}),
                     ),
                   ),
-                  FiIconButton(
-                    key: ValueKey('remove-option-${option.id}'),
-                    tooltip: context.l10n.fieldEditorDeleteOption,
-                    icon: FiIcons.delete,
-                    color: Nocturne.muted(.55),
-                    onPressed: () => _removeOption(option),
-                  ),
+                  _optionMenu(option),
                 ],
               ),
             ),

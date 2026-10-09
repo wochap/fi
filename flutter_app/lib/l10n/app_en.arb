@@ -4832,5 +4832,153 @@
         "type": "int"
       }
     }
+  },
+  "fieldEditorAllowAddingOptions": "Allow adding options from records",
+  "@fieldEditorAllowAddingOptions": {
+    "description": "Switch on Choice and Choices fields"
+  },
+  "fieldEditorAllowAddingOptionsHelp": "New options are added to this field when the record is saved.",
+  "@fieldEditorAllowAddingOptionsHelp": {
+    "description": "Helper under the allow-adding switch"
+  },
+  "fieldEditorOptionActions": "Actions for “{label}”",
+  "@fieldEditorOptionActions": {
+    "description": "Tooltip of an option row's ⋯ button",
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "fieldEditorMergeEllipsis": "Merge…",
+  "@fieldEditorMergeEllipsis": {
+    "description": "Option row menu item"
+  },
+  "fieldEditorDeleteEllipsis": "Delete…",
+  "@fieldEditorDeleteEllipsis": {
+    "description": "Option row menu item"
+  },
+  "fieldEditorDuplicateBanner": "{count} options are named “{label}”. Merge them?",
+  "@fieldEditorDuplicateBanner": {
+    "description": "Banner when active options share a label ignoring case",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "fieldEditorMerge": "Merge",
+  "@fieldEditorMerge": {
+    "description": "Button that merges options"
+  },
+  "fieldEditorMergedStill": "{count, plural, =1{1 record still uses merged options.} other{{count} records still use merged options.}}",
+  "@fieldEditorMergedStill": {
+    "description": "Banner when records hold a merged-away option",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "fieldEditorMoveThem": "Move them",
+  "@fieldEditorMoveThem": {
+    "description": "Button moving records off merged options"
+  },
+  "mergeOptionsTitle": "Merge options",
+  "@mergeOptionsTitle": {
+    "description": "Merge sheet title"
+  },
+  "mergeOptionsSubtitle": "in {field} · {kind}",
+  "@mergeOptionsSubtitle": {
+    "description": "Merge sheet subtitle",
+    "placeholders": {
+      "field": {
+        "type": "String"
+      },
+      "kind": {
+        "type": "String"
+      }
+    }
+  },
+  "mergeOptionsToMerge": "Options to merge",
+  "@mergeOptionsToMerge": {
+    "description": "Merge sheet section"
+  },
+  "mergeOptionsRecords": "{count, plural, =1{1 record} other{{count} records}}",
+  "@mergeOptionsRecords": {
+    "description": "Records holding an option",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "mergeOptionsKeep": "Keep",
+  "@mergeOptionsKeep": {
+    "description": "Merge sheet section"
+  },
+  "mergeOptionsLabelStays": "Its label stays",
+  "@mergeOptionsLabelStays": {
+    "description": "Under the kept option"
+  },
+  "mergeOptionsWillUse": "{count, plural, =1{1 record will use “{label}”} other{{count} records will use “{label}”}}",
+  "@mergeOptionsWillUse": {
+    "description": "Merge result line",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "mergeOptionsHadBoth": "{count, plural, =1{1 record had both. It keeps one “{label}”.} other{{count} records had both. Each keeps one “{label}”.}}",
+  "@mergeOptionsHadBoth": {
+    "description": "Choices merge: records holding several merged options",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "mergeOptionsCantUndo": "This can't be undone.",
+  "@mergeOptionsCantUndo": {
+    "description": "Merge sheet warning"
+  },
+  "mergeOptionsSaveFirst": "Save the field first. Options with unsaved changes can't be merged.",
+  "@mergeOptionsSaveFirst": {
+    "description": "Merge sheet when the editor holds unsaved option edits"
+  },
+  "choiceAddOption": "Add “{label}”",
+  "@choiceAddOption": {
+    "description": "Last row of a picker when no option matches",
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "choiceAddChip": "Add",
+  "@choiceAddChip": {
+    "description": "Trailing chip that adds an option"
+  },
+  "choiceNewTag": "New",
+  "@choiceNewTag": {
+    "description": "Tag on an option added from the record form"
+  },
+  "choiceExistingTag": "existing",
+  "@choiceExistingTag": {
+    "description": "Tag on the option matching the typed text"
+  },
+  "choiceNewOptionHint": "New option",
+  "@choiceNewOptionHint": {
+    "description": "Hint of the inline add input"
   }
 }

@@ -2744,6 +2744,29 @@ class _RecordEditorFormState extends State<_RecordEditorForm> {
   /// The values the sheet opened with, to tell whether closing loses changes.
   late final Map<String, FieldValueDto> _opened;
 
+  /// Options added from this form, created only when the record is saved. A value picks one by
+  /// its key; one that is no longer picked is dropped.
+  final _pending = <PendingOptionDto>[];
+  var _pendingSerial = 0;
+
+  /// Adds an option labelled [label] to [fieldId] and returns the key a value picks it by.
+  String _addPending(String fieldId, String label) {
+    final key = 'pending:${++_pendingSerial}';
+    _pending.add(PendingOptionDto(key: key, fieldId: fieldId, label: label));
+    return key;
+  }
+
+  /// Drops pending options that no value picks any more.
+  void _dropUnpicked() {
+    bool picked(PendingOptionDto option) {
+      final value = values[option.fieldId];
+      return value?.textValue == option.key ||
+          (value?.listValue.contains(option.key) ?? false);
+    }
+
+    _pending.removeWhere((option) => !picked(option));
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -2952,8 +2975,15 @@ class _RecordEditorFormState extends State<_RecordEditorForm> {
     _voice?.fieldEdited(fieldId);
     final wasNeeded = _stillNeeded(fieldId);
     values[fieldId] = value;
+    final pendingBefore = _pending.length;
+    _dropUnpicked();
     final wasDefaulted = _defaulted.remove(fieldId);
-    if (wasNeeded != _stillNeeded(fieldId) || wasDefaulted) setState(() {});
+    if (wasNeeded != _stillNeeded(fieldId) ||
+        wasDefaulted ||
+        _pending.length != pendingBefore ||
+        _pending.any((option) => option.fieldId == fieldId)) {
+      setState(() {});
+    }
     if (!attempted) return;
     _debounce?.cancel();
     _debounce = Timer(_draftValidationDelay, () => unawaited(_validate()));
@@ -2967,6 +2997,7 @@ class _RecordEditorFormState extends State<_RecordEditorForm> {
         await widget.controller.validateRecordDraft(
           _submitted,
           recordId: widget.existing?.id,
+          pendingOptions: List.of(_pending),
         ),
       );
     } catch (failure) {
@@ -2995,9 +3026,16 @@ class _RecordEditorFormState extends State<_RecordEditorForm> {
     try {
       final existing = widget.existing;
       if (existing == null) {
-        await widget.controller.createRecord(_submitted);
+        await widget.controller.createRecord(
+          _submitted,
+          pendingOptions: List.of(_pending),
+        );
       } else if (_submitted.isNotEmpty) {
-        await widget.controller.updateRecord(existing.id, _submitted);
+        await widget.controller.updateRecord(
+          existing.id,
+          _submitted,
+          pendingOptions: List.of(_pending),
+        );
       }
       if (mounted) Navigator.pop(context);
     } catch (failure) {
@@ -3201,6 +3239,11 @@ class _RecordEditorFormState extends State<_RecordEditorForm> {
                           quickFill: true,
                           showLabel: false,
                           dictation: _dictationSlot(field),
+                          pendingOptions: [
+                            for (final option in _pending)
+                              if (option.fieldId == field.id) option,
+                          ],
+                          onAddOption: (label) => _addPending(field.id, label),
                         ),
                       ),
                     ),

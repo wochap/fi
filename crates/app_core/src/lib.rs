@@ -16,6 +16,7 @@ pub mod hlc;
 pub mod identity;
 pub mod import_export;
 pub mod models;
+pub mod option_edits;
 pub mod pairing;
 pub mod pairing_manager;
 pub mod pairing_transport;
@@ -81,6 +82,9 @@ pub use identity::{
 pub use import_export::{
     ENVELOPE_FORMAT, ENVELOPE_VERSION, Envelope, ExportedCollection, ExportedRecord, ImportAbort,
     ImportOutcome, ImportedCollection, prepare_import,
+};
+pub use option_edits::{
+    DraftTarget, DraftValue, PENDING_OPTION_PREFIX, PendingOption, ResolvedDraft, resolve_draft,
 };
 pub use pairing::{
     PAIRING_ALPN, PairingCandidate, PairingDecision, PairingDecisionKind, PairingError,

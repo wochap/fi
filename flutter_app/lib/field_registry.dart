@@ -100,6 +100,11 @@ final class FieldRendererRegistry {
   ///
   /// [dictation] puts the field dictation mic in a Text input's trailing slot (after the clear
   /// mark), with its listening or processing row over the value; other kinds ignore it.
+  ///
+  /// [onAddOption] lets a Choice or Choices record value add an option to the field (only when
+  /// the field allows it): it receives the label and returns the draft-local key the value picks
+  /// it by. [pendingOptions] are the options already added for this field, shown after the
+  /// stored ones with a "New" tag.
   Widget editor(
     FieldDefinitionDto field,
     FieldValueDto? initial,
@@ -110,6 +115,8 @@ final class FieldRendererRegistry {
     bool quickFill = false,
     bool showLabel = true,
     TextDictationSlot? dictation,
+    List<PendingOptionDto> pendingOptions = const [],
+    AddChoiceOption? onAddOption,
     Key? key,
   }) => _FieldEditor(
     key: key ?? ValueKey(field.id),
@@ -122,6 +129,8 @@ final class FieldRendererRegistry {
     quickFill: quickFill,
     showLabel: showLabel,
     dictation: field.fieldType.kind == FieldTypeKindDto.text ? dictation : null,
+    pendingOptions: pendingOptions,
+    onAddOption: field.allowOptionsFromRecords ? onAddOption : null,
   );
 
   /// A stored value as text. [human] reads dates as `Sep 22, 2026 · 14:05` for tables and lists,
@@ -218,6 +227,8 @@ final class _FieldEditor extends StatefulWidget {
     this.quickFill = false,
     this.showLabel = true,
     this.dictation,
+    this.pendingOptions = const [],
+    this.onAddOption,
   });
   final FieldDefinitionDto field;
   final FieldValueDto? initial;
@@ -228,6 +239,8 @@ final class _FieldEditor extends StatefulWidget {
   final bool quickFill;
   final bool showLabel;
   final TextDictationSlot? dictation;
+  final List<PendingOptionDto> pendingOptions;
+  final AddChoiceOption? onAddOption;
   @override
   State<_FieldEditor> createState() => _FieldEditorState();
 }
@@ -291,6 +304,16 @@ final class _FieldEditorState extends State<_FieldEditor> {
       _ => value?.integerValue?.toString() ?? '',
     };
   }
+
+  /// The stored active options, then the options added from the record form for this field.
+  List<ChoiceOption> _choiceOptions(List<EnumOptionDto> active) => [
+    for (final option in active)
+      ChoiceOption(id: option.id, label: option.label),
+    if (widget.onAddOption != null)
+      for (final pending in widget.pendingOptions)
+        if (pending.fieldId == widget.field.id)
+          ChoiceOption(id: pending.key, label: pending.label, isNew: true),
+  ];
 
   @override
   void dispose() {
@@ -460,10 +483,8 @@ final class _FieldEditorState extends State<_FieldEditor> {
         required: _required,
         errors: widget.errors,
         allowClear: _canClear,
-        options: [
-          for (final option in active)
-            ChoiceOption(id: option.id, label: option.label),
-        ],
+        options: _choiceOptions(active),
+        onAdd: widget.onAddOption,
         value: choice,
         heldLabel: FieldRendererRegistry.optionLabel(field, choice),
         onChanged: (value) {
@@ -487,10 +508,8 @@ final class _FieldEditorState extends State<_FieldEditor> {
         required: _required,
         errors: widget.errors,
         allowClear: _canClear,
-        options: [
-          for (final option in active)
-            ChoiceOption(id: option.id, label: option.label),
-        ],
+        options: _choiceOptions(active),
+        onAdd: widget.onAddOption,
         value: choices,
         heldLabels: {
           for (final id in choices)

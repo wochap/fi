@@ -1,12 +1,15 @@
 use std::{collections::BTreeMap, str::FromStr};
 
-use app_core::{CollectionSchemaId, FieldId, RecordId};
+use app_core::{
+    CollectionSchemaId, DraftValue, FieldId, PENDING_OPTION_PREFIX, PendingOption, RecordId,
+};
 
 use crate::api::{
     lifecycle::core,
     models::{
         BootstrapDto, BridgeError, BridgeIssueDto, CollectionDto, CollectionSchemaDto,
-        FieldDefinitionDto, FieldValueDto, ImportOutcomeDto, RecordDto,
+        FieldDefinitionDto, FieldValueDto, FieldValueKindDto, ImportOutcomeDto, PendingOptionDto,
+        RecordDto,
     },
 };
 
@@ -203,17 +206,72 @@ pub async fn create_record(
 /// Dry-run record validation with create (no `record_id`) or merged-update
 /// semantics. Returns every issue; empty when the draft is valid. Commits
 /// nothing. Errs only for non-validation failures.
+///
+/// `pending_options` are options the form added; values pick them by key in place of an option
+/// id, and their own problems are reported on their fields.
 pub async fn validate_record_draft(
     collection_id: String,
     record_id: Option<String>,
     values: Vec<crate::api::models::RecordValueDto>,
+    pending_options: Vec<PendingOptionDto>,
 ) -> Result<Vec<BridgeIssueDto>, BridgeError> {
     let record_id = record_id.as_deref().map(parse_record).transpose()?;
-    let values = parse_values(values)?;
+    let values = parse_draft_values(values)?;
+    let pending_options = parse_pending(pending_options)?;
     core()
         .await?
-        .validate_record_draft(parse_collection(&collection_id)?, record_id, values)
+        .validate_record_draft_with_options(
+            parse_collection(&collection_id)?,
+            record_id,
+            values,
+            pending_options,
+        )
         .map(|issues| issues.into_iter().map(Into::into).collect())
+        .map_err(Into::into)
+}
+/// Saves a new record (no `record_id`) or the given changed fields of an existing one, together
+/// with the options the form added, in one change. Returns the record id.
+pub async fn save_record_draft(
+    collection_id: String,
+    record_id: Option<String>,
+    values: Vec<crate::api::models::RecordValueDto>,
+    pending_options: Vec<PendingOptionDto>,
+) -> Result<String, BridgeError> {
+    let record_id = record_id.as_deref().map(parse_record).transpose()?;
+    let values = parse_draft_values(values)?;
+    let pending_options = parse_pending(pending_options)?;
+    core()
+        .await?
+        .save_record_draft(
+            parse_collection(&collection_id)?,
+            record_id,
+            values,
+            pending_options,
+        )
+        .await
+        .map(|id| id.to_string())
+        .map_err(Into::into)
+}
+/// Merges the `merge` options into `keep` on one Choice or Choices field.
+pub async fn merge_enum_options(
+    collection_id: String,
+    field_id: String,
+    keep: String,
+    merge: Vec<String>,
+) -> Result<(), BridgeError> {
+    let merge = merge
+        .iter()
+        .map(|id| id.parse().map_err(core_error))
+        .collect::<Result<Vec<_>, _>>()?;
+    core()
+        .await?
+        .merge_enum_options(
+            parse_collection(&collection_id)?,
+            parse_field(&field_id)?,
+            keep.parse().map_err(core_error)?,
+            merge,
+        )
+        .await
         .map_err(Into::into)
 }
 pub async fn update_record_field(
@@ -308,6 +366,49 @@ fn parse_values(
         })
         .collect()
 }
+/// Like [`parse_values`], but option ids starting with `pending:` pick pending options.
+fn parse_draft_values(
+    values: Vec<crate::api::models::RecordValueDto>,
+) -> Result<BTreeMap<FieldId, DraftValue>, BridgeError> {
+    let pending = |id: &str| id.starts_with(PENDING_OPTION_PREFIX);
+    values
+        .into_iter()
+        .map(|item| {
+            let field = parse_field(&item.field_id)?;
+            let value = item.value;
+            let draft = match value.kind {
+                FieldValueKindDto::Enum if value.text_value.as_deref().is_some_and(pending) => {
+                    DraftValue::PendingChoice(value.text_value.unwrap_or_default())
+                }
+                FieldValueKindDto::EnumSet if value.list_value.iter().any(|id| pending(id)) => {
+                    let (keys, ids): (Vec<_>, Vec<_>) =
+                        value.list_value.into_iter().partition(|id| pending(id));
+                    DraftValue::Choices {
+                        options: ids
+                            .iter()
+                            .map(|id| id.parse().map_err(core_error))
+                            .collect::<Result<_, _>>()?,
+                        pending: keys,
+                    }
+                }
+                _ => DraftValue::Value(FieldValueDto::into_core(value)?),
+            };
+            Ok((field, draft))
+        })
+        .collect()
+}
+fn parse_pending(values: Vec<PendingOptionDto>) -> Result<Vec<PendingOption>, BridgeError> {
+    values
+        .into_iter()
+        .map(|item| {
+            Ok(PendingOption {
+                key: item.key,
+                field_id: parse_field(&item.field_id)?,
+                label: item.label,
+            })
+        })
+        .collect()
+}
 fn parse_records(values: &[String]) -> Result<Vec<RecordId>, BridgeError> {
     values.iter().map(|value| parse_record(value)).collect()
 }
@@ -323,4 +424,60 @@ fn parse_record(value: &str) -> Result<RecordId, BridgeError> {
 }
 fn core_error(error: app_core::DomainError) -> BridgeError {
     BridgeError::from(app_core::AppError::from(error))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::api::models::RecordValueDto;
+
+    fn value(kind: FieldValueKindDto, text: Option<&str>, list: &[&str]) -> FieldValueDto {
+        FieldValueDto {
+            kind,
+            integer_value: None,
+            text_value: text.map(Into::into),
+            boolean_value: None,
+            list_value: list.iter().map(|item| (*item).to_owned()).collect(),
+        }
+    }
+
+    #[test]
+    fn draft_values_split_pending_keys_from_option_ids() {
+        let (choice, choices, plain) = (FieldId::new(), FieldId::new(), FieldId::new());
+        let stored = app_core::EnumOptionId::new();
+        let parsed = parse_draft_values(vec![
+            RecordValueDto {
+                field_id: choice.to_string(),
+                value: value(FieldValueKindDto::Enum, Some("pending:1"), &[]),
+            },
+            RecordValueDto {
+                field_id: choices.to_string(),
+                value: value(
+                    FieldValueKindDto::EnumSet,
+                    None,
+                    &[&stored.to_string(), "pending:2"],
+                ),
+            },
+            RecordValueDto {
+                field_id: plain.to_string(),
+                value: value(FieldValueKindDto::Enum, Some(&stored.to_string()), &[]),
+            },
+        ])
+        .unwrap();
+        assert_eq!(
+            parsed[&choice],
+            DraftValue::PendingChoice("pending:1".into())
+        );
+        assert_eq!(
+            parsed[&choices],
+            DraftValue::Choices {
+                options: vec![stored],
+                pending: vec!["pending:2".into()],
+            }
+        );
+        assert_eq!(
+            parsed[&plain],
+            DraftValue::Value(app_core::FieldValue::Enum(stored))
+        );
+    }
 }

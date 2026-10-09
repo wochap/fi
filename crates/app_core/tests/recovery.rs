@@ -125,6 +125,7 @@ async fn wait_converged(a: &AppCore, b: &AppCore, collection: app_core::Collecti
 }
 fn field(name: &str, order: i64) -> FieldDefinition {
     FieldDefinition {
+        allow_options_from_records: false,
         id: FieldId::new(),
         name: name.into(),
         field_type: FieldType::Text,

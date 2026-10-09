@@ -1800,6 +1800,68 @@ impl AppCore {
         .await?;
         Ok(id)
     }
+    /// Saves one record (new when `record_id` is `None`, else only the given fields of an existing
+    /// record) together with options the record form added, in one change. Returns the record id.
+    pub async fn save_record_draft(
+        &self,
+        collection_id: CollectionSchemaId,
+        record_id: Option<RecordId>,
+        values: std::collections::BTreeMap<FieldId, crate::DraftValue>,
+        pending_options: Vec<crate::PendingOption>,
+    ) -> Result<RecordId> {
+        let record = match record_id {
+            Some(id) => crate::DraftTarget::Existing { id, values },
+            None => crate::DraftTarget::New {
+                id: RecordId::new(),
+                values,
+            },
+        };
+        let id = record.record_id();
+        let kinds = if pending_options.is_empty() {
+            vec![DomainKind::Records]
+        } else {
+            vec![DomainKind::Schemas, DomainKind::Records]
+        };
+        self.generic(
+            GenericCommand::SaveRecordDraft {
+                collection_id,
+                record,
+                pending_options,
+                plan: None,
+            },
+            kinds,
+            vec![collection_id],
+        )
+        .await?;
+        Ok(id)
+    }
+    /// Merges `merge` into `keep` on one Choice or Choices field.
+    pub async fn merge_enum_options(
+        &self,
+        collection_id: CollectionSchemaId,
+        field_id: FieldId,
+        keep: EnumOptionId,
+        merge: Vec<EnumOptionId>,
+    ) -> Result<()> {
+        self.generic(
+            GenericCommand::MergeEnumOptions {
+                collection_id,
+                field_id,
+                keep,
+                merge,
+                plan: None,
+            },
+            vec![
+                DomainKind::Schemas,
+                DomainKind::Records,
+                DomainKind::ComputedFields,
+                DomainKind::Queries,
+                DomainKind::Widgets,
+            ],
+            vec![collection_id],
+        )
+        .await
+    }
     pub async fn update_record_field(
         &self,
         record_id: RecordId,
@@ -2301,8 +2363,27 @@ impl AppCore {
         record_id: Option<RecordId>,
         values: std::collections::BTreeMap<FieldId, FieldValue>,
     ) -> Result<Vec<crate::ValidationIssue>> {
+        self.validate_record_draft_with_options(
+            collection_id,
+            record_id,
+            values
+                .into_iter()
+                .map(|(id, value)| (id, crate::DraftValue::Value(value)))
+                .collect(),
+            Vec::new(),
+        )
+    }
+    /// [`Self::validate_record_draft`] with options the record form added; values may pick them
+    /// by key. Problems with the pending options are reported on their fields.
+    pub fn validate_record_draft_with_options(
+        &self,
+        collection_id: CollectionSchemaId,
+        record_id: Option<RecordId>,
+        values: std::collections::BTreeMap<FieldId, crate::DraftValue>,
+        pending_options: Vec<crate::PendingOption>,
+    ) -> Result<Vec<crate::ValidationIssue>> {
         ensure_query_ready(self.lifecycle_state())?;
-        let schema = self
+        let stored = self
             .read_model
             .schema(collection_id)?
             .filter(|schema| !schema.deleted)
@@ -2310,6 +2391,26 @@ impl AppCore {
                 kind: "collection",
                 id: collection_id.to_string(),
             })?;
+        // Pending options count as active options of their fields; their own problems are
+        // reported on those fields.
+        let crate::ResolvedDraft {
+            schema,
+            values,
+            issues: pending_issues,
+            ..
+        } = crate::resolve_draft(&stored, &values, &pending_options);
+        let mut issues = self.validate_resolved_draft(&schema, collection_id, record_id, values)?;
+        issues.extend(pending_issues);
+        Ok(issues)
+    }
+    fn validate_resolved_draft(
+        &self,
+        schema: &CollectionSchema,
+        collection_id: CollectionSchemaId,
+        record_id: Option<RecordId>,
+        values: std::collections::BTreeMap<FieldId, FieldValue>,
+    ) -> Result<Vec<crate::ValidationIssue>> {
+        let schema = schema.clone();
         let mut record = GenericRecord {
             id: record_id.unwrap_or_default(),
             collection_id,
@@ -3427,6 +3528,8 @@ fn command_name(command: &GenericCommand) -> &'static str {
         GenericCommand::RemoveWidget { .. } => "remove_widget",
         GenericCommand::ReorderWidgets { .. } => "reorder_widgets",
         GenericCommand::Batch(_) => "batch",
+        GenericCommand::SaveRecordDraft { .. } => "save_record_draft",
+        GenericCommand::MergeEnumOptions { .. } => "merge_enum_options",
     }
 }
 

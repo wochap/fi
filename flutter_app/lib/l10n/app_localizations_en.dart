@@ -3566,4 +3566,119 @@ class AppLocalizationsEn extends AppLocalizations {
   String recordsMoreTags(int count) {
     return '+$count';
   }
+
+  @override
+  String get fieldEditorAllowAddingOptions =>
+      'Allow adding options from records';
+
+  @override
+  String get fieldEditorAllowAddingOptionsHelp =>
+      'New options are added to this field when the record is saved.';
+
+  @override
+  String fieldEditorOptionActions(String label) {
+    return 'Actions for “$label”';
+  }
+
+  @override
+  String get fieldEditorMergeEllipsis => 'Merge…';
+
+  @override
+  String get fieldEditorDeleteEllipsis => 'Delete…';
+
+  @override
+  String fieldEditorDuplicateBanner(int count, String label) {
+    return '$count options are named “$label”. Merge them?';
+  }
+
+  @override
+  String get fieldEditorMerge => 'Merge';
+
+  @override
+  String fieldEditorMergedStill(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count records still use merged options.',
+      one: '1 record still uses merged options.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get fieldEditorMoveThem => 'Move them';
+
+  @override
+  String get mergeOptionsTitle => 'Merge options';
+
+  @override
+  String mergeOptionsSubtitle(String field, String kind) {
+    return 'in $field · $kind';
+  }
+
+  @override
+  String get mergeOptionsToMerge => 'Options to merge';
+
+  @override
+  String mergeOptionsRecords(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count records',
+      one: '1 record',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get mergeOptionsKeep => 'Keep';
+
+  @override
+  String get mergeOptionsLabelStays => 'Its label stays';
+
+  @override
+  String mergeOptionsWillUse(int count, String label) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count records will use “$label”',
+      one: '1 record will use “$label”',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String mergeOptionsHadBoth(int count, String label) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count records had both. Each keeps one “$label”.',
+      one: '1 record had both. It keeps one “$label”.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get mergeOptionsCantUndo => 'This can\'t be undone.';
+
+  @override
+  String get mergeOptionsSaveFirst =>
+      'Save the field first. Options with unsaved changes can\'t be merged.';
+
+  @override
+  String choiceAddOption(String label) {
+    return 'Add “$label”';
+  }
+
+  @override
+  String get choiceAddChip => 'Add';
+
+  @override
+  String get choiceNewTag => 'New';
+
+  @override
+  String get choiceExistingTag => 'existing';
+
+  @override
+  String get choiceNewOptionHint => 'New option';
 }

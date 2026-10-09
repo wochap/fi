@@ -208,6 +208,7 @@ FieldDefinitionDto _fieldWith(
   order: field.order,
   deleted: field.deleted,
   enumOptions: enumOptions,
+  allowOptionsFromRecords: field.allowOptionsFromRecords,
 );
 
 /// What a collection holds, as shown before deleting it.
@@ -738,32 +739,68 @@ final class CollectionsController extends ChangeNotifier {
     await refresh();
   }
 
-  Future<void> createRecord(List<RecordValueDto> values) async {
-    await bridge.createRecord(selectedCollectionId!, values);
+  /// Saves a new record, with the options the form added ([pendingOptions]), in one Rust
+  /// command.
+  Future<void> createRecord(
+    List<RecordValueDto> values, {
+    List<PendingOptionDto> pendingOptions = const [],
+  }) async {
+    await bridge.saveRecordDraft(
+      selectedCollectionId!,
+      null,
+      values,
+      pendingOptions,
+    );
     await refresh();
   }
 
+  /// Saves the changed [values] of an existing record, with the options the form added, in one
+  /// Rust command.
   Future<void> updateRecord(
     String recordId,
-    List<RecordValueDto> values,
-  ) async {
-    for (final value in values) {
-      await bridge.updateRecordField(
-        recordId,
-        selectedCollectionId!,
-        value.fieldId,
-        value.value,
-      );
-    }
+    List<RecordValueDto> values, {
+    List<PendingOptionDto> pendingOptions = const [],
+  }) async {
+    await bridge.saveRecordDraft(
+      selectedCollectionId!,
+      recordId,
+      values,
+      pendingOptions,
+    );
     await refresh();
   }
 
   /// Dry-run record validation in Rust with the same rules as create (no [recordId]) or update.
-  /// Commits nothing; returns every issue, empty when the draft is valid.
+  /// Commits nothing; returns every issue, empty when the draft is valid. [pendingOptions] are
+  /// options the form added, picked by key in [values].
   Future<List<BridgeIssueDto>> validateRecordDraft(
     List<RecordValueDto> values, {
     String? recordId,
-  }) => bridge.validateRecordDraft(selectedCollectionId!, recordId, values);
+    List<PendingOptionDto> pendingOptions = const [],
+  }) => bridge.validateRecordDraft(
+    selectedCollectionId!,
+    recordId,
+    values,
+    pendingOptions: pendingOptions,
+  );
+
+  /// Merges [merge] into [keep] on [fieldId], then reloads the schema and records.
+  Future<void> mergeEnumOptions(
+    String fieldId,
+    String keep,
+    List<String> merge,
+  ) async {
+    try {
+      await bridge.mergeEnumOptions(
+        selectedCollectionId!,
+        fieldId,
+        keep,
+        merge,
+      );
+    } finally {
+      await refresh();
+    }
+  }
 
   Future<void> deleteRecord(String id) async {
     await bridge.deleteRecord(id, selectedCollectionId!);

@@ -117,6 +117,10 @@ pub struct EnumOption {
     pub label: String,
     pub order: i64,
     pub deleted: bool,
+    /// Set on a removed option that was merged into another option of the same field. Additive:
+    /// a device that does not know it reads an ordinary removed option.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub merged_into: Option<EnumOptionId>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -135,6 +139,15 @@ pub struct FieldDefinition {
     pub order: i64,
     pub deleted: bool,
     pub enum_options: Vec<EnumOption>,
+    /// Choice/Choices only: records may add options to this field when they are saved.
+    /// Additive: a definition without the key reads as off.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub allow_options_from_records: bool,
+}
+
+#[allow(clippy::trivially_copy_pass_by_ref)]
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -199,6 +212,12 @@ impl FieldDefinition {
             .is_some_and(|(min, max)| min > max)
         {
             return Err(invalid("length_range", "minimum must not exceed maximum"));
+        }
+        if self.allow_options_from_records && !self.field_type.has_options() {
+            return Err(invalid(
+                "allow_options_from_records",
+                "is valid only for Choice and Choices fields",
+            ));
         }
         if self.display.multiline && !matches!(self.field_type, FieldType::Text) {
             return Err(invalid("multiline", "is valid only for Text fields"));
@@ -752,6 +771,7 @@ mod tests {
             .iter()
             .enumerate()
             .map(|(order, label)| EnumOption {
+                merged_into: None,
                 id: EnumOptionId::new(),
                 label: (*label).into(),
                 order: order as i64,
@@ -819,6 +839,70 @@ mod tests {
         );
     }
 
+    #[test]
+    fn options_from_records_setting_round_trips_and_is_additive() {
+        let mut field = text_field("category", 0);
+        field.field_type = FieldType::Enum;
+        let plain = serde_json::to_string(&field).unwrap();
+        assert!(!plain.contains("allow_options_from_records"));
+        let read: FieldDefinition = serde_json::from_str(&plain).unwrap();
+        assert!(!read.allow_options_from_records);
+
+        field.allow_options_from_records = true;
+        field.validate().unwrap();
+        let encoded = serde_json::to_string(&field).unwrap();
+        assert!(encoded.contains(r#""allow_options_from_records":true"#));
+        assert_eq!(
+            serde_json::from_str::<FieldDefinition>(&encoded).unwrap(),
+            field
+        );
+        field.field_type = FieldType::EnumSet;
+        field.validate().unwrap();
+
+        field.field_type = FieldType::Text;
+        assert!(matches!(
+            field.validate(),
+            Err(DomainError::Invalid {
+                field: "allow_options_from_records",
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn merged_into_is_additive_for_older_and_newer_decoders() {
+        #[derive(Deserialize)]
+        #[allow(dead_code)]
+        struct OlderEnumOption {
+            id: EnumOptionId,
+            label: String,
+            order: i64,
+            deleted: bool,
+        }
+        let keep = EnumOptionId::new();
+        let merged = EnumOption {
+            id: EnumOptionId::new(),
+            label: "groceries".into(),
+            order: 1,
+            deleted: true,
+            merged_into: Some(keep),
+        };
+        let encoded = serde_json::to_string(&merged).unwrap();
+        assert!(encoded.contains("merged_into"));
+        let older: OlderEnumOption = serde_json::from_str(&encoded).unwrap();
+        assert!(older.deleted);
+        assert_eq!(
+            serde_json::from_str::<EnumOption>(&encoded).unwrap(),
+            merged
+        );
+        let plain = r#"{"id":"%ID%","label":"a","order":0,"deleted":false}"#
+            .replace("%ID%", &keep.to_string());
+        let read: EnumOption = serde_json::from_str(&plain).unwrap();
+        assert_eq!(read.merged_into, None);
+        let rewritten = serde_json::to_string(&read).unwrap();
+        assert!(!rewritten.contains("merged_into"));
+    }
+
     fn assert_step_rejected(field: &FieldDefinition) {
         assert!(matches!(
             field.validate(),
@@ -841,6 +925,7 @@ mod tests {
 
     fn text_field(name: &str, order: i64) -> FieldDefinition {
         FieldDefinition {
+            allow_options_from_records: false,
             id: FieldId::new(),
             name: name.into(),
             field_type: FieldType::Text,
