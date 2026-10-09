@@ -15,7 +15,7 @@ use uuid::Uuid;
 use crate::{
     error::{DomainError, IssueCode, ValidationIssue, summarize_issues},
     hlc::{HlcNodeId, HlcStamp},
-    schema::{CollectionSchema, CollectionSchemaId, FieldId},
+    schema::{CollectionSchema, CollectionSchemaId, EnumOptionId, FieldId},
     values::FieldValue,
 };
 
@@ -161,6 +161,14 @@ pub fn validate_record(
         })
         .collect();
     let creation_day = record.creation_day();
+    if apply_defaults {
+        // A new set drops repeats and reads as Null when empty.
+        for value in record.values.values_mut() {
+            if let FieldValue::EnumSet(ids) = value {
+                *value = FieldValue::enum_set(ids.iter().copied());
+            }
+        }
+    }
     for field in schema.fields.iter().filter(|field| !field.deleted) {
         if !record.values.contains_key(&field.id)
             && apply_defaults
@@ -248,6 +256,12 @@ pub fn write_lww_register(
         FieldValue::Enum(value) => tx
             .put(&register, "enum_id", value.to_string())
             .map_err(repo_change)?,
+        // Sets live in per-option membership registers; see `write_set_value`.
+        FieldValue::EnumSet(_) => {
+            return Err(repo_change(
+                "a set of options is written as membership registers",
+            ));
+        }
     }
     tx.put(&register, "physical_time_ms", stamp.physical_time_ms)
         .map_err(repo_change)?;
@@ -330,7 +344,156 @@ fn value_kind(value: &FieldValue) -> &'static str {
         FieldValue::DateTime(_) => "date_time",
         FieldValue::Duration(_) => "duration",
         FieldValue::Enum(_) => "enum",
+        FieldValue::EnumSet(_) => "enum_set",
     }
+}
+
+/// Separates the field id from the option id in a membership register key. A UUID never holds
+/// it, so membership keys can't collide with plain field ids.
+pub const MEMBER_KEY_SEPARATOR: char = '/';
+
+/// The `values` key of the membership register of `option` in the Choices field `field`.
+#[must_use]
+pub fn member_key(field: FieldId, option: EnumOptionId) -> String {
+    format!("{field}{MEMBER_KEY_SEPARATOR}{option}")
+}
+
+/// Splits a membership register key into its field and option ids.
+pub fn parse_member_key(key: &str) -> Option<(FieldId, EnumOptionId)> {
+    let (field, option) = key.split_once(MEMBER_KEY_SEPARATOR)?;
+    Some((field.parse().ok()?, option.parse().ok()?))
+}
+
+/// Reads a Choices value from a record's `values` map.
+///
+/// Each option resolves on its own: the winning membership register at `<field>/<option>` and a
+/// single-value register at `<field>` (left by Choice before a conversion, or by a conversion
+/// back) compete by stamp. The single-value register asserts the set it names at its stamp: its
+/// option present and every other option absent (a Null register: no member). `None` means
+/// nothing was ever written for the field; an empty set reads as Null. The returned stamp is the
+/// greatest one involved.
+pub fn read_set_value(
+    doc: &impl ReadDoc,
+    values: &ObjId,
+    field: FieldId,
+) -> Result<Option<LwwValue>, DomainError> {
+    let prefix = format!("{field}{MEMBER_KEY_SEPARATOR}");
+    let mut members: BTreeMap<EnumOptionId, LwwValue> = BTreeMap::new();
+    for key in doc.keys(values).filter(|key| key.starts_with(&prefix)) {
+        let (_, option) = parse_member_key(&key)
+            .ok_or_else(|| malformed(format!("invalid membership key {key}")))?;
+        if let Some(winner) = read_lww_winner(doc, values, &key)? {
+            members.insert(option, winner);
+        }
+    }
+    let legacy = read_lww_winner(doc, values, &field.to_string())?;
+    if members.is_empty() && legacy.is_none() {
+        return Ok(None);
+    }
+    let legacy_option = match &legacy {
+        Some(LwwValue {
+            value: FieldValue::Enum(option),
+            ..
+        }) => Some(*option),
+        _ => None,
+    };
+    let legacy_stamp = legacy.as_ref().map(|legacy| legacy.stamp);
+    let mut stamp = legacy_stamp;
+    let mut present = Vec::new();
+    for (option, member) in &members {
+        stamp = Some(stamp.map_or(member.stamp, |current| current.max(member.stamp)));
+        let held = match member.value {
+            FieldValue::Boolean(held) => held,
+            _ => return Err(malformed("membership register is not Boolean")),
+        };
+        let held = match legacy_stamp {
+            Some(legacy_stamp) if legacy_stamp > member.stamp => legacy_option == Some(*option),
+            _ => held,
+        };
+        if held {
+            present.push(*option);
+        }
+    }
+    if let Some(option) = legacy_option
+        && !members.contains_key(&option)
+    {
+        present.push(option);
+    }
+    Ok(Some(LwwValue {
+        value: FieldValue::enum_set(present),
+        stamp: stamp.expect("a register was read"),
+    }))
+}
+
+/// Writes a Choices value (`FieldValue::EnumSet` or `FieldValue::Null`) as membership registers:
+/// only options whose membership changes against the current value are written (plus kept members
+/// that so far live only in a single-value register), all under `stamp`. When the new set is empty and nothing was ever written, a Null single-value register
+/// marks the field as written.
+pub fn write_set_value(
+    tx: &mut AutomergeTransaction<'_>,
+    values: &ObjId,
+    field: FieldId,
+    value: &FieldValue,
+    stamp: HlcStamp,
+) -> automerge_repo::Result<()> {
+    let wanted: &[EnumOptionId] = match value {
+        FieldValue::EnumSet(ids) => ids,
+        FieldValue::Null => &[],
+        _ => return Err(repo_change("a Choices field takes a set of options")),
+    };
+    let current = read_set_value(tx, values, field).map_err(repo_change)?;
+    let held: Vec<EnumOptionId> = match current.as_ref().map(|current| &current.value) {
+        Some(FieldValue::EnumSet(ids)) => ids.clone(),
+        _ => Vec::new(),
+    };
+    if current.is_none() && wanted.is_empty() {
+        return write_lww_register(tx, values, &field.to_string(), &FieldValue::Null, stamp);
+    }
+    // A member read only from a single-value register has no membership register of its own;
+    // it is written so that a later single-value register can't silently drop it.
+    let prefix = format!("{field}{MEMBER_KEY_SEPARATOR}");
+    let stored: HashSet<EnumOptionId> = tx
+        .keys(values)
+        .filter_map(|key| {
+            key.starts_with(&prefix)
+                .then(|| parse_member_key(&key).map(|(_, option)| option))
+                .flatten()
+        })
+        .collect();
+    for option in held
+        .iter()
+        .filter(|option| wanted.contains(option) && !stored.contains(option))
+    {
+        write_lww_register(
+            tx,
+            values,
+            &member_key(field, *option),
+            &FieldValue::Boolean(true),
+            stamp,
+        )?;
+    }
+    for option in held.iter().filter(|option| !wanted.contains(option)) {
+        write_lww_register(
+            tx,
+            values,
+            &member_key(field, *option),
+            &FieldValue::Boolean(false),
+            stamp,
+        )?;
+    }
+    let mut added = HashSet::new();
+    for option in wanted.iter().filter(|option| !held.contains(option)) {
+        if added.insert(*option) {
+            write_lww_register(
+                tx,
+                values,
+                &member_key(field, *option),
+                &FieldValue::Boolean(true),
+                stamp,
+            )?;
+        }
+    }
+    Ok(())
 }
 
 fn string(doc: &impl ReadDoc, object: &ObjId, key: &str) -> Result<String, DomainError> {

@@ -70,12 +70,16 @@ query_id!(ComputedFieldId, "computed_field_id");
 pub enum ValueType {
     Text,
     Integer,
-    FixedDecimal { scale: u8 },
+    FixedDecimal {
+        scale: u8,
+    },
     Boolean,
     Date,
     DateTime,
     Duration,
     Enum,
+    /// A set of options of one Choices field.
+    EnumSet,
     Null,
 }
 
@@ -90,6 +94,7 @@ impl From<&FieldType> for ValueType {
             FieldType::DateTime => Self::DateTime,
             FieldType::Duration => Self::Duration,
             FieldType::Enum => Self::Enum,
+            FieldType::EnumSet => Self::EnumSet,
         }
     }
 }
@@ -100,12 +105,21 @@ pub enum TypedValue {
     Null,
     Text(String),
     Integer(i64),
-    FixedDecimal { representation: i64, scale: u8 },
+    FixedDecimal {
+        representation: i64,
+        scale: u8,
+    },
     Boolean(bool),
     Date(i64),
     DateTime(i64),
     Duration(i64),
     Enum(EnumOptionId),
+    /// Option ids of one field: a Choices value read from a record, or a set constant used with
+    /// the set operators. Never empty when read from a record; an empty set reads as Null.
+    EnumOptionSet {
+        field: FieldId,
+        options: Vec<EnumOptionId>,
+    },
 }
 
 impl TypedValue {
@@ -121,15 +135,26 @@ impl TypedValue {
             Self::DateTime(_) => ValueType::DateTime,
             Self::Duration(_) => ValueType::Duration,
             Self::Enum(_) => ValueType::Enum,
+            Self::EnumOptionSet { .. } => ValueType::EnumSet,
         }
     }
 
     fn from_field(
         value: &FieldValue,
-        field_type: &FieldType,
+        definition: &crate::FieldDefinition,
     ) -> Result<Self, QueryEvaluationError> {
+        let field_type = &definition.field_type;
         Ok(match (value, field_type) {
             (FieldValue::Null, _) => Self::Null,
+            (FieldValue::EnumSet(ids), FieldType::EnumSet) if ids.is_empty() => Self::Null,
+            (FieldValue::EnumSet(ids), FieldType::EnumSet) => {
+                let mut options = ids.clone();
+                definition.sort_option_ids(&mut options);
+                Self::EnumOptionSet {
+                    field: definition.id,
+                    options,
+                }
+            }
             (FieldValue::Text(v), FieldType::Text) => Self::Text(v.clone()),
             (FieldValue::Integer(v), FieldType::Integer) => Self::Integer(*v),
             (FieldValue::FixedDecimal(v), FieldType::FixedDecimal { scale }) => {
@@ -178,6 +203,18 @@ pub enum ComparisonOperator {
     LessThanOrEqual,
 }
 
+/// Set tests between a Choices field and an option-set constant of that field.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SetOperator {
+    /// The record's set shares at least one option with the constant.
+    HasAnyOf,
+    /// The record's set holds every option of the constant.
+    HasAllOf,
+    /// The record's set shares no option with the constant.
+    HasNoneOf,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum BooleanOperator {
@@ -223,6 +260,12 @@ pub enum Expression {
     },
     Compare {
         operator: ComparisonOperator,
+        left: Box<Expression>,
+        right: Box<Expression>,
+    },
+    /// `left` is a Choices source field, `right` an `EnumOptionSet` constant of that field.
+    SetCompare {
+        operator: SetOperator,
         left: Box<Expression>,
         right: Box<Expression>,
     },
@@ -636,6 +679,12 @@ fn infer_at(
         Expression::Compare { left, right, .. } => {
             let left = infer_at(left, env, computed_allowed, &child("left"))?;
             let right = infer_at(right, env, computed_allowed, &child("right"))?;
+            if left.value_type == ValueType::EnumSet || right.value_type == ValueType::EnumSet {
+                return Err(QueryValidationError::new(
+                    path,
+                    "a Choices value can't be compared; use has any of, has all of or has none of",
+                ));
+            }
             if left.value_type != ValueType::Null
                 && right.value_type != ValueType::Null
                 && left.value_type != right.value_type
@@ -651,6 +700,58 @@ fn infer_at(
                     || right.nullable
                     || left.value_type == ValueType::Null
                     || right.value_type == ValueType::Null,
+            })
+        }
+        Expression::SetCompare { left, right, .. } => {
+            let Expression::Field {
+                field: FieldReference::Source(field_id),
+            } = &**left
+            else {
+                return Err(QueryValidationError::new(
+                    child("left"),
+                    "must be a Choices field",
+                ));
+            };
+            let field = env
+                .schema
+                .fields
+                .iter()
+                .find(|field| field.id == *field_id && !field.deleted)
+                .ok_or_else(|| {
+                    QueryValidationError::new(
+                        child("left"),
+                        "source field was not found or is removed",
+                    )
+                })?;
+            if field.field_type != FieldType::EnumSet {
+                return Err(QueryValidationError::new(
+                    child("left"),
+                    "must be a Choices field",
+                ));
+            }
+            let Expression::Constant {
+                value:
+                    TypedValue::EnumOptionSet {
+                        field: owner,
+                        options,
+                    },
+            } = &**right
+            else {
+                return Err(QueryValidationError::new(
+                    child("right"),
+                    "must be a set of options",
+                ));
+            };
+            if owner != field_id {
+                return Err(QueryValidationError::new(
+                    child("right"),
+                    "options must belong to the compared field",
+                ));
+            }
+            validate_option_set(options, field, &child("right"))?;
+            Ok(InferredType {
+                value_type: ValueType::Boolean,
+                nullable: false,
             })
         }
         Expression::Boolean { left, right, .. } => {
@@ -705,6 +806,34 @@ fn infer_at(
     }
 }
 
+/// A set constant is non-empty, has no repeats, and names options of `field` (removed ones
+/// included, so a saved filter survives an option removal).
+fn validate_option_set(
+    options: &[EnumOptionId],
+    field: &crate::FieldDefinition,
+    path: &str,
+) -> Result<(), QueryValidationError> {
+    if options.is_empty() {
+        return Err(QueryValidationError::new(
+            path,
+            "must pick at least one option",
+        ));
+    }
+    let mut seen = std::collections::HashSet::new();
+    for option in options {
+        if !seen.insert(option) {
+            return Err(QueryValidationError::new(path, "repeats an option"));
+        }
+        if !field.enum_options.iter().any(|item| item.id == *option) {
+            return Err(QueryValidationError::new(
+                path,
+                "names an option the field doesn't have",
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn is_numeric(value: &ValueType) -> bool {
     matches!(value, ValueType::Integer | ValueType::FixedDecimal { .. })
 }
@@ -729,6 +858,12 @@ pub fn validate_computed_field(
         },
         false,
     )?;
+    if inferred.value_type == ValueType::EnumSet {
+        return Err(QueryValidationError::new(
+            "declared_type",
+            "a computed field can't hold a set of options",
+        ));
+    }
     if inferred.value_type != definition.declared_type {
         return Err(QueryValidationError::new(
             "declared_type",
@@ -788,7 +923,10 @@ pub fn validate_query(
     }
     for (index, sort) in query.sorting.iter().enumerate() {
         let inferred = infer_expression(&sort.expression, &env, true)?;
-        if matches!(inferred.value_type, ValueType::Boolean | ValueType::Null) {
+        if matches!(
+            inferred.value_type,
+            ValueType::Boolean | ValueType::Null | ValueType::EnumSet
+        ) {
             return Err(QueryValidationError::new(
                 format!("sorting[{index}]"),
                 "type is not orderable",
@@ -827,6 +965,12 @@ fn validate_aggregation(
         Aggregation::Min { expression } | Aggregation::Max { expression } => (expression, false),
     };
     let inferred = infer_expression(expression, env, true)?;
+    if inferred.value_type == ValueType::EnumSet {
+        return Err(QueryValidationError::new(
+            "aggregation",
+            "can't aggregate a set of options",
+        ));
+    }
     if numeric && !is_numeric(&inferred.value_type) {
         return Err(QueryValidationError::new(
             "aggregation",
@@ -881,7 +1025,7 @@ pub fn evaluate_expression(
                     QueryEvaluationError::InvalidDefinition("source field unavailable".into())
                 })?;
             match record.values.get(id) {
-                Some(value) => TypedValue::from_field(value, &definition.field_type),
+                Some(value) => TypedValue::from_field(value, definition),
                 None => Ok(TypedValue::Null),
             }
         }
@@ -931,6 +1075,15 @@ pub fn evaluate_expression(
             left,
             right,
         } => compare(
+            *operator,
+            evaluate_expression(left, record, context)?,
+            evaluate_expression(right, record, context)?,
+        ),
+        Expression::SetCompare {
+            operator,
+            left,
+            right,
+        } => set_compare(
             *operator,
             evaluate_expression(left, record, context)?,
             evaluate_expression(right, record, context)?,
@@ -1141,6 +1294,39 @@ fn compare(
         ComparisonOperator::GreaterThanOrEqual => ordering != Ordering::Less,
         ComparisonOperator::LessThan => ordering == Ordering::Less,
         ComparisonOperator::LessThanOrEqual => ordering != Ordering::Greater,
+    }))
+}
+
+/// Set operators: a Null (empty) record set shares nothing, so HasAnyOf and HasAllOf are false
+/// and HasNoneOf is true.
+fn set_compare(
+    operator: SetOperator,
+    left: TypedValue,
+    right: TypedValue,
+) -> Result<TypedValue, QueryEvaluationError> {
+    let held: &[EnumOptionId] = match &left {
+        TypedValue::Null => &[],
+        TypedValue::EnumOptionSet { options, .. } => options,
+        _ => {
+            return Err(QueryEvaluationError::InvalidDefinition(
+                "set operand is not a set of options".into(),
+            ));
+        }
+    };
+    let TypedValue::EnumOptionSet {
+        options: wanted, ..
+    } = &right
+    else {
+        return Err(QueryEvaluationError::InvalidDefinition(
+            "set constant is not a set of options".into(),
+        ));
+    };
+    Ok(TypedValue::Boolean(match operator {
+        SetOperator::HasAnyOf => wanted.iter().any(|option| held.contains(option)),
+        SetOperator::HasAllOf => {
+            !held.is_empty() && wanted.iter().all(|option| held.contains(option))
+        }
+        SetOperator::HasNoneOf => !wanted.iter().any(|option| held.contains(option)),
     }))
 }
 
@@ -1415,14 +1601,44 @@ pub fn execute_query(
                     )?,
                     None => evaluate_expression(category, record, &context)?,
                 };
-                if let Some((_, rows)) = groups.iter_mut().find(|(candidate, _)| candidate == &key)
-                {
-                    rows.push(record);
-                } else {
-                    groups.push((key, vec![record]));
+                for key in group_keys(key) {
+                    if let Some((_, rows)) =
+                        groups.iter_mut().find(|(candidate, _)| candidate == &key)
+                    {
+                        rows.push(record);
+                    } else {
+                        groups.push((key, vec![record]));
+                    }
                 }
             }
-            groups.sort_by(|(a, _), (b, _)| null_cmp(a, b, NullOrder::Last));
+            let set_field = match (&query.grouping, category) {
+                (
+                    None,
+                    Expression::Field {
+                        field: FieldReference::Source(id),
+                    },
+                ) => schema
+                    .fields
+                    .iter()
+                    .find(|field| field.id == *id && field.field_type == FieldType::EnumSet),
+                _ => None,
+            };
+            match set_field {
+                // Groups of a Choices field follow its option order, removed options included.
+                Some(field) => groups.sort_by_key(|(key, _)| match key {
+                    TypedValue::Enum(id) => (
+                        false,
+                        field
+                            .enum_options
+                            .iter()
+                            .find(|option| option.id == *id)
+                            .map_or(i64::MAX, |option| option.order),
+                        Some(*id),
+                    ),
+                    _ => (true, i64::MAX, None),
+                }),
+                None => groups.sort_by(|(a, _), (b, _)| null_cmp(a, b, NullOrder::Last)),
+            }
             let mut points = groups
                 .into_iter()
                 .map(|(category, rows)| {
@@ -1440,6 +1656,12 @@ pub fn execute_query(
             }
             .map_err(|e| QueryEvaluationError::InvalidDefinition(e.to_string()))?
             .value_type;
+            // A Choices category fans out into one group per option.
+            let category_type = if category_type == ValueType::EnumSet {
+                ValueType::Enum
+            } else {
+                category_type
+            };
             let value_type = points
                 .first()
                 .map_or(ValueType::Null, |point| point.value.value_type());
@@ -1449,6 +1671,18 @@ pub fn execute_query(
                 value_type,
             })
         }
+    }
+}
+
+/// The group keys of one record: one per member of a set of options (the Null group when it is
+/// empty), otherwise the key itself.
+fn group_keys(key: TypedValue) -> Vec<TypedValue> {
+    match key {
+        TypedValue::EnumOptionSet { options, .. } if !options.is_empty() => {
+            options.into_iter().map(TypedValue::Enum).collect()
+        }
+        TypedValue::EnumOptionSet { .. } => vec![TypedValue::Null],
+        other => vec![other],
     }
 }
 

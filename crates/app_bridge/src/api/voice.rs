@@ -166,6 +166,7 @@ fn field(dto: VoiceFieldDto) -> VoiceField {
             FieldTypeKindDto::DateTime => FieldKind::DateTime,
             FieldTypeKindDto::Duration => FieldKind::Duration,
             FieldTypeKindDto::Enum => FieldKind::Choice,
+            FieldTypeKindDto::EnumSet => FieldKind::Choices,
         },
         required: dto.required,
         options: dto
@@ -204,6 +205,7 @@ fn request(dto: VoiceFillRequestDto) -> Option<voice_engine::FillRequest> {
     allow(dead_code, reason = "used only by the native voice worker")
 )]
 fn entry_dto(entry: PatchEntry) -> VoicePatchEntryDto {
+    let mut list_value = Vec::new();
     let (kind, integer_value, text_value, boolean_value) = match entry.value {
         TypedValue::Text(text) => (FieldValueKindDto::Text, None, Some(text), None),
         TypedValue::Integer(value) => (FieldValueKindDto::Integer, Some(value), None, None),
@@ -213,6 +215,10 @@ fn entry_dto(entry: PatchEntry) -> VoicePatchEntryDto {
         TypedValue::DateTime(value) => (FieldValueKindDto::DateTime, Some(value), None, None),
         TypedValue::Duration(value) => (FieldValueKindDto::Duration, Some(value), None, None),
         TypedValue::Choice(id) => (FieldValueKindDto::Enum, None, Some(id), None),
+        TypedValue::Choices(ids) => {
+            list_value = ids;
+            (FieldValueKindDto::EnumSet, None, None, None)
+        }
     };
     VoicePatchEntryDto {
         field_id: entry.field_id,
@@ -221,6 +227,7 @@ fn entry_dto(entry: PatchEntry) -> VoicePatchEntryDto {
             integer_value,
             text_value,
             boolean_value,
+            list_value,
         },
         evidence: entry.evidence,
     }

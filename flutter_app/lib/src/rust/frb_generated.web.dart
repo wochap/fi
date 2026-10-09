@@ -211,6 +211,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   RoundingPolicyDto dco_decode_box_autoadd_rounding_policy_dto(dynamic raw);
 
   @protected
+  SetOperatorDto dco_decode_box_autoadd_set_operator_dto(dynamic raw);
+
+  @protected
   TypedValueDto dco_decode_box_autoadd_typed_value_dto(dynamic raw);
 
   @protected
@@ -644,6 +647,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  SetOperatorDto? dco_decode_opt_box_autoadd_set_operator_dto(dynamic raw);
+
+  @protected
   TypedValueDto? dco_decode_opt_box_autoadd_typed_value_dto(dynamic raw);
 
   @protected
@@ -776,6 +782,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   SeriesPointDto dco_decode_series_point_dto(dynamic raw);
+
+  @protected
+  SetOperatorDto dco_decode_set_operator_dto(dynamic raw);
 
   @protected
   SortClauseDto dco_decode_sort_clause_dto(dynamic raw);
@@ -1097,6 +1106,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   RoundingPolicyDto sse_decode_box_autoadd_rounding_policy_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  SetOperatorDto sse_decode_box_autoadd_set_operator_dto(
     SseDeserializer deserializer,
   );
 
@@ -1670,6 +1684,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  SetOperatorDto? sse_decode_opt_box_autoadd_set_operator_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   TypedValueDto? sse_decode_opt_box_autoadd_typed_value_dto(
     SseDeserializer deserializer,
   );
@@ -1840,6 +1859,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   SeriesPointDto sse_decode_series_point_dto(SseDeserializer deserializer);
+
+  @protected
+  SetOperatorDto sse_decode_set_operator_dto(SseDeserializer deserializer);
 
   @protected
   SortClauseDto sse_decode_sort_clause_dto(SseDeserializer deserializer);
@@ -2247,6 +2269,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_box_autoadd_rounding_policy_dto(
     RoundingPolicyDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_set_operator_dto(
+    SetOperatorDto self,
     SseSerializer serializer,
   );
 
@@ -2956,6 +2984,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_opt_box_autoadd_set_operator_dto(
+    SetOperatorDto? self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_opt_box_autoadd_typed_value_dto(
     TypedValueDto? self,
     SseSerializer serializer,
@@ -3171,6 +3205,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_series_point_dto(
     SeriesPointDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_set_operator_dto(
+    SetOperatorDto self,
     SseSerializer serializer,
   );
 

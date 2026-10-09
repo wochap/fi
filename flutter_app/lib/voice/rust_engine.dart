@@ -202,6 +202,10 @@ String draftText(VoiceField field, FieldValueDto value) {
               .firstOrNull
               ?.label ??
           '',
+    FieldValueKindDto.enumSet => [
+      for (final option in field.options)
+        if (value.listValue.contains(option.id)) option.label,
+    ].join(', '),
     FieldValueKindDto.fixedDecimal when integer != null => _decimal(
       integer,
       field.scale ?? 0,

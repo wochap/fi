@@ -910,5 +910,18 @@
   "dictatedAppend": "Añadir",
   "dictatedReplace": "Reemplazar",
   "dictatedInsert": "Insertar",
-  "dictatedRemovedWords": "Quitado: {words}"
+  "dictatedRemovedWords": "Quitado: {words}",
+  "fieldTypeChoices": "Opciones",
+  "themeChoicesPicked": "{count} elegidas",
+  "fieldEditorChoicesRequiredHelp": "Obligatorio significa que se elige al menos una opción.",
+  "fieldEditorChoicesDefaultHelp": "Un conjunto de opciones, elegidas en los registros nuevos.",
+  "fieldEditorChoicesSemicolon": "Las opciones de un campo Opciones no pueden contener «;».",
+  "fieldEditorChoicesConversionBlocked": "{count, plural, =1{1 registro tiene más de una opción. Edítalo primero.} other{{count} registros tienen más de una opción. Edítalos primero.}}",
+  "queryOpHasAnyOf": "tiene alguna de",
+  "queryOpHasAllOf": "tiene todas",
+  "queryOpHasNoneOf": "no tiene ninguna de",
+  "queryOpIsEmpty": "está vacío",
+  "queryOpIsNotEmpty": "no está vacío",
+  "widgetGroupsOverlap": "Los grupos se solapan: un registro cuenta en cada una de sus opciones.",
+  "recordsMoreTags": "+{count}"
 }

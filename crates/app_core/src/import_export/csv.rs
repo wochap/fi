@@ -125,8 +125,20 @@ pub fn format_field_value(field: &FieldDefinition, value: &FieldValue) -> String
             .iter()
             .find(|option| option.id == *id && !option.deleted)
             .map_or_else(String::new, |option| option.label.clone()),
+        (FieldType::EnumSet, FieldValue::EnumSet(ids)) => set_labels(field, ids),
         _ => String::new(),
     }
+}
+
+/// Labels of the active members of a set in the field's option order, joined with `; `.
+fn set_labels(field: &FieldDefinition, ids: &[EnumOptionId]) -> String {
+    field
+        .ordered_enum_options()
+        .into_iter()
+        .filter(|option| ids.contains(&option.id))
+        .map(|option| option.label.as_str())
+        .collect::<Vec<_>>()
+        .join("; ")
 }
 
 fn format_typed_value(schema: &CollectionSchema, value: &TypedValue) -> String {
@@ -143,6 +155,11 @@ fn format_typed_value(schema: &CollectionSchema, value: &TypedValue) -> String {
         TypedValue::Date(days) => format_date(*days),
         TypedValue::DateTime(ms) => format_date_time(*ms),
         TypedValue::Enum(id) => enum_label(schema, *id).unwrap_or_default(),
+        TypedValue::EnumOptionSet { field, options } => schema
+            .fields
+            .iter()
+            .find(|item| item.id == *field)
+            .map_or_else(String::new, |field| set_labels(field, options)),
     }
 }
 
@@ -229,7 +246,7 @@ pub fn parse_csv(
     }
     let labels: HashMap<_, _> = fields
         .iter()
-        .filter(|field| matches!(field.field_type, FieldType::Enum))
+        .filter(|field| field.field_type.has_options())
         .map(|field| (field.id, label_index(field)))
         .collect();
     let mut records = Vec::new();
@@ -348,6 +365,30 @@ fn parse_cell(
                 }
                 _ => return Err(format!("no active option is labeled \"{cell}\"")),
             }
+        }
+        FieldType::EnumSet => {
+            let mut ids = Vec::new();
+            for part in cell
+                .split(';')
+                .map(str::trim)
+                .filter(|part| !part.is_empty())
+            {
+                match labels
+                    .and_then(|labels| labels.get(part))
+                    .map(Vec::as_slice)
+                {
+                    Some([id]) => ids.push(*id),
+                    Some([_, _, ..]) => {
+                        return Err(format!("several active options are labeled \"{part}\""));
+                    }
+                    _ => return Err(format!("no active option is labeled \"{part}\"")),
+                }
+            }
+            let mut value = FieldValue::enum_set(ids);
+            if let FieldValue::EnumSet(ids) = &mut value {
+                field.sort_option_ids(ids);
+            }
+            value
         }
     })
 }

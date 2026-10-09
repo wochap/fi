@@ -25,15 +25,19 @@ pub use schema::{Grammar, GrammarCache};
 pub enum FieldKind {
     Text,
     Integer,
-    Decimal { scale: u8 },
+    Decimal {
+        scale: u8,
+    },
     Boolean,
     Date,
     DateTime,
     Duration,
     Choice,
+    /// A set of the field's options ("Choices").
+    Choices,
 }
 
-/// One live option of a Choice field.
+/// One live option of a Choice or Choices field.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct ChoiceOption {
     pub id: String,
@@ -47,7 +51,7 @@ pub struct VoiceField {
     pub name: String,
     pub kind: FieldKind,
     pub required: bool,
-    /// A Choice field's live options.
+    /// A Choice or Choices field's live options.
     pub options: Vec<ChoiceOption>,
     pub max_length: Option<u32>,
 }
@@ -110,6 +114,9 @@ pub enum TypedValue {
     Duration(i64),
     /// The option id.
     Choice(String),
+    /// A Choices value: distinct option ids in the field's option order, never empty. Applying it
+    /// replaces the field's whole set.
+    Choices(Vec<String>),
 }
 
 /// One surviving patch entry.
@@ -216,6 +223,13 @@ pub(crate) mod test_support {
             required: false,
             options: Vec::new(),
             max_length: None,
+        }
+    }
+
+    pub fn choices(id: &str, name: &str, labels: &[&str]) -> VoiceField {
+        VoiceField {
+            kind: FieldKind::Choices,
+            ..choice(id, name, labels)
         }
     }
 
@@ -359,6 +373,41 @@ mod tests {
                 ("f-cat", TypedValue::Choice("f-cat-comida".into())),
                 ("f-date", TypedValue::Date(20_723)),
             ]
+        );
+    }
+
+    #[test]
+    fn a_choices_turn_becomes_a_set_in_english_and_spanish() {
+        let mut engine = VoiceEngine::new();
+        let mut runner = scripted(
+            r#"[{"field":"tags","value":["work","urgent"],"evidence":"tags work and urgent"}]"#,
+        );
+        let mut fields = expense_fields();
+        fields.push(choices("f-tags", "tags", &["urgent", "work", "food"]));
+        let outcome = engine
+            .fill(&mut runner, "Taxi, tags work and urgent", &request(fields))
+            .unwrap();
+        assert_eq!(
+            outcome.patch[0].value,
+            TypedValue::Choices(vec!["f-tags-urgent".into(), "f-tags-work".into()])
+        );
+        assert!(runner.prompts[0].contains("- tags (choices, one or more: urgent|work|food)\n"));
+
+        let mut runner = scripted(
+            r#"[{"field":"etiquetas","value":["trabajo","urgente"],"evidence":"etiquetas trabajo y urgente"}]"#,
+        );
+        let mut request = request(vec![choices(
+            "f-tags",
+            "etiquetas",
+            &["trabajo", "urgente", "comida"],
+        )]);
+        request.language = VoiceLanguage::Es;
+        let outcome = engine
+            .fill(&mut runner, "etiquetas trabajo y urgente", &request)
+            .unwrap();
+        assert_eq!(
+            outcome.patch[0].value,
+            TypedValue::Choices(vec!["f-tags-trabajo".into(), "f-tags-urgente".into()])
         );
     }
 

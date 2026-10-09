@@ -341,6 +341,58 @@ void main() {
       ];
       expect(exampleUtterance(fields), '3, done yes, 45 minutes, Lunch');
     });
+
+    test('a Choices field reads as its name and first option', () {
+      const fields = [
+        VoiceField(
+          id: 't',
+          name: 'Tags',
+          kind: FieldTypeKindDto.enumSet,
+          options: [(id: 'w', label: 'Work'), (id: 'u', label: 'Urgent')],
+        ),
+      ];
+      expect(exampleUtterance(fields), 'tags work');
+    });
+  });
+
+  group('Choices patch values', () {
+    const tags = VoiceField(
+      id: 't',
+      name: 'tags',
+      kind: FieldTypeKindDto.enumSet,
+      options: [(id: 'w', label: 'work'), (id: 'u', label: 'urgent')],
+    );
+    FieldValueDto set(List<String> ids) =>
+        FieldValueDto(kind: FieldValueKindDto.enumSet, listValue: ids);
+
+    test('a set of distinct active options is valid', () {
+      expect(validVoiceValue(tags, set(['w', 'u'])), isTrue);
+      expect(validVoiceValue(tags, set(const [])), isFalse);
+      expect(validVoiceValue(tags, set(['w', 'w'])), isFalse);
+      expect(validVoiceValue(tags, set(['gone'])), isFalse);
+    });
+
+    test('applyPatch replaces the set and marks it voice', () {
+      final outcome = applyPatch(
+        fields: const [tags],
+        draft: {
+          't': set(['u']),
+        },
+        origins: const {},
+        patch: [
+          VoicePatchEntry(
+            fieldId: 't',
+            value: set(['w', 'u']),
+            evidence: 'tags work and urgent',
+          ),
+        ],
+        transcript: 'tags work and urgent',
+        turn: 1,
+      );
+      expect(outcome.applied, ['t']);
+      expect(outcome.draft['t']!.listValue, ['w', 'u']);
+      expect(outcome.origins['t']!.kind, FieldOriginKind.voice);
+    });
   });
 
   group('VoiceFillController', () {

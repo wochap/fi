@@ -3511,4 +3511,59 @@ class AppLocalizationsEn extends AppLocalizations {
   String dictatedRemovedWords(String words) {
     return 'Removed: $words';
   }
+
+  @override
+  String get fieldTypeChoices => 'Choices';
+
+  @override
+  String themeChoicesPicked(int count) {
+    return '$count picked';
+  }
+
+  @override
+  String get fieldEditorChoicesRequiredHelp =>
+      'Required means at least one option is picked.';
+
+  @override
+  String get fieldEditorChoicesDefaultHelp =>
+      'A set of options, picked on new records.';
+
+  @override
+  String get fieldEditorChoicesSemicolon =>
+      'Options of a Choices field can\'t contain “;”.';
+
+  @override
+  String fieldEditorChoicesConversionBlocked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count records hold more than one choice. Edit them first.',
+      one: '1 record holds more than one choice. Edit it first.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get queryOpHasAnyOf => 'has any of';
+
+  @override
+  String get queryOpHasAllOf => 'has all of';
+
+  @override
+  String get queryOpHasNoneOf => 'has none of';
+
+  @override
+  String get queryOpIsEmpty => 'is empty';
+
+  @override
+  String get queryOpIsNotEmpty => 'is not empty';
+
+  @override
+  String get widgetGroupsOverlap =>
+      'Groups overlap: a record counts in each of its choices.';
+
+  @override
+  String recordsMoreTags(int count) {
+    return '+$count';
+  }
 }

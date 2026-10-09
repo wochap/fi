@@ -613,20 +613,30 @@ final class CollectionsController extends ChangeNotifier {
     final minted = session?.optionIds ?? <String, String>{};
     String resolve(String id) => minted[id] ?? id;
     final fieldId = field.id.isEmpty ? (session?.fieldId ?? '') : field.id;
-    final choice = field.fieldType.kind == FieldTypeKindDto.enum_;
+    final kind = field.fieldType.kind;
+    final choice =
+        kind == FieldTypeKindDto.enum_ || kind == FieldTypeKindDto.enumSet;
     final chosen = field.defaultValue;
+    // A default naming an option this save creates waits until the option has its real id.
+    final chosenIds = switch (chosen?.kind) {
+      FieldValueKindDto.enum_ => [chosen!.textValue!],
+      FieldValueKindDto.enumSet => chosen!.listValue,
+      _ => const <String>[],
+    };
+    FieldValueDto? resolvedDefault() => switch (chosen?.kind) {
+      FieldValueKindDto.enum_ => FieldValueDto(
+        kind: FieldValueKindDto.enum_,
+        textValue: resolve(chosen!.textValue!),
+      ),
+      FieldValueKindDto.enumSet => FieldValueDto(
+        kind: FieldValueKindDto.enumSet,
+        listValue: [for (final id in chosen!.listValue) resolve(id)],
+      ),
+      _ => chosen,
+    };
     final pendingDefault =
-        choice &&
-            chosen?.kind == FieldValueKindDto.enum_ &&
-            isTempOptionId(resolve(chosen?.textValue ?? ''))
-        ? chosen!.textValue
-        : null;
-    final defaultValue = choice && chosen?.kind == FieldValueKindDto.enum_
-        ? FieldValueDto(
-            kind: FieldValueKindDto.enum_,
-            textValue: resolve(chosen!.textValue!),
-          )
-        : chosen;
+        choice && chosenIds.any((id) => isTempOptionId(resolve(id)));
+    final defaultValue = resolvedDefault();
     final stored = schema?.fields
         .where((item) => item.id == fieldId)
         .firstOrNull;
@@ -635,7 +645,7 @@ final class CollectionsController extends ChangeNotifier {
       final submitted = _fieldWith(
         field,
         id: fieldId,
-        defaultValue: pendingDefault == null ? defaultValue : null,
+        defaultValue: pendingDefault ? null : defaultValue,
         enumOptions: storedOptions,
       );
       final String savedId;
@@ -686,7 +696,7 @@ final class CollectionsController extends ChangeNotifier {
         }
       }
 
-      if (pendingDefault != null) {
+      if (pendingDefault) {
         // The options just written live inside the stored definition, so the follow-up write
         // starts from what Rust now holds rather than from the list this call began with.
         final current = (await bridge.getCollectionSchema(
@@ -697,10 +707,7 @@ final class CollectionsController extends ChangeNotifier {
           _fieldWith(
             field,
             id: savedId,
-            defaultValue: FieldValueDto(
-              kind: FieldValueKindDto.enum_,
-              textValue: resolve(pendingDefault),
-            ),
+            defaultValue: resolvedDefault(),
             enumOptions: current?.enumOptions ?? const [],
           ),
         );

@@ -66,6 +66,30 @@ pub fn evidence_holds(transcript: &str, evidence: &str, span: Option<&str>) -> b
     contains_words(transcript, evidence) && span.is_none_or(|span| contains_words(evidence, span))
 }
 
+/// Evidence occurs in the transcript, and every label span of a Choices entry within it.
+pub fn evidence_holds_all(transcript: &str, evidence: &str, spans: &[&str]) -> bool {
+    contains_words(transcript, evidence) && spans.iter().all(|span| contains_words(evidence, span))
+}
+
+/// The labels of a Choices entry as option ids: distinct, in the field's option order. `None`
+/// when the array is empty, holds a non-string, or a label matches no option.
+fn choices_value(field: &VoiceField, labels: &[&str]) -> Option<crate::TypedValue> {
+    let mut ids = Vec::new();
+    for label in labels {
+        let id = normalize::normalize_choice(label, &field.options)?;
+        if !ids.contains(&id) {
+            ids.push(id);
+        }
+    }
+    let ordered: Vec<String> = field
+        .options
+        .iter()
+        .map(|option| option.id.clone())
+        .filter(|id| ids.contains(id))
+        .collect();
+    (!ordered.is_empty()).then_some(crate::TypedValue::Choices(ordered))
+}
+
 pub fn build_patch(
     output: &str,
     transcript: &str,
@@ -84,6 +108,31 @@ pub fn build_patch(
         }
         seen.push(&field.id);
         stats.proposed += 1;
+        if field.kind == FieldKind::Choices {
+            let labels: Option<Vec<&str>> = match &entry.value {
+                Value::Array(items) if !items.is_empty() => {
+                    items.iter().map(Value::as_str).collect()
+                }
+                _ => None,
+            };
+            let Some(labels) = labels else {
+                stats.unconvertible += 1;
+                continue;
+            };
+            if !evidence_holds_all(transcript, &entry.evidence, &labels) {
+                stats.evidence_rejected += 1;
+                continue;
+            }
+            match choices_value(field, &labels) {
+                Some(value) => patch.push(PatchEntry {
+                    field_id: field.id.clone(),
+                    value,
+                    evidence: entry.evidence.trim().to_owned(),
+                }),
+                None => stats.unconvertible += 1,
+            }
+            continue;
+        }
         let span = match &entry.value {
             Value::String(span) => Some(span.as_str()),
             Value::Bool(_) if field.kind == FieldKind::Boolean => None,
@@ -189,6 +238,50 @@ mod tests {
             Some("Café")
         ));
         assert_eq!(normalize_text("¿Cuánto? ¡Sí! Año"), "cuanto si año");
+    }
+
+    fn tags_patch(output: &str, transcript: &str) -> FillOutcome {
+        let mut fields = expense_fields();
+        fields.push(choices("f-tags", "tags", &["work", "urgent", "food"]));
+        let request = request(fields);
+        build_patch(output, transcript, &request.fields, &request)
+    }
+
+    #[test]
+    fn choices_labels_map_to_distinct_ids_in_option_order() {
+        let outcome = tags_patch(
+            r#"[{"field":"tags","value":["urgent","work","urgent"],"evidence":"tags work and urgent"}]"#,
+            "Taxi, tags work and urgent",
+        );
+        assert_eq!(
+            outcome.patch,
+            vec![PatchEntry {
+                field_id: "f-tags".into(),
+                value: TypedValue::Choices(vec!["f-tags-work".into(), "f-tags-urgent".into()]),
+                evidence: "tags work and urgent".into(),
+            }]
+        );
+    }
+
+    #[test]
+    fn every_choices_label_must_lie_within_the_evidence() {
+        let outcome = tags_patch(
+            r#"[{"field":"tags","value":["work","urgent"],"evidence":"tags work"}]"#,
+            "tags work",
+        );
+        assert!(outcome.patch.is_empty());
+        assert_eq!(outcome.stats.evidence_rejected, 1);
+    }
+
+    #[test]
+    fn a_choices_entry_needs_a_non_empty_array_of_known_labels() {
+        for value in [r#""work""#, "[]", r#"["travel"]"#, "[1]"] {
+            let outcome = tags_patch(
+                &format!(r#"[{{"field":"tags","value":{value},"evidence":"tags work travel"}}]"#),
+                "tags work travel 1",
+            );
+            assert!(outcome.patch.is_empty(), "{value}");
+        }
     }
 
     #[test]

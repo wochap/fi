@@ -1894,6 +1894,17 @@ impl AppCore {
                 .into_iter()
                 .filter_map(|field| {
                     let value = source.values.get(&field.id)?;
+                    if let FieldValue::EnumSet(ids) = value {
+                        // Removed members are dropped; a set left empty is not copied.
+                        let active: Vec<_> = field
+                            .ordered_enum_options()
+                            .into_iter()
+                            .map(|option| option.id)
+                            .filter(|id| ids.contains(id))
+                            .collect();
+                        return (!active.is_empty())
+                            .then_some((field.id, FieldValue::EnumSet(active)));
+                    }
                     let keep = match value {
                         FieldValue::Null => false,
                         FieldValue::Enum(option) => field

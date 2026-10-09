@@ -601,6 +601,9 @@ final class FakeCollectionBridge implements CollectionBridge {
   /// When set, the next [addField] throws it and changes nothing.
   Object? nextFieldError;
 
+  /// When set, the next [updateField] throws it and changes nothing.
+  Object? nextUpdateFieldError;
+
   @override
   Future<String> addField(String collectionId, FieldDefinitionDto field) async {
     schemaCalls.add('addField');
@@ -626,9 +629,14 @@ final class FakeCollectionBridge implements CollectionBridge {
     String collectionId,
     FieldDefinitionDto field,
   ) async {
+    final chosen = field.defaultValue;
     schemaCalls.add(
-      'updateField default=${field.defaultValue?.textValue ?? '-'}',
+      'updateField default=${chosen?.textValue ?? (chosen == null || chosen.listValue.isEmpty ? '-' : chosen.listValue.join('+'))}',
     );
+    if (nextUpdateFieldError case final error?) {
+      nextUpdateFieldError = null;
+      throw error;
+    }
     final schema = schemas[collectionId]!;
     schemas[collectionId] = CollectionSchemaDto(
       id: schema.id,

@@ -667,6 +667,164 @@ void main() {
       );
     });
 
+    List<FieldDefinitionDto> choicesFields() => [
+      field('mood', FieldTypeKindDto.enumSet, options: options(3)),
+      field(
+        'tags',
+        FieldTypeKindDto.enumSet,
+        options: options(7, labels: ['a', 'b', 'c', 'd', 'e', 'f', 'g']),
+      ),
+      field(
+        'places',
+        FieldTypeKindDto.enumSet,
+        options: options(48, labels: countries),
+      ),
+    ];
+
+    testWidgets('choices follow the option count on a phone', (tester) async {
+      final emitted = await pumpForm(tester, 390, choicesFields());
+
+      // 3 options: toggle chips with a check when on.
+      expect(find.byKey(const Key('choices-chips')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('choices-chip-o0')));
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('choices-chip-o2')));
+      await tester.pump();
+      expect(emitted.last.kind, FieldValueKindDto.enumSet);
+      expect(emitted.last.listValue, ['o0', 'o2']);
+      expect(find.byKey(const Key('choices-chip-check')), findsNWidgets(2));
+      await tester.tap(find.byKey(const ValueKey('choices-chip-o0')));
+      await tester.pump();
+      expect(emitted.last.listValue, ['o2']);
+
+      // 7 options: a field that opens a checkbox sheet with Done.
+      await tester.tap(find.text('Choose…'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('choices-sheet')), findsOneWidget);
+      expect(find.byKey(const Key('choices-search')), findsNothing);
+      expect(find.byType(Checkbox), findsNWidgets(7));
+      await tester.tap(find.byKey(const ValueKey('choices-row-o4')));
+      await tester.tap(find.byKey(const ValueKey('choices-row-o1')));
+      await tester.pump();
+      expect(find.text('2 picked'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('choices-sheet-done')));
+      await tester.pumpAndSettle();
+      expect(emitted.last.listValue, ['o1', 'o4']);
+      expect(find.text('b, e'), findsOneWidget);
+
+      // 48 options: the same sheet with a search.
+      await tester.tap(find.text('Search 48 options'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('choices-search')), findsOneWidget);
+      await tester.enterText(
+        find.descendant(
+          of: find.byKey(const Key('choices-search')),
+          matching: find.byType(TextField),
+        ),
+        'po',
+      );
+      await tester.pump();
+      expect(find.byType(Checkbox), findsNWidgets(3));
+      await tester.tap(find.byKey(const ValueKey('choices-row-o32')));
+      await tester.tap(find.byKey(const Key('choices-sheet-done')));
+      await tester.pumpAndSettle();
+      expect(emitted.last.listValue, ['o32']);
+    });
+
+    testWidgets('picked labels give way to "N picked" when they do not fit', (
+      tester,
+    ) async {
+      final tags = field(
+        'tags',
+        FieldTypeKindDto.enumSet,
+        options: options(
+          7,
+          labels: [for (var i = 0; i < 7; i++) 'a rather long label $i'],
+        ),
+      );
+      await pumpForm(
+        tester,
+        390,
+        [tags],
+        initial: {
+          'tags': const FieldValueDto(
+            kind: FieldValueKindDto.enumSet,
+            listValue: ['o0', 'o1', 'o2'],
+          ),
+        },
+      );
+      expect(find.text('3 picked'), findsOneWidget);
+    });
+
+    testWidgets('a removed member reads "(deleted)" and can be unpicked', (
+      tester,
+    ) async {
+      final tags = field(
+        'tags',
+        FieldTypeKindDto.enumSet,
+        options: [
+          ...options(2),
+          const EnumOptionDto(
+            id: 'gone',
+            label: 'urgent',
+            order: 2,
+            deleted: true,
+          ),
+        ],
+      );
+      const held = FieldValueDto(
+        kind: FieldValueKindDto.enumSet,
+        listValue: ['o0', 'gone'],
+      );
+      final emitted = await pumpForm(
+        tester,
+        1240,
+        [tags],
+        initial: {'tags': held},
+      );
+      expect(find.text('urgent (deleted)'), findsOneWidget);
+      expect(
+        const FieldRendererRegistry().displayText(tags, held),
+        'option 1, urgent (deleted)',
+      );
+      await tester.tap(find.byKey(const ValueKey('choices-chip-gone')));
+      await tester.pump();
+      expect(emitted.last.listValue, ['o0']);
+      expect(find.text('urgent (deleted)'), findsNothing);
+    });
+
+    testWidgets('list tags collapse the ones that do not fit into "+N"', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: nocturneTheme(),
+          home: const Scaffold(
+            body: Align(
+              alignment: Alignment.topLeft,
+              child: SizedBox(
+                width: 150,
+                child: ChoicesTagRow([
+                  'work',
+                  'urgent',
+                  'food',
+                  'travel',
+                  'home',
+                ]),
+              ),
+            ),
+          ),
+        ),
+      );
+      expect(find.byKey(const Key('choices-tag-more')), findsOneWidget);
+      final shown = tester
+          .widgetList(find.byType(Tag))
+          .where((tag) => tag.key != const Key('choices-tag-more'))
+          .length;
+      expect(shown, inInclusiveRange(1, 4));
+      expect(find.text('+${5 - shown}'), findsOneWidget);
+    });
+
     testWidgets('booleans, decimals and durations use their controls', (
       tester,
     ) async {

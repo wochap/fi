@@ -111,6 +111,12 @@ ExactValue exactFromTypedValue(
     ValueTypeKindDto.enum_ => ExactText(
       enumLabels?[value.textValue] ?? value.textValue ?? '',
     ),
+    ValueTypeKindDto.enumSet =>
+      value.listValue.isEmpty
+          ? const ExactMissing()
+          : ExactText(
+              value.listValue.map((id) => enumLabels?[id] ?? id).join(', '),
+            ),
     ValueTypeKindDto.boolean => ExactBoolean(value.booleanValue ?? false),
     ValueTypeKindDto.integer => ExactInteger(value.integerValue ?? 0),
     ValueTypeKindDto.fixedDecimal => ExactDecimal(

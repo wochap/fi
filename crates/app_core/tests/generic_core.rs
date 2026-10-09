@@ -1567,7 +1567,10 @@ async fn clone_records_copies_values_in_one_batch_and_rejects_incomplete_sources
         panic!("projection not ready");
     };
     let mut events = app.subscribe_data_changed();
-    let clones = app.clone_records(sources.clone(), collection).await.unwrap();
+    let clones = app
+        .clone_records(sources.clone(), collection)
+        .await
+        .unwrap();
     assert_eq!(clones.len(), 3);
     let event = tokio::time::timeout(Duration::from_secs(5), events.recv())
         .await
@@ -1608,7 +1611,11 @@ async fn clone_records_copies_values_in_one_batch_and_rejects_incomplete_sources
     // A required field added without a default makes every source incomplete.
     let mood = field("Mood", FieldType::Text, true, 4);
     app.add_field(collection, mood).await.unwrap();
-    assert!(app.clone_records(vec![sources[0]], collection).await.is_err());
+    assert!(
+        app.clone_records(vec![sources[0]], collection)
+            .await
+            .is_err()
+    );
     assert_eq!(app.records(collection).unwrap().len(), 6);
     assert!(app.clone_records(vec![], collection).await.is_err());
     assert!(

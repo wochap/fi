@@ -178,6 +178,25 @@ pub enum FieldValue {
     DateTime(i64),
     Duration(i64),
     Enum(EnumOptionId),
+    /// A Choices value: a set of option ids of one field. Never empty when stored or read; an
+    /// empty set reads as [`FieldValue::Null`] (see [`FieldValue::enum_set`]).
+    EnumSet(Vec<EnumOptionId>),
+}
+
+impl FieldValue {
+    /// A Choices value from option ids: duplicates dropped, ids sorted, and an empty set read as
+    /// Null. Callers that know the field reorder by option order.
+    #[must_use]
+    pub fn enum_set(ids: impl IntoIterator<Item = EnumOptionId>) -> Self {
+        let mut ids: Vec<_> = ids.into_iter().collect();
+        ids.sort();
+        ids.dedup();
+        if ids.is_empty() {
+            Self::Null
+        } else {
+            Self::EnumSet(ids)
+        }
+    }
 }
 
 #[cfg(test)]
@@ -257,10 +276,24 @@ mod tests {
             FieldValue::DateTime(0),
             FieldValue::Duration(-500),
             FieldValue::Enum(EnumOptionId::new()),
+            FieldValue::EnumSet(vec![EnumOptionId::new(), EnumOptionId::new()]),
         ];
         for value in values {
             let encoded = serde_json::to_string(&value).unwrap();
             assert_eq!(serde_json::from_str::<FieldValue>(&encoded).unwrap(), value);
         }
+    }
+
+    #[test]
+    fn enum_set_dedups_and_empty_reads_as_null() {
+        let a = EnumOptionId::new();
+        let b = EnumOptionId::new();
+        assert_eq!(FieldValue::enum_set([]), FieldValue::Null);
+        assert_eq!(
+            FieldValue::enum_set([b, a, b]),
+            FieldValue::EnumSet(vec![a, b])
+        );
+        let encoded = serde_json::to_string(&FieldValue::EnumSet(vec![a])).unwrap();
+        assert_eq!(encoded, format!(r#"{{"kind":"enum_set","value":["{a}"]}}"#));
     }
 }

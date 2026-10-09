@@ -73,6 +73,8 @@ void main() {
     await tester.tap(find.byKey(const Key('new-field')));
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const Key('field-name')), 'Title');
+    await tester.ensureVisible(find.byKey(const Key('field-save')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('field-save')));
     await tester.pumpAndSettle();
     expect(find.text('Title'), findsOneWidget);

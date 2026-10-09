@@ -67,12 +67,24 @@ uuid_v7_id!(EnumOptionId, "enum_option_id");
 pub enum FieldType {
     Text,
     Integer,
-    FixedDecimal { scale: u8 },
+    FixedDecimal {
+        scale: u8,
+    },
     Boolean,
     Date,
     DateTime,
     Duration,
     Enum,
+    /// "Choices": a set of the field's options. Shares `enum_options` with [`FieldType::Enum`].
+    EnumSet,
+}
+
+impl FieldType {
+    /// Whether the type carries an option list (Choice or Choices).
+    #[must_use]
+    pub const fn has_options(&self) -> bool {
+        matches!(self, Self::Enum | Self::EnumSet)
+    }
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
@@ -215,16 +227,25 @@ impl FieldDefinition {
                 ));
             }
         }
-        if matches!(self.field_type, FieldType::Enum) {
+        if self.field_type.has_options() {
             let mut ids = HashSet::new();
             for option in &self.enum_options {
                 if !ids.insert(option.id) {
                     return Err(invalid("enum_option_id", "must be unique"));
                 }
                 validate_name("enum_option_label", &option.label)?;
+                // Removed options are never exported, so only active labels must split cleanly.
+                if !option.deleted {
+                    self.validate_option_label(&option.label)?;
+                }
             }
         } else if !self.enum_options.is_empty() {
             return Err(invalid("enum_options", "are valid only for Enum fields"));
+        }
+        if let Some(FieldValue::EnumSet(ids)) = &self.default
+            && ids.is_empty()
+        {
+            return Err(invalid("default", "must pick at least one option"));
         }
         if let Some(default) = &self.default {
             self.validate_value(default)
@@ -284,6 +305,7 @@ impl FieldDefinition {
                 | (FieldType::DateTime, FieldValue::DateTime(_))
                 | (FieldType::Duration, FieldValue::Duration(_))
                 | (FieldType::Enum, FieldValue::Enum(_))
+                | (FieldType::EnumSet, FieldValue::EnumSet(_))
         );
         if !type_matches {
             return Err(ValidationIssue::new(
@@ -342,14 +364,94 @@ impl FieldDefinition {
                     ));
                 }
             }
+            FieldValue::EnumSet(ids) => {
+                if ids.is_empty() {
+                    return if self.required {
+                        Err(ValidationIssue::new(IssueCode::Required, "Required"))
+                    } else {
+                        Ok(())
+                    };
+                }
+                let mut seen = HashSet::new();
+                for id in ids {
+                    if !seen.insert(id) {
+                        return Err(ValidationIssue::new(
+                            IssueCode::Invalid,
+                            "An option is picked twice",
+                        ));
+                    }
+                    if !self.is_active_option(*id) {
+                        return Err(ValidationIssue::new(
+                            IssueCode::InactiveOption,
+                            "Pick active options",
+                        ));
+                    }
+                }
+            }
             FieldValue::Null | FieldValue::Boolean(_) => {}
         }
         Ok(())
     }
 
+    fn is_active_option(&self, id: EnumOptionId) -> bool {
+        self.enum_options
+            .iter()
+            .any(|option| option.id == id && !option.deleted)
+    }
+
+    /// Checks a label for an option of this field: Choices labels can't hold `;`, the CSV
+    /// separator of a set.
+    pub fn validate_option_label(&self, label: &str) -> Result<(), DomainError> {
+        if matches!(self.field_type, FieldType::EnumSet) && label.contains(';') {
+            return Err(invalid(
+                "enum_option_label",
+                format!("“{label}” can't contain “;” in a Choices field"),
+            ));
+        }
+        Ok(())
+    }
+
+    /// Orders option ids by this field's option order (removed options included), id as the
+    /// tie-breaker; unknown ids sort last by id.
+    pub fn sort_option_ids(&self, ids: &mut [EnumOptionId]) {
+        ids.sort_by_key(|id| {
+            let order = self
+                .enum_options
+                .iter()
+                .find(|option| option.id == *id)
+                .map_or(i64::MAX, |option| option.order);
+            (order, *id)
+        });
+    }
+
     /// Like [`Self::validate_value`], but a Choice value pointing at a removed option of this
     /// field is accepted: a stored record keeps the option it already holds.
     pub fn validate_kept_value(&self, value: &FieldValue) -> Result<(), ValidationIssue> {
+        if let FieldValue::EnumSet(ids) = value
+            && matches!(self.field_type, FieldType::EnumSet)
+            && ids.iter().any(|id| {
+                self.enum_options
+                    .iter()
+                    .any(|option| option.id == *id && option.deleted)
+            })
+        {
+            // Members already held may be removed options; the rest must still be active.
+            let active: Vec<_> = ids
+                .iter()
+                .copied()
+                .filter(|id| {
+                    !self
+                        .enum_options
+                        .iter()
+                        .any(|option| option.id == *id && option.deleted)
+                })
+                .collect();
+            return if active.is_empty() {
+                Ok(())
+            } else {
+                self.validate_value(&FieldValue::EnumSet(active))
+            };
+        }
         if let FieldValue::Enum(id) = value
             && matches!(self.field_type, FieldType::Enum)
             && self
@@ -639,6 +741,81 @@ mod tests {
                 .unwrap()
                 .default_relative_days,
             None
+        );
+    }
+
+    #[test]
+    fn choices_fields_round_trip_and_validate_labels_and_defaults() {
+        let mut tags = text_field("tags", 0);
+        tags.field_type = FieldType::EnumSet;
+        tags.enum_options = ["work", "urgent", "gone"]
+            .iter()
+            .enumerate()
+            .map(|(order, label)| EnumOption {
+                id: EnumOptionId::new(),
+                label: (*label).into(),
+                order: order as i64,
+                deleted: *label == "gone",
+            })
+            .collect();
+        tags.default = Some(FieldValue::EnumSet(vec![tags.enum_options[0].id]));
+        tags.validate().unwrap();
+        let encoded = serde_json::to_string(&tags).unwrap();
+        assert!(encoded.contains(r#""field_type":{"kind":"enum_set"}"#));
+        assert_eq!(
+            serde_json::from_str::<FieldDefinition>(&encoded).unwrap(),
+            tags
+        );
+
+        for default in [
+            FieldValue::EnumSet(vec![]),
+            FieldValue::EnumSet(vec![tags.enum_options[2].id]),
+            FieldValue::EnumSet(vec![EnumOptionId::new()]),
+            FieldValue::Enum(tags.enum_options[0].id),
+        ] {
+            let mut field = tags.clone();
+            field.default = Some(default);
+            assert!(matches!(
+                field.validate(),
+                Err(DomainError::Invalid {
+                    field: "default",
+                    ..
+                })
+            ));
+        }
+        let mut field = tags.clone();
+        field.enum_options[1].label = "food; drinks".into();
+        assert!(matches!(
+            field.validate(),
+            Err(DomainError::Invalid {
+                field: "enum_option_label",
+                ..
+            })
+        ));
+        // A removed label is never exported, and a Choice label may hold `;`.
+        field.enum_options[1].deleted = true;
+        field.validate().unwrap();
+        field.enum_options[1].deleted = false;
+        field.field_type = FieldType::Enum;
+        field.default = None;
+        field.validate().unwrap();
+
+        // Values: active members only, kept removed members on stored records, required non-empty.
+        let removed = tags.enum_options[2].id;
+        let active = tags.enum_options[0].id;
+        assert!(
+            tags.validate_value(&FieldValue::EnumSet(vec![active, removed]))
+                .is_err()
+        );
+        tags.validate_kept_value(&FieldValue::EnumSet(vec![active, removed]))
+            .unwrap();
+        tags.validate_value(&FieldValue::EnumSet(vec![])).unwrap();
+        tags.required = true;
+        assert_eq!(
+            tags.validate_value(&FieldValue::EnumSet(vec![]))
+                .unwrap_err()
+                .code,
+            IssueCode::Required
         );
     }
 

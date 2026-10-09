@@ -200,6 +200,15 @@ pub fn remap_expression(
             left: boxed(left)?,
             right: boxed(right)?,
         },
+        Expression::SetCompare {
+            operator,
+            left,
+            right,
+        } => Expression::SetCompare {
+            operator: *operator,
+            left: boxed(left)?,
+            right: boxed(right)?,
+        },
         Expression::Boolean {
             operator,
             left,
@@ -240,6 +249,13 @@ fn remap_reference(
 fn remap_typed_value(value: &TypedValue, remap: &IdRemap) -> Result<TypedValue, DomainError> {
     Ok(match value {
         TypedValue::Enum(id) => TypedValue::Enum(remap.option(*id)?),
+        TypedValue::EnumOptionSet { field, options } => TypedValue::EnumOptionSet {
+            field: remap.field(*field)?,
+            options: options
+                .iter()
+                .map(|id| remap.option(*id))
+                .collect::<Result<_, _>>()?,
+        },
         TypedValue::Null
         | TypedValue::Text(_)
         | TypedValue::Integer(_)
@@ -368,6 +384,11 @@ pub fn remap_field(
             .collect::<Result<_, DomainError>>()?,
         default: match &field.default {
             Some(FieldValue::Enum(id)) => Some(FieldValue::Enum(remap.option(*id)?)),
+            Some(FieldValue::EnumSet(ids)) => Some(FieldValue::EnumSet(
+                ids.iter()
+                    .map(|id| remap.option(*id))
+                    .collect::<Result<_, _>>()?,
+            )),
             other => other.clone(),
         },
         ..field.clone()
@@ -430,6 +451,11 @@ pub fn remap_record_values(
         .map(|(field, value)| {
             let value = match value {
                 FieldValue::Enum(id) => FieldValue::Enum(remap.option(*id)?),
+                FieldValue::EnumSet(ids) => FieldValue::EnumSet(
+                    ids.iter()
+                        .map(|id| remap.option(*id))
+                        .collect::<Result<_, _>>()?,
+                ),
                 FieldValue::Null
                 | FieldValue::Text(_)
                 | FieldValue::Integer(_)

@@ -14,11 +14,12 @@ void main() {
       FieldTypeKindDto.dateTime: PhosphorIconsRegular.calendarCheck,
       FieldTypeKindDto.duration: PhosphorIconsRegular.timer,
       FieldTypeKindDto.enum_: PhosphorIconsRegular.listBullets,
+      FieldTypeKindDto.enumSet: PhosphorIconsRegular.listChecks,
     };
     for (final kind in FieldTypeKindDto.values) {
       expect(fieldTypeIcon(kind), expected[kind], reason: kind.name);
     }
     final glyphs = FieldTypeKindDto.values.map(fieldTypeIcon).toSet();
-    expect(glyphs, hasLength(8));
+    expect(glyphs, hasLength(9));
   });
 }

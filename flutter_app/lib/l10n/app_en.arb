@@ -4765,5 +4765,72 @@
         "type": "String"
       }
     }
+  },
+  "fieldTypeChoices": "Choices",
+  "@fieldTypeChoices": {
+    "description": "Field kind name: a set of options"
+  },
+  "themeChoicesPicked": "{count} picked",
+  "@themeChoicesPicked": {
+    "description": "How many options of a Choices field are picked",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "fieldEditorChoicesRequiredHelp": "Required means at least one option is picked.",
+  "@fieldEditorChoicesRequiredHelp": {
+    "description": "Helper under the chips of a Choices field"
+  },
+  "fieldEditorChoicesDefaultHelp": "A set of options, picked on new records.",
+  "@fieldEditorChoicesDefaultHelp": {
+    "description": "Helper under the default of a Choices field"
+  },
+  "fieldEditorChoicesSemicolon": "Options of a Choices field can't contain “;”.",
+  "@fieldEditorChoicesSemicolon": {
+    "description": "Inline error on a Choices option label holding a semicolon"
+  },
+  "fieldEditorChoicesConversionBlocked": "{count, plural, =1{1 record holds more than one choice. Edit it first.} other{{count} records hold more than one choice. Edit them first.}}",
+  "@fieldEditorChoicesConversionBlocked": {
+    "description": "Choices to Choice refused because records hold several options",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "queryOpHasAnyOf": "has any of",
+  "@queryOpHasAnyOf": {
+    "description": "Set filter operator"
+  },
+  "queryOpHasAllOf": "has all of",
+  "@queryOpHasAllOf": {
+    "description": "Set filter operator"
+  },
+  "queryOpHasNoneOf": "has none of",
+  "@queryOpHasNoneOf": {
+    "description": "Set filter operator"
+  },
+  "queryOpIsEmpty": "is empty",
+  "@queryOpIsEmpty": {
+    "description": "Filter operator: no value"
+  },
+  "queryOpIsNotEmpty": "is not empty",
+  "@queryOpIsNotEmpty": {
+    "description": "Filter operator: has a value"
+  },
+  "widgetGroupsOverlap": "Groups overlap: a record counts in each of its choices.",
+  "@widgetGroupsOverlap": {
+    "description": "Note under a widget grouped by a Choices field"
+  },
+  "recordsMoreTags": "+{count}",
+  "@recordsMoreTags": {
+    "description": "Tag standing for Choices labels that don't fit",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   }
 }

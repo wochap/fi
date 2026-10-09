@@ -1,8 +1,9 @@
-import 'package:fi/exact_format.dart';
 import 'package:fi/help_button.dart';
 import 'package:fi/help_copy.dart';
 import 'package:fi/l10n/l10n.dart';
 import 'package:fi/src/rust/api/models.dart';
+import 'package:fi/field_registry.dart';
+import 'package:fi/theme/choice_input.dart';
 import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/theme/inputs.dart';
 import 'package:fi/theme/nocturne.dart';
@@ -20,6 +21,33 @@ String presetLabel(AppLocalizations l, ChartPreset preset) => switch (preset) {
   ChartPreset.countPerDay => l.queryPresetCountPerDay,
   ChartPreset.latestValues => l.queryPresetLatestValues,
 };
+
+/// The filter operators offered for a Choices field. The first three take a pick of options and
+/// become set tests; the last two take no value and become IsNull / IsNotNull.
+enum ChoicesFilterOperator {
+  hasAnyOf,
+  hasAllOf,
+  hasNoneOf,
+  isEmpty,
+  isNotEmpty;
+
+  bool get takesOptions => this != isEmpty && this != isNotEmpty;
+
+  SetOperatorDto? get setOperator => switch (this) {
+    hasAnyOf => SetOperatorDto.hasAnyOf,
+    hasAllOf => SetOperatorDto.hasAllOf,
+    hasNoneOf => SetOperatorDto.hasNoneOf,
+    _ => null,
+  };
+
+  String label(AppLocalizations l) => switch (this) {
+    hasAnyOf => l.queryOpHasAnyOf,
+    hasAllOf => l.queryOpHasAllOf,
+    hasNoneOf => l.queryOpHasNoneOf,
+    isEmpty => l.queryOpIsEmpty,
+    isNotEmpty => l.queryOpIsNotEmpty,
+  };
+}
 
 /// Everything the guided query builder can express, as plain data.
 ///
@@ -41,6 +69,9 @@ final class QueryBuilderState {
     this.filterFieldId,
     this.filterOperator = ComparisonOperatorDto.equal,
     this.filterValue = '',
+    this.filterChoices = false,
+    this.choicesOperator = ChoicesFilterOperator.hasAnyOf,
+    this.filterOptions = const [],
     this.descending = false,
     this.limit,
   });
@@ -57,6 +88,12 @@ final class QueryBuilderState {
   final String? filterFieldId;
   final ComparisonOperatorDto filterOperator;
   final String filterValue;
+
+  /// Whether the filter field is a Choices field: the condition is then [choicesOperator] with
+  /// [filterOptions] rather than [filterOperator] with [filterValue].
+  final bool filterChoices;
+  final ChoicesFilterOperator choicesOperator;
+  final List<String> filterOptions;
 
   /// Series ordering. Descending plus a [limit] is how "Latest values" reads the newest records.
   final bool descending;
@@ -75,6 +112,9 @@ final class QueryBuilderState {
     Object? filterFieldId = _keep,
     ComparisonOperatorDto? filterOperator,
     String? filterValue,
+    bool? filterChoices,
+    ChoicesFilterOperator? choicesOperator,
+    List<String>? filterOptions,
     bool? descending,
     Object? limit = _keep,
   }) => QueryBuilderState(
@@ -100,6 +140,9 @@ final class QueryBuilderState {
         : filterFieldId as String?,
     filterOperator: filterOperator ?? this.filterOperator,
     filterValue: filterValue ?? this.filterValue,
+    filterChoices: filterChoices ?? this.filterChoices,
+    choicesOperator: choicesOperator ?? this.choicesOperator,
+    filterOptions: filterOptions ?? this.filterOptions,
     descending: descending ?? this.descending,
     limit: identical(limit, _keep) ? this.limit : limit as int?,
   );
@@ -143,11 +186,16 @@ final class QueryBuilderState {
         categoryFieldId == null) {
       return l.queryBlockerCategory;
     }
-    if (filterFieldId != null && filterValue.trim().isEmpty) {
+    if (filterFieldId != null && !filterComplete) {
       return l.queryBlockerFilterValue;
     }
     return null;
   }
+
+  /// Whether the filter condition has everything it needs.
+  bool get filterComplete => filterChoices
+      ? !choicesOperator.takesOptions || filterOptions.isNotEmpty
+      : filterValue.trim().isNotEmpty;
 
   QueryDefinitionDto toDefinition(
     CollectionSchemaDto schema,
@@ -269,6 +317,47 @@ final class QueryBuilderState {
     if (fieldId == null) return null;
     final field = schema.fields.where((item) => item.id == fieldId).firstOrNull;
     if (field == null) return null;
+    final reference = ExpressionNodeDto(
+      kind: ExpressionKindDto.field,
+      field: FieldReferenceDto(kind: FieldReferenceKindDto.source, id: fieldId),
+    );
+    if (field.fieldType.kind == FieldTypeKindDto.enumSet) {
+      if (choicesOperator.setOperator case final operator?) {
+        if (filterOptions.isEmpty) return null;
+        return ExpressionDto(
+          root: 2,
+          nodes: [
+            reference,
+            ExpressionNodeDto(
+              kind: ExpressionKindDto.constant,
+              value: TypedValueDto(
+                valueType: const ValueTypeDto(kind: ValueTypeKindDto.enumSet),
+                listValue: _inOptionOrder(field, filterOptions),
+                fieldId: fieldId,
+              ),
+            ),
+            ExpressionNodeDto(
+              kind: ExpressionKindDto.setCompare,
+              setOperator: operator,
+              left: 0,
+              right: 1,
+            ),
+          ],
+        );
+      }
+      return ExpressionDto(
+        root: 1,
+        nodes: [
+          reference,
+          ExpressionNodeDto(
+            kind: choicesOperator == ChoicesFilterOperator.isEmpty
+                ? ExpressionKindDto.isNull
+                : ExpressionKindDto.isNotNull,
+            expression: 0,
+          ),
+        ],
+      );
+    }
     final constant = _constant(field, decimalSeparator);
     if (constant == null) return null;
     return ExpressionDto(
@@ -342,13 +431,23 @@ final class QueryBuilderState {
 
     // Filter: only the one comparison shape the builder emits is representable.
     if (query.filter case final filter?) {
-      final parsed = _parseFilter(filter, schema, decimalSeparator);
-      if (parsed == null) return null;
-      state = state.copyWith(
-        filterFieldId: parsed.fieldId,
-        filterOperator: parsed.operator,
-        filterValue: parsed.value,
-      );
+      final choices = _parseChoicesFilter(filter, schema);
+      if (choices != null) {
+        state = state.copyWith(
+          filterFieldId: choices.fieldId,
+          filterChoices: true,
+          choicesOperator: choices.operator,
+          filterOptions: choices.options,
+        );
+      } else {
+        final parsed = _parseFilter(filter, schema, decimalSeparator);
+        if (parsed == null) return null;
+        state = state.copyWith(
+          filterFieldId: parsed.fieldId,
+          filterOperator: parsed.operator,
+          filterValue: parsed.value,
+        );
+      }
     }
 
     final groupingFieldId = query.grouping == null
@@ -581,6 +680,24 @@ ValueTypeDto? queryResultType(
   }
 }
 
+/// Whether [definition] groups by a Choices field, so its groups overlap: a record counts in
+/// the group of each of its options.
+bool groupsByChoices(
+  QueryDefinitionDto definition,
+  CollectionSchemaDto schema,
+) {
+  final query = definition.query;
+  if (query == null) return false;
+  final keys = [?query.shape.category, ?query.grouping?.expression];
+  return keys.any((expression) {
+    final id = _fieldIdOf(expression);
+    return schema.fields.any(
+      (field) =>
+          field.id == id && field.fieldType.kind == FieldTypeKindDto.enumSet,
+    );
+  });
+}
+
 /// The single-node field expression the builder emits everywhere it names a field.
 ExpressionDto fieldExpression(String fieldId) => ExpressionDto(
   root: 0,
@@ -634,6 +751,88 @@ _AggregationApply? _parseAggregation(AggregationDto? aggregation) {
   }
   return (state) =>
       state.copyWith(aggregation: aggregation.kind, operandFieldId: operand);
+}
+
+/// [ids] in [field]'s option order.
+List<String> _inOptionOrder(FieldDefinitionDto field, List<String> ids) {
+  final wanted = ids.toSet();
+  final ordered = [...field.enumOptions]
+    ..sort((a, b) {
+      final order = a.order.compareTo(b.order);
+      return order == 0 ? a.id.compareTo(b.id) : order;
+    });
+  return [
+    for (final option in ordered)
+      if (wanted.contains(option.id)) option.id,
+  ];
+}
+
+typedef _ParsedChoicesFilter = ({
+  String fieldId,
+  ChoicesFilterOperator operator,
+  List<String> options,
+});
+
+/// A Choices condition the builder emits: a set test against an option set, or IsNull /
+/// IsNotNull of the field. Null for anything else.
+_ParsedChoicesFilter? _parseChoicesFilter(
+  ExpressionDto filter,
+  CollectionSchemaDto schema,
+) {
+  FieldDefinitionDto? choicesField(ExpressionNodeDto node) {
+    final reference = node.field;
+    if (node.kind != ExpressionKindDto.field ||
+        reference == null ||
+        reference.kind != FieldReferenceKindDto.source) {
+      return null;
+    }
+    final field = schema.fields
+        .where((item) => item.id == reference.id)
+        .firstOrNull;
+    return field?.fieldType.kind == FieldTypeKindDto.enumSet ? field : null;
+  }
+
+  if (filter.nodes.length == 2 && filter.root == 1) {
+    final test = filter.nodes[1];
+    final field = choicesField(filter.nodes[0]);
+    if (field == null || test.expression != 0) return null;
+    return switch (test.kind) {
+      ExpressionKindDto.isNull => (
+        fieldId: field.id,
+        operator: ChoicesFilterOperator.isEmpty,
+        options: const <String>[],
+      ),
+      ExpressionKindDto.isNotNull => (
+        fieldId: field.id,
+        operator: ChoicesFilterOperator.isNotEmpty,
+        options: const <String>[],
+      ),
+      _ => null,
+    };
+  }
+  if (filter.nodes.length != 3 || filter.root != 2) return null;
+  final field = choicesField(filter.nodes[0]);
+  final constant = filter.nodes[1];
+  final compare = filter.nodes[2];
+  if (field == null ||
+      constant.kind != ExpressionKindDto.constant ||
+      compare.kind != ExpressionKindDto.setCompare ||
+      compare.left != 0 ||
+      compare.right != 1) {
+    return null;
+  }
+  final value = constant.value;
+  if (value == null || value.valueType.kind != ValueTypeKindDto.enumSet) {
+    return null;
+  }
+  final operator = switch (compare.setOperator) {
+    SetOperatorDto.hasAnyOf => ChoicesFilterOperator.hasAnyOf,
+    SetOperatorDto.hasAllOf => ChoicesFilterOperator.hasAllOf,
+    SetOperatorDto.hasNoneOf => ChoicesFilterOperator.hasNoneOf,
+    null => null,
+  };
+  if (operator == null) return null;
+  return (fieldId: field.id, operator: operator, options: value.listValue);
 }
 
 final class _ParsedFilter {
@@ -700,6 +899,7 @@ ValueTypeKindDto valueKindFor(FieldTypeKindDto kind) => switch (kind) {
   FieldTypeKindDto.dateTime => ValueTypeKindDto.dateTime,
   FieldTypeKindDto.duration => ValueTypeKindDto.duration,
   FieldTypeKindDto.enum_ => ValueTypeKindDto.enum_,
+  FieldTypeKindDto.enumSet => ValueTypeKindDto.enumSet,
 };
 
 List<FieldDefinitionDto> activeFieldsOf(CollectionSchemaDto schema) =>
@@ -731,6 +931,7 @@ List<FieldDefinitionDto> categoryFieldsOf(CollectionSchemaDto schema) =>
       schema,
       (kind) =>
           kind == FieldTypeKindDto.enum_ ||
+          kind == FieldTypeKindDto.enumSet ||
           kind == FieldTypeKindDto.text ||
           kind == FieldTypeKindDto.boolean ||
           kind == FieldTypeKindDto.date ||
@@ -1021,6 +1222,24 @@ class _QueryBuilderState extends State<QueryBuilder> {
     final field = schema.fields
         .where((item) => item.id == state.filterFieldId)
         .firstOrNull;
+    if (state.filterChoices) {
+      final labels = field == null
+          ? const <String>[]
+          : FieldRendererRegistry.optionLabels(
+              field,
+              FieldValueDto(
+                kind: FieldValueKindDto.enumSet,
+                listValue: state.filterOptions,
+              ),
+            );
+      return l
+          .queryFilterChip(
+            field?.name ?? '?',
+            state.choicesOperator.label(l),
+            labels.join(', '),
+          )
+          .trim();
+    }
     final value = field?.fieldType.kind == FieldTypeKindDto.enum_
         ? field!.enumOptions
                   .where((option) => option.id == state.filterValue.trim())
@@ -1040,14 +1259,20 @@ class _QueryBuilderState extends State<QueryBuilder> {
 
   void _clearFilter() {
     setState(() => editingFilter = false);
-    _emit(state.copyWith(filterFieldId: null, filterValue: ''));
+    _emit(
+      state.copyWith(
+        filterFieldId: null,
+        filterValue: '',
+        filterChoices: false,
+        filterOptions: const [],
+      ),
+    );
   }
 
   /// Chip style: the finished condition as a chip (✕ removes it), the open condition row, or the
   /// "Add filter" button. One condition at most, so "Add filter" hides while one exists.
   List<Widget> _filterChip(AppLocalizations l) {
-    final complete =
-        state.filterFieldId != null && state.filterValue.trim().isNotEmpty;
+    final complete = state.filterFieldId != null && state.filterComplete;
     if (editingFilter || (state.filterFieldId != null && !complete)) {
       return [
         _conditionRow(l),
@@ -1103,6 +1328,9 @@ class _QueryBuilderState extends State<QueryBuilder> {
   /// Field, operator and value side by side.
   Widget _conditionRow(AppLocalizations l) {
     final fields = activeFieldsOf(schema);
+    final choicesField = state.filterChoices
+        ? fields.where((field) => field.id == state.filterFieldId).firstOrNull
+        : null;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       spacing: 8,
@@ -1119,58 +1347,112 @@ class _QueryBuilderState extends State<QueryBuilder> {
               for (final field in fields)
                 DropdownMenuItem(value: field.id, child: Text(field.name)),
             ],
-            onChanged: (value) => _emit(state.copyWith(filterFieldId: value)),
+            onChanged: (value) {
+              final choices =
+                  fields
+                      .where((field) => field.id == value)
+                      .firstOrNull
+                      ?.fieldType
+                      .kind ==
+                  FieldTypeKindDto.enumSet;
+              _emit(
+                state.copyWith(
+                  filterFieldId: value,
+                  filterChoices: choices,
+                  // Options belong to one field, so a new field starts with none picked.
+                  filterOptions: const [],
+                ),
+              );
+            },
           ),
         ),
-        Expanded(
-          child: FiSelect<ComparisonOperatorDto>.compact(
-            key: const Key('filter-operator'),
-            value: state.filterOperator,
-            label: l.queryFilterOperator,
-            items: [
-              DropdownMenuItem(
-                value: ComparisonOperatorDto.equal,
-                child: Text(l.queryOpEquals),
-              ),
-              DropdownMenuItem(
-                value: ComparisonOperatorDto.notEqual,
-                child: Text(l.queryOpIsNot),
-              ),
-              DropdownMenuItem(
-                value: ComparisonOperatorDto.greaterThan,
-                child: Text(l.queryOpGreaterThan),
-              ),
-              DropdownMenuItem(
-                value: ComparisonOperatorDto.greaterThanOrEqual,
-                child: Text(l.queryOpAtLeast),
-              ),
-              DropdownMenuItem(
-                value: ComparisonOperatorDto.lessThan,
-                child: Text(l.queryOpLessThan),
-              ),
-              DropdownMenuItem(
-                value: ComparisonOperatorDto.lessThanOrEqual,
-                child: Text(l.queryOpAtMost),
-              ),
-            ],
-            onChanged: state.filterFieldId == null
-                ? null
-                : (value) => _emit(
-                    state.copyWith(
-                      filterOperator: value ?? state.filterOperator,
-                    ),
+        if (choicesField != null) ...[
+          Expanded(
+            child: FiSelect<ChoicesFilterOperator>.compact(
+              key: const Key('filter-choices-operator'),
+              value: state.choicesOperator,
+              label: l.queryFilterOperator,
+              items: [
+                for (final operator in ChoicesFilterOperator.values)
+                  DropdownMenuItem(
+                    value: operator,
+                    child: Text(operator.label(l)),
                   ),
+              ],
+              onChanged: (value) => _emit(
+                state.copyWith(choicesOperator: value ?? state.choicesOperator),
+              ),
+            ),
           ),
-        ),
-        Expanded(
-          child: FiTextInput.compact(
-            key: const Key('filter-value'),
-            controller: filterValue,
-            enabled: state.filterFieldId != null,
-            label: l.queryFilterValue,
-            onChanged: (value) => _emit(state.copyWith(filterValue: value)),
+          Expanded(
+            child: state.choicesOperator.takesOptions
+                ? FiChoicesInput(
+                    key: const Key('filter-options'),
+                    title: choicesField.name,
+                    options: [
+                      for (final option in FieldRendererRegistry.activeOptions(
+                        choicesField,
+                      ))
+                        ChoiceOption(id: option.id, label: option.label),
+                    ],
+                    value: state.filterOptions,
+                    allowClear: true,
+                    onChanged: (value) =>
+                        _emit(state.copyWith(filterOptions: value)),
+                  )
+                : const SizedBox.shrink(),
           ),
-        ),
+        ] else ...[
+          Expanded(
+            child: FiSelect<ComparisonOperatorDto>.compact(
+              key: const Key('filter-operator'),
+              value: state.filterOperator,
+              label: l.queryFilterOperator,
+              items: [
+                DropdownMenuItem(
+                  value: ComparisonOperatorDto.equal,
+                  child: Text(l.queryOpEquals),
+                ),
+                DropdownMenuItem(
+                  value: ComparisonOperatorDto.notEqual,
+                  child: Text(l.queryOpIsNot),
+                ),
+                DropdownMenuItem(
+                  value: ComparisonOperatorDto.greaterThan,
+                  child: Text(l.queryOpGreaterThan),
+                ),
+                DropdownMenuItem(
+                  value: ComparisonOperatorDto.greaterThanOrEqual,
+                  child: Text(l.queryOpAtLeast),
+                ),
+                DropdownMenuItem(
+                  value: ComparisonOperatorDto.lessThan,
+                  child: Text(l.queryOpLessThan),
+                ),
+                DropdownMenuItem(
+                  value: ComparisonOperatorDto.lessThanOrEqual,
+                  child: Text(l.queryOpAtMost),
+                ),
+              ],
+              onChanged: state.filterFieldId == null
+                  ? null
+                  : (value) => _emit(
+                      state.copyWith(
+                        filterOperator: value ?? state.filterOperator,
+                      ),
+                    ),
+            ),
+          ),
+          Expanded(
+            child: FiTextInput.compact(
+              key: const Key('filter-value'),
+              controller: filterValue,
+              enabled: state.filterFieldId != null,
+              label: l.queryFilterValue,
+              onChanged: (value) => _emit(state.copyWith(filterValue: value)),
+            ),
+          ),
+        ],
       ],
     );
   }

@@ -110,6 +110,7 @@ pub fn voice_fields(definitions: &[FieldDefinition]) -> Vec<VoiceField> {
                     FieldType::DateTime => FieldKind::DateTime,
                     FieldType::Duration => FieldKind::Duration,
                     FieldType::Enum => FieldKind::Choice,
+                    FieldType::EnumSet => FieldKind::Choices,
                 },
                 required: field.required,
                 options: options
@@ -155,6 +156,18 @@ pub fn build_grammar(fields: &[VoiceField]) -> String {
                 labels.push("\"null\"".into());
                 format!("({})", labels.join(" | "))
             }
+            // An array of one or more labels of this field. GBNF can't forbid a repeated label
+            // without blowing up, so repeats are dropped when the patch is built.
+            FieldKind::Choices if field.options.is_empty() => "(\"null\")".to_owned(),
+            FieldKind::Choices => {
+                let labels: Vec<String> = field
+                    .options
+                    .iter()
+                    .map(|option| json_literal(&option.label))
+                    .collect();
+                let label = format!("({})", labels.join(" | "));
+                format!("(\"[\" ws {label} ( ws \",\" ws {label} )* ws \"]\" | \"null\")")
+            }
             _ => "(span | \"null\")".to_owned(),
         };
         let name = format!("e{index}");
@@ -193,16 +206,18 @@ fn kind_label(field: &VoiceField) -> String {
         FieldKind::Date => "date".into(),
         FieldKind::DateTime => "date and time".into(),
         FieldKind::Duration => "duration".into(),
-        FieldKind::Choice => format!(
-            "choice: {}",
-            field
-                .options
-                .iter()
-                .map(|option| option.label.as_str())
-                .collect::<Vec<_>>()
-                .join("|")
-        ),
+        FieldKind::Choice => format!("choice: {}", option_labels(field)),
+        FieldKind::Choices => format!("choices, one or more: {}", option_labels(field)),
     }
+}
+
+fn option_labels(field: &VoiceField) -> String {
+    field
+        .options
+        .iter()
+        .map(|option| option.label.as_str())
+        .collect::<Vec<_>>()
+        .join("|")
 }
 
 const SYSTEM: &str = "You fill form fields from a spoken note. Output JSON only: an array of \
@@ -315,6 +330,32 @@ mod tests {
         assert!(!gbnf.contains("old notes"));
         assert!(!gbnf.contains("gone"));
         assert!(gbnf.contains("(\"true\" | \"false\" | \"null\")"));
+    }
+
+    #[test]
+    fn choices_grammar_is_an_array_of_the_field_labels_or_null() {
+        let mut tags = definition("tags", FieldType::EnumSet, 0, false);
+        tags.enum_options = ["work", "urgent", "gone"]
+            .iter()
+            .enumerate()
+            .map(|(order, label)| EnumOption {
+                id: EnumOptionId::new(),
+                label: (*label).into(),
+                order: order as i64,
+                deleted: *label == "gone",
+            })
+            .collect();
+        let fields = voice_fields(&[tags]);
+        assert_eq!(fields[0].kind, FieldKind::Choices);
+        let gbnf = build_grammar(&fields);
+        let label = r#"("\"work\"" | "\"urgent\"")"#;
+        assert!(
+            gbnf.contains(&format!(
+                r#"("[" ws {label} ( ws "," ws {label} )* ws "]" | "null")"#
+            )),
+            "{gbnf}"
+        );
+        assert!(!gbnf.contains("gone"));
     }
 
     #[test]

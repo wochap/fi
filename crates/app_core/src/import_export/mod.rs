@@ -16,7 +16,7 @@ use crate::{
     query::{ComputedFieldDefinition, QueryDefinition},
     records::{GenericRecord, RecordId},
     remap::{ClonePlan, IdRemap, plan_with_remap, remap_record_values},
-    schema::{CollectionSchema, CollectionSchemaId, FieldId},
+    schema::{CollectionSchema, CollectionSchemaId, FieldDefinition, FieldId},
     values::FieldValue,
     widgets::WidgetDefinition,
 };
@@ -126,6 +126,10 @@ impl ExportedCollection {
             .collect();
         for field in &mut fields {
             field.enum_options.retain(|option| !option.deleted);
+            if let Some(default) = &field.default {
+                field.default =
+                    Some(active_members(field, default)).filter(|value| *value != FieldValue::Null);
+            }
         }
         let active: HashSet<_> = fields.iter().map(|field| field.id).collect();
         Self {
@@ -157,11 +161,42 @@ impl ExportedCollection {
                         .values
                         .iter()
                         .filter(|(field, _)| active.contains(field))
-                        .map(|(field, value)| (*field, value.clone()))
+                        .map(|(field, value)| {
+                            let value = schema
+                                .fields
+                                .iter()
+                                .find(|item| item.id == *field)
+                                .map_or_else(
+                                    || value.clone(),
+                                    |field| active_members(field, value),
+                                );
+                            (*field, value)
+                        })
                         .collect(),
                 })
                 .collect(),
         }
+    }
+}
+
+/// A Choices value without its removed options (they aren't exported), Null when none is left.
+/// Any other value is returned unchanged.
+fn active_members(field: &FieldDefinition, value: &FieldValue) -> FieldValue {
+    match value {
+        FieldValue::EnumSet(ids) => {
+            let ids: Vec<_> = field
+                .ordered_enum_options()
+                .into_iter()
+                .map(|option| option.id)
+                .filter(|id| ids.contains(id))
+                .collect();
+            if ids.is_empty() {
+                FieldValue::Null
+            } else {
+                FieldValue::EnumSet(ids)
+            }
+        }
+        other => other.clone(),
     }
 }
 

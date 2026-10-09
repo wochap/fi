@@ -101,6 +101,7 @@ FieldValueKindDto _valueKindFor(FieldTypeKindDto kind) => switch (kind) {
   FieldTypeKindDto.dateTime => FieldValueKindDto.dateTime,
   FieldTypeKindDto.duration => FieldValueKindDto.duration,
   FieldTypeKindDto.enum_ => FieldValueKindDto.enum_,
+  FieldTypeKindDto.enumSet => FieldValueKindDto.enumSet,
 };
 
 /// Whether [value] is a valid value of [field]'s type, options and bounds.
@@ -115,6 +116,12 @@ bool validVoiceValue(VoiceField field, FieldValueDto value) {
       return true;
     case FieldValueKindDto.enum_:
       return field.options.any((option) => option.id == value.textValue);
+    case FieldValueKindDto.enumSet:
+      // A non-empty set of distinct active options of the field.
+      final ids = value.listValue;
+      return ids.isNotEmpty &&
+          ids.toSet().length == ids.length &&
+          ids.every((id) => field.options.any((option) => option.id == id));
     case FieldValueKindDto.boolean:
       return value.booleanValue != null;
     case FieldValueKindDto.integer:
@@ -180,5 +187,6 @@ PatchOutcome applyPatch({
 bool isEmptyValue(FieldValueDto? value) =>
     value == null ||
     value.kind == FieldValueKindDto.null_ ||
+    (value.kind == FieldValueKindDto.enumSet && value.listValue.isEmpty) ||
     (value.kind == FieldValueKindDto.text &&
         (value.textValue?.trim().isEmpty ?? true));

@@ -21,13 +21,13 @@ guide disagree, update this guide to match.
 | --- | --- |
 | `lib/theme/nocturne.dart` | `Nocturne` tokens (colors, radii, shadows, fonts, input heights via `Nocturne.inputHeight`) and `nocturneTheme()`, the only `ThemeData` |
 | `lib/theme/nocturne_widgets.dart` | Shared pieces: `FadedRule`, `Kicker`, `SectionLabel`, `GlowDot`, `IconTile`, `Tag` (accent, `Tag.neutral`, `Tag.outline`, optional leading icon), `NocturneCard`, `nocturneGlow()`, `DashedSlot`, `FiLogoMark`, `FiLogoTile`, `ClearMark`, the field status markers `VoiceChip` / `DefaultMarker` / `NeededMarker`, `FiSwitch` / `FiSwitchTile`, `FiIconButton`, `CardListRow` |
-| `lib/theme/fi_icons.dart` | `FiIcons`: every icon the app draws, named by meaning and pointing at a Phosphor glyph; `fieldTypeIcon()` for the eight field types |
+| `lib/theme/fi_icons.dart` | `FiIcons`: every icon the app draws, named by meaning and pointing at a Phosphor glyph; `fieldTypeIcon()` for the nine field types |
 | `lib/theme/side_sheet.dart` | `showSideSheet()`: a 480px sheet from the right, or a bottom sheet on a phone |
 | `lib/theme/form_surface.dart` | `showFormSurface()` + `FormSurface`: every create/edit form, a bottom sheet on a phone and a dialog (optionally two-pane with an aside) otherwise |
 | `lib/theme/inputs.dart` | `FiTextInput`, `FiSelect`, `FiPickerInput`, `FiSlider`, `FiSegmented`, `FiDurationInput`: every text, number, search, select, picker, slider, segmented and duration input, at the small or normal height token; `DurationGrammar` (set once at startup to the core's grammar, `lib/bridge/duration_grammar.dart`) and `formatDurationPreview()` |
-| `lib/theme/choice_input.dart` | `FiChoiceInput`: a Choice picked by option count (segmented up to 4, select or phone picker sheet up to 10, search above that), with `showChoicePickerSheet()` and the full-height `showChoiceSearchSheet()` |
+| `lib/theme/choice_input.dart` | `FiChoiceInput`: a Choice picked by option count (segmented up to 4, select or phone picker sheet up to 10, search above that), with `showChoicePickerSheet()` and the full-height `showChoiceSearchSheet()`; `FiChoicesInput`: a Choices set by the same thresholds (toggle chips up to 4, then a field with "N picked" opening the checkbox sheet `showChoicesSheet()` with Done, plus search above 10); `ChoicesTagRow`: a Choices value as list tags with "+N" overflow |
 | `lib/record_form.dart` | `RecordFormBody`: the record editor's fields, labels in a 140px column beside the controls at ≥720 and above them below, with the Default / Needed markers in the label row |
-| `lib/field_editor.dart` | `FieldEditorBody` (name, 4×2 type grid, option chips with a settings block per chip, Choice options, default checks), hosted as a desktop inline panel or by `FieldEditorScreen` (the pushed phone screen); `fieldSummary()` for schema rows |
+| `lib/field_editor.dart` | `FieldEditorBody` (name, 3×3 type grid, option chips with a settings block per chip, Choice / Choices options, default checks; Choice ↔ Choices stays switchable on an existing field), hosted as a desktop inline panel or by `FieldEditorScreen` (the pushed phone screen); `fieldSummary()` for schema rows |
 | `lib/theme/action_sheet.dart` | `showActionSheet()` + `ActionSheet`: a phone row menu as a bottom sheet, headed by what it acts on (icon tile, title, subtitle), with 48px action rows in optionally labelled groups (mock collections) |
 | `lib/device_details.dart` | A trusted device's Details: `DeviceDetails` (state grid, failure, DeviceId with copy, categorized connection log with the All / Pairing / Peer filter, Reconnect and Copy log), `DeviceDetailsScreen` (the pushed phone screen, mock devices-details), `DeviceStateTag`, `LogLineRow`, `seenSyncedLine()`, `shortDeviceId()` / `groupedDeviceId()`, `copyWithConfirmation()` |
 | `lib/ui_prefs.dart` | `UiPrefs` and its stores: device-local presentation choices (the collections sort, the voice tip dismissal, hands-free spoken feedback) in `ui_prefs.json` in the app support directory; never sent to Rust or synced. Write with `UiPrefsStore.update` so writers of different fields don't undo each other |
@@ -73,7 +73,7 @@ widget to `nocturne_widgets.dart` only when a second screen needs it.
 9. **Inputs come from the shared widgets.** Build text, integer, decimal, search, select,
    slider, segmented choice, duration and Date / Date & time / time inputs with `FiTextInput`,
    `FiSelect`, `FiPickerInput`, `FiSlider`, `FiSegmented`, `FiDurationInput` and (for a Choice)
-   `FiChoiceInput`, never a raw `TextField`, `TextFormField`, `DropdownButton`,
+   `FiChoiceInput` (or `FiChoicesInput` for a Choices set), never a raw `TextField`, `TextFormField`, `DropdownButton`,
    `DropdownButtonFormField` or `SegmentedButton` in feature code. Pass `label`, `required` and
    `errors` to them rather than building an `InputDecoration`. Switches, checkboxes and buttons
    are not inputs here.

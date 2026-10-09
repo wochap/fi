@@ -50,6 +50,8 @@ String issueText(
       return l.issueInactiveOption;
     case 'field_unavailable':
       return l.issueFieldUnavailable;
+    case 'choices_conversion_blocked':
+      return l.fieldEditorChoicesConversionBlocked(issue.count ?? 0);
     case 'length':
       return switch ((validation?.minLength, validation?.maxLength)) {
         (final min?, final max?) when min == max => l.issueLengthExact(min),

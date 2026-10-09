@@ -101,7 +101,8 @@ pub use quinn_transport::{
     TlsIdentity, TrustResolver, extract_public_key,
 };
 pub use records::{
-    GenericRecord, RecordFieldIssue, RecordId, RecordValidationError, validate_record,
+    GenericRecord, MEMBER_KEY_SEPARATOR, RecordFieldIssue, RecordId, RecordValidationError,
+    member_key, parse_member_key, read_set_value, validate_record, write_set_value,
 };
 pub use remap::{ClonePlan, IdRemap, clone_plan, plan_with_remap, remap_record_values};
 pub use routing::{

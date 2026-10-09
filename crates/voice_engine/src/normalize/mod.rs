@@ -19,6 +19,10 @@ pub fn normalize(field: &VoiceField, span: &str, request: &FillRequest) -> Optio
     match (field.kind.clone(), request.language) {
         (FieldKind::Text, _) => normalize_text(span, field.max_length).map(TypedValue::Text),
         (FieldKind::Choice, _) => normalize_choice(span, &field.options).map(TypedValue::Choice),
+        // One label of a set; the patch gathers the labels of an entry.
+        (FieldKind::Choices, _) => {
+            normalize_choice(span, &field.options).map(|id| TypedValue::Choices(vec![id]))
+        }
         (FieldKind::Integer, VoiceLanguage::En) => normalize_integer(span).map(TypedValue::Integer),
         (FieldKind::Integer, VoiceLanguage::Es) => {
             es::normalize_integer(span).map(TypedValue::Integer)

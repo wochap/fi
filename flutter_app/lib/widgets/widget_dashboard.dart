@@ -25,6 +25,11 @@ Map<String, String> enumLabelsFor(CollectionSchemaDto? schema) => {
     if (field.fieldType.kind == FieldTypeKindDto.enum_)
       for (final option in field.enumOptions)
         if (!option.deleted) option.id: option.label,
+  // A Choices group of a removed option reads under its last label.
+  for (final field in schema?.fields ?? const <FieldDefinitionDto>[])
+    if (field.fieldType.kind == FieldTypeKindDto.enumSet)
+      for (final option in field.enumOptions)
+        option.id: option.deleted ? '${option.label} (deleted)' : option.label,
 };
 
 /// The ordered responsive widget section of a collection screen. It sits above the record list
@@ -205,16 +210,50 @@ final class _CollectionDashboardState extends State<CollectionDashboard> {
         : null,
     // Tile taps are inert while reordering.
     onTap: reordering ? null : () => _edit(definition),
-    child: CollectionDashboard._registry.build(
-      WidgetRenderContext(
-        definition: definition,
-        evaluation: controller.evaluationFor(definition.id),
-        enumLabels: labels,
-        summary: _summary(context.l10n, definition, schema),
-        onEdit: () => _edit(definition),
+    child: _withOverlapNote(
+      definition,
+      schema,
+      CollectionDashboard._registry.build(
+        WidgetRenderContext(
+          definition: definition,
+          evaluation: controller.evaluationFor(definition.id),
+          enumLabels: labels,
+          summary: _summary(context.l10n, definition, schema),
+          onEdit: () => _edit(definition),
+        ),
       ),
     ),
   );
+
+  /// Adds the muted overlap note under a widget whose query groups by a Choices field.
+  Widget _withOverlapNote(
+    WidgetDefinitionDto definition,
+    CollectionSchemaDto? schema,
+    Widget tile,
+  ) {
+    final query = controller.queryDefinitions
+        .where((item) => item.id == definition.queryId)
+        .firstOrNull;
+    if (schema == null || query == null || !groupsByChoices(query, schema)) {
+      return tile;
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(child: tile),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          child: Text(
+            context.l10n.widgetGroupsOverlap,
+            key: Key('widget-overlap-${definition.id}'),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 11, color: Nocturne.muted(.5)),
+          ),
+        ),
+      ],
+    );
+  }
 
   /// The query in words for the tile's meta line, e.g. `Sum of Amount · all records`.
   String? _summary(

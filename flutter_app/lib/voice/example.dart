@@ -14,7 +14,8 @@ String exampleUtterance(List<VoiceField> fields, {String language = 'en'}) {
       FieldTypeKindDto.text => es ? 'Almuerzo' : 'Lunch',
       FieldTypeKindDto.fixedDecimal => es ? '12,50' : '12.50',
       FieldTypeKindDto.integer => '3',
-      FieldTypeKindDto.enum_ => switch (field.options.firstOrNull) {
+      FieldTypeKindDto.enum_ ||
+      FieldTypeKindDto.enumSet => switch (field.options.firstOrNull) {
         final option? => '$name ${option.label.toLowerCase()}',
         null => null,
       },

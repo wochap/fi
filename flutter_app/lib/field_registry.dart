@@ -25,6 +25,7 @@ String fieldKindLabel(AppLocalizations l, FieldTypeKindDto kind) =>
       FieldTypeKindDto.dateTime => l.fieldTypeDateTime,
       FieldTypeKindDto.duration => l.fieldTypeDuration,
       FieldTypeKindDto.enum_ => l.fieldTypeChoice,
+      FieldTypeKindDto.enumSet => l.fieldTypeChoices,
     };
 
 typedef FieldValueChanged = void Function(FieldValueDto value);
@@ -55,6 +56,28 @@ final class FieldRendererRegistry {
         .firstOrNull;
     if (option == null) return null;
     return option.deleted ? '${option.label} (deleted)' : option.label;
+  }
+
+  /// The labels a Choices value reads as, in option order (removed options read
+  /// "<label> (deleted)"); unknown ids are left out.
+  static List<String> optionLabels(
+    FieldDefinitionDto field,
+    FieldValueDto? value,
+  ) {
+    if (value == null || value.kind != FieldValueKindDto.enumSet) {
+      return const [];
+    }
+    final held = value.listValue.toSet();
+    final ordered = [...field.enumOptions]
+      ..sort((a, b) {
+        final order = a.order.compareTo(b.order);
+        return order == 0 ? a.id.compareTo(b.id) : order;
+      });
+    return [
+      for (final option in ordered)
+        if (held.contains(option.id))
+          option.deleted ? '${option.label} (deleted)' : option.label,
+    ];
   }
 
   /// [errors] are this field's issues, shown below the input one per line (for example the
@@ -155,6 +178,10 @@ final class FieldRendererRegistry {
       FieldValueKindDto.text => value.textValue ?? '—',
       FieldValueKindDto.enum_ =>
         FieldRendererRegistry.optionLabel(field, value.textValue) ?? '—',
+      FieldValueKindDto.enumSet => () {
+        final labels = FieldRendererRegistry.optionLabels(field, value);
+        return labels.isEmpty ? '—' : labels.join(', ');
+      }(),
       FieldValueKindDto.fixedDecimal => formatScaled(
         value.integerValue ?? 0,
         field.fieldType.scale ?? 0,
@@ -215,6 +242,7 @@ final class _FieldEditorState extends State<_FieldEditor> {
   int? sliderValue;
   int? durationValue;
   String? choice;
+  List<String> choices = const [];
   @override
   void initState() {
     super.initState();
@@ -230,6 +258,9 @@ final class _FieldEditorState extends State<_FieldEditor> {
         ? value?.integerValue
         : null;
     choice = value?.kind == FieldValueKindDto.enum_ ? value?.textValue : null;
+    choices = value?.kind == FieldValueKindDto.enumSet
+        ? value!.listValue
+        : const [];
   }
 
   /// The initial text needs the locale's decimal separator, so it is set once dependencies exist.
@@ -443,6 +474,36 @@ final class _FieldEditorState extends State<_FieldEditor> {
                 : FieldValueDto(
                     kind: FieldValueKindDto.enum_,
                     textValue: value,
+                  ),
+          );
+        },
+      );
+    }
+    if (field.fieldType.kind == FieldTypeKindDto.enumSet) {
+      final active = FieldRendererRegistry.activeOptions(field);
+      return FiChoicesInput(
+        title: _label,
+        label: _inputLabel,
+        required: _required,
+        errors: widget.errors,
+        allowClear: _canClear,
+        options: [
+          for (final option in active)
+            ChoiceOption(id: option.id, label: option.label),
+        ],
+        value: choices,
+        heldLabels: {
+          for (final id in choices)
+            id: ?FieldRendererRegistry.optionLabel(field, id),
+        },
+        onChanged: (value) {
+          setState(() => choices = value);
+          widget.onChanged(
+            value.isEmpty
+                ? _null
+                : FieldValueDto(
+                    kind: FieldValueKindDto.enumSet,
+                    listValue: value,
                   ),
           );
         },

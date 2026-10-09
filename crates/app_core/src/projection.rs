@@ -22,7 +22,7 @@ use crate::{
     widgets::{WidgetDefinition, WidgetId},
 };
 
-pub const PROJECTION_SCHEMA_VERSION: i64 = 5;
+pub const PROJECTION_SCHEMA_VERSION: i64 = 6;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProjectionCheckpoint {
@@ -148,7 +148,7 @@ impl ReadModel {
                 CHECK(boolean_value IS NULL OR boolean_value IN (0,1)),
                 CHECK((value_kind='null' AND integer_value IS NULL AND text_value IS NULL AND boolean_value IS NULL)
                    OR (value_kind IN ('integer','fixed_decimal','date','date_time','duration') AND integer_value IS NOT NULL AND text_value IS NULL AND boolean_value IS NULL)
-                   OR (value_kind IN ('text','enum') AND integer_value IS NULL AND text_value IS NOT NULL AND boolean_value IS NULL)
+                   OR (value_kind IN ('text','enum','enum_set') AND integer_value IS NULL AND text_value IS NOT NULL AND boolean_value IS NULL)
                    OR (value_kind='boolean' AND integer_value IS NULL AND text_value IS NULL AND boolean_value IS NOT NULL))
              ) STRICT;
              CREATE TABLE IF NOT EXISTS projection_diagnostics (
@@ -721,7 +721,7 @@ fn sql_typed_value(value: &TypedValue) -> Option<(&'static str, Value)> {
         }
         TypedValue::Boolean(value) => Some(("boolean_value", Value::Integer(i64::from(*value)))),
         TypedValue::Enum(value) => Some(("text_value", Value::Text(value.to_string()))),
-        TypedValue::Null => None,
+        TypedValue::Null | TypedValue::EnumOptionSet { .. } => None,
     }
 }
 
@@ -827,6 +827,7 @@ fn field_kind(field: &crate::schema::FieldType) -> (&'static str, Option<i64>) {
         DateTime => ("date_time", None),
         Duration => ("duration", None),
         Enum => ("enum", None),
+        EnumSet => ("enum_set", None),
     }
 }
 fn sql_value(value: &FieldValue) -> (&'static str, Option<i64>, Option<String>, Option<bool>) {
@@ -840,6 +841,18 @@ fn sql_value(value: &FieldValue) -> (&'static str, Option<i64>, Option<String>, 
         FieldValue::DateTime(value) => ("date_time", Some(*value), None, None),
         FieldValue::Duration(value) => ("duration", Some(*value), None, None),
         FieldValue::Enum(value) => ("enum", None, Some(value.to_string()), None),
+        // Option ids in the order they were read (the field's option order), comma-joined.
+        FieldValue::EnumSet(ids) => (
+            "enum_set",
+            None,
+            Some(
+                ids.iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(","),
+            ),
+            None,
+        ),
     }
 }
 fn decode_sql_value(
@@ -874,6 +887,13 @@ fn decode_sql_value(
         "enum" => FieldValue::Enum(
             text.ok_or_else(|| AppError::Storage("missing enum payload".into()))?
                 .parse()?,
+        ),
+        "enum_set" => FieldValue::EnumSet(
+            text.ok_or_else(|| AppError::Storage("missing enum set payload".into()))?
+                .split(',')
+                .filter(|id| !id.is_empty())
+                .map(str::parse)
+                .collect::<std::result::Result<_, _>>()?,
         ),
         _ => return Err(AppError::Storage("unsupported projected value kind".into())),
     })

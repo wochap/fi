@@ -18,12 +18,13 @@ use crate::{
         validate_computed_field, validate_query,
     },
     records::{
-        GenericRecord, RecordId, read_lww_candidates, read_lww_winner, validate_record,
-        write_lww_register,
+        GenericRecord, MEMBER_KEY_SEPARATOR, RecordId, read_lww_candidates, read_lww_winner,
+        read_set_value, validate_record, write_lww_register, write_set_value,
     },
     remap::{ClonePlan, clone_plan},
     schema::{
         CollectionSchema, CollectionSchemaId, EnumOption, EnumOptionId, FieldDefinition, FieldId,
+        FieldType,
     },
     values::FieldValue,
     widget_registry::{QueryResultShape, descriptor_for, validate_widget_configuration},
@@ -224,23 +225,48 @@ impl GenericCommand {
                 collection_id,
                 field,
             } => {
-                field.validate()?;
                 let schema = active_collection(snapshot, *collection_id)?;
                 let prior = schema
                     .fields
                     .iter()
                     .find(|item| item.id == field.id && !item.deleted)
                     .ok_or_else(|| not_found("field", field.id))?;
-                let populated = snapshot.records.iter().any(|record| {
-                    !record.deleted
-                        && record.collection_id == *collection_id
-                        && record.values.contains_key(&field.id)
-                });
-                if populated && prior.field_type != field.field_type {
-                    return Err(invalid(
-                        "field_type",
-                        "cannot change a populated field type or decimal scale",
-                    ));
+                convert_choice_default(&prior.field_type, field);
+                field.validate()?;
+                let active_values = || {
+                    snapshot
+                        .records
+                        .iter()
+                        .filter(|record| !record.deleted && record.collection_id == *collection_id)
+                };
+                match (&prior.field_type, &field.field_type) {
+                    (before, after) if before == after => {}
+                    // Each Choice value reads as a set of one; nothing is rewritten.
+                    (FieldType::Enum, FieldType::EnumSet) => {}
+                    (FieldType::EnumSet, FieldType::Enum) => {
+                        let blocking = active_values()
+                            .filter(|record| {
+                                matches!(
+                                    record.values.get(&field.id),
+                                    Some(FieldValue::EnumSet(ids)) if ids.len() > 1
+                                )
+                            })
+                            .count();
+                        if blocking > 0 {
+                            return Err(DomainError::ChoicesConversionBlocked {
+                                field: field.id,
+                                records: u32::try_from(blocking).unwrap_or(u32::MAX),
+                            });
+                        }
+                    }
+                    _ => {
+                        if active_values().any(|record| record.values.contains_key(&field.id)) {
+                            return Err(invalid(
+                                "field_type",
+                                "cannot change a populated field type or decimal scale",
+                            ));
+                        }
+                    }
                 }
             }
             Self::RemoveField {
@@ -281,8 +307,11 @@ impl GenericCommand {
             } => {
                 validate_name(&option.label)?;
                 let field = active_field(snapshot, *collection_id, *field_id)?;
-                if !matches!(field.field_type, crate::schema::FieldType::Enum) {
+                if !field.field_type.has_options() {
                     return Err(invalid("field_id", "is not an Enum field"));
+                }
+                if !option.deleted {
+                    field.validate_option_label(&option.label)?;
                 }
             }
             Self::RemoveEnumOption {
@@ -314,6 +343,29 @@ impl GenericCommand {
             } => {
                 let record = active_record(snapshot, *record_id)?;
                 let field = active_field(snapshot, record.collection_id, *field_id)?;
+                if let FieldValue::EnumSet(ids) = value {
+                    *value = FieldValue::enum_set(ids.iter().copied());
+                }
+                if let (FieldValue::EnumSet(ids), Some(FieldValue::EnumSet(held))) =
+                    (&*value, record.values.get(field_id))
+                {
+                    // Members the record already holds stay valid even when removed; a removed
+                    // option can't be added.
+                    let fresh: Vec<_> = ids
+                        .iter()
+                        .copied()
+                        .filter(|id| !held.contains(id))
+                        .collect();
+                    let checked = if fresh.is_empty() {
+                        field.validate_kept_value(value)
+                    } else {
+                        field
+                            .validate_kept_value(value)
+                            .and_then(|()| field.validate_value(&FieldValue::EnumSet(fresh)))
+                    };
+                    checked.map_err(|issue| DomainError::InvalidMany(vec![issue.on(field_id)]))?;
+                    return Ok(());
+                }
                 // Rewriting the value a record already holds keeps a removed option valid;
                 // newly setting one is rejected.
                 let checked = if record.values.get(field_id) == Some(&*value) {
@@ -539,6 +591,21 @@ impl GenericCommand {
         }
         Ok(())
     }
+}
+
+/// Carries a default across a Choice ↔ Choices conversion: option `X` becomes `{X}`, a set of one
+/// becomes that option, and a larger set clears the default.
+fn convert_choice_default(prior: &FieldType, field: &mut FieldDefinition) {
+    field.default = match (prior, &field.field_type, field.default.take()) {
+        (FieldType::Enum, FieldType::EnumSet, Some(FieldValue::Enum(id))) => {
+            Some(FieldValue::EnumSet(vec![id]))
+        }
+        (FieldType::EnumSet, FieldType::Enum, Some(FieldValue::EnumSet(ids))) => match ids[..] {
+            [id] => Some(FieldValue::Enum(id)),
+            _ => None,
+        },
+        (_, _, default) => default,
+    };
 }
 
 /// The first import item that failed validation.
@@ -838,6 +905,10 @@ pub fn apply_generic_command(
             let fields =
                 collection_fields(tx, &collections, *collection_id).map_err(repo_change)?;
             let entry = object(tx, &fields, &field.id.to_string()).map_err(repo_change)?;
+            let prior = decode_field(tx, &entry).map_err(repo_change)?;
+            if prior.field_type == FieldType::EnumSet && field.field_type == FieldType::Enum {
+                rewrite_sets_as_choice(tx, &records, *collection_id, field.id, stamp)?;
+            }
             write_field_definition(tx, &entry, field, stamp)?;
         }
         GenericCommand::RemoveField {
@@ -909,7 +980,11 @@ pub fn apply_generic_command(
         } => {
             let record = object(tx, &records, &record_id.to_string()).map_err(repo_change)?;
             let values = object(tx, &record, "values").map_err(repo_change)?;
-            write_lww_register(tx, &values, &field_id.to_string(), value, stamp)?;
+            if record_field_is_set(tx, &collections, &record, *field_id)? {
+                write_set_value(tx, &values, *field_id, value, stamp)?;
+            } else {
+                write_lww_register(tx, &values, &field_id.to_string(), value, stamp)?;
+            }
         }
         GenericCommand::DeleteRecord(id) => {
             let record = object(tx, &records, &id.to_string()).map_err(repo_change)?;
@@ -1313,16 +1388,48 @@ pub fn decode_generic(doc: &Automerge) -> Result<GenericSnapshot, DomainError> {
         let values_map = object(doc, &entry, "values")?;
         let mut values = BTreeMap::new();
         let mut stamps = BTreeMap::new();
+        // Choices fields (removed ones included) read from their membership registers; any
+        // other field ignores membership registers left over from a conversion.
+        let set_fields: Vec<&FieldDefinition> = collections
+            .iter()
+            .find(|schema| schema.id == collection_id)
+            .map(|schema| {
+                schema
+                    .fields
+                    .iter()
+                    .filter(|field| field.field_type == FieldType::EnumSet)
+                    .collect()
+            })
+            .unwrap_or_default();
         for field_key in doc.keys(&values_map) {
-            let field_id = FieldId::from_str(&field_key)?;
             let candidates = read_lww_candidates(doc, &values_map, &field_key)?;
             let winner = candidates
                 .into_iter()
                 .max_by_key(|candidate| candidate.stamp)
                 .ok_or_else(|| malformed("empty field register"))?;
             max_stamp = Some(max_stamp.map_or(winner.stamp, |current| current.max(winner.stamp)));
+            if field_key.contains(MEMBER_KEY_SEPARATOR) {
+                continue;
+            }
+            let field_id = FieldId::from_str(&field_key)?;
+            if set_fields.iter().any(|field| field.id == field_id) {
+                continue;
+            }
             values.insert(field_id, winner.value);
             stamps.insert(field_id, winner.stamp);
+        }
+        for field in set_fields {
+            if let Some(read) = read_set_value(doc, &values_map, field.id)? {
+                let value = match read.value {
+                    FieldValue::EnumSet(mut ids) => {
+                        field.sort_option_ids(&mut ids);
+                        FieldValue::EnumSet(ids)
+                    }
+                    other => other,
+                };
+                values.insert(field.id, value);
+                stamps.insert(field.id, read.stamp);
+            }
         }
         records.push(GenericRecord {
             id,
@@ -1640,7 +1747,60 @@ fn write_record(
         .put_object(&entry, "values", ObjType::Map)
         .map_err(repo_change)?;
     for (field, value) in &record.values {
-        write_lww_register(tx, &values, &field.to_string(), value, stamp)?;
+        if matches!(value, FieldValue::EnumSet(_)) {
+            write_set_value(tx, &values, *field, value, stamp)?;
+        } else {
+            write_lww_register(tx, &values, &field.to_string(), value, stamp)?;
+        }
+    }
+    Ok(())
+}
+
+/// Whether `field` of the record's collection is a Choices field, read from the document.
+fn record_field_is_set(
+    tx: &AutomergeTransaction<'_>,
+    collections: &ObjId,
+    record: &ObjId,
+    field: FieldId,
+) -> automerge_repo::Result<bool> {
+    let collection_id = string(tx, record, "collection_id")
+        .and_then(|id| CollectionSchemaId::from_str(&id))
+        .map_err(repo_change)?;
+    let fields = collection_fields(tx, collections, collection_id).map_err(repo_change)?;
+    let entry = object(tx, &fields, &field.to_string()).map_err(repo_change)?;
+    Ok(decode_field(tx, &entry).map_err(repo_change)?.field_type == FieldType::EnumSet)
+}
+
+/// Choices → Choice: every record of the collection that wrote the field gets its single option,
+/// or Null for an empty set, as a single-value register under `stamp`. Validation already refused
+/// active records holding two or more options; a removed record holding several keeps its
+/// membership registers untouched.
+fn rewrite_sets_as_choice(
+    tx: &mut AutomergeTransaction<'_>,
+    records: &ObjId,
+    collection_id: CollectionSchemaId,
+    field: FieldId,
+    stamp: HlcStamp,
+) -> automerge_repo::Result<()> {
+    let collection_id = collection_id.to_string();
+    let keys: Vec<String> = tx.keys(records).collect();
+    for key in keys {
+        let record = object(tx, records, &key).map_err(repo_change)?;
+        if string(tx, &record, "collection_id").map_err(repo_change)? != collection_id {
+            continue;
+        }
+        let values = object(tx, &record, "values").map_err(repo_change)?;
+        let Some(current) = read_set_value(tx, &values, field).map_err(repo_change)? else {
+            continue;
+        };
+        let single = match current.value {
+            FieldValue::EnumSet(ids) => match ids[..] {
+                [id] => FieldValue::Enum(id),
+                _ => continue,
+            },
+            _ => FieldValue::Null,
+        };
+        write_lww_register(tx, &values, &field.to_string(), &single, stamp)?;
     }
     Ok(())
 }
@@ -2322,6 +2482,245 @@ mod tests {
         );
         let ids = options.iter().map(|option| option.id).collect();
         (doc, collection, ids)
+    }
+
+    fn commit_as(doc: &mut Automerge, command: &mut GenericCommand, time: i64, node: u8) {
+        command
+            .validate_against(&decode_generic(doc).unwrap())
+            .unwrap();
+        let mut tx = doc.transaction();
+        let stamp = HlcStamp {
+            physical_time_ms: time,
+            logical_counter: 0,
+            node_id: HlcNodeId([node; 32]),
+        };
+        apply_generic_command(&mut tx, command, stamp).unwrap();
+        tx.commit();
+    }
+
+    /// A collection with a Choices field "tags" (food, work, urgent) and one record holding
+    /// {food}, committed at time 2.
+    fn tags_collection() -> (Automerge, CollectionSchema, Vec<EnumOptionId>, RecordId) {
+        let (mut doc, mut collection, options) = choice_collection();
+        collection.fields[1].field_type = FieldType::EnumSet;
+        commit(
+            &mut doc,
+            &mut GenericCommand::UpdateField {
+                collection_id: collection.id,
+                field: collection.fields[1].clone(),
+            },
+            2,
+        );
+        let record = GenericRecord {
+            id: RecordId::new(),
+            collection_id: collection.id,
+            values: BTreeMap::from([
+                (collection.fields[0].id, FieldValue::Integer(3)),
+                (
+                    collection.fields[1].id,
+                    FieldValue::EnumSet(vec![options[0]]),
+                ),
+            ]),
+            stamps: BTreeMap::new(),
+            deleted: false,
+        };
+        let id = record.id;
+        commit(&mut doc, &mut GenericCommand::CreateRecord(record), 3);
+        (doc, collection, options, id)
+    }
+
+    fn set_tags(field: FieldId, record_id: RecordId, ids: &[EnumOptionId]) -> GenericCommand {
+        GenericCommand::UpdateRecordField {
+            record_id,
+            field_id: field,
+            value: FieldValue::enum_set(ids.iter().copied()),
+        }
+    }
+
+    fn read_tags(doc: &Automerge, field: FieldId, record_id: RecordId) -> Option<FieldValue> {
+        let snapshot = decode_generic(doc).unwrap();
+        let record = snapshot
+            .records
+            .iter()
+            .find(|record| record.id == record_id)
+            .unwrap();
+        record.values.get(&field).cloned()
+    }
+
+    fn sorted(mut ids: Vec<EnumOptionId>) -> FieldValue {
+        ids.sort_by_key(|id| *id);
+        FieldValue::EnumSet(ids)
+    }
+
+    #[test]
+    fn concurrent_adds_of_different_options_compose() {
+        let (base, schema, options, id) = tags_collection();
+        let tags = schema.fields[1].id;
+        let (mut left, mut right) = (base.fork(), base.fork());
+        commit_as(&mut left, &mut set_tags(tags, id, &options[..2]), 10, 1);
+        commit_as(
+            &mut right,
+            &mut set_tags(tags, id, &[options[0], options[2]]),
+            11,
+            2,
+        );
+        left.merge(&mut right).unwrap();
+        right.merge(&mut left.clone()).unwrap();
+        // Option order is food, work, urgent.
+        let expected = FieldValue::EnumSet(options.clone());
+        assert_eq!(read_tags(&left, tags, id), Some(expected.clone()));
+        assert_eq!(read_tags(&right, tags, id), Some(expected));
+    }
+
+    #[test]
+    fn concurrent_edits_of_the_same_option_resolve_by_hlc() {
+        let (base, schema, options, id) = tags_collection();
+        let tags = schema.fields[1].id;
+        let (mut left, mut right) = (base.fork(), base.fork());
+        commit_as(&mut left, &mut set_tags(tags, id, &[]), 10, 1);
+        commit_as(&mut right, &mut set_tags(tags, id, &[]), 11, 2);
+        commit_as(&mut right, &mut set_tags(tags, id, &options[..1]), 12, 2);
+        left.merge(&mut right).unwrap();
+        assert_eq!(
+            read_tags(&left, tags, id),
+            Some(FieldValue::EnumSet(vec![options[0]]))
+        );
+    }
+
+    #[test]
+    fn concurrent_add_and_remove_of_different_options_compose() {
+        let (base, schema, options, id) = tags_collection();
+        let tags = schema.fields[1].id;
+        let (mut left, mut right) = (base.fork(), base.fork());
+        commit_as(&mut left, &mut set_tags(tags, id, &[]), 10, 1);
+        commit_as(&mut right, &mut set_tags(tags, id, &options[..2]), 9, 2);
+        left.merge(&mut right).unwrap();
+        assert_eq!(
+            read_tags(&left, tags, id),
+            Some(FieldValue::EnumSet(vec![options[1]]))
+        );
+        // Clearing the last member reads as Null, not as absent.
+        commit_as(&mut left, &mut set_tags(tags, id, &[]), 20, 1);
+        assert_eq!(read_tags(&left, tags, id), Some(FieldValue::Null));
+    }
+
+    /// Two replicas edit one record offline: A adds work, B adds urgent, and both toggle food
+    /// under different stamps. Merging either way gives the same set, resolved per option.
+    #[test]
+    fn two_replicas_converge_on_concurrent_option_edits() {
+        let (base, schema, options, id) = tags_collection();
+        let tags = schema.fields[1].id;
+        let (food, work, urgent) = (options[0], options[1], options[2]);
+        let (mut a, mut b) = (base.fork(), base.fork());
+        // A: add work, then remove food at 12.
+        commit_as(&mut a, &mut set_tags(tags, id, &[food, work]), 10, 1);
+        commit_as(&mut a, &mut set_tags(tags, id, &[work]), 12, 1);
+        // B: add urgent, remove food at 11, re-add food at 14 (newest food stamp).
+        commit_as(&mut b, &mut set_tags(tags, id, &[food, urgent]), 10, 2);
+        commit_as(&mut b, &mut set_tags(tags, id, &[urgent]), 11, 2);
+        commit_as(&mut b, &mut set_tags(tags, id, &[food, urgent]), 14, 2);
+
+        let (mut ab, mut ba) = (a.clone(), b.clone());
+        ab.merge(&mut b.clone()).unwrap();
+        ba.merge(&mut a.clone()).unwrap();
+        let expected = FieldValue::EnumSet(vec![food, work, urgent]);
+        assert_eq!(read_tags(&ab, tags, id), Some(expected.clone()));
+        assert_eq!(read_tags(&ba, tags, id), Some(expected));
+
+        // Second offline round from the merged state: A removes food at 21 (newest),
+        // B re-asserts food and removes work at 20.
+        let (mut a, mut b) = (ab, ba);
+        commit_as(&mut a, &mut set_tags(tags, id, &[work, urgent]), 21, 1);
+        commit_as(&mut b, &mut set_tags(tags, id, &[urgent]), 19, 2);
+        commit_as(&mut b, &mut set_tags(tags, id, &[food, urgent]), 20, 2);
+        let (mut ab, mut ba) = (a.clone(), b.clone());
+        ab.merge(&mut b.clone()).unwrap();
+        ba.merge(&mut a.clone()).unwrap();
+        // food: A absent@21 beats B present@20; work: B absent@19 is the only edit; urgent kept.
+        let expected = FieldValue::EnumSet(vec![urgent]);
+        assert_eq!(read_tags(&ab, tags, id), Some(expected.clone()));
+        assert_eq!(read_tags(&ba, tags, id), Some(expected));
+    }
+
+    #[test]
+    fn only_changed_memberships_are_written() {
+        let (mut doc, schema, options, id) = tags_collection();
+        let tags = schema.fields[1].id;
+        commit(&mut doc, &mut set_tags(tags, id, &options[..2]), 10);
+        let values = {
+            let app = object(&doc, &ROOT, "application").unwrap();
+            let records = object(&doc, &app, "records").unwrap();
+            let record = object(&doc, &records, &id.to_string()).unwrap();
+            object(&doc, &record, "values").unwrap()
+        };
+        let stamp_of = |option: EnumOptionId| {
+            read_lww_winner(&doc, &values, &crate::records::member_key(tags, option))
+                .unwrap()
+                .map(|winner| winner.stamp.physical_time_ms)
+        };
+        assert_eq!(stamp_of(options[0]), Some(3));
+        assert_eq!(stamp_of(options[1]), Some(10));
+        assert_eq!(stamp_of(options[2]), None);
+    }
+
+    #[test]
+    fn a_legacy_choice_register_merges_with_later_set_writes() {
+        // The record is written while the field is still a Choice.
+        let (mut doc, schema, options) = choice_collection();
+        let record = choice_record(&schema, options[0]);
+        let id = record.id;
+        commit(&mut doc, &mut GenericCommand::CreateRecord(record), 2);
+        let mut field = schema.fields[1].clone();
+        field.field_type = FieldType::EnumSet;
+        commit(
+            &mut doc,
+            &mut GenericCommand::UpdateField {
+                collection_id: schema.id,
+                field: field.clone(),
+            },
+            3,
+        );
+        let tags = field.id;
+        assert_eq!(
+            read_tags(&doc, tags, id),
+            Some(FieldValue::EnumSet(vec![options[0]]))
+        );
+        let mut stale = doc.fork();
+        commit(&mut doc, &mut set_tags(tags, id, &options[..2]), 10);
+        assert_eq!(
+            read_tags(&doc, tags, id),
+            Some(sorted(options[..2].to_vec()))
+        );
+
+        // A device that has not seen the conversion writes the old single-value register; it
+        // asserts its option, and clears the others only where it is newer.
+        {
+            let mut tx = stale.transaction();
+            let app = object(&tx, &ROOT, "application").unwrap();
+            let records = object(&tx, &app, "records").unwrap();
+            let record = object(&tx, &records, &id.to_string()).unwrap();
+            let values = object(&tx, &record, "values").unwrap();
+            write_lww_register(
+                &mut tx,
+                &values,
+                &tags.to_string(),
+                &FieldValue::Enum(options[2]),
+                HlcStamp {
+                    physical_time_ms: 5,
+                    logical_counter: 0,
+                    node_id: HlcNodeId([9; 32]),
+                },
+            )
+            .unwrap();
+            tx.commit();
+        }
+        doc.merge(&mut stale).unwrap();
+        // food and work were written at 10, after the stale register at 5, which adds urgent.
+        assert_eq!(read_tags(&doc, tags, id), Some(sorted(options.clone())));
+
+        // Restart: a saved and reloaded document reads the same set.
+        let reloaded = Automerge::load(&doc.save()).unwrap();
+        assert_eq!(read_tags(&reloaded, tags, id), read_tags(&doc, tags, id));
     }
 
     fn choice_record(schema: &CollectionSchema, option: EnumOptionId) -> GenericRecord {

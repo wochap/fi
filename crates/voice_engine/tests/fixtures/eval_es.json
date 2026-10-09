@@ -16,6 +16,11 @@
       { "name": "inicio", "kind": "datetime" },
       { "name": "notas", "kind": "text" }
     ],
+    "tareas": [
+      { "name": "tarea", "kind": "text", "required": true },
+      { "name": "etiquetas", "kind": "choices", "options": ["urgente", "trabajo", "casa", "comida"] },
+      { "name": "fecha", "kind": "date" }
+    ],
     "libros": [
       { "name": "título", "kind": "text", "required": true },
       { "name": "páginas", "kind": "integer" },
@@ -57,8 +62,11 @@
     { "schema": "libros", "text": "El túnel, no gustó, terminado sí.", "expect": { "título": "El túnel", "valoración": "no gustó", "terminado": "true" } },
     { "schema": "libros", "text": "Como agua para chocolate, doscientas cincuenta páginas, gusto.", "expect": { "título": "Como agua para chocolate", "páginas": "250", "valoración": "gustó" } },
     { "schema": "libros", "text": "Nada, de Carmen Laforet, terminado el martes pasado.", "expect": { "título": "Nada", "terminado el": "2026-09-22" } },
-    { "schema": "libros", "text": "Aura, sesenta páginas, regular, terminado hoy.", "expect": { "título": "Aura", "páginas": "60", "valoración": "regular", "terminado el": "2026-09-28" } }
-  ]],
+    { "schema": "libros", "text": "Aura, sesenta páginas, regular, terminado hoy.", "expect": { "título": "Aura", "páginas": "60", "valoración": "regular", "terminado el": "2026-09-28" } },
+    { "schema": "tareas", "text": "Enviar el informe, etiquetas trabajo y urgente, para mañana.", "expect": { "tarea": "Enviar el informe", "etiquetas": "urgente; trabajo", "fecha": "2026-09-29" } },
+    { "schema": "tareas", "text": "Hacer la compra, etiquetas casa y comida.", "expect": { "tarea": "Hacer la compra", "etiquetas": "casa; comida" } },
+    { "schema": "tareas", "text": "Arreglar el grifo, etiqueta casa.", "expect": { "tarea": "Arreglar el grifo", "etiquetas": "casa" } }
+  ],
   "dictation": [
     { "text": "Comprar leche de avena, digo, leche de almendra", "expect": "Comprar leche de almendra" },
     { "text": "Cena el viernes, perdón, el sábado con Ana", "expect": "Cena el sábado con Ana" },

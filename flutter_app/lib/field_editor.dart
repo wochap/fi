@@ -15,7 +15,7 @@ import 'package:fi/theme/nocturne_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-/// The schema field editor (mocks schema-field-editor, schema-add-field): name, a 4×2 type grid, option chips for the
+/// The schema field editor (mocks schema-field-editor, schema-add-field): name, a 3×3 type grid, option chips for the
 /// type, a settings block per chip that is on, the Choice options, and the default. One body,
 /// hosted as an inline panel in the desktop schema sheet or as a pushed phone screen.
 
@@ -67,7 +67,7 @@ List<_Chip> _chipsFor(FieldTypeKindDto kind) => [
   _Chip.defaultValue,
 ];
 
-/// The field types in grid order: two rows of four.
+/// The field types in grid order: three rows of three, Choices directly after Choice.
 const _typeGrid = [
   FieldTypeKindDto.text,
   FieldTypeKindDto.integer,
@@ -77,18 +77,22 @@ const _typeGrid = [
   FieldTypeKindDto.dateTime,
   FieldTypeKindDto.duration,
   FieldTypeKindDto.enum_,
+  FieldTypeKindDto.enumSet,
 ];
 
+bool _isChoiceKind(FieldTypeKindDto kind) =>
+    kind == FieldTypeKindDto.enum_ || kind == FieldTypeKindDto.enumSet;
+
 /// A field's kind and its main settings in a few words, for the schema sheet's rows: "Integer ·
-/// 5–30", "Integer · 0–10 · slider", "Text · multiline", "Decimal · 2 dp", and for a Choice field
-/// its option labels in order.
+/// 5–30", "Integer · 0–10 · slider", "Text · multiline", "Decimal · 2 dp", and for a Choice or
+/// Choices field its option labels in order.
 String fieldSummary(AppLocalizations l, FieldDefinitionDto field) {
   final kind = field.fieldType.kind;
   final label = fieldKindLabel(l, kind);
   final min = field.validation.minInteger;
   final max = field.validation.maxInteger;
   final detail = switch (kind) {
-    FieldTypeKindDto.enum_ => () {
+    FieldTypeKindDto.enum_ || FieldTypeKindDto.enumSet => () {
       final options = FieldRendererRegistry.activeOptions(field);
       return options.isEmpty
           ? null
@@ -461,12 +465,36 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
   /// survive it, and neither can the chips of another type.
   void _setKind(FieldTypeKindDto value) {
     if (value == kind) return;
+    if (_isChoiceKind(value) && _isChoiceKind(kind)) {
+      // Choice ↔ Choices keeps the options and converts the default: one option becomes a set
+      // of one, a set of one becomes that option, and a larger set clears it.
+      kind = value;
+      final current = defaultValue;
+      defaultValue = switch (current?.kind) {
+        FieldValueKindDto.enum_ when value == FieldTypeKindDto.enumSet =>
+          FieldValueDto(
+            kind: FieldValueKindDto.enumSet,
+            listValue: [current!.textValue!],
+          ),
+        FieldValueKindDto.enumSet
+            when value == FieldTypeKindDto.enum_ &&
+                current!.listValue.length == 1 =>
+          FieldValueDto(
+            kind: FieldValueKindDto.enum_,
+            textValue: current.listValue.single,
+          ),
+        _ => null,
+      };
+      if (defaultValue == null) open.remove(_Chip.defaultValue);
+      _edited('default');
+      return;
+    }
     kind = value;
     defaultValue = null;
     relative = true;
     relativeDays.clear();
     relativeNegative = false;
-    if (kind != FieldTypeKindDto.enum_) options.clear();
+    if (!_isChoiceKind(kind)) options.clear();
     minimum = null;
     maximum = null;
     _turnSliderOff();
@@ -666,14 +694,25 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
     }
   }
 
+  /// Whether a Choices option label holds `;`, the CSV separator of a Choices value.
+  bool get _hasSemicolonLabel =>
+      kind == FieldTypeKindDto.enumSet &&
+      options.any((option) => option.label.text.contains(';'));
+
+  /// Whether [record] holds [optionId] in this field, as a Choice value or a Choices member.
+  bool _holdsOption(RecordDto record, String optionId) {
+    final value = existing == null ? null : _valueOf(record, existing!.id);
+    return switch (value?.kind) {
+      FieldValueKindDto.enum_ => value!.textValue == optionId,
+      FieldValueKindDto.enumSet => value!.listValue.contains(optionId),
+      _ => false,
+    };
+  }
+
   /// Asks before deleting an option that active records hold, since they keep it.
   Future<void> _removeOption(_DraftOption option) async {
     final used = controller.records
-        .where(
-          (record) =>
-              existing != null &&
-              _valueOf(record, existing!.id)?.textValue == option.id,
-        )
+        .where((record) => _holdsOption(record, option.id))
         .length;
     if (used > 0) {
       final label = option.label.text;
@@ -691,7 +730,19 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
     }
     setState(() {
       options.remove(option);
-      if (defaultValue?.textValue == option.id) defaultValue = null;
+      final current = defaultValue;
+      if (current?.kind == FieldValueKindDto.enum_ &&
+          current?.textValue == option.id) {
+        defaultValue = null;
+      } else if (current?.kind == FieldValueKindDto.enumSet) {
+        final kept = [
+          for (final id in current!.listValue)
+            if (id != option.id) id,
+        ];
+        defaultValue = kept.isEmpty
+            ? null
+            : FieldValueDto(kind: FieldValueKindDto.enumSet, listValue: kept);
+      }
     });
   }
 
@@ -757,7 +808,7 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
               }),
             ),
           ),
-        if (kind == FieldTypeKindDto.enum_) ..._optionsEditor(),
+        if (_isChoiceKind(kind)) ..._optionsEditor(),
         Padding(
           padding: const EdgeInsets.only(top: 16),
           child: Wrap(
@@ -782,6 +833,15 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
             ],
           ),
         ),
+        if (kind == FieldTypeKindDto.enumSet)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+              context.l10n.fieldEditorChoicesRequiredHelp,
+              key: const Key('choices-required-help'),
+              style: TextStyle(fontSize: 12, color: Nocturne.muted(.5)),
+            ),
+          ),
         if (kind == FieldTypeKindDto.integer && !_sliderAvailable)
           Padding(
             padding: const EdgeInsets.only(top: 6),
@@ -804,7 +864,7 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
     final saveLabel = existing == null
         ? context.l10n.fieldEditorAddField
         : context.l10n.fieldEditorSaveField;
-    final canSave = _defaultIssue == null;
+    final canSave = _defaultIssue == null && !_hasSemicolonLabel;
     if (widget.host == FieldEditorHost.screen) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -877,7 +937,11 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
     final phone = Nocturne.isPhone(context);
     Widget tile(FieldTypeKindDto value) {
       final selected = value == kind;
-      final enabled = existing == null || selected;
+      // The type is fixed once the field exists, except that Choice and Choices convert.
+      final enabled =
+          existing == null ||
+          selected ||
+          (_isChoiceKind(existing!.fieldType.kind) && _isChoiceKind(value));
       return Expanded(
         child: Opacity(
           opacity: enabled ? 1 : .4,
@@ -896,8 +960,7 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
               child: InkWell(
                 key: Key('type-${value.name}'),
                 borderRadius: BorderRadius.circular(Nocturne.radius),
-                // The type is fixed once the field exists.
-                onTap: existing == null
+                onTap: existing == null || (enabled && !selected)
                     ? () => setState(() => _setKind(value))
                     : null,
                 child: SizedBox(
@@ -939,7 +1002,11 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
     return Column(
       key: const Key('type-grid'),
       spacing: 6,
-      children: [row(_typeGrid.take(4)), row(_typeGrid.skip(4))],
+      children: [
+        row(_typeGrid.take(3)),
+        row(_typeGrid.skip(3).take(3)),
+        row(_typeGrid.skip(6)),
+      ],
     );
   }
 
@@ -1148,6 +1215,12 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
           )
         else
           fixed,
+        if (kind == FieldTypeKindDto.enumSet)
+          Text(
+            context.l10n.fieldEditorChoicesDefaultHelp,
+            key: const Key('choices-default-help'),
+            style: TextStyle(fontSize: 12, color: Nocturne.muted(.55)),
+          ),
         if (text && (min != null || max != null))
           Text(
             '${defaultValue?.textValue?.characters.length ?? 0} / '
@@ -1237,6 +1310,11 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
                           isTempOptionId(option.id) &&
                           option.label.text.isEmpty,
                       hint: context.l10n.fieldEditorOptionLabel,
+                      errors:
+                          kind == FieldTypeKindDto.enumSet &&
+                              option.label.text.contains(';')
+                          ? [context.l10n.fieldEditorChoicesSemicolon]
+                          : const [],
                       onChanged: (_) => setState(() {}),
                     ),
                   ),
@@ -1343,7 +1421,7 @@ FieldValueDto? _boundValue(int? bound, FieldTypeKindDto kind, int scale) {
       FieldTypeKindDto.date => FieldValueKindDto.date,
       FieldTypeKindDto.dateTime => FieldValueKindDto.dateTime,
       FieldTypeKindDto.duration => FieldValueKindDto.duration,
-      // Text, boolean, and enum carry no numeric range; the control is not rendered for them.
+      // Text, boolean, enum and enum set carry no numeric range; the control is not rendered for them.
       _ => FieldValueKindDto.null_,
     },
     integerValue: bound,

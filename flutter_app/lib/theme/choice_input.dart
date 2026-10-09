@@ -1,5 +1,6 @@
 import 'package:fi/l10n/l10n.dart';
 import 'package:fi/theme/fi_icons.dart';
+import 'package:fi/theme/form_errors.dart';
 import 'package:fi/theme/inputs.dart';
 import 'package:fi/theme/nocturne.dart';
 import 'package:fi/theme/nocturne_widgets.dart';
@@ -687,4 +688,526 @@ class _ChoiceSearchSheetState extends State<_ChoiceSearchSheet> {
       ),
     );
   }
+}
+
+/// A set of options among [options] (a Choices field), presented by the option count with the
+/// same thresholds as [FiChoiceInput]:
+///
+/// - up to 4: wrapping toggle chips, each showing a check when on;
+/// - 5–10: a field showing the picked labels, or "N picked" when they don't fit, that opens a
+///   sheet titled [title] with one checkbox row per option and Done ([showChoicesSheet]);
+/// - more than 10: the same field and sheet, with a search input in the sheet.
+///
+/// [options] are the pickable ones. [value] may hold ids that are not among them (removed options
+/// a record still holds); [heldLabels] names those, read as "<label> (deleted)". Such a member can
+/// be unpicked but is never offered again. [onChanged] receives the ids in option order.
+class FiChoicesInput extends StatelessWidget {
+  const FiChoicesInput({
+    required this.options,
+    required this.value,
+    required this.onChanged,
+    required this.title,
+    this.heldLabels = const {},
+    this.allowClear = false,
+    this.label,
+    this.required = false,
+    this.errors = const [],
+    super.key,
+  });
+
+  final List<ChoiceOption> options;
+  final List<String> value;
+  final Map<String, String> heldLabels;
+  final ValueChanged<List<String>> onChanged;
+  final String title;
+  final bool allowClear;
+  final String? label;
+  final bool required;
+  final List<String> errors;
+
+  /// The removed members [value] holds, with their labels.
+  List<ChoiceOption> get _held => [
+    for (final id in value)
+      if (!options.any((option) => option.id == id))
+        ChoiceOption(id: id, label: heldLabels[id] ?? id),
+  ];
+
+  /// [ids] ordered as the options are, held removed members last.
+  List<String> _ordered(Set<String> ids) => [
+    for (final option in options)
+      if (ids.contains(option.id)) option.id,
+    for (final held in _held)
+      if (ids.contains(held.id)) held.id,
+  ];
+
+  List<String> get _pickedLabels {
+    final picked = value.toSet();
+    return [
+      for (final option in [...options, ..._held])
+        if (picked.contains(option.id)) option.label,
+    ];
+  }
+
+  void _toggle(String id) {
+    final next = value.toSet();
+    if (!next.remove(id)) next.add(id);
+    onChanged(_ordered(next));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final error = errors.isNotEmpty;
+    final Widget control;
+    if (options.length <= choiceSegmentedMax) {
+      final picked = value.toSet();
+      control = Wrap(
+        key: const Key('choices-chips'),
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          for (final option in [...options, ..._held])
+            ChoicesToggleChip(
+              key: ValueKey('choices-chip-${option.id}'),
+              label: option.label,
+              selected: picked.contains(option.id),
+              error: error,
+              onTap: () => _toggle(option.id),
+            ),
+        ],
+      );
+    } else {
+      control = _ChoicesSheetField(
+        pickedLabels: _pickedLabels,
+        hint: options.length <= choiceSelectMax
+            ? context.l10n.themeChoose
+            : context.l10n.themeSearchOptions(options.length),
+        search: options.length > choiceSelectMax,
+        errors: errors,
+        onClear: allowClear && value.isNotEmpty
+            ? () => onChanged(const [])
+            : null,
+        onOpen: () async {
+          final picked = await showChoicesSheet(
+            context,
+            title: title,
+            options: options,
+            held: _held,
+            selected: value,
+            search: options.length > choiceSelectMax,
+          );
+          if (picked != null) onChanged(_ordered(picked.toSet()));
+        },
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (label case final label?)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: DefaultTextStyle.merge(
+              style: TextStyle(fontSize: 12, color: Nocturne.muted(.7)),
+              child: required ? requiredLabel(label) : Text(label),
+            ),
+          ),
+        control,
+        if (error && options.length <= choiceSegmentedMax)
+          FieldErrorLines(errors),
+      ],
+    );
+  }
+}
+
+/// A toggle chip of [FiChoicesInput]: a check when on, a 44px target on a phone.
+class ChoicesToggleChip extends StatelessWidget {
+  const ChoicesToggleChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    this.error = false,
+    super.key,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+  final bool error;
+
+  @override
+  Widget build(BuildContext context) {
+    final radius = BorderRadius.circular(16);
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: Material(
+        color: selected ? Nocturne.accent900 : Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: radius,
+          side: BorderSide(
+            color: selected
+                ? Nocturne.accent700
+                : error
+                ? Nocturne.accent
+                : Nocturne.divider,
+          ),
+        ),
+        child: InkWell(
+          borderRadius: radius,
+          onTap: onTap,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight: Nocturne.isPhone(context) ? Nocturne.touchTarget : 32,
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (selected) ...[
+                    const Icon(
+                      FiIcons.check,
+                      key: Key('choices-chip-check'),
+                      size: 14,
+                      color: Nocturne.accent200,
+                    ),
+                    const SizedBox(width: 6),
+                  ],
+                  Flexible(
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: selected
+                            ? Nocturne.accent100
+                            : Nocturne.muted(.75),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The field of a [FiChoicesInput] with more than 4 options: read-only, showing the picked labels
+/// joined by commas, or "N picked" when they don't fit its width.
+class _ChoicesSheetField extends StatefulWidget {
+  const _ChoicesSheetField({
+    required this.pickedLabels,
+    required this.hint,
+    required this.search,
+    required this.errors,
+    required this.onClear,
+    required this.onOpen,
+  });
+
+  final List<String> pickedLabels;
+  final String hint;
+  final bool search;
+  final List<String> errors;
+  final VoidCallback? onClear;
+  final VoidCallback onOpen;
+
+  @override
+  State<_ChoicesSheetField> createState() => _ChoicesSheetFieldState();
+}
+
+class _ChoicesSheetFieldState extends State<_ChoicesSheetField> {
+  final TextEditingController _text = TextEditingController();
+
+  @override
+  void dispose() {
+    _text.dispose();
+    super.dispose();
+  }
+
+  /// The joined labels when they fit in [width] at the input's text size, else "N picked".
+  String _summary(BuildContext context, double width) {
+    final labels = widget.pickedLabels;
+    if (labels.isEmpty) return '';
+    final joined = labels.join(', ');
+    final painter = TextPainter(
+      text: TextSpan(
+        text: joined,
+        style: DefaultTextStyle.of(
+          context,
+        ).style.merge(const TextStyle(fontSize: 14)),
+      ),
+      textDirection: Directionality.of(context),
+      maxLines: 1,
+    )..layout();
+    final fits = painter.width <= width;
+    painter.dispose();
+    return fits ? joined : context.l10n.themeChoicesPicked(labels.length);
+  }
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      // Room for the padding, the clear mark and the caret.
+      final room = constraints.maxWidth - (widget.search ? 140 : 110);
+      final text = _summary(context, room);
+      if (_text.text != text) _text.text = text;
+      return FiTextInput(
+        key: const Key('choices-field'),
+        controller: _text,
+        readOnly: true,
+        onTap: widget.onOpen,
+        hint: widget.hint,
+        errors: widget.errors,
+        prefixIcon: widget.search ? const Icon(FiIcons.search, size: 18) : null,
+        onClear: widget.onClear,
+        suffixIcon: const Padding(
+          padding: EdgeInsets.only(left: 4, right: 10),
+          child: Icon(FiIcons.expand, size: 18),
+        ),
+      );
+    },
+  );
+}
+
+/// The checkbox sheet of a [FiChoicesInput]: [title] over "N picked", one checkbox row per
+/// option, removed members ([held]) while they stay picked, a search input when [search], and
+/// Done. Returns the picked ids on Done, or null when dismissed.
+Future<List<String>?> showChoicesSheet(
+  BuildContext context, {
+  required String title,
+  required List<ChoiceOption> options,
+  required List<String> selected,
+  List<ChoiceOption> held = const [],
+  bool search = false,
+}) => showModalBottomSheet<List<String>>(
+  context: context,
+  useSafeArea: true,
+  isScrollControlled: true,
+  builder: (context) => _ChoicesSheet(
+    title: title,
+    options: options,
+    held: held,
+    selected: selected,
+    search: search,
+  ),
+);
+
+class _ChoicesSheet extends StatefulWidget {
+  const _ChoicesSheet({
+    required this.title,
+    required this.options,
+    required this.held,
+    required this.selected,
+    required this.search,
+  });
+
+  final String title;
+  final List<ChoiceOption> options;
+  final List<ChoiceOption> held;
+  final List<String> selected;
+  final bool search;
+
+  @override
+  State<_ChoicesSheet> createState() => _ChoicesSheetState();
+}
+
+class _ChoicesSheetState extends State<_ChoicesSheet> {
+  late final Set<String> _picked = widget.selected.toSet();
+  final TextEditingController _query = TextEditingController();
+
+  @override
+  void dispose() {
+    _query.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final query = _query.text.trim();
+    // A removed member is listed only while it stays picked: once unpicked it is gone.
+    final held = [
+      for (final option in widget.held)
+        if (_picked.contains(option.id)) option,
+    ];
+    final matches = _matching([...widget.options, ...held], query);
+    return BottomSheetInsets(
+      child: ConstrainedBox(
+        key: const Key('choices-sheet'),
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * .85,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 0, 8, 6),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        Text(
+                          context.l10n.themeChoicesPicked(_picked.length),
+                          key: const Key('choices-sheet-count'),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Nocturne.muted(.55),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  TextButton(
+                    key: const Key('choices-sheet-done'),
+                    onPressed: () => Navigator.pop(context, [
+                      for (final option in [...widget.options, ...widget.held])
+                        if (_picked.contains(option.id)) option.id,
+                    ]),
+                    child: Text(context.l10n.commonDone),
+                  ),
+                ],
+              ),
+            ),
+            if (widget.search)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                child: FiTextInput(
+                  key: const Key('choices-search'),
+                  controller: _query,
+                  hint: context.l10n.themeSearchOptions(widget.options.length),
+                  prefixIcon: const Icon(FiIcons.search, size: 18),
+                  onClear: query.isEmpty
+                      ? null
+                      : () => setState(() => _query.clear()),
+                  onChanged: (_) => setState(() {}),
+                ),
+              ),
+            Flexible(
+              child: ListView(
+                shrinkWrap: true,
+                padding: const EdgeInsets.fromLTRB(8, 0, 8, 12),
+                children: [
+                  for (final option in matches)
+                    InkWell(
+                      key: ValueKey('choices-row-${option.id}'),
+                      borderRadius: BorderRadius.circular(Nocturne.radius),
+                      onTap: () => setState(() {
+                        if (!_picked.remove(option.id)) _picked.add(option.id);
+                      }),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(minHeight: 48),
+                        child: Row(
+                          children: [
+                            Checkbox(
+                              value: _picked.contains(option.id),
+                              onChanged: (_) => setState(() {
+                                if (!_picked.remove(option.id)) {
+                                  _picked.add(option.id);
+                                }
+                              }),
+                            ),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text.rich(
+                                TextSpan(
+                                  children: highlightMatches(
+                                    option.label,
+                                    query,
+                                  ),
+                                ),
+                                style: const TextStyle(fontSize: 15),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A Choices value in a record list: one small tag per picked label in option order, the tags
+/// that don't fit the width collapsed into one "+N" tag.
+class ChoicesTagRow extends StatelessWidget {
+  const ChoicesTagRow(this.labels, {super.key});
+
+  final List<String> labels;
+
+  static const double _gap = 4;
+  static const TextStyle _style = TextStyle(fontSize: 11, letterSpacing: .22);
+
+  static double _tagWidth(BuildContext context, String text) {
+    final painter = TextPainter(
+      text: TextSpan(text: text, style: _style),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      maxLines: 1,
+    )..layout();
+    final width = painter.width + 20;
+    painter.dispose();
+    return width;
+  }
+
+  /// How many of [labels] fit in [maxWidth], leaving room for the "+N" tag when some don't.
+  static int fitting(
+    BuildContext context,
+    List<String> labels,
+    double maxWidth,
+  ) {
+    final widths = [for (final label in labels) _tagWidth(context, label)];
+    var used = 0.0;
+    for (var index = 0; index < labels.length; index++) {
+      final next = used + (index == 0 ? 0 : _gap) + widths[index];
+      final rest = labels.length - index - 1;
+      final more = rest == 0
+          ? 0
+          : _gap + _tagWidth(context, context.l10n.recordsMoreTags(rest));
+      if (next + more > maxWidth) return index;
+      used = next;
+    }
+    return labels.length;
+  }
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final shown = constraints.maxWidth.isFinite
+          ? fitting(context, labels, constraints.maxWidth)
+          : labels.length;
+      final hidden = labels.length - shown;
+      return ClipRect(
+        child: Row(
+          key: const Key('choices-tags'),
+          spacing: _gap,
+          children: [
+            for (final label in labels.take(shown))
+              Tag.neutral(label, key: ValueKey('choices-tag-$label')),
+            if (hidden > 0)
+              Tag.outline(
+                context.l10n.recordsMoreTags(hidden),
+                key: const Key('choices-tag-more'),
+              ),
+          ],
+        ),
+      );
+    },
+  );
 }

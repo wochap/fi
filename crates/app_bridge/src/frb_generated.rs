@@ -4846,10 +4846,12 @@ impl SseDecode for crate::api::models::BridgeIssueDto {
         let mut var_fields = <Vec<String>>::sse_decode(deserializer);
         let mut var_code = <String>::sse_decode(deserializer);
         let mut var_message = <String>::sse_decode(deserializer);
+        let mut var_count = <Option<u32>>::sse_decode(deserializer);
         return crate::api::models::BridgeIssueDto {
             fields: var_fields,
             code: var_code,
             message: var_message,
+            count: var_count,
         };
     }
 }
@@ -5141,12 +5143,13 @@ impl SseDecode for crate::api::models::ExpressionKindDto {
             2 => crate::api::models::ExpressionKindDto::Arithmetic,
             3 => crate::api::models::ExpressionKindDto::Divide,
             4 => crate::api::models::ExpressionKindDto::Compare,
-            5 => crate::api::models::ExpressionKindDto::Boolean,
-            6 => crate::api::models::ExpressionKindDto::Not,
-            7 => crate::api::models::ExpressionKindDto::IsNull,
-            8 => crate::api::models::ExpressionKindDto::IsNotNull,
-            9 => crate::api::models::ExpressionKindDto::Abs,
-            10 => crate::api::models::ExpressionKindDto::StartOfCurrent,
+            5 => crate::api::models::ExpressionKindDto::SetCompare,
+            6 => crate::api::models::ExpressionKindDto::Boolean,
+            7 => crate::api::models::ExpressionKindDto::Not,
+            8 => crate::api::models::ExpressionKindDto::IsNull,
+            9 => crate::api::models::ExpressionKindDto::IsNotNull,
+            10 => crate::api::models::ExpressionKindDto::Abs,
+            11 => crate::api::models::ExpressionKindDto::StartOfCurrent,
             _ => unreachable!("Invalid variant for ExpressionKindDto: {}", inner),
         };
     }
@@ -5163,6 +5166,8 @@ impl SseDecode for crate::api::models::ExpressionNodeDto {
             <Option<crate::api::models::ArithmeticOperatorDto>>::sse_decode(deserializer);
         let mut var_comparisonOperator =
             <Option<crate::api::models::ComparisonOperatorDto>>::sse_decode(deserializer);
+        let mut var_setOperator =
+            <Option<crate::api::models::SetOperatorDto>>::sse_decode(deserializer);
         let mut var_booleanOperator =
             <Option<crate::api::models::BooleanOperatorDto>>::sse_decode(deserializer);
         let mut var_left = <Option<u32>>::sse_decode(deserializer);
@@ -5179,6 +5184,7 @@ impl SseDecode for crate::api::models::ExpressionNodeDto {
             field: var_field,
             arithmetic_operator: var_arithmeticOperator,
             comparison_operator: var_comparisonOperator,
+            set_operator: var_setOperator,
             boolean_operator: var_booleanOperator,
             left: var_left,
             right: var_right,
@@ -5272,6 +5278,7 @@ impl SseDecode for crate::api::models::FieldTypeKindDto {
             5 => crate::api::models::FieldTypeKindDto::DateTime,
             6 => crate::api::models::FieldTypeKindDto::Duration,
             7 => crate::api::models::FieldTypeKindDto::Enum,
+            8 => crate::api::models::FieldTypeKindDto::EnumSet,
             _ => unreachable!("Invalid variant for FieldTypeKindDto: {}", inner),
         };
     }
@@ -5284,11 +5291,13 @@ impl SseDecode for crate::api::models::FieldValueDto {
         let mut var_integerValue = <Option<i64>>::sse_decode(deserializer);
         let mut var_textValue = <Option<String>>::sse_decode(deserializer);
         let mut var_booleanValue = <Option<bool>>::sse_decode(deserializer);
+        let mut var_listValue = <Vec<String>>::sse_decode(deserializer);
         return crate::api::models::FieldValueDto {
             kind: var_kind,
             integer_value: var_integerValue,
             text_value: var_textValue,
             boolean_value: var_booleanValue,
+            list_value: var_listValue,
         };
     }
 }
@@ -5307,6 +5316,7 @@ impl SseDecode for crate::api::models::FieldValueKindDto {
             6 => crate::api::models::FieldValueKindDto::DateTime,
             7 => crate::api::models::FieldValueKindDto::Duration,
             8 => crate::api::models::FieldValueKindDto::Enum,
+            9 => crate::api::models::FieldValueKindDto::EnumSet,
             _ => unreachable!("Invalid variant for FieldValueKindDto: {}", inner),
         };
     }
@@ -6461,6 +6471,19 @@ impl SseDecode for Option<crate::api::models::RoundingPolicyDto> {
     }
 }
 
+impl SseDecode for Option<crate::api::models::SetOperatorDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<crate::api::models::SetOperatorDto>::sse_decode(
+                deserializer,
+            ));
+        } else {
+            return None;
+        }
+    }
+}
+
 impl SseDecode for Option<crate::api::models::TypedValueDto> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -7050,6 +7073,19 @@ impl SseDecode for crate::api::models::SeriesPointDto {
     }
 }
 
+impl SseDecode for crate::api::models::SetOperatorDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::api::models::SetOperatorDto::HasAnyOf,
+            1 => crate::api::models::SetOperatorDto::HasAllOf,
+            2 => crate::api::models::SetOperatorDto::HasNoneOf,
+            _ => unreachable!("Invalid variant for SetOperatorDto: {}", inner),
+        };
+    }
+}
+
 impl SseDecode for crate::api::models::SortClauseDto {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -7184,11 +7220,15 @@ impl SseDecode for crate::api::models::TypedValueDto {
         let mut var_integerValue = <Option<i64>>::sse_decode(deserializer);
         let mut var_textValue = <Option<String>>::sse_decode(deserializer);
         let mut var_booleanValue = <Option<bool>>::sse_decode(deserializer);
+        let mut var_listValue = <Vec<String>>::sse_decode(deserializer);
+        let mut var_fieldId = <Option<String>>::sse_decode(deserializer);
         return crate::api::models::TypedValueDto {
             value_type: var_valueType,
             integer_value: var_integerValue,
             text_value: var_textValue,
             boolean_value: var_booleanValue,
+            list_value: var_listValue,
+            field_id: var_fieldId,
         };
     }
 }
@@ -7274,7 +7314,8 @@ impl SseDecode for crate::api::models::ValueTypeKindDto {
             5 => crate::api::models::ValueTypeKindDto::DateTime,
             6 => crate::api::models::ValueTypeKindDto::Duration,
             7 => crate::api::models::ValueTypeKindDto::Enum,
-            8 => crate::api::models::ValueTypeKindDto::Null,
+            8 => crate::api::models::ValueTypeKindDto::EnumSet,
+            9 => crate::api::models::ValueTypeKindDto::Null,
             _ => unreachable!("Invalid variant for ValueTypeKindDto: {}", inner),
         };
     }
@@ -8183,6 +8224,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::models::BridgeIssueDto {
             self.fields.into_into_dart().into_dart(),
             self.code.into_into_dart().into_dart(),
             self.message.into_into_dart().into_dart(),
+            self.count.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -8608,12 +8650,13 @@ impl flutter_rust_bridge::IntoDart for crate::api::models::ExpressionKindDto {
             Self::Arithmetic => 2.into_dart(),
             Self::Divide => 3.into_dart(),
             Self::Compare => 4.into_dart(),
-            Self::Boolean => 5.into_dart(),
-            Self::Not => 6.into_dart(),
-            Self::IsNull => 7.into_dart(),
-            Self::IsNotNull => 8.into_dart(),
-            Self::Abs => 9.into_dart(),
-            Self::StartOfCurrent => 10.into_dart(),
+            Self::SetCompare => 5.into_dart(),
+            Self::Boolean => 6.into_dart(),
+            Self::Not => 7.into_dart(),
+            Self::IsNull => 8.into_dart(),
+            Self::IsNotNull => 9.into_dart(),
+            Self::Abs => 10.into_dart(),
+            Self::StartOfCurrent => 11.into_dart(),
             _ => unreachable!(),
         }
     }
@@ -8638,6 +8681,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::models::ExpressionNodeDto {
             self.field.into_into_dart().into_dart(),
             self.arithmetic_operator.into_into_dart().into_dart(),
             self.comparison_operator.into_into_dart().into_dart(),
+            self.set_operator.into_into_dart().into_dart(),
             self.boolean_operator.into_into_dart().into_dart(),
             self.left.into_into_dart().into_dart(),
             self.right.into_into_dart().into_dart(),
@@ -8765,6 +8809,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::models::FieldTypeKindDto {
             Self::DateTime => 5.into_dart(),
             Self::Duration => 6.into_dart(),
             Self::Enum => 7.into_dart(),
+            Self::EnumSet => 8.into_dart(),
             _ => unreachable!(),
         }
     }
@@ -8788,6 +8833,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::models::FieldValueDto {
             self.integer_value.into_into_dart().into_dart(),
             self.text_value.into_into_dart().into_dart(),
             self.boolean_value.into_into_dart().into_dart(),
+            self.list_value.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -8816,6 +8862,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::models::FieldValueKindDto {
             Self::DateTime => 6.into_dart(),
             Self::Duration => 7.into_dart(),
             Self::Enum => 8.into_dart(),
+            Self::EnumSet => 9.into_dart(),
             _ => unreachable!(),
         }
     }
@@ -9888,6 +9935,28 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::models::SeriesPointDto>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::models::SetOperatorDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::HasAnyOf => 0.into_dart(),
+            Self::HasAllOf => 1.into_dart(),
+            Self::HasNoneOf => 2.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::models::SetOperatorDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::models::SetOperatorDto>
+    for crate::api::models::SetOperatorDto
+{
+    fn into_into_dart(self) -> crate::api::models::SetOperatorDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::models::SortClauseDto {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -10066,6 +10135,8 @@ impl flutter_rust_bridge::IntoDart for crate::api::models::TypedValueDto {
             self.integer_value.into_into_dart().into_dart(),
             self.text_value.into_into_dart().into_dart(),
             self.boolean_value.into_into_dart().into_dart(),
+            self.list_value.into_into_dart().into_dart(),
+            self.field_id.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -10137,7 +10208,8 @@ impl flutter_rust_bridge::IntoDart for crate::api::models::ValueTypeKindDto {
             Self::DateTime => 5.into_dart(),
             Self::Duration => 6.into_dart(),
             Self::Enum => 7.into_dart(),
-            Self::Null => 8.into_dart(),
+            Self::EnumSet => 8.into_dart(),
+            Self::Null => 9.into_dart(),
             _ => unreachable!(),
         }
     }
@@ -10852,6 +10924,7 @@ impl SseEncode for crate::api::models::BridgeIssueDto {
         <Vec<String>>::sse_encode(self.fields, serializer);
         <String>::sse_encode(self.code, serializer);
         <String>::sse_encode(self.message, serializer);
+        <Option<u32>>::sse_encode(self.count, serializer);
     }
 }
 
@@ -11085,12 +11158,13 @@ impl SseEncode for crate::api::models::ExpressionKindDto {
                 crate::api::models::ExpressionKindDto::Arithmetic => 2,
                 crate::api::models::ExpressionKindDto::Divide => 3,
                 crate::api::models::ExpressionKindDto::Compare => 4,
-                crate::api::models::ExpressionKindDto::Boolean => 5,
-                crate::api::models::ExpressionKindDto::Not => 6,
-                crate::api::models::ExpressionKindDto::IsNull => 7,
-                crate::api::models::ExpressionKindDto::IsNotNull => 8,
-                crate::api::models::ExpressionKindDto::Abs => 9,
-                crate::api::models::ExpressionKindDto::StartOfCurrent => 10,
+                crate::api::models::ExpressionKindDto::SetCompare => 5,
+                crate::api::models::ExpressionKindDto::Boolean => 6,
+                crate::api::models::ExpressionKindDto::Not => 7,
+                crate::api::models::ExpressionKindDto::IsNull => 8,
+                crate::api::models::ExpressionKindDto::IsNotNull => 9,
+                crate::api::models::ExpressionKindDto::Abs => 10,
+                crate::api::models::ExpressionKindDto::StartOfCurrent => 11,
                 _ => {
                     unimplemented!("");
                 }
@@ -11114,6 +11188,7 @@ impl SseEncode for crate::api::models::ExpressionNodeDto {
             self.comparison_operator,
             serializer,
         );
+        <Option<crate::api::models::SetOperatorDto>>::sse_encode(self.set_operator, serializer);
         <Option<crate::api::models::BooleanOperatorDto>>::sse_encode(
             self.boolean_operator,
             serializer,
@@ -11189,6 +11264,7 @@ impl SseEncode for crate::api::models::FieldTypeKindDto {
                 crate::api::models::FieldTypeKindDto::DateTime => 5,
                 crate::api::models::FieldTypeKindDto::Duration => 6,
                 crate::api::models::FieldTypeKindDto::Enum => 7,
+                crate::api::models::FieldTypeKindDto::EnumSet => 8,
                 _ => {
                     unimplemented!("");
                 }
@@ -11205,6 +11281,7 @@ impl SseEncode for crate::api::models::FieldValueDto {
         <Option<i64>>::sse_encode(self.integer_value, serializer);
         <Option<String>>::sse_encode(self.text_value, serializer);
         <Option<bool>>::sse_encode(self.boolean_value, serializer);
+        <Vec<String>>::sse_encode(self.list_value, serializer);
     }
 }
 
@@ -11222,6 +11299,7 @@ impl SseEncode for crate::api::models::FieldValueKindDto {
                 crate::api::models::FieldValueKindDto::DateTime => 6,
                 crate::api::models::FieldValueKindDto::Duration => 7,
                 crate::api::models::FieldValueKindDto::Enum => 8,
+                crate::api::models::FieldValueKindDto::EnumSet => 9,
                 _ => {
                     unimplemented!("");
                 }
@@ -12144,6 +12222,16 @@ impl SseEncode for Option<crate::api::models::RoundingPolicyDto> {
     }
 }
 
+impl SseEncode for Option<crate::api::models::SetOperatorDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::api::models::SetOperatorDto>::sse_encode(value, serializer);
+        }
+    }
+}
+
 impl SseEncode for Option<crate::api::models::TypedValueDto> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -12644,6 +12732,23 @@ impl SseEncode for crate::api::models::SeriesPointDto {
     }
 }
 
+impl SseEncode for crate::api::models::SetOperatorDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::api::models::SetOperatorDto::HasAnyOf => 0,
+                crate::api::models::SetOperatorDto::HasAllOf => 1,
+                crate::api::models::SetOperatorDto::HasNoneOf => 2,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
 impl SseEncode for crate::api::models::SortClauseDto {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -12758,6 +12863,8 @@ impl SseEncode for crate::api::models::TypedValueDto {
         <Option<i64>>::sse_encode(self.integer_value, serializer);
         <Option<String>>::sse_encode(self.text_value, serializer);
         <Option<bool>>::sse_encode(self.boolean_value, serializer);
+        <Vec<String>>::sse_encode(self.list_value, serializer);
+        <Option<String>>::sse_encode(self.field_id, serializer);
     }
 }
 
@@ -12835,7 +12942,8 @@ impl SseEncode for crate::api::models::ValueTypeKindDto {
                 crate::api::models::ValueTypeKindDto::DateTime => 5,
                 crate::api::models::ValueTypeKindDto::Duration => 6,
                 crate::api::models::ValueTypeKindDto::Enum => 7,
-                crate::api::models::ValueTypeKindDto::Null => 8,
+                crate::api::models::ValueTypeKindDto::EnumSet => 8,
+                crate::api::models::ValueTypeKindDto::Null => 9,
                 _ => {
                     unimplemented!("");
                 }

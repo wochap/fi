@@ -87,6 +87,7 @@ fn fields(specs: &[FieldSpec]) -> Vec<VoiceField> {
                 "datetime" => FieldKind::DateTime,
                 "duration" => FieldKind::Duration,
                 "choice" => FieldKind::Choice,
+                "choices" => FieldKind::Choices,
                 other => panic!("unknown kind {other}"),
             },
             required: spec.required,
@@ -132,6 +133,8 @@ fn render(value: &TypedValue, kind: &FieldKind) -> String {
             .to_string(),
         (TypedValue::Duration(ms), _) => ms.to_string(),
         (TypedValue::Choice(id), _) => id.clone(),
+        // Option ids are the labels here, already in option order.
+        (TypedValue::Choices(ids), _) => ids.join("; "),
         (value, _) => format!("{value:?}"),
     }
 }

@@ -110,6 +110,7 @@ abstract final class FiIcons {
   static const IconData dateTime = PhosphorIconsRegular.calendarCheck;
   static const IconData duration = PhosphorIconsRegular.timer;
   static const IconData choice = PhosphorIconsRegular.listBullets;
+  static const IconData choices = PhosphorIconsRegular.listChecks;
 }
 
 /// The one icon for a field type of [kind].
@@ -122,4 +123,5 @@ IconData fieldTypeIcon(FieldTypeKindDto kind) => switch (kind) {
   FieldTypeKindDto.dateTime => FiIcons.dateTime,
   FieldTypeKindDto.duration => FiIcons.duration,
   FieldTypeKindDto.enum_ => FiIcons.choice,
+  FieldTypeKindDto.enumSet => FiIcons.choices,
 };

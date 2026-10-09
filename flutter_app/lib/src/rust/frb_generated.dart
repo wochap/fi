@@ -4703,6 +4703,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  SetOperatorDto dco_decode_box_autoadd_set_operator_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_set_operator_dto(raw);
+  }
+
+  @protected
   TypedValueDto dco_decode_box_autoadd_typed_value_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_typed_value_dto(raw);
@@ -4835,12 +4841,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   BridgeIssueDto dco_decode_bridge_issue_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 3)
-      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
     return BridgeIssueDto(
       fields: dco_decode_list_String(arr[0]),
       code: dco_decode_String(arr[1]),
       message: dco_decode_String(arr[2]),
+      count: dco_decode_opt_box_autoadd_u_32(arr[3]),
     );
   }
 
@@ -5057,8 +5064,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ExpressionNodeDto dco_decode_expression_node_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 12)
-      throw Exception('unexpected arr length: expect 12 but see ${arr.length}');
+    if (arr.length != 13)
+      throw Exception('unexpected arr length: expect 13 but see ${arr.length}');
     return ExpressionNodeDto(
       kind: dco_decode_expression_kind_dto(arr[0]),
       value: dco_decode_opt_box_autoadd_typed_value_dto(arr[1]),
@@ -5069,13 +5076,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       comparisonOperator: dco_decode_opt_box_autoadd_comparison_operator_dto(
         arr[4],
       ),
-      booleanOperator: dco_decode_opt_box_autoadd_boolean_operator_dto(arr[5]),
-      left: dco_decode_opt_box_autoadd_u_32(arr[6]),
-      right: dco_decode_opt_box_autoadd_u_32(arr[7]),
-      expression: dco_decode_opt_box_autoadd_u_32(arr[8]),
-      outputScale: dco_decode_opt_box_autoadd_u_8(arr[9]),
-      rounding: dco_decode_opt_box_autoadd_rounding_policy_dto(arr[10]),
-      boundary: dco_decode_opt_box_autoadd_current_boundary_dto(arr[11]),
+      setOperator: dco_decode_opt_box_autoadd_set_operator_dto(arr[5]),
+      booleanOperator: dco_decode_opt_box_autoadd_boolean_operator_dto(arr[6]),
+      left: dco_decode_opt_box_autoadd_u_32(arr[7]),
+      right: dco_decode_opt_box_autoadd_u_32(arr[8]),
+      expression: dco_decode_opt_box_autoadd_u_32(arr[9]),
+      outputScale: dco_decode_opt_box_autoadd_u_8(arr[10]),
+      rounding: dco_decode_opt_box_autoadd_rounding_policy_dto(arr[11]),
+      boundary: dco_decode_opt_box_autoadd_current_boundary_dto(arr[12]),
     );
   }
 
@@ -5140,13 +5148,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   FieldValueDto dco_decode_field_value_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 4)
-      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
     return FieldValueDto(
       kind: dco_decode_field_value_kind_dto(arr[0]),
       integerValue: dco_decode_opt_CastedPrimitive_i_64(arr[1]),
       textValue: dco_decode_opt_String(arr[2]),
       booleanValue: dco_decode_opt_box_autoadd_bool(arr[3]),
+      listValue: dco_decode_list_String(arr[4]),
     );
   }
 
@@ -5861,6 +5870,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  SetOperatorDto? dco_decode_opt_box_autoadd_set_operator_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_set_operator_dto(raw);
+  }
+
+  @protected
   TypedValueDto? dco_decode_opt_box_autoadd_typed_value_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_box_autoadd_typed_value_dto(raw);
@@ -6254,6 +6269,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  SetOperatorDto dco_decode_set_operator_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return SetOperatorDto.values[raw as int];
+  }
+
+  @protected
   SortClauseDto dco_decode_sort_clause_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -6340,13 +6361,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TypedValueDto dco_decode_typed_value_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 4)
-      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    if (arr.length != 6)
+      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
     return TypedValueDto(
       valueType: dco_decode_value_type_dto(arr[0]),
       integerValue: dco_decode_opt_CastedPrimitive_i_64(arr[1]),
       textValue: dco_decode_opt_String(arr[2]),
       booleanValue: dco_decode_opt_box_autoadd_bool(arr[3]),
+      listValue: dco_decode_list_String(arr[4]),
+      fieldId: dco_decode_opt_String(arr[5]),
     );
   }
 
@@ -7037,6 +7060,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  SetOperatorDto sse_decode_box_autoadd_set_operator_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_set_operator_dto(deserializer));
+  }
+
+  @protected
   TypedValueDto sse_decode_box_autoadd_typed_value_dto(
     SseDeserializer deserializer,
   ) {
@@ -7193,10 +7224,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_fields = sse_decode_list_String(deserializer);
     var var_code = sse_decode_String(deserializer);
     var var_message = sse_decode_String(deserializer);
+    var var_count = sse_decode_opt_box_autoadd_u_32(deserializer);
     return BridgeIssueDto(
       fields: var_fields,
       code: var_code,
       message: var_message,
+      count: var_count,
     );
   }
 
@@ -7453,6 +7486,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_decode_opt_box_autoadd_arithmetic_operator_dto(deserializer);
     var var_comparisonOperator =
         sse_decode_opt_box_autoadd_comparison_operator_dto(deserializer);
+    var var_setOperator = sse_decode_opt_box_autoadd_set_operator_dto(
+      deserializer,
+    );
     var var_booleanOperator = sse_decode_opt_box_autoadd_boolean_operator_dto(
       deserializer,
     );
@@ -7472,6 +7508,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       field: var_field,
       arithmeticOperator: var_arithmeticOperator,
       comparisonOperator: var_comparisonOperator,
+      setOperator: var_setOperator,
       booleanOperator: var_booleanOperator,
       left: var_left,
       right: var_right,
@@ -7558,11 +7595,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_integerValue = sse_decode_opt_CastedPrimitive_i_64(deserializer);
     var var_textValue = sse_decode_opt_String(deserializer);
     var var_booleanValue = sse_decode_opt_box_autoadd_bool(deserializer);
+    var var_listValue = sse_decode_list_String(deserializer);
     return FieldValueDto(
       kind: var_kind,
       integerValue: var_integerValue,
       textValue: var_textValue,
       booleanValue: var_booleanValue,
+      listValue: var_listValue,
     );
   }
 
@@ -8676,6 +8715,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  SetOperatorDto? sse_decode_opt_box_autoadd_set_operator_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_set_operator_dto(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
   TypedValueDto? sse_decode_opt_box_autoadd_typed_value_dto(
     SseDeserializer deserializer,
   ) {
@@ -9188,6 +9240,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  SetOperatorDto sse_decode_set_operator_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return SetOperatorDto.values[inner];
+  }
+
+  @protected
   SortClauseDto sse_decode_sort_clause_dto(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_expression = sse_decode_expression_dto(deserializer);
@@ -9293,11 +9352,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_integerValue = sse_decode_opt_CastedPrimitive_i_64(deserializer);
     var var_textValue = sse_decode_opt_String(deserializer);
     var var_booleanValue = sse_decode_opt_box_autoadd_bool(deserializer);
+    var var_listValue = sse_decode_list_String(deserializer);
+    var var_fieldId = sse_decode_opt_String(deserializer);
     return TypedValueDto(
       valueType: var_valueType,
       integerValue: var_integerValue,
       textValue: var_textValue,
       booleanValue: var_booleanValue,
+      listValue: var_listValue,
+      fieldId: var_fieldId,
     );
   }
 
@@ -10160,6 +10223,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_box_autoadd_set_operator_dto(
+    SetOperatorDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_set_operator_dto(self, serializer);
+  }
+
+  @protected
   void sse_encode_box_autoadd_typed_value_dto(
     TypedValueDto self,
     SseSerializer serializer,
@@ -10323,6 +10395,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_list_String(self.fields, serializer);
     sse_encode_String(self.code, serializer);
     sse_encode_String(self.message, serializer);
+    sse_encode_opt_box_autoadd_u_32(self.count, serializer);
   }
 
   @protected
@@ -10531,6 +10604,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       self.comparisonOperator,
       serializer,
     );
+    sse_encode_opt_box_autoadd_set_operator_dto(self.setOperator, serializer);
     sse_encode_opt_box_autoadd_boolean_operator_dto(
       self.booleanOperator,
       serializer,
@@ -10607,6 +10681,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_opt_CastedPrimitive_i_64(self.integerValue, serializer);
     sse_encode_opt_String(self.textValue, serializer);
     sse_encode_opt_box_autoadd_bool(self.booleanValue, serializer);
+    sse_encode_list_String(self.listValue, serializer);
   }
 
   @protected
@@ -11623,6 +11698,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_opt_box_autoadd_set_operator_dto(
+    SetOperatorDto? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_set_operator_dto(self, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_opt_box_autoadd_typed_value_dto(
     TypedValueDto? self,
     SseSerializer serializer,
@@ -12073,6 +12161,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_set_operator_dto(
+    SetOperatorDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
   void sse_encode_sort_clause_dto(
     SortClauseDto self,
     SseSerializer serializer,
@@ -12167,6 +12264,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_opt_CastedPrimitive_i_64(self.integerValue, serializer);
     sse_encode_opt_String(self.textValue, serializer);
     sse_encode_opt_box_autoadd_bool(self.booleanValue, serializer);
+    sse_encode_list_String(self.listValue, serializer);
+    sse_encode_opt_String(self.fieldId, serializer);
   }
 
   @protected

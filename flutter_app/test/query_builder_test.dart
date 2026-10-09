@@ -356,4 +356,158 @@ void main() {
     // The saved-query editor style labels the filter row.
     expect(find.text('Only records where'), findsOneWidget);
   });
+
+  group('Choices filters', () {
+    final tagsSchema = CollectionSchemaDto(
+      id: 'collection',
+      description: '',
+      name: 'Spending',
+      fields: [
+        ...schema.fields,
+        FieldDefinitionDto(
+          id: 'tags',
+          name: 'tags',
+          fieldType: const FieldTypeDto(kind: FieldTypeKindDto.enumSet),
+          required_: false,
+          validation: const ValidationMetadataDto(),
+          display: const DisplayMetadataDto(
+            multiline: false,
+            slider: false,
+            sliderStep: null,
+          ),
+          order: 3,
+          deleted: false,
+          enumOptions: [
+            for (final (index, label) in ['work', 'urgent', 'food'].indexed)
+              EnumOptionDto(
+                id: label,
+                label: label,
+                order: index,
+                deleted: false,
+              ),
+          ],
+        ),
+      ],
+    );
+
+    QueryDefinitionDto definitionOf(QueryBuilderState state) =>
+        state.toDefinition(tagsSchema, 'Saved', 0, id: 'query-1');
+
+    Future<QueryBuilderState Function()> pumpBuilder(
+      WidgetTester tester,
+    ) async {
+      tester.view.physicalSize = const Size(1200, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      var state = const QueryBuilderState();
+      await tester.pumpWidget(
+        MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: StatefulBuilder(
+                builder: (context, setState) => QueryBuilder(
+                  schema: tagsSchema,
+                  state: state,
+                  onChanged: (next) => setState(() => state = next),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      return () => state;
+    }
+
+    Future<void> pick(WidgetTester tester, Key select, String item) async {
+      await tester.tap(find.byKey(select));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(item).last);
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('has any of picks options and saves a set test', (
+      tester,
+    ) async {
+      final state = await pumpBuilder(tester);
+      await pick(tester, const Key('filter-field'), 'tags');
+      expect(find.byKey(const Key('filter-operator')), findsNothing);
+      await tester.tap(find.byKey(const Key('filter-choices-operator')));
+      await tester.pumpAndSettle();
+      for (final label in [
+        'has any of',
+        'has all of',
+        'has none of',
+        'is empty',
+        'is not empty',
+      ]) {
+        expect(find.text(label), findsWidgets, reason: label);
+      }
+      expect(find.text('equals'), findsNothing);
+      await tester.tap(find.text('has any of').last);
+      await tester.pumpAndSettle();
+      expect(
+        state().blocker(lookupAppLocalizations(const Locale('en'))),
+        isNotNull,
+      );
+      await tester.tap(find.byKey(const ValueKey('choices-chip-urgent')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('choices-chip-work')));
+      await tester.pumpAndSettle();
+
+      final filter = definitionOf(state()).query!.filter!;
+      expect(filter.root, 2);
+      expect(filter.nodes[2].kind, ExpressionKindDto.setCompare);
+      expect(filter.nodes[2].setOperator, SetOperatorDto.hasAnyOf);
+      final constant = filter.nodes[1].value!;
+      expect(constant.valueType.kind, ValueTypeKindDto.enumSet);
+      expect(constant.listValue, ['work', 'urgent']);
+      expect(constant.fieldId, 'tags');
+
+      final loaded = QueryBuilderState.fromDefinition(
+        definitionOf(state()),
+        tagsSchema,
+      )!;
+      expect(loaded.filterChoices, isTrue);
+      expect(loaded.choicesOperator, ChoicesFilterOperator.hasAnyOf);
+      expect(loaded.filterOptions, ['work', 'urgent']);
+    });
+
+    testWidgets('is empty takes no value and saves IsNull', (tester) async {
+      final state = await pumpBuilder(tester);
+      await pick(tester, const Key('filter-field'), 'tags');
+      await pick(tester, const Key('filter-choices-operator'), 'is empty');
+      expect(find.byKey(const Key('filter-options')), findsNothing);
+      final filter = definitionOf(state()).query!.filter!;
+      expect(filter.root, 1);
+      expect(filter.nodes[1].kind, ExpressionKindDto.isNull);
+      expect(filter.nodes[1].expression, 0);
+      final loaded = QueryBuilderState.fromDefinition(
+        definitionOf(state()),
+        tagsSchema,
+      )!;
+      expect(loaded.choicesOperator, ChoicesFilterOperator.isEmpty);
+      expect(
+        loaded.blocker(lookupAppLocalizations(const Locale('en'))),
+        isNull,
+      );
+    });
+
+    test('grouping by a Choices field is detected for the overlap note', () {
+      const bar = QueryBuilderState(
+        widgetType: 'core.bar-chart',
+        categoryFieldId: 'tags',
+      );
+      expect(groupsByChoices(definitionOf(bar), tagsSchema), isTrue);
+      expect(
+        groupsByChoices(
+          definitionOf(bar.copyWith(categoryFieldId: 'note')),
+          tagsSchema,
+        ),
+        isFalse,
+      );
+    });
+  });
 }

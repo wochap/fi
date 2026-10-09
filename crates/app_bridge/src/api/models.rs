@@ -3,6 +3,7 @@ use app_core::{
     IssueCode, NetworkingDeferredReason, ProjectionState, RecoveryOutcome, RecoveryReason,
     RecoveryRecord, RepositoryBootstrapError, ValidationIssue, summarize_issues,
 };
+use flutter_rust_bridge::frb;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PlatformSecretSlotDto {
@@ -225,6 +226,7 @@ pub enum FieldTypeKindDto {
     DateTime,
     Duration,
     Enum,
+    EnumSet,
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FieldTypeDto {
@@ -243,13 +245,18 @@ pub enum FieldValueKindDto {
     DateTime,
     Duration,
     Enum,
+    EnumSet,
 }
+#[frb]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FieldValueDto {
     pub kind: FieldValueKindDto,
     pub integer_value: Option<i64>,
     pub text_value: Option<String>,
     pub boolean_value: Option<bool>,
+    /// Option ids of an `EnumSet` value, in option order. Empty for other kinds.
+    #[frb(default = "const []")]
+    pub list_value: Vec<String>,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -321,6 +328,7 @@ pub enum ValueTypeKindDto {
     DateTime,
     Duration,
     Enum,
+    EnumSet,
     Null,
 }
 
@@ -336,12 +344,19 @@ pub struct InferredTypeDto {
     pub nullable: bool,
 }
 
+#[frb]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TypedValueDto {
     pub value_type: ValueTypeDto,
     pub integer_value: Option<i64>,
     pub text_value: Option<String>,
     pub boolean_value: Option<bool>,
+    /// Option ids of an `EnumOptionSet` constant. Empty for other kinds.
+    #[frb(default = "const []")]
+    pub list_value: Vec<String>,
+    /// Field id an `EnumOptionSet` constant belongs to.
+    #[frb(default = "null")]
+    pub field_id: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -363,6 +378,7 @@ pub enum ExpressionKindDto {
     Arithmetic,
     Divide,
     Compare,
+    SetCompare,
     Boolean,
     Not,
     IsNull,
@@ -385,6 +401,12 @@ pub enum ComparisonOperatorDto {
     GreaterThanOrEqual,
     LessThan,
     LessThanOrEqual,
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SetOperatorDto {
+    HasAnyOf,
+    HasAllOf,
+    HasNoneOf,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BooleanOperatorDto {
@@ -410,6 +432,7 @@ pub struct ExpressionDto {
     pub nodes: Vec<ExpressionNodeDto>,
 }
 
+#[frb]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ExpressionNodeDto {
     pub kind: ExpressionKindDto,
@@ -417,6 +440,8 @@ pub struct ExpressionNodeDto {
     pub field: Option<FieldReferenceDto>,
     pub arithmetic_operator: Option<ArithmeticOperatorDto>,
     pub comparison_operator: Option<ComparisonOperatorDto>,
+    #[frb(default = "null")]
+    pub set_operator: Option<SetOperatorDto>,
     pub boolean_operator: Option<BooleanOperatorDto>,
     pub left: Option<u32>,
     pub right: Option<u32>,
@@ -757,11 +782,15 @@ pub struct BridgeError {
 
 /// One validation problem. `fields` holds zero, one, or several field ids or
 /// form keys; `code` is stable; `message` is safe and never contains ids.
+#[frb]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct BridgeIssueDto {
     pub fields: Vec<String>,
     pub code: String,
     pub message: String,
+    /// Record count for issues that name one (`choices_conversion_blocked`).
+    #[frb(default = "null")]
+    pub count: Option<u32>,
 }
 
 impl From<ValidationIssue> for BridgeIssueDto {
@@ -770,6 +799,7 @@ impl From<ValidationIssue> for BridgeIssueDto {
             fields: value.fields,
             code: value.code.as_str().into(),
             message: value.message,
+            count: None,
         }
     }
 }
@@ -1390,6 +1420,7 @@ impl From<app_core::FieldType> for FieldTypeDto {
             app_core::FieldType::DateTime => (FieldTypeKindDto::DateTime, None),
             app_core::FieldType::Duration => (FieldTypeKindDto::Duration, None),
             app_core::FieldType::Enum => (FieldTypeKindDto::Enum, None),
+            app_core::FieldType::EnumSet => (FieldTypeKindDto::EnumSet, None),
         };
         Self { kind, scale }
     }
@@ -1407,6 +1438,7 @@ impl From<FieldTypeDto> for app_core::FieldType {
             FieldTypeKindDto::DateTime => Self::DateTime,
             FieldTypeKindDto::Duration => Self::Duration,
             FieldTypeKindDto::Enum => Self::Enum,
+            FieldTypeKindDto::EnumSet => Self::EnumSet,
         }
     }
 }
@@ -1434,12 +1466,22 @@ impl From<app_core::FieldValue> for FieldValueDto {
             app_core::FieldValue::Enum(value) => {
                 (FieldValueKindDto::Enum, None, Some(value.to_string()), None)
             }
+            app_core::FieldValue::EnumSet(ids) => {
+                return Self {
+                    kind: FieldValueKindDto::EnumSet,
+                    integer_value: None,
+                    text_value: None,
+                    boolean_value: None,
+                    list_value: ids.iter().map(ToString::to_string).collect(),
+                };
+            }
         };
         Self {
             kind,
             integer_value,
             text_value,
             boolean_value,
+            list_value: Vec::new(),
         }
     }
 }
@@ -1474,6 +1516,13 @@ impl FieldValueDto {
                     |error: app_core::DomainError| BridgeError::from(AppError::from(error)),
                 )?)
             }
+            FieldValueKindDto::EnumSet => app_core::FieldValue::EnumSet(
+                self.list_value
+                    .iter()
+                    .map(|id| id.parse())
+                    .collect::<Result<Vec<_>, app_core::DomainError>>()
+                    .map_err(|error| BridgeError::from(AppError::from(error)))?,
+            ),
         })
     }
 }
@@ -1659,6 +1708,21 @@ impl From<AppError> for BridgeError {
                     Self::validation(field, message)
                 }
                 AppError::Domain(DomainError::InvalidMany(issues)) => Self::issues(issues),
+                AppError::Domain(DomainError::ChoicesConversionBlocked { field, records }) => {
+                    let message =
+                        format!("{records} records hold more than one choice. Edit them first.");
+                    Self {
+                        kind: BridgeErrorKind::Validation,
+                        issues: vec![BridgeIssueDto {
+                            fields: vec![field.to_string()],
+                            code: "choices_conversion_blocked".into(),
+                            message: message.clone(),
+                            count: Some(records),
+                        }],
+                        message,
+                        reset_resolvable: false,
+                    }
+                }
                 AppError::Domain(DomainError::NotFound { kind, .. }) => Self::safe(
                     BridgeErrorKind::Validation,
                     format!("The selected {kind} no longer exists."),
@@ -2164,5 +2228,34 @@ mod tests {
             app_core::SecureStoreError::Locked,
         )));
         assert!(!locked.reset_resolvable);
+    }
+
+    #[test]
+    fn choices_values_and_the_conversion_block_cross_the_bridge() {
+        let ids = vec![app_core::EnumOptionId::new(), app_core::EnumOptionId::new()];
+        let dto = super::FieldValueDto::from(app_core::FieldValue::EnumSet(ids.clone()));
+        assert_eq!(dto.kind, super::FieldValueKindDto::EnumSet);
+        assert_eq!(dto.list_value.len(), 2);
+        assert_eq!(
+            dto.into_core().expect("round trip"),
+            app_core::FieldValue::EnumSet(ids)
+        );
+        assert_eq!(
+            super::FieldTypeDto::from(app_core::FieldType::EnumSet).kind,
+            super::FieldTypeKindDto::EnumSet
+        );
+
+        let blocked = BridgeError::from(AppError::Domain(DomainError::ChoicesConversionBlocked {
+            field: app_core::FieldId::new(),
+            records: 3,
+        }));
+        assert_eq!(blocked.kind, BridgeErrorKind::Validation);
+        assert_eq!(blocked.issues.len(), 1);
+        assert_eq!(blocked.issues[0].code, "choices_conversion_blocked");
+        assert_eq!(blocked.issues[0].count, Some(3));
+        assert_eq!(
+            blocked.message,
+            "3 records hold more than one choice. Edit them first."
+        );
     }
 }

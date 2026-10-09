@@ -9,8 +9,8 @@ use crate::api::{
         ExpressionKindDto, ExpressionNodeDto, FieldReferenceDto, FieldReferenceKindDto,
         GroupingDto, InferredTypeDto, NullOrderDto, QueryDefinitionDto, QueryResultDto,
         QueryResultKindDto, QueryShapeDto, QueryShapeKindDto, ResultRecordDto,
-        ResultRecordValueDto, RoundingPolicyDto, SeriesPointDto, SortClauseDto, SortDirectionDto,
-        TypedValueDto, ValueTypeDto, ValueTypeKindDto, WeekStartDto,
+        ResultRecordValueDto, RoundingPolicyDto, SeriesPointDto, SetOperatorDto, SortClauseDto,
+        SortDirectionDto, TypedValueDto, ValueTypeDto, ValueTypeKindDto, WeekStartDto,
     },
 };
 
@@ -201,6 +201,7 @@ impl TryFrom<ValueTypeDto> for app_core::ValueType {
             ValueTypeKindDto::DateTime => Self::DateTime,
             ValueTypeKindDto::Duration => Self::Duration,
             ValueTypeKindDto::Enum => Self::Enum,
+            ValueTypeKindDto::EnumSet => Self::EnumSet,
             ValueTypeKindDto::Null => Self::Null,
         })
     }
@@ -227,6 +228,7 @@ impl From<app_core::ValueType> for ValueTypeDto {
             app_core::ValueType::DateTime => (ValueTypeKindDto::DateTime, None),
             app_core::ValueType::Duration => (ValueTypeKindDto::Duration, None),
             app_core::ValueType::Enum => (ValueTypeKindDto::Enum, None),
+            app_core::ValueType::EnumSet => (ValueTypeKindDto::EnumSet, None),
             app_core::ValueType::Null => (ValueTypeKindDto::Null, None),
         };
         Self { kind, scale }
@@ -278,6 +280,18 @@ impl TryFrom<TypedValueDto> for app_core::TypedValue {
                     .parse()
                     .map_err(validation)?,
             ),
+            ValueTypeKindDto::EnumSet => Self::EnumOptionSet {
+                field: value
+                    .field_id
+                    .ok_or_else(|| missing("field_id"))?
+                    .parse()
+                    .map_err(validation)?,
+                options: value
+                    .list_value
+                    .iter()
+                    .map(|id| id.parse().map_err(validation))
+                    .collect::<Result<Vec<_>, _>>()?,
+            },
         })
     }
 }
@@ -296,12 +310,24 @@ impl From<app_core::TypedValue> for TypedValueDto {
             }
             app_core::TypedValue::Boolean(v) => (None, None, Some(v)),
             app_core::TypedValue::Enum(v) => (None, Some(v.to_string()), None),
+            app_core::TypedValue::EnumOptionSet { field, options } => {
+                return Self {
+                    value_type,
+                    integer_value: None,
+                    text_value: None,
+                    boolean_value: None,
+                    list_value: options.iter().map(ToString::to_string).collect(),
+                    field_id: Some(field.to_string()),
+                };
+            }
         };
         Self {
             value_type,
             integer_value,
             text_value,
             boolean_value,
+            list_value: Vec::new(),
+            field_id: None,
         }
     }
 }
@@ -353,6 +379,7 @@ fn empty_node(kind: ExpressionKindDto) -> ExpressionNodeDto {
         field: None,
         arithmetic_operator: None,
         comparison_operator: None,
+        set_operator: None,
         boolean_operator: None,
         left: None,
         right: None,
@@ -405,6 +432,20 @@ fn encode_node(value: app_core::Expression, nodes: &mut Vec<ExpressionNodeDto>) 
         } => {
             node.kind = ExpressionKindDto::Compare;
             node.comparison_operator = Some(operator.into());
+            node.left = Some(encode_node(*left, nodes));
+            node.right = Some(encode_node(*right, nodes));
+        }
+        app_core::Expression::SetCompare {
+            operator,
+            left,
+            right,
+        } => {
+            node.kind = ExpressionKindDto::SetCompare;
+            node.set_operator = Some(match operator {
+                app_core::SetOperator::HasAnyOf => SetOperatorDto::HasAnyOf,
+                app_core::SetOperator::HasAllOf => SetOperatorDto::HasAllOf,
+                app_core::SetOperator::HasNoneOf => SetOperatorDto::HasNoneOf,
+            });
             node.left = Some(encode_node(*left, nodes));
             node.right = Some(encode_node(*right, nodes));
         }
@@ -500,6 +541,15 @@ fn decode_node(
                 node.comparison_operator
                     .ok_or_else(|| missing("comparison_operator"))?,
             ),
+            left: Box::new(child(node.left, "left", stack)?),
+            right: Box::new(child(node.right, "right", stack)?),
+        },
+        ExpressionKindDto::SetCompare => app_core::Expression::SetCompare {
+            operator: match node.set_operator.ok_or_else(|| missing("set_operator"))? {
+                SetOperatorDto::HasAnyOf => app_core::SetOperator::HasAnyOf,
+                SetOperatorDto::HasAllOf => app_core::SetOperator::HasAllOf,
+                SetOperatorDto::HasNoneOf => app_core::SetOperator::HasNoneOf,
+            },
             left: Box::new(child(node.left, "left", stack)?),
             right: Box::new(child(node.right, "right", stack)?),
         },

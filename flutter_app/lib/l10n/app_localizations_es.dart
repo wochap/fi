@@ -3539,4 +3539,59 @@ class AppLocalizationsEs extends AppLocalizations {
   String dictatedRemovedWords(String words) {
     return 'Quitado: $words';
   }
+
+  @override
+  String get fieldTypeChoices => 'Opciones';
+
+  @override
+  String themeChoicesPicked(int count) {
+    return '$count elegidas';
+  }
+
+  @override
+  String get fieldEditorChoicesRequiredHelp =>
+      'Obligatorio significa que se elige al menos una opción.';
+
+  @override
+  String get fieldEditorChoicesDefaultHelp =>
+      'Un conjunto de opciones, elegidas en los registros nuevos.';
+
+  @override
+  String get fieldEditorChoicesSemicolon =>
+      'Las opciones de un campo Opciones no pueden contener «;».';
+
+  @override
+  String fieldEditorChoicesConversionBlocked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count registros tienen más de una opción. Edítalos primero.',
+      one: '1 registro tiene más de una opción. Edítalo primero.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get queryOpHasAnyOf => 'tiene alguna de';
+
+  @override
+  String get queryOpHasAllOf => 'tiene todas';
+
+  @override
+  String get queryOpHasNoneOf => 'no tiene ninguna de';
+
+  @override
+  String get queryOpIsEmpty => 'está vacío';
+
+  @override
+  String get queryOpIsNotEmpty => 'no está vacío';
+
+  @override
+  String get widgetGroupsOverlap =>
+      'Los grupos se solapan: un registro cuenta en cada una de sus opciones.';
+
+  @override
+  String recordsMoreTags(int count) {
+    return '+$count';
+  }
 }

@@ -400,6 +400,7 @@ String describeValueType(AppLocalizations l, ValueTypeDto type) =>
       ValueTypeKindDto.boolean => l.exprTypeBoolean,
       ValueTypeKindDto.text => l.exprTypeText,
       ValueTypeKindDto.enum_ => l.exprTypeChoice,
+      ValueTypeKindDto.enumSet => l.fieldTypeChoices,
       ValueTypeKindDto.null_ => l.exprTypeEmpty,
     };
 

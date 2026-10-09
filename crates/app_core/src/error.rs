@@ -21,6 +21,12 @@ pub enum DomainError {
     /// concerns. Used where every problem is reported at once (records).
     #[error("{}", summarize_issues(.0))]
     InvalidMany(Vec<ValidationIssue>),
+    /// Choices → Choice refused: `records` active records hold two or more options of `field`.
+    #[error("{records} records hold more than one choice. Edit them first.")]
+    ChoicesConversionBlocked {
+        field: crate::schema::FieldId,
+        records: u32,
+    },
 }
 
 /// Stable machine-readable category of a validation issue.

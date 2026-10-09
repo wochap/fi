@@ -6,6 +6,7 @@ import 'package:fi/l10n/error_text.dart';
 import 'package:fi/l10n/l10n.dart';
 import 'package:fi/status_time.dart';
 import 'package:fi/theme/action_sheet.dart';
+import 'package:fi/theme/choice_input.dart';
 import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/ui_prefs.dart';
 import 'package:fi/controllers.dart';
@@ -1311,19 +1312,23 @@ class CollectionsPage extends StatelessWidget {
                                     alignment: Alignment.centerLeft,
                                     child: NeededMarker(),
                                   )
-                                : _cell(
-                                    registry.displayText(
-                                      field,
-                                      _recordValue(record, field.id),
-                                      human: true,
-                                      short: true,
-                                      l: context.l10n,
-                                      decimalSeparator: decimalSeparatorOf(
-                                        context,
+                                : _choicesTags(
+                                        field,
+                                        _recordValue(record, field.id),
+                                      ) ??
+                                      _cell(
+                                        registry.displayText(
+                                          field,
+                                          _recordValue(record, field.id),
+                                          human: true,
+                                          short: true,
+                                          l: context.l10n,
+                                          decimalSeparator: decimalSeparatorOf(
+                                            context,
+                                          ),
+                                        ),
+                                        selected: selected,
                                       ),
-                                    ),
-                                    selected: selected,
-                                  ),
                           ),
                         ],
                       ),
@@ -3253,6 +3258,15 @@ Widget _withCloneLine(String? title, Widget body) {
   );
 }
 
+/// A Choices value as tags with "+N" overflow (mock collection-records); null for any other
+/// value, which reads as text.
+Widget? _choicesTags(FieldDefinitionDto field, FieldValueDto? value) {
+  if (field.fieldType.kind != FieldTypeKindDto.enumSet) return null;
+  final labels = FieldRendererRegistry.optionLabels(field, value);
+  if (labels.isEmpty) return null;
+  return Align(alignment: Alignment.centerLeft, child: ChoicesTagRow(labels));
+}
+
 /// A clone's starting values: every value of [fields], except empty ones and removed Choice
 /// options, which a new record can't pick.
 Map<String, FieldValueDto> _cloneValues(
@@ -3268,6 +3282,24 @@ Map<String, FieldValueDto> _cloneValues(
   for (final field in fields) {
     final value = valueOf(field.id);
     if (value == null || value.kind == FieldValueKindDto.null_) continue;
+    if (value.kind == FieldValueKindDto.enumSet) {
+      // A set keeps its active members; one left empty is copied as no value.
+      final deleted = {
+        for (final option in field.enumOptions)
+          if (option.deleted) option.id,
+      };
+      final kept = [
+        for (final id in value.listValue)
+          if (!deleted.contains(id)) id,
+      ];
+      if (kept.isNotEmpty) {
+        copy[field.id] = FieldValueDto(
+          kind: FieldValueKindDto.enumSet,
+          listValue: kept,
+        );
+      }
+      continue;
+    }
     if (!removed(field, value)) copy[field.id] = value;
   }
   return copy;
@@ -3577,16 +3609,17 @@ class _RecordTableState extends State<_RecordTable> {
                 key: const Key('required-cell'),
               ),
             )
-          : CollectionsPage._cell(
-              const FieldRendererRegistry().displayText(
-                field,
-                _recordValue(record, field.id),
-                human: true,
-                l: context.l10n,
-                decimalSeparator: decimalSeparatorOf(context),
-              ),
-              selected: selected,
-            );
+          : _choicesTags(field, _recordValue(record, field.id)) ??
+                CollectionsPage._cell(
+                  const FieldRendererRegistry().displayText(
+                    field,
+                    _recordValue(record, field.id),
+                    human: true,
+                    l: context.l10n,
+                    decimalSeparator: decimalSeparatorOf(context),
+                  ),
+                  selected: selected,
+                );
     }
     final first = column == 0;
     if (first) {

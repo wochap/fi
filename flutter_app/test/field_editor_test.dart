@@ -632,6 +632,183 @@ void main() {
     expect(glyphs - inTable, 1);
   });
 
+  group('Choices', () {
+    /// Adds a stored Choices field "tags" with work, urgent, food; returns ids by label.
+    Future<Map<String, String>> seedChoices(Seeded seeded) async {
+      const labels = ['work', 'urgent', 'food'];
+      await seeded.controller.saveFieldWithOptions(
+        const FieldDefinitionDto(
+          id: '',
+          name: 'tags',
+          fieldType: FieldTypeDto(kind: FieldTypeKindDto.enumSet),
+          required_: false,
+          validation: ValidationMetadataDto(),
+          display: DisplayMetadataDto(
+            multiline: false,
+            slider: false,
+            sliderStep: null,
+          ),
+          order: 2,
+          deleted: false,
+          enumOptions: [],
+        ),
+        [
+          for (final (index, label) in labels.indexed)
+            EnumOptionDto(
+              id: tempOptionId(index),
+              label: label,
+              order: index,
+              deleted: false,
+            ),
+        ],
+      );
+      seeded.bridge.schemaCalls.clear();
+      return {
+        for (final option
+            in seeded.controller.schema!.fields
+                .firstWhere((field) => field.name == 'tags')
+                .enumOptions)
+          option.label: option.id,
+      };
+    }
+
+    testWidgets('the type grid is three rows of three, Choices after Choice', (
+      tester,
+    ) async {
+      final seeded = await seed(tester);
+      await pumpPage(tester, seeded.controller);
+      await addFieldOfKind(tester, 'tags', FieldTypeKindDto.enumSet);
+      final choice = tester.getTopLeft(find.byKey(const Key('type-enum_')));
+      final choices = tester.getTopLeft(find.byKey(const Key('type-enumSet')));
+      final text = tester.getTopLeft(find.byKey(const Key('type-text')));
+      expect(choices.dy, choice.dy);
+      expect(choices.dx, greaterThan(choice.dx));
+      expect(choice.dy, greaterThan(text.dy));
+      expect(find.text('Choices'), findsWidgets);
+      expect(
+        find.text('Required means at least one option is picked.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a Choices field gets options and a set default in one save', (
+      tester,
+    ) async {
+      final seeded = await seed(tester);
+      await pumpPage(tester, seeded.controller);
+      await addFieldOfKind(tester, 'tags', FieldTypeKindDto.enumSet);
+      await addOption(tester, 'work');
+      await addOption(tester, 'urgent');
+      await addOption(tester, 'food');
+      await tapChip(tester, 'default');
+      expect(
+        find.text('A set of options, picked on new records.'),
+        findsOneWidget,
+      );
+      for (final id in ['new-1', 'new-2']) {
+        final chip = find.byKey(ValueKey('choices-chip-$id'));
+        await tester.ensureVisible(chip);
+        await tester.tap(chip);
+        await tester.pumpAndSettle();
+      }
+      seeded.bridge.schemaCalls.clear();
+      await tester.ensureVisible(find.byKey(const Key('field-save')));
+      await save(tester);
+
+      final field = seeded.controller.schema!.fields.firstWhere(
+        (item) => item.name == 'tags',
+      );
+      expect(field.fieldType.kind, FieldTypeKindDto.enumSet);
+      String id(String label) =>
+          field.enumOptions.firstWhere((item) => item.label == label).id;
+      expect(seeded.bridge.schemaCalls, [
+        'addField',
+        'upsertEnumOption -|work|0',
+        'upsertEnumOption -|urgent|1',
+        'upsertEnumOption -|food|2',
+        'updateField default=${id('work')}+${id('urgent')}',
+      ]);
+      expect(find.text('Choices · work, urgent, food'), findsOneWidget);
+    });
+
+    testWidgets('a ";" in a Choices option label is refused in place', (
+      tester,
+    ) async {
+      final seeded = await seed(tester);
+      await pumpPage(tester, seeded.controller);
+      await addFieldOfKind(tester, 'tags', FieldTypeKindDto.enumSet);
+      await addOption(tester, 'work; play');
+      expect(
+        find.text('Options of a Choices field can\'t contain “;”.'),
+        findsOneWidget,
+      );
+      final saveButton = tester.widget<FilledButton>(
+        find.byKey(const Key('field-save')),
+      );
+      expect(saveButton.onPressed, isNull);
+    });
+
+    testWidgets('an existing Choice field turns into Choices', (tester) async {
+      final seeded = await seed(tester);
+      final ids = await seedChoice(seeded, defaultLabel: 'Medium');
+      await pumpPage(tester, seeded.controller);
+      await openFieldEditor(tester, 'Priority');
+      final text = tester.widget<InkWell>(find.byKey(const Key('type-text')));
+      expect(text.onTap, isNull);
+      await pickType(tester, FieldTypeKindDto.enumSet);
+      seeded.bridge.schemaCalls.clear();
+      await tester.ensureVisible(find.byKey(const Key('field-save')));
+      await save(tester);
+      final field = seeded.controller.schema!.fields.firstWhere(
+        (item) => item.name == 'Priority',
+      );
+      expect(field.fieldType.kind, FieldTypeKindDto.enumSet);
+      expect(field.defaultValue?.listValue, [ids['Medium']]);
+      expect(seeded.bridge.schemaCalls, [
+        'updateField default=${ids['Medium']}',
+      ]);
+    });
+
+    testWidgets(
+      'Choices back to Choice is blocked while records hold several',
+      (tester) async {
+        final seeded = await seed(tester);
+        final ids = await seedChoices(seeded);
+        final tags = seeded.controller.schema!.fields
+            .firstWhere((field) => field.name == 'tags')
+            .id;
+        seeded.bridge.nextUpdateFieldError = BridgeError(
+          kind: BridgeErrorKind.validation,
+          issues: [
+            BridgeIssueDto(
+              fields: [tags],
+              code: 'choices_conversion_blocked',
+              message: '3 records hold more than one choice. Edit them first.',
+              count: 3,
+            ),
+          ],
+          message: '3 records hold more than one choice. Edit them first.',
+          resetResolvable: false,
+        );
+        await pumpPage(tester, seeded.controller);
+        await openFieldEditor(tester, 'tags');
+        await pickType(tester, FieldTypeKindDto.enum_);
+        await tester.ensureVisible(find.byKey(const Key('field-save')));
+        await save(tester);
+        expect(
+          find.text('3 records hold more than one choice. Edit them first.'),
+          findsOneWidget,
+        );
+        expect(find.byKey(const Key('field-save')), findsOneWidget);
+        final field = seeded.controller.schema!.fields.firstWhere(
+          (item) => item.id == tags,
+        );
+        expect(field.fieldType.kind, FieldTypeKindDto.enumSet);
+        expect(ids, hasLength(3));
+      },
+    );
+  });
+
   testWidgets('editing options sends only what changed', (tester) async {
     final seeded = await seed(tester);
     final ids = await seedChoice(seeded);

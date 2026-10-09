@@ -5563,6 +5563,84 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Removed: {words}'**
   String dictatedRemovedWords(String words);
+
+  /// Field kind name: a set of options
+  ///
+  /// In en, this message translates to:
+  /// **'Choices'**
+  String get fieldTypeChoices;
+
+  /// How many options of a Choices field are picked
+  ///
+  /// In en, this message translates to:
+  /// **'{count} picked'**
+  String themeChoicesPicked(int count);
+
+  /// Helper under the chips of a Choices field
+  ///
+  /// In en, this message translates to:
+  /// **'Required means at least one option is picked.'**
+  String get fieldEditorChoicesRequiredHelp;
+
+  /// Helper under the default of a Choices field
+  ///
+  /// In en, this message translates to:
+  /// **'A set of options, picked on new records.'**
+  String get fieldEditorChoicesDefaultHelp;
+
+  /// Inline error on a Choices option label holding a semicolon
+  ///
+  /// In en, this message translates to:
+  /// **'Options of a Choices field can\'t contain “;”.'**
+  String get fieldEditorChoicesSemicolon;
+
+  /// Choices to Choice refused because records hold several options
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 record holds more than one choice. Edit it first.} other{{count} records hold more than one choice. Edit them first.}}'**
+  String fieldEditorChoicesConversionBlocked(int count);
+
+  /// Set filter operator
+  ///
+  /// In en, this message translates to:
+  /// **'has any of'**
+  String get queryOpHasAnyOf;
+
+  /// Set filter operator
+  ///
+  /// In en, this message translates to:
+  /// **'has all of'**
+  String get queryOpHasAllOf;
+
+  /// Set filter operator
+  ///
+  /// In en, this message translates to:
+  /// **'has none of'**
+  String get queryOpHasNoneOf;
+
+  /// Filter operator: no value
+  ///
+  /// In en, this message translates to:
+  /// **'is empty'**
+  String get queryOpIsEmpty;
+
+  /// Filter operator: has a value
+  ///
+  /// In en, this message translates to:
+  /// **'is not empty'**
+  String get queryOpIsNotEmpty;
+
+  /// Note under a widget grouped by a Choices field
+  ///
+  /// In en, this message translates to:
+  /// **'Groups overlap: a record counts in each of its choices.'**
+  String get widgetGroupsOverlap;
+
+  /// Tag standing for Choices labels that don't fit
+  ///
+  /// In en, this message translates to:
+  /// **'+{count}'**
+  String recordsMoreTags(int count);
 }
 
 class _AppLocalizationsDelegate
