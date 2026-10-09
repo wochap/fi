@@ -175,3 +175,45 @@ The application core SHALL provide a command that clones one or more active reco
 #### Scenario: Sources unchanged
 - **WHEN** a record is cloned
 - **THEN** the source record's field registers and stamps are unchanged
+
+### Requirement: Record save with new options
+Rust SHALL provide a command that saves one record together with options the record form added to its fields. The command SHALL target one active collection and SHALL carry either a new record (a fresh record id and its values) or an existing active record and the fields being changed, plus a list of pending options. Each pending option SHALL name a field and a label and SHALL be identified within the command by a draft-local key; a value that picks a pending option SHALL hold that key in place of an option id.
+
+Before any write, Rust SHALL check against one snapshot that every pending option targets an active Choice or Choices field of the collection whose setting allows adding options from records, that its label passes the option label rules of that field type, that pending options of one field have distinct labels ignoring case, that every key used in a value names a pending option of the same field, and that every pending option is used by a value. The record part SHALL pass the same validation as record create or update, with the pending options counted as active options of their fields. Any failure SHALL reject the whole command and write nothing.
+
+When the command is applied, a pending option whose label equals an active option of its field ignoring case SHALL use that option instead of creating a new one; every other pending option SHALL be created as a new active option after the field's last option. Option creation and the record writes SHALL be applied in exactly one Automerge change under exactly one HLC stamp, with one projection pass and one `DataChanged` event. Record writes SHALL stay field-granular: an update SHALL write only the fields it changes. A command with no pending options SHALL behave as the plain record create or update.
+
+#### Scenario: New record with a new option
+- **WHEN** the Choice field category allows adding options and a new record is saved with category set to the pending option "Groceries"
+- **THEN** the option "Groceries" is created on category, the record holds its id, and the root document gains exactly one change
+
+#### Scenario: Edit record with new Choices options
+- **WHEN** an existing record's Choices field tags allows adding options and the record is saved with tags holding "food" and the pending options "coffee" and "travel"
+- **THEN** "coffee" and "travel" are created, the record's tags hold food, coffee and travel, and no other field of the record is written
+
+#### Scenario: Field does not allow adding
+- **WHEN** the command carries a pending option for a Choice field whose setting is off
+- **THEN** Rust rejects the command and creates neither the option nor the record
+
+#### Scenario: Unused pending option
+- **WHEN** the command carries a pending option that no value picks
+- **THEN** Rust rejects the command and writes nothing
+
+#### Scenario: Same label arrived by sync
+- **WHEN** a pending option "groceries" is saved after an active option "Groceries" of the same field arrived by sync
+- **THEN** no option is created and the record holds the existing "Groceries"
+
+#### Scenario: Invalid record rejects the options too
+- **WHEN** the command carries a valid pending option but the record misses a required field
+- **THEN** Rust reports the missing-required issue and neither the option nor the record is written
+
+### Requirement: Draft validation with pending options
+The record draft validation query SHALL accept the same list of pending options as the record save command and SHALL apply the same rules, returning every issue found and committing nothing. A pending option whose label fails the option label rules SHALL be reported as an issue on its field.
+
+#### Scenario: Draft picking a pending option
+- **WHEN** Flutter validates a draft whose required Choice field holds a pending option of a field that allows adding options
+- **THEN** the query reports no issue for that field and nothing is written
+
+#### Scenario: Draft with an invalid pending label
+- **WHEN** Flutter validates a draft whose pending option has an empty label
+- **THEN** the query returns an issue naming that field and nothing is written

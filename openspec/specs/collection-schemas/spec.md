@@ -232,3 +232,53 @@ The structure-only collection clone and the JSON collection import SHALL rewrite
 #### Scenario: Clone a Choices default
 - **WHEN** a collection whose EnumSet field has default {"work"} and a saved query filtering "has any of {urgent}" is cloned
 - **THEN** the cloned default and the cloned filter constant name only the cloned options, and evaluating the cloned query succeeds with no dangling-reference diagnostic
+
+### Requirement: Adding options from records setting
+A Choice or Choices field definition SHALL carry a setting that allows records to add options to the field, off by default. The setting SHALL be stored as an additive key so that a definition without it, or a device that does not know it, reads the setting as off. Rust SHALL reject a definition that turns the setting on for any field type other than Choice or Choices.
+
+#### Scenario: Setting round-trips
+- **WHEN** a Choice field is created on one device with adding options from records turned on
+- **THEN** another device reads the same field with the setting on
+
+#### Scenario: Definition written before the setting existed
+- **WHEN** a Choice field definition stored without the setting is read
+- **THEN** it parses with the setting off and no malformed diagnostic
+
+#### Scenario: Setting on the wrong type
+- **WHEN** a Text field definition carries the setting turned on
+- **THEN** the command returns a typed validation error naming the setting and commits nothing
+
+### Requirement: Merging enum options
+Rust SHALL provide a command that merges one or more options of a Choice or Choices field into a kept option of the same field. The kept option SHALL be active and SHALL keep its id, label and order. Each merged option SHALL be distinct, SHALL belong to the field, SHALL NOT be the kept option, and SHALL be either active or already removed with a recorded merge target. The command SHALL be rejected without any write when any of these conditions fails or the field is not an active Choice or Choices field of an active collection.
+
+An accepted merge SHALL, in exactly one Automerge change under exactly one HLC stamp, with one projection pass and one `DataChanged` event:
+- mark each merged option removed and record the kept option as its merge target, stored as an additive key that older devices ignore;
+- move each active record that holds a merged option to the kept option: a Choice field SHALL hold the kept option; a Choices field SHALL hold the kept option and none of the merged options, so a record that held several of them holds the kept option once;
+- rewrite field defaults that hold a merged option in the same way;
+- rewrite every reference to a merged option in saved queries, computed fields and widgets of the collection to the kept option, removing duplicates from option sets created by the rewrite.
+
+Logically deleted records SHALL NOT be rewritten. Merging SHALL have no undo.
+
+#### Scenario: Merge on a Choice field
+- **WHEN** the options "Groceries" (9 records) and "groceries" (3 records) of the Choice field category are merged, keeping "Groceries"
+- **THEN** all 12 active records hold "Groceries", "groceries" is removed with "Groceries" recorded as its merge target, and the root document gains exactly one change
+
+#### Scenario: Merge on a Choices field de-duplicates
+- **WHEN** a Choices field's options "Groceries" and "groceries" are merged keeping "Groceries", and two records hold both
+- **THEN** those two records hold "Groceries" once and not "groceries", and every other record that held either holds "Groceries"
+
+#### Scenario: References follow the merge
+- **WHEN** a saved query filters category equal to "groceries", a widget uses that query, and the field default is "groceries", and "groceries" is merged into "Groceries"
+- **THEN** the query filters on "Groceries", the widget evaluates with no dangling-reference diagnostic, and the default is "Groceries"
+
+#### Scenario: Invalid merge rejected
+- **WHEN** a merge names the kept option among the merged ones, names an option of another field, or keeps a removed option
+- **THEN** Rust returns a typed validation error and commits nothing
+
+#### Scenario: Record written offline with a merged option
+- **WHEN** a device that has not seen the merge sets a record to "groceries" and its edit wins by HLC after sync
+- **THEN** the record holds the removed option "groceries", stays valid, and a later merge of "groceries" into its recorded target "Groceries" is accepted and moves the record
+
+#### Scenario: Older device reads a merged option
+- **WHEN** a device that does not know merge targets reads the option "groceries" after the merge
+- **THEN** it reads an ordinary removed option and no malformed diagnostic

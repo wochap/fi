@@ -738,3 +738,85 @@ Cloning a record SHALL copy a Choices value without its removed options; a set l
 #### Scenario: Clone drops removed members
 - **WHEN** a record holding {"work", "urgent"} is cloned after "urgent" was removed
 - **THEN** the new record form holds {"work"}
+
+### Requirement: Adding options from records switch
+The field editor SHALL show a switch "Allow adding options from records" for Choice and Choices fields, with the helper line "New options are added to this field when the record is saved.", below the default value block, at every width. The switch SHALL be off for a new field and SHALL reflect the stored setting for an existing one. Its change SHALL be held in the editor and committed on Save with the field, and Cancel SHALL discard it. The switch SHALL NOT appear for any other type.
+
+#### Scenario: Off by default
+- **WHEN** the user adds a new Choice or Choices field
+- **THEN** the switch "Allow adding options from records" is shown off with its helper line
+
+#### Scenario: Saved with the field
+- **WHEN** the user turns the switch on for the existing field category and taps Save field
+- **THEN** the field update carries the setting on, and reopening the field shows the switch on
+
+#### Scenario: Not on other types
+- **WHEN** the user opens a Text field in the field editor
+- **THEN** no "Allow adding options from records" switch is shown
+
+### Requirement: Adding an option from the record form
+When a Choice or Choices field allows adding options from records, the New record and Edit record forms SHALL let the user add an option to it, at every width:
+- Every picker sheet, dropdown and search for the field SHALL show a search input at the top, whatever the option count, filtering by substring. When the trimmed text is not empty and no active or pending option of the field equals it ignoring case, the list SHALL end with the row "＋ Add “<text>”" (Spanish "Añadir «<text>»"). When an option equals it ignoring case, that option SHALL be offered and no Add row SHALL be shown.
+- A segmented choice or toggle chips (up to four options) SHALL end with a "＋ Add" chip that opens a small text input in place, applying the same matching rule when the text is submitted.
+- Adding SHALL pick the new option at once and show it with a "New" tag (Spanish "Nueva") in the control and in the sheet, after the stored options. On a Choice field it SHALL replace the current pick. A pending option that is no longer picked SHALL be dropped.
+- The control's layout SHALL be chosen from the number of stored active options, not counting pending ones.
+- The option SHALL be created only when the record is saved, through the record save command that carries pending options; draft validation SHALL include the pending options. Cancelling or discarding the form SHALL create nothing.
+
+When the setting is off, the controls SHALL behave as before and show no Add row, "＋ Add" chip or extra search input.
+
+#### Scenario: Add row when nothing matches
+- **WHEN** the Choices field tags allows adding options and the user types "groc" in its picker sheet search, and no option equals "groc" ignoring case
+- **THEN** the list ends with "＋ Add “groc”"
+
+#### Scenario: A case-insensitive match is offered instead
+- **WHEN** the user types "WORK" and the option "work" exists
+- **THEN** "work" is offered and no Add row is shown
+
+#### Scenario: Pending option is tagged and saved with the record
+- **WHEN** the user adds "groceries" to the Choice field category, sees it picked with a "New" tag, and taps Save record
+- **THEN** one save creates the option and the record holding it, and the field editor then lists "groceries" among the options
+
+#### Scenario: Cancel leaves nothing
+- **WHEN** the user adds "coffee" to tags and then discards the New record form
+- **THEN** no option "coffee" exists on the field
+
+#### Scenario: Unpicking drops the pending option
+- **WHEN** the user adds "coffee" to tags and then unpicks it before saving
+- **THEN** "coffee" disappears from the control and the save creates no option
+
+#### Scenario: Chip layout adds in place
+- **WHEN** a Choices field with the options food, work and travel allows adding options and the user taps "＋ Add", types "coffee" and submits
+- **THEN** "coffee" appears as a picked chip with a "New" tag and the control is still toggle chips
+
+#### Scenario: Setting off
+- **WHEN** a Choice field with seven options does not allow adding options
+- **THEN** its picker sheet shows no search input and no Add row
+
+### Requirement: Option row menu and merging options in the field editor
+In the field editor, each option row of a Choice or Choices field SHALL end with a ⋯ button in place of the delete action, at least 44px on screens narrower than 720px, opening "Merge…" and "Delete…" (as a menu at 720px and wider and as an action sheet below). "Delete…" SHALL behave as the option delete action did, including its confirmation.
+
+When two or more active options of the field share a label ignoring case, the options section SHALL show a banner "<N> options are named “<label>”. Merge them?" with a Merge action.
+
+"Merge…" and the banner's Merge SHALL open the merge sheet titled "Merge options" with the subtitle "in <field> · Choice" or "in <field> · Choices". The sheet SHALL list the field's active options under "Options to merge", each with a check and its count "<N> records", and under "Keep" the checked option whose label stays, with the line "Its label stays". It SHALL show "<N> records will use “<label>”", counting distinct active records that hold any checked option; on a Choices field, when some records hold more than one checked option, it SHALL also show "<M> records had both. Each keeps one “<label>”.". It SHALL show "This can't be undone." and the actions Cancel (secondary, left) and Merge (primary, right). Merge SHALL be enabled only with two or more options checked. "Merge…" SHALL pre-check its row's option; the banner SHALL pre-check the options sharing the label and keep the one with the most records, the lowest order breaking ties. Counts SHALL come from the projected records already loaded for the collection. Confirming SHALL submit the merge command at once, close the sheet and refresh the options list; a rejected merge SHALL keep the sheet open with the typed error. Merging SHALL be offered only for an existing field with no unsaved option edits; otherwise the sheet SHALL ask the user to save the field first.
+
+When active records hold an option that was merged into another option, the options section SHALL show "<N> records still use merged options." with "Move them", which SHALL submit the merge of those options into their recorded targets, following a target that was itself merged to its final active option.
+
+#### Scenario: Option row menu
+- **WHEN** the user opens the existing Choice field category on a 390px-wide screen and taps the ⋯ of "option one"
+- **THEN** an action sheet offers "Merge…" and "Delete…", and the ⋯ target is at least 44px
+
+#### Scenario: Duplicate label banner
+- **WHEN** the field tags has the active options "Groceries" (9 records) and "groceries" (3 records)
+- **THEN** the options section shows "2 options are named “Groceries”. Merge them?" with Merge, and Merge opens the sheet with both checked and "Groceries" kept
+
+#### Scenario: Merge sheet counts on a Choices field
+- **WHEN** the merge sheet for tags has "Groceries" (9 records) and "groceries" (3 records) checked, and 2 records hold both
+- **THEN** it reads "10 records will use “Groceries”" and "2 records had both. Each keeps one “Groceries”."
+
+#### Scenario: Merge confirmed
+- **WHEN** the user taps Merge in the sheet for category with "Groceries" kept and "groceries" checked
+- **THEN** the merge command is submitted, the sheet closes, the options list no longer shows "groceries", and records that held it show "Groceries"
+
+#### Scenario: Records still on a merged option
+- **WHEN** after sync 3 active records hold "groceries", which was merged into "Groceries"
+- **THEN** the options section shows "3 records still use merged options." and "Move them" moves the 3 records to "Groceries"
