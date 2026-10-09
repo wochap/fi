@@ -11,6 +11,7 @@ import 'package:fi/src/rust/api/voice.dart'
         VoiceErrorKindDto,
         VoiceFieldDto,
         VoiceFillRequestDto,
+        VoiceDictationDto,
         VoiceOptionDto,
         VoiceTurnEventDto;
 import 'package:fi/voice/engine.dart';
@@ -128,6 +129,11 @@ abstract interface class VoiceNative {
     Int16List pcm,
     VoiceFillRequestDto request,
   );
+  Stream<VoiceTurnEventDto> dictateTurn(
+    String modelsDir,
+    Int16List pcm,
+    String language,
+  );
   void cancel();
   void release();
 }
@@ -147,6 +153,14 @@ final class RustVoiceNative implements VoiceNative {
     Int16List pcm,
     VoiceFillRequestDto request,
   ) => rust.voiceFillTurn(modelsDir: modelsDir, pcm: pcm, request: request);
+
+  @override
+  Stream<VoiceTurnEventDto> dictateTurn(
+    String modelsDir,
+    Int16List pcm,
+    String language,
+  ) =>
+      rust.voiceDictateTurn(modelsDir: modelsDir, pcm: pcm, language: language);
 
   @override
   void cancel() => rust.voiceCancel();
@@ -277,7 +291,7 @@ final class RustVoiceEngine implements VoiceEngine {
   StreamSubscription<Uint8List>? _chunks;
   StreamSubscription<void>? _interruptions;
   Timer? _levelTimer;
-  Completer<VoiceTurnResult>? _pending;
+  Completer<Object>? _pending;
   StreamSubscription<VoiceTurnEventDto>? _events;
 
   /// The latest ~100 ms of samples, for the level meter.
@@ -295,7 +309,7 @@ final class RustVoiceEngine implements VoiceEngine {
   void release() => native.release();
 
   @override
-  Stream<double> start() {
+  Stream<double> start({VoiceTurnKind kind = VoiceTurnKind.fill}) {
     // The previous capture must be fully closed before the next one opens: closing releases
     // the platform recorder, and an unawaited close would release the new one instead.
     final discarded = _discardCapture();
@@ -390,6 +404,49 @@ final class RustVoiceEngine implements VoiceEngine {
   Future<VoiceTurnResult> stop(
     VoiceFillRequest request, {
     ValueChanged<String>? onTranscript,
+  }) => _process<VoiceTurnResult>(
+    (pcm) =>
+        native.fillTurn(modelsDir, pcm, requestDto(request, now: _clock())),
+    onTranscript: onTranscript,
+    finish: (event, transcript) => switch (event.patch) {
+      final patch? => VoiceTurnResult(
+        transcript: transcript,
+        patch: [
+          for (final entry in patch)
+            VoicePatchEntry(
+              fieldId: entry.fieldId,
+              value: entry.value,
+              evidence: entry.evidence,
+            ),
+        ],
+      ),
+      null => null,
+    },
+  );
+
+  @override
+  Future<DictationResult> stopDictation(
+    String language, {
+    ValueChanged<String>? onTranscript,
+  }) => _process<DictationResult>(
+    (pcm) => native.dictateTurn(modelsDir, pcm, language),
+    onTranscript: onTranscript,
+    finish: (event, transcript) => switch (event.dictation) {
+      final VoiceDictationDto dictation => DictationResult(
+        transcript: transcript,
+        cleaned: dictation.cleaned,
+        removedWordIndexes: List.unmodifiable(dictation.removed),
+      ),
+      null => null,
+    },
+  );
+
+  /// Stops capture and runs the turn's events: the transcript, then the result [finish] reads
+  /// from an event, or a failure.
+  Future<T> _process<T extends Object>(
+    Stream<VoiceTurnEventDto> Function(Int16List pcm) run, {
+    required ValueChanged<String>? onTranscript,
+    required T? Function(VoiceTurnEventDto event, String transcript) finish,
   }) async {
     final audio = _audio;
     _audio = null;
@@ -399,50 +456,37 @@ final class RustVoiceEngine implements VoiceEngine {
     if (levels != null && !levels.isClosed) unawaited(levels.close());
     final bytes = audio?.takeBytes() ?? Uint8List(0);
     final pcm = pcm16Samples(bytes);
-    final pending = _pending = Completer<VoiceTurnResult>();
+    final pending = Completer<T>();
+    _pending = pending;
     String? transcript;
-    _events = native
-        .fillTurn(modelsDir, pcm, requestDto(request, now: _clock()))
-        .listen(
-          (event) {
-            if (pending.isCompleted) return;
-            if (event.transcript case final text?) {
-              transcript = text;
-              onTranscript?.call(text);
-            }
-            if (event.error case final error?) {
-              pending.completeError(VoiceFailure(failureOf(error)));
-            } else if (event.patch case final patch?) {
-              pending.complete(
-                VoiceTurnResult(
-                  transcript: transcript ?? '',
-                  patch: [
-                    for (final entry in patch)
-                      VoicePatchEntry(
-                        fieldId: entry.fieldId,
-                        value: entry.value,
-                        evidence: entry.evidence,
-                      ),
-                  ],
-                ),
-              );
-            }
-          },
-          onError: (Object _) {
-            if (!pending.isCompleted) {
-              pending.completeError(
-                const VoiceFailure(VoiceFailureKind.modelLoadFailed),
-              );
-            }
-          },
-          onDone: () {
-            if (!pending.isCompleted) {
-              pending.completeError(
-                const VoiceFailure(VoiceFailureKind.modelLoadFailed),
-              );
-            }
-          },
-        );
+    _events = run(pcm).listen(
+      (event) {
+        if (pending.isCompleted) return;
+        if (event.transcript case final text?) {
+          transcript = text;
+          onTranscript?.call(text);
+        }
+        if (event.error case final error?) {
+          pending.completeError(VoiceFailure(failureOf(error)));
+        } else if (finish(event, transcript ?? '') case final result?) {
+          pending.complete(result);
+        }
+      },
+      onError: (Object _) {
+        if (!pending.isCompleted) {
+          pending.completeError(
+            const VoiceFailure(VoiceFailureKind.modelLoadFailed),
+          );
+        }
+      },
+      onDone: () {
+        if (!pending.isCompleted) {
+          pending.completeError(
+            const VoiceFailure(VoiceFailureKind.modelLoadFailed),
+          );
+        }
+      },
+    );
     try {
       return await pending.future;
     } finally {

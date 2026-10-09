@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:fi/l10n/app_localizations.dart';
 import 'package:fi/src/rust/api/models.dart';
+import 'package:fi/voice/dictation.dart';
 import 'package:fi/voice/engine.dart';
 import 'package:fi/voice/patch.dart';
 import 'package:fi/voice/services.dart';
@@ -40,10 +41,12 @@ class VoiceFillController extends ChangeNotifier with WidgetsBindingObserver {
     required this.fields,
     required this.readDraft,
     required this.writeDraft,
+    this.coordinator,
     Map<String, FieldOrigin>? origins,
   }) : draftState = VoiceDraftState(origins) {
     WidgetsBinding.instance.addObserver(this);
     services.models.addListener(_modelsChanged);
+    coordinator?.addListener(_modelsChanged);
     if (services.available && services.models.ready) services.engine.prepare();
   }
 
@@ -56,6 +59,12 @@ class VoiceFillController extends ChangeNotifier with WidgetsBindingObserver {
   /// Replaces the form's values with a patched draft.
   final ValueChanged<Map<String, FieldValueDto>> writeDraft;
   final VoiceDraftState draftState;
+
+  /// The form's one-turn-at-a-time guard, shared with field dictation.
+  final VoiceTurnCoordinator? coordinator;
+
+  /// Whether a dictation turn runs, so the mic is disabled.
+  bool get blocked => coordinator?.blockedFor(this) ?? false;
 
   VoicePhase _phase = VoicePhase.idle;
   VoicePhase get phase => _phase;
@@ -170,7 +179,7 @@ class VoiceFillController extends ChangeNotifier with WidgetsBindingObserver {
 
   /// Runs setup steps still unsatisfied, then listens.
   Future<void> begin() async {
-    if (busy) return;
+    if (busy || blocked) return;
     if (_phase == VoicePhase.speaking) await muteSpeech(turnOff: false);
     if (!_isOutcome(_phase) && _phase != VoicePhase.error) {
       _resting = VoicePhase.idle;
@@ -246,7 +255,7 @@ class VoiceFillController extends ChangeNotifier with WidgetsBindingObserver {
   // A turn.
 
   Future<void> startListening() async {
-    if (busy) return;
+    if (busy || !(coordinator?.claim(this) ?? true)) return;
     final token = ++_turnToken;
     levels.clear();
     elapsed = Duration.zero;
@@ -287,6 +296,7 @@ class VoiceFillController extends ChangeNotifier with WidgetsBindingObserver {
 
   void _endTurn() {
     _stopCapture();
+    coordinator?.release(this);
     pendingTranscript = null;
     if (!_disposed) services.models.setVoiceTurnActive(false);
   }
@@ -511,6 +521,8 @@ class VoiceFillController extends ChangeNotifier with WidgetsBindingObserver {
     _disposed = true;
     WidgetsBinding.instance.removeObserver(this);
     services.models.removeListener(_modelsChanged);
+    coordinator?.removeListener(_modelsChanged);
+    coordinator?.release(this);
     _turnToken++;
     if (busy) unawaited(services.engine.cancel());
     _stopCapture();

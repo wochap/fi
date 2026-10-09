@@ -58,5 +58,11 @@
     { "schema": "libros", "text": "Como agua para chocolate, doscientas cincuenta páginas, gusto.", "expect": { "título": "Como agua para chocolate", "páginas": "250", "valoración": "gustó" } },
     { "schema": "libros", "text": "Nada, de Carmen Laforet, terminado el martes pasado.", "expect": { "título": "Nada", "terminado el": "2026-09-22" } },
     { "schema": "libros", "text": "Aura, sesenta páginas, regular, terminado hoy.", "expect": { "título": "Aura", "páginas": "60", "valoración": "regular", "terminado el": "2026-09-28" } }
+  ]],
+  "dictation": [
+    { "text": "Comprar leche de avena, digo, leche de almendra", "expect": "Comprar leche de almendra" },
+    { "text": "Cena el viernes, perdón, el sábado con Ana", "expect": "Cena el sábado con Ana" },
+    { "text": "Este, llamar al banco mañana", "expect": "llamar al banco mañana" },
+    { "text": "Almuerzo con Sam", "expect": "Almuerzo con Sam" }
   ]
 }

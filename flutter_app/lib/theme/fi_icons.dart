@@ -25,6 +25,8 @@ abstract final class FiIcons {
   static const IconData reorder = PhosphorIconsRegular.arrowsDownUp;
   static const IconData importExport = PhosphorIconsRegular.arrowsDownUp;
   static const IconData check = PhosphorIconsRegular.check;
+  static const IconData radioOff = PhosphorIconsRegular.circle;
+  static const IconData radioOn = PhosphorIconsRegular.radioButton;
   static const IconData sort = PhosphorIconsRegular.sortAscending;
   static const IconData importFile = PhosphorIconsRegular.downloadSimple;
   static const IconData exportFile = PhosphorIconsRegular.uploadSimple;

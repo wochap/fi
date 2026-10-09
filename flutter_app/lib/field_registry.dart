@@ -74,6 +74,9 @@ final class FieldRendererRegistry {
   ///
   /// Every control clears only where the value is optional: a record field that is not
   /// required, or any schema slot ([allowClear]).
+  ///
+  /// [dictation] puts the field dictation mic in a Text input's trailing slot (after the clear
+  /// mark), with its listening or processing row over the value; other kinds ignore it.
   Widget editor(
     FieldDefinitionDto field,
     FieldValueDto? initial,
@@ -83,6 +86,7 @@ final class FieldRendererRegistry {
     bool allowClear = false,
     bool quickFill = false,
     bool showLabel = true,
+    TextDictationSlot? dictation,
     Key? key,
   }) => _FieldEditor(
     key: key ?? ValueKey(field.id),
@@ -94,6 +98,7 @@ final class FieldRendererRegistry {
     allowClear: allowClear,
     quickFill: quickFill,
     showLabel: showLabel,
+    dictation: field.fieldType.kind == FieldTypeKindDto.text ? dictation : null,
   );
 
   /// A stored value as text. [human] reads dates as `Sep 22, 2026 · 14:05` for tables and lists,
@@ -170,6 +175,10 @@ final class FieldRendererRegistry {
   }
 }
 
+/// What a Text input shows for field dictation: the [mic], and while a turn runs the [overlay]
+/// over the value, which is then read-only.
+typedef TextDictationSlot = ({Widget mic, Widget? overlay});
+
 final class _FieldEditor extends StatefulWidget {
   const _FieldEditor({
     super.key,
@@ -181,6 +190,7 @@ final class _FieldEditor extends StatefulWidget {
     this.allowClear = false,
     this.quickFill = false,
     this.showLabel = true,
+    this.dictation,
   });
   final FieldDefinitionDto field;
   final FieldValueDto? initial;
@@ -190,6 +200,7 @@ final class _FieldEditor extends StatefulWidget {
   final bool allowClear;
   final bool quickFill;
   final bool showLabel;
+  final TextDictationSlot? dictation;
   @override
   State<_FieldEditor> createState() => _FieldEditorState();
 }
@@ -593,6 +604,9 @@ final class _FieldEditorState extends State<_FieldEditor> {
             )
           : null,
       onClear: _canClear ? _clear : null,
+      trailingAction: widget.dictation?.mic,
+      overlay: widget.dictation?.overlay,
+      readOnly: widget.dictation?.overlay != null,
       onChanged: (raw) {
         if (raw.isEmpty && _canClear) {
           widget.onChanged(_null);

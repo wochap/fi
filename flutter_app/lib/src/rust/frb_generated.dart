@@ -75,7 +75,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => -1709875899;
+  int get rustContentHash => 1035829028;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -484,6 +484,12 @@ abstract class RustLibApi extends BaseApi {
   Future<ValidationMetadataDto> crateApiModelsValidationMetadataDtoDefault();
 
   void crateApiVoiceVoiceCancel();
+
+  Stream<VoiceTurnEventDto> crateApiVoiceVoiceDictateTurn({
+    required String modelsDir,
+    required List<int> pcm,
+    required String language,
+  });
 
   Stream<VoiceTurnEventDto> crateApiVoiceVoiceFillTurn({
     required String modelsDir,
@@ -4118,6 +4124,48 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "voice_cancel", argNames: []);
 
   @override
+  Stream<VoiceTurnEventDto> crateApiVoiceVoiceDictateTurn({
+    required String modelsDir,
+    required List<int> pcm,
+    required String language,
+  }) {
+    final sink = RustStreamSink<VoiceTurnEventDto>();
+    unawaited(
+      handler.executeNormal(
+        NormalTask(
+          callFfi: (port_) {
+            final serializer = SseSerializer(generalizedFrbRustBinding);
+            sse_encode_String(modelsDir, serializer);
+            sse_encode_list_prim_i_16_loose(pcm, serializer);
+            sse_encode_String(language, serializer);
+            sse_encode_StreamSink_voice_turn_event_dto_Sse(sink, serializer);
+            pdeCallFfi(
+              generalizedFrbRustBinding,
+              serializer,
+              funcId: 114,
+              port: port_,
+            );
+          },
+          codec: SseCodec(
+            decodeSuccessData: sse_decode_unit,
+            decodeErrorData: null,
+          ),
+          constMeta: kCrateApiVoiceVoiceDictateTurnConstMeta,
+          argValues: [modelsDir, pcm, language, sink],
+          apiImpl: this,
+        ),
+      ),
+    );
+    return sink.stream;
+  }
+
+  TaskConstMeta get kCrateApiVoiceVoiceDictateTurnConstMeta =>
+      const TaskConstMeta(
+        debugName: "voice_dictate_turn",
+        argNames: ["modelsDir", "pcm", "language", "sink"],
+      );
+
+  @override
   Stream<VoiceTurnEventDto> crateApiVoiceVoiceFillTurn({
     required String modelsDir,
     required List<int> pcm,
@@ -4136,7 +4184,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             pdeCallFfi(
               generalizedFrbRustBinding,
               serializer,
-              funcId: 114,
+              funcId: 115,
               port: port_,
             );
           },
@@ -4167,7 +4215,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 115,
+            funcId: 116,
           )!;
         },
         codec: SseCodec(
@@ -4194,7 +4242,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 116,
+            funcId: 117,
           )!;
         },
         codec: SseCodec(
@@ -4220,7 +4268,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 117,
+            funcId: 118,
           )!;
         },
         codec: SseCodec(
@@ -4249,7 +4297,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 118,
+            funcId: 119,
             port: port_,
           );
         },
@@ -4682,6 +4730,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ValueTypeDto dco_decode_box_autoadd_value_type_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_value_type_dto(raw);
+  }
+
+  @protected
+  VoiceDictationDto dco_decode_box_autoadd_voice_dictation_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_voice_dictation_dto(raw);
   }
 
   @protected
@@ -5291,6 +5345,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  Uint32List dco_decode_list_prim_u_32_strict(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as Uint32List;
+  }
+
+  @protected
   List<int> dco_decode_list_prim_u_8_loose(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as List<int>;
@@ -5831,6 +5891,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  VoiceDictationDto? dco_decode_opt_box_autoadd_voice_dictation_dto(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_voice_dictation_dto(raw);
+  }
+
+  @protected
   VoiceErrorKindDto? dco_decode_opt_box_autoadd_voice_error_kind_dto(
     dynamic raw,
   ) {
@@ -6351,6 +6419,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  VoiceDictationDto dco_decode_voice_dictation_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return VoiceDictationDto(
+      cleaned: dco_decode_String(arr[0]),
+      removed: dco_decode_list_prim_u_32_strict(arr[1]),
+    );
+  }
+
+  @protected
   VoiceDraftValueDto dco_decode_voice_draft_value_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -6433,12 +6513,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   VoiceTurnEventDto dco_decode_voice_turn_event_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 3)
-      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
     return VoiceTurnEventDto(
       transcript: dco_decode_opt_String(arr[0]),
       patch: dco_decode_opt_list_voice_patch_entry_dto(arr[1]),
-      error: dco_decode_opt_box_autoadd_voice_error_kind_dto(arr[2]),
+      dictation: dco_decode_opt_box_autoadd_voice_dictation_dto(arr[2]),
+      error: dco_decode_opt_box_autoadd_voice_error_kind_dto(arr[3]),
     );
   }
 
@@ -6987,6 +7068,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_value_type_dto(deserializer));
+  }
+
+  @protected
+  VoiceDictationDto sse_decode_box_autoadd_voice_dictation_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_voice_dictation_dto(deserializer));
   }
 
   @protected
@@ -7784,6 +7873,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var len_ = sse_decode_i_32(deserializer);
     return deserializer.buffer.getInt16List(len_);
+  }
+
+  @protected
+  Uint32List sse_decode_list_prim_u_32_strict(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var len_ = sse_decode_i_32(deserializer);
+    return deserializer.buffer.getUint32List(len_);
   }
 
   @protected
@@ -8639,6 +8735,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  VoiceDictationDto? sse_decode_opt_box_autoadd_voice_dictation_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_voice_dictation_dto(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
   VoiceErrorKindDto? sse_decode_opt_box_autoadd_voice_error_kind_dto(
     SseDeserializer deserializer,
   ) {
@@ -9262,6 +9371,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  VoiceDictationDto sse_decode_voice_dictation_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_cleaned = sse_decode_String(deserializer);
+    var var_removed = sse_decode_list_prim_u_32_strict(deserializer);
+    return VoiceDictationDto(cleaned: var_cleaned, removed: var_removed);
+  }
+
+  @protected
   VoiceDraftValueDto sse_decode_voice_draft_value_dto(
     SseDeserializer deserializer,
   ) {
@@ -9358,12 +9477,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_transcript = sse_decode_opt_String(deserializer);
     var var_patch = sse_decode_opt_list_voice_patch_entry_dto(deserializer);
+    var var_dictation = sse_decode_opt_box_autoadd_voice_dictation_dto(
+      deserializer,
+    );
     var var_error = sse_decode_opt_box_autoadd_voice_error_kind_dto(
       deserializer,
     );
     return VoiceTurnEventDto(
       transcript: var_transcript,
       patch: var_patch,
+      dictation: var_dictation,
       error: var_error,
     );
   }
@@ -10073,6 +10196,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_box_autoadd_voice_dictation_dto(
+    VoiceDictationDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_voice_dictation_dto(self, serializer);
+  }
+
+  @protected
   void sse_encode_box_autoadd_voice_error_kind_dto(
     VoiceErrorKindDto self,
     SseSerializer serializer,
@@ -10753,6 +10885,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_i_32(self.length, serializer);
     serializer.buffer.putInt16List(self);
+  }
+
+  @protected
+  void sse_encode_list_prim_u_32_strict(
+    Uint32List self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    serializer.buffer.putUint32List(self);
   }
 
   @protected
@@ -11537,6 +11679,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_opt_box_autoadd_voice_dictation_dto(
+    VoiceDictationDto? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_voice_dictation_dto(self, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_opt_box_autoadd_voice_error_kind_dto(
     VoiceErrorKindDto? self,
     SseSerializer serializer,
@@ -12078,6 +12233,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_voice_dictation_dto(
+    VoiceDictationDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.cleaned, serializer);
+    sse_encode_list_prim_u_32_strict(self.removed, serializer);
+  }
+
+  @protected
   void sse_encode_voice_draft_value_dto(
     VoiceDraftValueDto self,
     SseSerializer serializer,
@@ -12157,6 +12322,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_opt_String(self.transcript, serializer);
     sse_encode_opt_list_voice_patch_entry_dto(self.patch, serializer);
+    sse_encode_opt_box_autoadd_voice_dictation_dto(self.dictation, serializer);
     sse_encode_opt_box_autoadd_voice_error_kind_dto(self.error, serializer);
   }
 

@@ -1,6 +1,7 @@
 //! Evaluation harness: fills a fixed set of utterances against sample schemas with the
 //! provisioned instruction model and reports field accuracy, invented-field rate, evidence
-//! rejection rate and median fill latency. Exits non-zero below the acceptance bar.
+//! rejection rate and median fill latency. Exits non-zero below the acceptance bar. It also cleans
+//! a few dictated utterances and reports the cleanup acceptance rate (informational, no bar).
 //! `FI_EVAL_LANGUAGE` picks the utterance set: `en` (default) or `es`.
 //!
 //! ```sh
@@ -27,6 +28,8 @@ struct Fixture {
     today: NaiveDate,
     now: String,
     schemas: BTreeMap<String, Vec<FieldSpec>>,
+    #[serde(default)]
+    dictation: Vec<DictationCase>,
     cases: Vec<Case>,
 }
 
@@ -40,6 +43,12 @@ struct FieldSpec {
     required: bool,
     #[serde(default)]
     options: Vec<String>,
+}
+
+#[derive(Deserialize)]
+struct DictationCase {
+    text: String,
+    expect: String,
 }
 
 #[derive(Deserialize)]
@@ -225,6 +234,44 @@ fn main() -> ExitCode {
                 println!("    model: {}", recording.last);
             }
         }
+    }
+    let (mut cleaned_ok, mut accepted) = (0usize, 0usize);
+    for case in &fixture.dictation {
+        let mut recording = Recording {
+            inner: &mut runner,
+            last: String::new(),
+        };
+        let dictation = match engine.clean(&mut recording, &case.text, language) {
+            Ok(dictation) => dictation,
+            Err(error) => {
+                eprintln!("cleanup failed: {error}");
+                return ExitCode::from(2);
+            }
+        };
+        let fell_back = dictation.removed.is_empty()
+            && normalize_text(&recording.last.replace('"', "")) != normalize_text(&case.text);
+        if !fell_back {
+            accepted += 1;
+        }
+        if normalize_text(&dictation.cleaned) == normalize_text(&case.expect) {
+            cleaned_ok += 1;
+        } else {
+            println!(
+                "✗ dictation {}\n    want {}, got {}",
+                case.text, case.expect, dictation.cleaned
+            );
+            if std::env::var_os("FI_EVAL_VERBOSE").is_some() {
+                println!("    model: {}", recording.last);
+            }
+        }
+    }
+    if !fixture.dictation.is_empty() {
+        let total = fixture.dictation.len();
+        println!(
+            "dictation cleanup accepted: {:.1}% ({accepted}/{total})\ndictation cleanup correct: {:.1}% ({cleaned_ok}/{total})",
+            accepted as f64 * 100.0 / total as f64,
+            cleaned_ok as f64 * 100.0 / total as f64,
+        );
     }
     latencies.sort_by(f64::total_cmp);
     let accuracy = correct as f64 / expected.max(1) as f64;

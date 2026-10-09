@@ -6,6 +6,7 @@
 //! `native` feature adds the whisper.cpp and llama.cpp runners.
 
 pub mod audio;
+pub mod dictation;
 #[cfg(feature = "native")]
 pub mod native;
 pub mod normalize;
@@ -15,6 +16,7 @@ pub mod schema;
 use chrono::{NaiveDate, NaiveTime};
 use thiserror::Error;
 
+pub use dictation::Dictation;
 pub use patch::{PatchStats, RawEntry};
 pub use schema::{Grammar, GrammarCache};
 
@@ -182,6 +184,23 @@ impl VoiceEngine {
             return Err(VoiceError::NothingMatched);
         }
         Ok(outcome)
+    }
+
+    /// Cleans one dictated transcript, deleting self-corrections and filler. Falls back to the
+    /// transcript when the model's output is not the transcript with words deleted. Never fails
+    /// with `NothingMatched`; runner failures pass through.
+    pub fn clean(
+        &mut self,
+        runner: &mut dyn ModelRunner,
+        transcript: &str,
+        language: VoiceLanguage,
+    ) -> Result<Dictation, VoiceError> {
+        if transcript.trim().is_empty() {
+            return Ok(Dictation::unchanged(transcript));
+        }
+        let prompt = dictation::build_prompt(transcript, language);
+        let output = runner.complete(&prompt, &dictation::grammar())?;
+        Ok(dictation::accept(transcript, &output))
     }
 }
 
@@ -380,6 +399,100 @@ mod tests {
         }
         assert_eq!(
             VoiceEngine::new().fill(&mut Failing, "x", &request(expense_fields())),
+            Err(VoiceError::LowMemory)
+        );
+    }
+
+    fn clean(transcript: &str, cleaned: &str, language: VoiceLanguage) -> Dictation {
+        let mut runner = scripted(&serde_json::to_string(cleaned).unwrap());
+        VoiceEngine::new()
+            .clean(&mut runner, transcript, language)
+            .unwrap()
+    }
+
+    #[test]
+    fn dictation_self_correction_removed() {
+        let dictation = clean(
+            "Lunch at Nando's, scratch that, lunch at Wagamama with Sam",
+            "lunch at Wagamama with Sam",
+            VoiceLanguage::En,
+        );
+        assert_eq!(dictation.cleaned, "Lunch at Wagamama with Sam");
+        assert_eq!(dictation.removed, vec![0, 1, 2, 3, 4]);
+    }
+
+    #[test]
+    fn dictation_invented_word_rejected() {
+        let dictation = clean(
+            "Lunch at Wagamama",
+            "Lunch at the Wagamama",
+            VoiceLanguage::En,
+        );
+        assert_eq!(dictation, Dictation::unchanged("Lunch at Wagamama"));
+    }
+
+    #[test]
+    fn dictation_reworded_output_rejected() {
+        let dictation = clean(
+            "Buy oat milk, no wait, almond milk",
+            "Buy almond-based milk",
+            VoiceLanguage::En,
+        );
+        assert_eq!(dictation.cleaned, "Buy oat milk, no wait, almond milk");
+        assert!(dictation.removed.is_empty());
+    }
+
+    #[test]
+    fn dictation_nothing_to_clean() {
+        let dictation = clean(
+            "Team lunch at Wagamama",
+            "Team lunch at Wagamama",
+            VoiceLanguage::En,
+        );
+        assert_eq!(dictation.cleaned, "Team lunch at Wagamama");
+        assert!(dictation.removed.is_empty());
+    }
+
+    #[test]
+    fn dictation_spanish_corrections() {
+        let dictation = clean(
+            "Comprar leche de avena, digo, leche de almendra",
+            "Comprar leche de almendra",
+            VoiceLanguage::Es,
+        );
+        assert_eq!(dictation.cleaned, "Comprar leche de almendra");
+        assert_eq!(dictation.removed.len(), 4);
+        let dictation = clean(
+            "Llamar el martes, mejor dicho el miércoles",
+            "Llamar el miercoles",
+            VoiceLanguage::Es,
+        );
+        assert_eq!(dictation.cleaned, "Llamar el miércoles");
+    }
+
+    #[test]
+    fn dictation_empty_output_falls_back() {
+        let dictation = clean("Buy eggs", "", VoiceLanguage::En);
+        assert_eq!(dictation, Dictation::unchanged("Buy eggs"));
+        let mut garbage = scripted("not json");
+        assert_eq!(
+            VoiceEngine::new()
+                .clean(&mut garbage, "Buy eggs", VoiceLanguage::En)
+                .unwrap(),
+            Dictation::unchanged("Buy eggs")
+        );
+    }
+
+    #[test]
+    fn dictation_low_memory_passes_through() {
+        struct Failing;
+        impl ModelRunner for Failing {
+            fn complete(&mut self, _: &str, _: &Grammar) -> Result<String, VoiceError> {
+                Err(VoiceError::LowMemory)
+            }
+        }
+        assert_eq!(
+            VoiceEngine::new().clean(&mut Failing, "Buy eggs", VoiceLanguage::En),
             Err(VoiceError::LowMemory)
         );
     }

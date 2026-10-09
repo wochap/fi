@@ -7,7 +7,8 @@
 
 use flutter_rust_bridge::frb;
 use voice_engine::{
-    ChoiceOption, FieldKind, PatchEntry, TypedValue, VoiceError, VoiceField, VoiceLanguage,
+    ChoiceOption, Dictation, FieldKind, PatchEntry, TypedValue, VoiceError, VoiceField,
+    VoiceLanguage,
 };
 
 use crate::{
@@ -84,11 +85,21 @@ impl From<VoiceError> for VoiceErrorKindDto {
     }
 }
 
-/// One event of a turn: the transcript first, then either the patch or a failure.
+/// A dictation turn's cleaned text. `removed` holds the indexes of the transcript's
+/// whitespace-separated tokens that the cleanup dropped.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct VoiceDictationDto {
+    pub cleaned: String,
+    pub removed: Vec<u32>,
+}
+
+/// One event of a turn: the transcript first, then either the patch (fill turn), the dictation
+/// (dictation turn) or a failure.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct VoiceTurnEventDto {
     pub transcript: Option<String>,
     pub patch: Option<Vec<VoicePatchEntryDto>>,
+    pub dictation: Option<VoiceDictationDto>,
     pub error: Option<VoiceErrorKindDto>,
 }
 
@@ -104,6 +115,7 @@ impl VoiceTurnEventDto {
         Self {
             transcript: Some(text),
             patch: None,
+            dictation: None,
             error: None,
         }
     }
@@ -112,6 +124,19 @@ impl VoiceTurnEventDto {
         Self {
             transcript: None,
             patch: Some(patch.into_iter().map(entry_dto).collect()),
+            dictation: None,
+            error: None,
+        }
+    }
+
+    pub(crate) fn dictation(dictation: Dictation) -> Self {
+        Self {
+            transcript: None,
+            patch: None,
+            dictation: Some(VoiceDictationDto {
+                cleaned: dictation.cleaned,
+                removed: dictation.removed,
+            }),
             error: None,
         }
     }
@@ -120,6 +145,7 @@ impl VoiceTurnEventDto {
         Self {
             transcript: None,
             patch: None,
+            dictation: None,
             error: Some(error.into()),
         }
     }
@@ -231,6 +257,25 @@ pub fn voice_fill_turn(
     });
 }
 
+/// Transcribes one turn of 16 kHz mono PCM16 audio and cleans it for dictation into one field.
+/// The sink receives the transcript, then the dictation or a failure, and closes. `language` is
+/// the voice language code; anything but "es" reads as English.
+pub fn voice_dictate_turn(
+    models_dir: String,
+    pcm: Vec<i16>,
+    language: String,
+    sink: StreamSink<VoiceTurnEventDto>,
+) {
+    crate::voice_worker::dictate_turn(
+        &models_dir,
+        pcm,
+        VoiceLanguage::from_code(&language),
+        move |event| {
+            let _ = sink.add(event);
+        },
+    );
+}
+
 /// Stops the running turn at the next opportunity; it fails with `Cancelled`.
 #[frb(sync)]
 pub fn voice_cancel() {
@@ -302,6 +347,23 @@ mod tests {
         assert_eq!(entry.value.integer_value, Some(1250));
     }
 
+    #[test]
+    fn dictation_events_carry_the_cleaned_text() {
+        let event = VoiceTurnEventDto::dictation(Dictation {
+            transcript: "Buy oat milk, no wait, almond milk".into(),
+            cleaned: "Buy almond milk".into(),
+            removed: vec![1, 2, 3, 4],
+        });
+        assert_eq!(
+            event.dictation,
+            Some(VoiceDictationDto {
+                cleaned: "Buy almond milk".into(),
+                removed: vec![1, 2, 3, 4],
+            })
+        );
+        assert!(event.patch.is_none() && event.transcript.is_none());
+    }
+
     #[cfg(not(any(
         feature = "voice-native",
         all(target_os = "android", target_arch = "aarch64")
@@ -318,6 +380,14 @@ mod tests {
                 sender.send(event).unwrap();
             },
         );
+        assert_eq!(
+            receiver.recv().unwrap().error,
+            Some(VoiceErrorKindDto::ModelLoadFailed)
+        );
+        let (sender, receiver) = std::sync::mpsc::channel();
+        crate::voice_worker::dictate_turn("x", vec![0; 10], VoiceLanguage::En, move |event| {
+            sender.send(event).unwrap();
+        });
         assert_eq!(
             receiver.recv().unwrap().error,
             Some(VoiceErrorKindDto::ModelLoadFailed)

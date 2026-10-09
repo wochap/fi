@@ -20,6 +20,7 @@ class VoiceMicButton extends StatelessWidget {
     this.onHoldEnd,
     this.percent = 0,
     this.progress = .28,
+    this.enabled = true,
     super.key,
   });
 
@@ -35,6 +36,9 @@ class VoiceMicButton extends StatelessWidget {
 
   /// The processing ring's filled fraction.
   final double progress;
+
+  /// False while another voice turn (field dictation) runs.
+  final bool enabled;
 
   String labelOf(AppLocalizations l) => switch (state) {
     MicState.idle => l.voiceFillByVoice,
@@ -88,7 +92,7 @@ class VoiceMicButton extends StatelessWidget {
       MicState.downloading => percent / 100,
       _ => null,
     };
-    final busy = state == MicState.processing;
+    final busy = state == MicState.processing || !enabled;
     return Semantics(
       button: true,
       label: labelOf(context.l10n),
@@ -105,12 +109,15 @@ class VoiceMicButton extends StatelessWidget {
         onLongPressEnd: onHoldEnd == null ? null : (_) => onHoldEnd!(),
         child: SizedBox.square(
           dimension: size,
-          child: DecoratedBox(
-            decoration: decoration,
-            child: CustomPaint(
-              painter: ring == null ? null : _RingPainter(ring),
-              child: Center(
-                child: Icon(icon, size: iconSize, color: iconColor),
+          child: Opacity(
+            opacity: enabled ? 1 : .4,
+            child: DecoratedBox(
+              decoration: decoration,
+              child: CustomPaint(
+                painter: ring == null ? null : _RingPainter(ring),
+                child: Center(
+                  child: Icon(icon, size: iconSize, color: iconColor),
+                ),
               ),
             ),
           ),

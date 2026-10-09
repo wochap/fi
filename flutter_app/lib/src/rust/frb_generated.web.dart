@@ -226,6 +226,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   ValueTypeDto dco_decode_box_autoadd_value_type_dto(dynamic raw);
 
   @protected
+  VoiceDictationDto dco_decode_box_autoadd_voice_dictation_dto(dynamic raw);
+
+  @protected
   VoiceErrorKindDto dco_decode_box_autoadd_voice_error_kind_dto(dynamic raw);
 
   @protected
@@ -427,6 +430,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   Int16List dco_decode_list_prim_i_16_strict(dynamic raw);
+
+  @protected
+  Uint32List dco_decode_list_prim_u_32_strict(dynamic raw);
 
   @protected
   List<int> dco_decode_list_prim_u_8_loose(dynamic raw);
@@ -653,6 +659,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   ValueTypeDto? dco_decode_opt_box_autoadd_value_type_dto(dynamic raw);
 
   @protected
+  VoiceDictationDto? dco_decode_opt_box_autoadd_voice_dictation_dto(
+    dynamic raw,
+  );
+
+  @protected
   VoiceErrorKindDto? dco_decode_opt_box_autoadd_voice_error_kind_dto(
     dynamic raw,
   );
@@ -816,6 +827,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ValueTypeKindDto dco_decode_value_type_kind_dto(dynamic raw);
+
+  @protected
+  VoiceDictationDto dco_decode_voice_dictation_dto(dynamic raw);
 
   @protected
   VoiceDraftValueDto dco_decode_voice_draft_value_dto(dynamic raw);
@@ -1106,6 +1120,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  VoiceDictationDto sse_decode_box_autoadd_voice_dictation_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   VoiceErrorKindDto sse_decode_box_autoadd_voice_error_kind_dto(
     SseDeserializer deserializer,
   );
@@ -1371,6 +1390,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   Int16List sse_decode_list_prim_i_16_strict(SseDeserializer deserializer);
+
+  @protected
+  Uint32List sse_decode_list_prim_u_32_strict(SseDeserializer deserializer);
 
   @protected
   List<int> sse_decode_list_prim_u_8_loose(SseDeserializer deserializer);
@@ -1667,6 +1689,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  VoiceDictationDto? sse_decode_opt_box_autoadd_voice_dictation_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   VoiceErrorKindDto? sse_decode_opt_box_autoadd_voice_error_kind_dto(
     SseDeserializer deserializer,
   );
@@ -1872,6 +1899,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ValueTypeKindDto sse_decode_value_type_kind_dto(SseDeserializer deserializer);
+
+  @protected
+  VoiceDictationDto sse_decode_voice_dictation_dto(
+    SseDeserializer deserializer,
+  );
 
   @protected
   VoiceDraftValueDto sse_decode_voice_draft_value_dto(
@@ -2240,6 +2272,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_box_autoadd_voice_dictation_dto(
+    VoiceDictationDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_box_autoadd_voice_error_kind_dto(
     VoiceErrorKindDto self,
     SseSerializer serializer,
@@ -2575,6 +2613,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_list_prim_i_16_strict(
     Int16List self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_prim_u_32_strict(
+    Uint32List self,
     SseSerializer serializer,
   );
 
@@ -2933,6 +2977,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_opt_box_autoadd_voice_dictation_dto(
+    VoiceDictationDto? self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_opt_box_autoadd_voice_error_kind_dto(
     VoiceErrorKindDto? self,
     SseSerializer serializer,
@@ -3193,6 +3243,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_value_type_kind_dto(
     ValueTypeKindDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_voice_dictation_dto(
+    VoiceDictationDto self,
     SseSerializer serializer,
   );
 

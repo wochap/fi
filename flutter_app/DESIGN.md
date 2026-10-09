@@ -31,7 +31,7 @@ guide disagree, update this guide to match.
 | `lib/theme/action_sheet.dart` | `showActionSheet()` + `ActionSheet`: a phone row menu as a bottom sheet, headed by what it acts on (icon tile, title, subtitle), with 48px action rows in optionally labelled groups (mock collections) |
 | `lib/device_details.dart` | A trusted device's Details: `DeviceDetails` (state grid, failure, DeviceId with copy, categorized connection log with the All / Pairing / Peer filter, Reconnect and Copy log), `DeviceDetailsScreen` (the pushed phone screen, mock devices-details), `DeviceStateTag`, `LogLineRow`, `seenSyncedLine()`, `shortDeviceId()` / `groupedDeviceId()`, `copyWithConfirmation()` |
 | `lib/ui_prefs.dart` | `UiPrefs` and its stores: device-local presentation choices (the collections sort, the voice tip dismissal, hands-free spoken feedback) in `ui_prefs.json` in the app support directory; never sent to Rust or synced. Write with `UiPrefsStore.update` so writers of different fields don't undo each other |
-| `lib/voice/` | Voice fill in the phone New record sheet (voice-* mocks): `engine.dart` (`VoiceEngine` boundary, `FakeVoiceEngine`, `UnavailableVoiceEngine`, `selectVoiceEngine()`), `patch.dart` (`applyPatch` rules, `VoiceDraftState` field origins), `controller.dart` (`VoiceFillController`, the sheet's flow), `panel.dart` (`VoicePanel`, `VoiceEvidencePopover`, `VoiceFieldMark`, `voiceErrorCopy()`), `mic_button.dart` (`VoiceMicButton`, `VoiceProgressRing`), `example.dart` (`exampleUtterance()`), `services.dart` (permission, network, TTS and model services, `VoicePrefs`, `VoiceScope`, `formatBytes()`), `fakes.dart` (test fakes) |
+| `lib/voice/` | Voice fill in the phone New record sheet and field dictation (voice-* mocks): `dictation.dart` (`DictationController`, `VoiceTurnCoordinator`, `DictationMic`, `DictationStateRow`, `DictationReview`), `engine.dart` (`VoiceEngine` boundary, `FakeVoiceEngine`, `UnavailableVoiceEngine`, `selectVoiceEngine()`), `patch.dart` (`applyPatch` rules, `VoiceDraftState` field origins), `controller.dart` (`VoiceFillController`, the sheet's flow), `panel.dart` (`VoicePanel`, `VoiceEvidencePopover`, `VoiceFieldMark`, `voiceErrorCopy()`), `mic_button.dart` (`VoiceMicButton`, `VoiceProgressRing`), `example.dart` (`exampleUtterance()`), `services.dart` (permission, network, TTS and model services, `VoicePrefs`, `VoiceScope`, `formatBytes()`), `fakes.dart` (test fakes) |
 | `lib/settings_page.dart` | `SettingsPage`, the third phone tab (mock settings): Voice input (model row, hands-free, re-download, delete), Microphone and About (the build label) |
 | `lib/collections_page.dart` `_RecordTable` | The desktop records table (mock collection-records): a `two_dimensional_scrollables` `TableView` with a pinned header row and first column (170px, others 150px), typed headers with the required mark, incomplete-row marks, and the "Scroll for more columns →" hint with a trailing fade |
 | `lib/theme/form_errors.dart` | `FieldErrorMessage` / `FieldErrorLines` (warning icon + message under a control), `FormErrorLines`, `FormErrorSummary` ("Couldn't save. N fields need attention." + Show), `RequiredLegend`, `requiredLabel()`, `errorOf()` / `decorationErrorText()`: how forms show errors and required inputs |
@@ -83,6 +83,9 @@ widget to `nocturne_widgets.dart` only when a second screen needs it.
    required value never shows it. A `FiSegmented` that allows clearing clears on a second tap of
    the selected segment. An unset `FiSlider` shows a dashed track and "Set" (which picks the
    minimum).
+11. **The trailing slot is `[ClearMark?, trailingAction?]`.** An action that belongs to the
+   input (the dictation mic) goes in `FiTextInput.trailingAction`, after the clear mark, with its
+   own 44px target; in a multiline input the slot stays pinned to the top.
 
 ## Input sizes
 
@@ -235,7 +238,7 @@ must write one, use these sizes:
 
 - **Voice fill** exists only in the phone New record sheet and only when `VoiceScope.of` returns
   services (an engine is available; the fake one in debug builds or with
-  `--dart-define=FI_VOICE_FAKE=true`). Never in Edit record or a dialog. The sheet is its own route,
+  `--dart-define=FI_VOICE_FAKE=true`). Whole-form fill is never in Edit record or a dialog. The sheet is its own route,
   so `_recordEditor` carries the shell's `VoiceScope` into it. `FormSurface.phoneFooterLeading`
   holds the 56px `VoiceMicButton` beside a flexible Save; `FormSurface.top` holds the `VoicePanel`.
   Each mic state has its own icon and label, never color alone. Panels use `bg` cards with 8px
@@ -246,6 +249,20 @@ must write one, use these sizes:
   disabled only while listening or processing, and closing with changes asks "Discard this
   record?". Transcripts stay in the controller's memory and die with the sheet: never log, persist
   or send them.
+- **Field dictation** (mocks `record-form-field-states` Dictation, `record-form-edit`,
+  `voice-dictation-review`) puts a `DictationMic` in the trailing slot of every Text and multiline
+  Text input of New and Edit record, on Android (`PlatformScope.android`) with an engine, at any
+  width. `DictationController` owns the turn; the form's `VoiceTurnCoordinator` lets one turn run
+  at a time, so every other field mic and the footer mic are disabled meanwhile. While listening
+  or processing, the input shows `DictationStateRow` over its value (`FiTextInput.overlay`: level
+  bars and "Listening… m:ss", or a ring and "Cleaning up…"), keeps its text and is read-only; the
+  mic becomes a stop square. Failures are one `DictationErrorLine` under the field with Retry.
+  Setup reuses the panel's `VoicePrimerCard`, `VoiceOfferCard` and `VoiceErrorCard` in a bottom
+  sheet (phone) or dialog (wide). The "Dictated" review (`DictationReview`) offers Cleaned
+  (Default) and As heard (removed words struck through, and read out as "Removed: …"), then
+  Insert for an empty field or Append / Replace (Replace primary); it is skipped when the field is
+  empty and nothing was cleaned. Applied text goes through the keystroke path: it counts as typed,
+  gets no Voice marker, and makes closing ask first.
 
 ## Charts
 

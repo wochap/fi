@@ -93,6 +93,31 @@ final class VoiceTurnResult {
   final List<VoicePatchEntry> patch;
 }
 
+/// A finished dictation turn: what was heard, the cleaned text, and which of the transcript's
+/// whitespace-separated words the cleanup removed.
+@immutable
+final class DictationResult {
+  const DictationResult({
+    required this.transcript,
+    required this.cleaned,
+    this.removedWordIndexes = const [],
+  });
+
+  /// A result whose cleanup changed nothing.
+  const DictationResult.unchanged(String transcript)
+    : this(transcript: transcript, cleaned: transcript);
+
+  final String transcript;
+  final String cleaned;
+  final List<int> removedWordIndexes;
+
+  /// Whether the cleanup changed nothing.
+  bool get identical => cleaned == transcript;
+}
+
+/// What a turn produces: a patch for the whole form, or text for one field.
+enum VoiceTurnKind { fill, dictation }
+
 /// The ways a turn fails.
 enum VoiceFailureKind {
   noSpeech,
@@ -122,9 +147,10 @@ abstract interface class VoiceEngine {
   /// Whether this build can fill by voice at all. When false no voice UI is shown.
   bool get available;
 
-  /// Starts listening; the stream carries input levels 0..1 until [stop] or [cancel].
-  /// Fails with a [VoiceFailure] (permission, busy microphone, model load) through the stream.
-  Stream<double> start();
+  /// Starts listening for a turn of [kind]; the stream carries input levels 0..1 until [stop],
+  /// [stopDictation] or [cancel]. Fails with a [VoiceFailure] (permission, busy microphone,
+  /// model load) through the stream.
+  Stream<double> start({VoiceTurnKind kind = VoiceTurnKind.fill});
 
   /// Stops listening and processes the turn. [onTranscript] fires as soon as the transcript
   /// exists, before the fields are filled. Throws a [VoiceFailure].
@@ -133,11 +159,19 @@ abstract interface class VoiceEngine {
     ValueChanged<String>? onTranscript,
   });
 
+  /// Stops listening and processes the turn as dictation into one field, in [language].
+  /// [onTranscript] fires as soon as the transcript exists, before cleanup. Throws a
+  /// [VoiceFailure]; never `nothingMatched`.
+  Future<DictationResult> stopDictation(
+    String language, {
+    ValueChanged<String>? onTranscript,
+  });
+
   /// Stops the turn and discards its audio and transcript.
   Future<void> cancel();
 
-  /// Starts loading the instruction model in the background; called when a New record sheet
-  /// opens with the models ready.
+  /// Starts loading the instruction model in the background; called when a record form that
+  /// offers voice opens with the models ready.
   void prepare();
 
   /// Frees the instruction model (long in the background, or memory pressure).
@@ -190,12 +224,18 @@ final class UnavailableVoiceEngine implements VoiceEngine {
   bool get available => false;
 
   @override
-  Stream<double> start() =>
+  Stream<double> start({VoiceTurnKind kind = VoiceTurnKind.fill}) =>
       Stream.error(const VoiceFailure(VoiceFailureKind.modelLoadFailed));
 
   @override
   Future<VoiceTurnResult> stop(
     VoiceFillRequest request, {
+    ValueChanged<String>? onTranscript,
+  }) => Future.error(const VoiceFailure(VoiceFailureKind.modelLoadFailed));
+
+  @override
+  Future<DictationResult> stopDictation(
+    String language, {
     ValueChanged<String>? onTranscript,
   }) => Future.error(const VoiceFailure(VoiceFailureKind.modelLoadFailed));
 
@@ -250,6 +290,24 @@ final class FakeVoiceTurn {
   final String? transcript;
 }
 
+/// One scripted dictation turn of a [FakeVoiceEngine]: a result, or a failure raised at
+/// [failAt].
+@immutable
+final class FakeDictationTurn {
+  const FakeDictationTurn.result(DictationResult this.result)
+    : failure = null,
+      failAt = FakeFailurePoint.stop;
+
+  const FakeDictationTurn.failure(
+    VoiceFailureKind this.failure, {
+    this.failAt = FakeFailurePoint.stop,
+  }) : result = null;
+
+  final DictationResult? result;
+  final VoiceFailureKind? failure;
+  final FakeFailurePoint failAt;
+}
+
 /// Where a scripted failure surfaces: as soon as listening starts, or when it stops.
 enum FakeFailurePoint { start, stop }
 
@@ -261,7 +319,22 @@ final class FakeVoiceEngine implements VoiceEngine {
     this.transcribeDelay = const Duration(milliseconds: 900),
     this.fillDelay = const Duration(milliseconds: 1600),
     this.levelInterval = const Duration(milliseconds: 80),
-  }) : script = script == null || script.isEmpty ? demoScript : script;
+    List<FakeDictationTurn>? dictations,
+  }) : script = script == null || script.isEmpty ? demoScript : script,
+       dictations = dictations == null || dictations.isEmpty
+           ? demoDictations
+           : dictations;
+
+  /// A demo for debug builds: every dictation hears a self-correction and cleans it.
+  static const demoDictations = [
+    FakeDictationTurn.result(
+      DictationResult(
+        transcript: 'Buy oat milk, no wait, almond milk',
+        cleaned: 'Buy almond milk',
+        removedWordIndexes: [1, 2, 3, 4],
+      ),
+    ),
+  ];
 
   /// A demo for debug builds: every turn hears "Lunch" and fills the first text field.
   static final demoScript = [
@@ -287,6 +360,9 @@ final class FakeVoiceEngine implements VoiceEngine {
   ];
 
   final List<FakeVoiceTurn> script;
+
+  /// Scripted dictation turns; each dictation takes the next, the last repeats.
+  final List<FakeDictationTurn> dictations;
   final Duration transcribeDelay;
   final Duration fillDelay;
   final Duration levelInterval;
@@ -296,11 +372,19 @@ final class FakeVoiceEngine implements VoiceEngine {
   Timer? _ticker;
   Completer<void>? _cancelled;
 
-  /// Turns started so far.
+  /// Turns started so far, of both kinds.
   int get turns => _turn;
 
-  /// The language of each request passed to [stop].
+  /// Dictation turns started so far.
+  int get dictationTurns => _dictation;
+
+  /// The language of each request passed to [stop] or [stopDictation].
   final languages = <String>[];
+
+  /// The kind of each processed turn, in order.
+  final kinds = <VoiceTurnKind>[];
+
+  var _dictation = 0;
 
   /// [prepare] and [release] calls so far.
   int prepares = 0;
@@ -312,20 +396,30 @@ final class FakeVoiceEngine implements VoiceEngine {
   @override
   void release() => releases++;
 
-  FakeVoiceTurn get _current => script[math.min(_turn, script.length) - 1];
+  FakeVoiceTurn get _current =>
+      script[math.max(1, math.min(_turn - _dictation, script.length)) - 1];
+
+  FakeDictationTurn get _currentDictation =>
+      dictations[math.max(1, math.min(_dictation, dictations.length)) - 1];
 
   @override
   bool get available => true;
 
   @override
-  Stream<double> start() {
+  Stream<double> start({VoiceTurnKind kind = VoiceTurnKind.fill}) {
     _turn++;
+    final dictation = kind == VoiceTurnKind.dictation;
+    if (dictation) _dictation++;
     _stopLevels();
     final levels = _levels = StreamController<double>();
     _cancelled = Completer<void>();
-    final turn = _current;
-    if (turn.failAt == FakeFailurePoint.start && turn.failure != null) {
-      levels.addError(VoiceFailure(turn.failure!));
+    final failure = dictation
+        ? (_currentDictation.failAt == FakeFailurePoint.start
+              ? _currentDictation.failure
+              : null)
+        : (_current.failAt == FakeFailurePoint.start ? _current.failure : null);
+    if (failure != null) {
+      levels.addError(VoiceFailure(failure));
       unawaited(levels.close());
       return levels.stream;
     }
@@ -363,6 +457,7 @@ final class FakeVoiceEngine implements VoiceEngine {
     ValueChanged<String>? onTranscript,
   }) async {
     languages.add(request.language);
+    kinds.add(VoiceTurnKind.fill);
     _stopLevels();
     final turn = _current;
     await _wait(transcribeDelay);
@@ -374,6 +469,23 @@ final class FakeVoiceEngine implements VoiceEngine {
       throw VoiceFailure(failure);
     }
     final result = turn.result ?? turn.respond!(request);
+    onTranscript?.call(result.transcript);
+    await _wait(fillDelay);
+    return result;
+  }
+
+  @override
+  Future<DictationResult> stopDictation(
+    String language, {
+    ValueChanged<String>? onTranscript,
+  }) async {
+    languages.add(language);
+    kinds.add(VoiceTurnKind.dictation);
+    _stopLevels();
+    final turn = _currentDictation;
+    await _wait(transcribeDelay);
+    if (turn.failure case final failure?) throw VoiceFailure(failure);
+    final result = turn.result!;
     onTranscript?.call(result.transcript);
     await _wait(fillDelay);
     return result;

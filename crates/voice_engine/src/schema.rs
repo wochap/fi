@@ -26,6 +26,14 @@ pub struct Grammar {
 }
 
 impl Grammar {
+    /// A grammar from GBNF text that does not depend on a schema.
+    pub(crate) fn fixed(gbnf: &str) -> Self {
+        Self {
+            gbnf: gbnf.into(),
+            key: 0,
+        }
+    }
+
     /// The GBNF text; its start rule is `root`.
     pub fn gbnf(&self) -> &str {
         &self.gbnf

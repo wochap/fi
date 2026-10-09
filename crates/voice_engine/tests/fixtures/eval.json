@@ -87,5 +87,11 @@
     { "schema": "books", "text": "Station Eleven, 333 pages, loved it.", "expect": { "title": "Station Eleven", "pages": "333", "rating": "loved" } },
     { "schema": "books", "text": "Gone Girl, meh, finished yesterday.", "expect": { "title": "Gone Girl", "rating": "meh", "finished": "true", "finished on": "2026-09-27" } },
     { "schema": "books", "text": "The Name of the Wind, 662 pages.", "expect": { "title": "The Name of the Wind", "pages": "662" } }
+  ]],
+  "dictation": [
+    { "text": "Lunch at Nando's, scratch that, lunch at Wagamama with Sam", "expect": "Lunch at Wagamama with Sam" },
+    { "text": "Pick up oat milk, no wait, almond milk, and eggs, I mean a dozen eggs", "expect": "Pick up almond milk and a dozen eggs" },
+    { "text": "Call the plumber um on Friday", "expect": "Call the plumber on Friday" },
+    { "text": "Team lunch at Wagamama", "expect": "Team lunch at Wagamama" }
   ]
 }

@@ -7,8 +7,8 @@ import '../frb_generated.dart';
 import 'models.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `entry_dto`, `failed`, `field`, `patch`, `request`, `transcript`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`
+// These functions are ignored because they are not marked as `pub`: `dictation`, `entry_dto`, `failed`, `field`, `patch`, `request`, `transcript`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`
 
 /// Whether this build has the on-device engine. True whether or not the models are downloaded,
 /// so the first-use download flow can run.
@@ -31,11 +31,44 @@ Stream<VoiceTurnEventDto> voiceFillTurn({
   request: request,
 );
 
+/// Transcribes one turn of 16 kHz mono PCM16 audio and cleans it for dictation into one field.
+/// The sink receives the transcript, then the dictation or a failure, and closes. `language` is
+/// the voice language code; anything but "es" reads as English.
+Stream<VoiceTurnEventDto> voiceDictateTurn({
+  required String modelsDir,
+  required List<int> pcm,
+  required String language,
+}) => RustLib.instance.api.crateApiVoiceVoiceDictateTurn(
+  modelsDir: modelsDir,
+  pcm: pcm,
+  language: language,
+);
+
 /// Stops the running turn at the next opportunity; it fails with `Cancelled`.
 void voiceCancel() => RustLib.instance.api.crateApiVoiceVoiceCancel();
 
 /// Releases the instruction model (backgrounded app or memory pressure).
 void voiceRelease() => RustLib.instance.api.crateApiVoiceVoiceRelease();
+
+/// A dictation turn's cleaned text. `removed` holds the indexes of the transcript's
+/// whitespace-separated tokens that the cleanup dropped.
+class VoiceDictationDto {
+  final String cleaned;
+  final Uint32List removed;
+
+  const VoiceDictationDto({required this.cleaned, required this.removed});
+
+  @override
+  int get hashCode => cleaned.hashCode ^ removed.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is VoiceDictationDto &&
+          runtimeType == other.runtimeType &&
+          cleaned == other.cleaned &&
+          removed == other.removed;
+}
 
 /// A draft value, as display text.
 class VoiceDraftValueDto {
@@ -205,16 +238,27 @@ class VoicePatchEntryDto {
           evidence == other.evidence;
 }
 
-/// One event of a turn: the transcript first, then either the patch or a failure.
+/// One event of a turn: the transcript first, then either the patch (fill turn), the dictation
+/// (dictation turn) or a failure.
 class VoiceTurnEventDto {
   final String? transcript;
   final List<VoicePatchEntryDto>? patch;
+  final VoiceDictationDto? dictation;
   final VoiceErrorKindDto? error;
 
-  const VoiceTurnEventDto({this.transcript, this.patch, this.error});
+  const VoiceTurnEventDto({
+    this.transcript,
+    this.patch,
+    this.dictation,
+    this.error,
+  });
 
   @override
-  int get hashCode => transcript.hashCode ^ patch.hashCode ^ error.hashCode;
+  int get hashCode =>
+      transcript.hashCode ^
+      patch.hashCode ^
+      dictation.hashCode ^
+      error.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -223,5 +267,6 @@ class VoiceTurnEventDto {
           runtimeType == other.runtimeType &&
           transcript == other.transcript &&
           patch == other.patch &&
+          dictation == other.dictation &&
           error == other.error;
 }

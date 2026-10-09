@@ -12,7 +12,7 @@ mod imp {
     };
 
     use voice_engine::{
-        FillRequest, VoiceEngine, VoiceError,
+        FillRequest, VoiceEngine, VoiceError, VoiceLanguage,
         native::{
             CancelFlag, LlamaRunner, speech_model_file, transcribe, understanding_model_file,
         },
@@ -73,19 +73,28 @@ mod imp {
         });
     }
 
-    pub fn fill_turn(
+    /// Transcribes, emits the transcript, then runs `finish` with the loaded model and emits its
+    /// event or the failure. Fill and dictation turns share the model slot and cancel flag.
+    fn run_turn(
         models_dir: &str,
         pcm: Vec<i16>,
-        request: FillRequest,
+        language: VoiceLanguage,
         emit: impl Fn(VoiceTurnEventDto) + Send + 'static,
+        finish: impl FnOnce(
+            &mut VoiceEngine,
+            &mut LlamaRunner,
+            &str,
+        ) -> Result<VoiceTurnEventDto, VoiceError>
+        + Send
+        + 'static,
     ) {
         let dir = version_dir(models_dir);
         cancel_flag().reset();
         std::thread::spawn(move || {
             let result = transcribe(
-                &dir.join(speech_model_file(request.language)),
+                &dir.join(speech_model_file(language)),
                 &pcm,
-                request.language,
+                language,
                 cancel_flag(),
             )
             .and_then(|transcript| {
@@ -100,17 +109,52 @@ mod imp {
                 ensure_loaded(&mut slot, &dir.join(understanding_model_file()))?;
                 let Slot { model, engine } = &mut *slot;
                 let (_, runner) = model.as_mut().expect("loaded above");
-                let outcome = engine.fill(runner, &transcript, &request);
-                if outcome == Err(VoiceError::LowMemory) {
+                let event = finish(engine, runner, &transcript);
+                if matches!(event, Err(VoiceError::LowMemory)) {
                     *model = None;
                 }
-                outcome
+                event
             });
-            emit(match result {
-                Ok(outcome) => VoiceTurnEventDto::patch(outcome.patch),
-                Err(error) => VoiceTurnEventDto::failed(error),
-            });
+            emit(result.unwrap_or_else(VoiceTurnEventDto::failed));
         });
+    }
+
+    pub fn fill_turn(
+        models_dir: &str,
+        pcm: Vec<i16>,
+        request: FillRequest,
+        emit: impl Fn(VoiceTurnEventDto) + Send + 'static,
+    ) {
+        run_turn(
+            models_dir,
+            pcm,
+            request.language,
+            emit,
+            move |engine, runner, transcript| {
+                engine
+                    .fill(runner, transcript, &request)
+                    .map(|outcome| VoiceTurnEventDto::patch(outcome.patch))
+            },
+        );
+    }
+
+    pub fn dictate_turn(
+        models_dir: &str,
+        pcm: Vec<i16>,
+        language: VoiceLanguage,
+        emit: impl Fn(VoiceTurnEventDto) + Send + 'static,
+    ) {
+        run_turn(
+            models_dir,
+            pcm,
+            language,
+            emit,
+            move |engine, runner, transcript| {
+                engine
+                    .clean(runner, transcript, language)
+                    .map(VoiceTurnEventDto::dictation)
+            },
+        );
     }
 
     pub fn cancel() {
@@ -132,7 +176,7 @@ mod imp {
     all(target_os = "android", target_arch = "aarch64")
 )))]
 mod imp {
-    use voice_engine::{FillRequest, VoiceError};
+    use voice_engine::{FillRequest, VoiceError, VoiceLanguage};
 
     use crate::api::voice::VoiceTurnEventDto;
 
@@ -144,6 +188,15 @@ mod imp {
         _: &str,
         _: Vec<i16>,
         _: FillRequest,
+        emit: impl Fn(VoiceTurnEventDto) + Send + 'static,
+    ) {
+        emit(VoiceTurnEventDto::failed(VoiceError::ModelLoadFailed));
+    }
+
+    pub fn dictate_turn(
+        _: &str,
+        _: Vec<i16>,
+        _: VoiceLanguage,
         emit: impl Fn(VoiceTurnEventDto) + Send + 'static,
     ) {
         emit(VoiceTurnEventDto::failed(VoiceError::ModelLoadFailed));

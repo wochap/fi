@@ -11,6 +11,7 @@ import 'package:fi/ui_prefs.dart';
 import 'package:fi/controllers.dart';
 import 'package:fi/field_editor.dart';
 import 'package:fi/field_registry.dart';
+import 'package:fi/platform_capabilities.dart';
 import 'package:fi/help_button.dart';
 import 'package:fi/help_copy.dart';
 import 'package:fi/record_form.dart';
@@ -28,6 +29,7 @@ import 'package:fi/widgets/query_builder.dart';
 import 'package:fi/widgets/query_editor_dialog.dart';
 import 'package:fi/widgets/widget_dashboard.dart';
 import 'package:fi/voice/controller.dart';
+import 'package:fi/voice/dictation.dart';
 import 'package:fi/voice/engine.dart';
 import 'package:fi/voice/mic_button.dart';
 import 'package:fi/voice/panel.dart';
@@ -2722,11 +2724,20 @@ class _RecordEditorFormState extends State<_RecordEditorForm> {
   VoiceFillController? _voice;
   var _voiceChecked = false;
 
+  /// Field dictation into Text inputs: on Android with an engine, in New and Edit record.
+  DictationController? _dictation;
+
+  /// Whether dictated text was applied, which makes closing ask first.
+  var _dictationApplied = false;
+
+  /// One voice turn at a time across whole-form fill and field dictation.
+  final _voiceTurns = VoiceTurnCoordinator();
+
   /// Bumped when voice writes a field, so its control rebuilds from the new value.
   final _revisions = <String, int>{};
 
   /// The values the sheet opened with, to tell whether closing loses changes.
-  late final _opened = Map<String, FieldValueDto>.of(values);
+  late final Map<String, FieldValueDto> _opened;
 
   @override
   void didChangeDependencies() {
@@ -2734,8 +2745,24 @@ class _RecordEditorFormState extends State<_RecordEditorForm> {
     if (_voiceChecked) return;
     _voiceChecked = true;
     final services = VoiceScope.of(context);
-    if (services == null ||
-        widget.existing != null ||
+    if (services == null) return;
+    if (PlatformScope.of(context).android &&
+        fields.any((field) => field.fieldType.kind == FieldTypeKindDto.text)) {
+      _dictation = DictationController(
+        services: services,
+        coordinator: _voiceTurns,
+        onResult: _dictated,
+        onSetup: (fieldId, setup) => unawaited(
+          showDictationSetup(
+            context,
+            controller: _dictation!,
+            fieldId: fieldId,
+            setup: setup,
+          ),
+        ),
+      );
+    }
+    if (widget.existing != null ||
         FormSurfaceScope.modeOf(context) != FormSurfaceMode.sheet) {
       return;
     }
@@ -2744,7 +2771,58 @@ class _RecordEditorFormState extends State<_RecordEditorForm> {
       fields: [for (final field in fields) VoiceField.fromDefinition(field)],
       readDraft: () => values,
       writeDraft: _voiceWrote,
+      coordinator: _voiceTurns,
       origins: {for (final id in _defaulted) id: FieldOrigin.defaulted},
+    );
+  }
+
+  /// A dictation turn into [fieldId] finished: review it, then apply the chosen text.
+  Future<void> _dictated(String fieldId, DictationResult result) async {
+    final field = fields.firstWhere((field) => field.id == fieldId);
+    final current = values[fieldId]?.textValue ?? '';
+    final text = await reviewDictation(
+      context,
+      fieldName: field.name,
+      current: current,
+      result: result,
+    );
+    if (text == null || !mounted) return;
+    _dictationApplied = true;
+    // Through the keystroke path: the field counts as typed, with no Voice marker.
+    _changed(
+      fieldId,
+      text.isEmpty && !field.required_
+          ? const FieldValueDto(kind: FieldValueKindDto.null_)
+          : FieldValueDto(kind: FieldValueKindDto.text, textValue: text),
+    );
+    setState(() => _revisions[fieldId] = (_revisions[fieldId] ?? 0) + 1);
+  }
+
+  /// The dictation mic and in-field state for [field], when dictation is offered.
+  TextDictationSlot? _dictationSlot(FieldDefinitionDto field) {
+    final dictation = _dictation;
+    if (dictation == null || field.fieldType.kind != FieldTypeKindDto.text) {
+      return null;
+    }
+    final phase = dictation.phaseOf(field.id);
+    return (
+      mic: DictationMic(
+        key: Key('dictation-mic-${field.id}'),
+        fieldName: field.name,
+        phase: phase,
+        disabled: dictation.disabledFor(field.id),
+        downloadPercent: dictation.downloading
+            ? dictation.downloadPercent
+            : null,
+        onTap: () => unawaited(dictation.micTapped(field.id)),
+      ),
+      overlay: phase == DictationPhase.idle
+          ? null
+          : DictationStateRow(
+              phase: phase,
+              levels: dictation.levels,
+              elapsed: dictation.elapsed,
+            ),
     );
   }
 
@@ -2776,9 +2854,12 @@ class _RecordEditorFormState extends State<_RecordEditorForm> {
     });
   }
 
-  /// Closing while a turn runs or after changes asks first (voice sheets only).
+  /// Closing while a turn runs or after changes asks first (voice sheets, and forms where
+  /// dictated text was applied).
   bool get _confirmClose =>
-      _voice != null && (_voice!.busy || _changedSinceOpen);
+      (_voice != null && (_voice!.busy || _changedSinceOpen)) ||
+      (_dictation?.busy ?? false) ||
+      (_dictationApplied && _changedSinceOpen);
 
   Future<void> _close() async {
     if (!_confirmClose) {
@@ -2808,6 +2889,7 @@ class _RecordEditorFormState extends State<_RecordEditorForm> {
     );
     if (discard != true || !mounted) return;
     await _voice?.discard();
+    await _dictation?.cancel();
     if (mounted) Navigator.pop(context);
   }
 
@@ -2819,6 +2901,7 @@ class _RecordEditorFormState extends State<_RecordEditorForm> {
   @override
   void initState() {
     super.initState();
+    _opened = Map.of(values);
     if (widget.focusFieldId case final id?) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _focusField(id));
     }
@@ -2852,6 +2935,8 @@ class _RecordEditorFormState extends State<_RecordEditorForm> {
   void dispose() {
     _debounce?.cancel();
     _voice?.dispose();
+    _dictation?.dispose();
+    _voiceTurns.dispose();
     for (final node in _focusGroups.values) {
       node.dispose();
     }
@@ -2966,9 +3051,15 @@ class _RecordEditorFormState extends State<_RecordEditorForm> {
   @override
   Widget build(BuildContext context) {
     final voice = _voice;
-    if (voice == null) return _form(context);
+    final dictation = _dictation;
+    if (voice == null && dictation == null) return _form(context);
     return ListenableBuilder(
-      listenable: Listenable.merge([voice, voice.services.models]),
+      listenable: Listenable.merge([
+        ?voice,
+        ?dictation,
+        _voiceTurns,
+        (voice?.services ?? dictation!.services).models,
+      ]),
       builder: (context, _) => PopScope(
         canPop: !_confirmClose,
         onPopInvokedWithResult: (didPop, _) {
@@ -2983,6 +3074,7 @@ class _RecordEditorFormState extends State<_RecordEditorForm> {
     final status = voice.services.models.status;
     return VoiceMicButton(
       state: voice.micState,
+      enabled: !voice.blocked,
       percent: status.totalBytes == 0
           ? 0
           : status.doneBytes * 100 ~/ status.totalBytes,
@@ -3022,7 +3114,9 @@ class _RecordEditorFormState extends State<_RecordEditorForm> {
       contextLabel: _contextLabel(l),
       showContextInDialog: true,
       closeInHeader: true,
-      onCancel: voice == null ? null : () => unawaited(_close()),
+      onCancel: voice == null && _dictation == null
+          ? null
+          : () => unawaited(_close()),
       fullWidthPrimaryOnPhone: true,
       phoneFooterLeading: voice == null ? null : _mic(voice),
       top: voice == null ? null : VoicePanel(controller: voice),
@@ -3087,18 +3181,22 @@ class _RecordEditorFormState extends State<_RecordEditorForm> {
                     key: _fieldKeys[field.id],
                     child: KeyedSubtree(
                       key: ValueKey(_revisions[field.id] ?? 0),
-                      child: const FieldRendererRegistry().editor(
-                        field,
-                        values[field.id],
-                        (value) => _changed(field.id, value),
-                        errors: issues.fieldLines(
-                          context.l10n,
-                          field.id,
-                          field: field,
-                          decimalSeparator: decimalSeparatorOf(context),
+                      child: _withDictationError(
+                        field.id,
+                        const FieldRendererRegistry().editor(
+                          field,
+                          values[field.id],
+                          (value) => _changed(field.id, value),
+                          errors: issues.fieldLines(
+                            context.l10n,
+                            field.id,
+                            field: field,
+                            decimalSeparator: decimalSeparatorOf(context),
+                          ),
+                          quickFill: true,
+                          showLabel: false,
+                          dictation: _dictationSlot(field),
                         ),
-                        quickFill: true,
-                        showLabel: false,
                       ),
                     ),
                   ),
@@ -3110,7 +3208,25 @@ class _RecordEditorFormState extends State<_RecordEditorForm> {
       errors: issues.formLines(context.l10n),
       primaryLabel: existing == null ? l.recordSave : l.recordSaveChanges,
       // Voice fill never saves by itself, and Save waits while a turn listens or processes.
-      onPrimary: voice?.busy ?? false ? null : _save,
+      onPrimary: _voiceTurns.busy ? null : _save,
+    );
+  }
+
+  /// [control] with the inline error of [fieldId]'s last failed dictation turn under it.
+  Widget _withDictationError(String fieldId, Widget control) {
+    final dictation = _dictation;
+    final error = dictation?.errorOf(fieldId);
+    if (dictation == null || error == null) return control;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        control,
+        DictationErrorLine(
+          key: Key('dictation-error-$fieldId'),
+          kind: error,
+          onRetry: () => unawaited(dictation.retry(fieldId)),
+        ),
+      ],
     );
   }
 }

@@ -5467,6 +5467,102 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Undo'**
   String get commonUndo;
+
+  /// Field dictation mic label
+  ///
+  /// In en, this message translates to:
+  /// **'Dictate into {field}'**
+  String dictationMicLabel(String field);
+
+  /// Field dictation listening state
+  ///
+  /// In en, this message translates to:
+  /// **'Listening…'**
+  String get dictationListening;
+
+  /// Announced when field dictation starts listening
+  ///
+  /// In en, this message translates to:
+  /// **'Listening into {field}'**
+  String dictationListeningAnnounce(String field);
+
+  /// Field dictation processing state
+  ///
+  /// In en, this message translates to:
+  /// **'Cleaning up…'**
+  String get dictationCleaningUp;
+
+  /// Dictated review sheet title
+  ///
+  /// In en, this message translates to:
+  /// **'Dictated'**
+  String get dictatedTitle;
+
+  /// Dictated review sheet subtitle
+  ///
+  /// In en, this message translates to:
+  /// **'into {field}'**
+  String dictatedInto(String field);
+
+  /// The cleaned dictation version
+  ///
+  /// In en, this message translates to:
+  /// **'Cleaned'**
+  String get dictatedCleaned;
+
+  /// Tag on the default dictation version
+  ///
+  /// In en, this message translates to:
+  /// **'Default'**
+  String get dictatedDefault;
+
+  /// The raw dictation version
+  ///
+  /// In en, this message translates to:
+  /// **'As heard'**
+  String get dictatedAsHeard;
+
+  /// Shown when cleanup changed nothing
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing to clean up.'**
+  String get dictatedNothingToClean;
+
+  /// The field's current text in the review sheet
+  ///
+  /// In en, this message translates to:
+  /// **'In the field now: “{text}”'**
+  String dictatedInFieldNow(String text);
+
+  /// Review sheet line for an empty field
+  ///
+  /// In en, this message translates to:
+  /// **'The field is empty.'**
+  String get dictatedFieldEmpty;
+
+  /// Adds the dictated text after the field's text
+  ///
+  /// In en, this message translates to:
+  /// **'Append'**
+  String get dictatedAppend;
+
+  /// Replaces the field's text with the dictated text
+  ///
+  /// In en, this message translates to:
+  /// **'Replace'**
+  String get dictatedReplace;
+
+  /// Puts the dictated text into the empty field
+  ///
+  /// In en, this message translates to:
+  /// **'Insert'**
+  String get dictatedInsert;
+
+  /// Screen reader text for words the cleanup removed
+  ///
+  /// In en, this message translates to:
+  /// **'Removed: {words}'**
+  String dictatedRemovedWords(String words);
 }
 
 class _AppLocalizationsDelegate

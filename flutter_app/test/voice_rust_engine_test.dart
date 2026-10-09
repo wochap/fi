@@ -69,11 +69,24 @@ final class FakeNative implements VoiceNative {
   @override
   void prepare(String modelsDir) => prepares++;
 
+  /// The language of the last dictation turn.
+  String? dictationLanguage;
+
+  @override
+  Stream<VoiceTurnEventDto> dictateTurn(
+    String modelsDir,
+    Int16List pcm,
+    String language,
+  ) {
+    dictationLanguage = language;
+    return fillTurn(modelsDir, pcm, null);
+  }
+
   @override
   Stream<VoiceTurnEventDto> fillTurn(
     String modelsDir,
     Int16List pcm,
-    VoiceFillRequestDto request,
+    VoiceFillRequestDto? request,
   ) {
     this.pcm = pcm;
     this.request = request;
@@ -187,6 +200,60 @@ void main() {
       'date',
     ]);
     expect(capture.closed, greaterThan(0));
+  });
+
+  test('a dictation turn returns the cleaned text and removed words', () async {
+    final capture = FakeCapture();
+    final native = FakeNative(
+      events: [
+        const VoiceTurnEventDto(
+          transcript: 'Buy oat milk, no wait, almond milk',
+        ),
+        VoiceTurnEventDto(
+          dictation: VoiceDictationDto(
+            cleaned: 'Buy almond milk',
+            removed: Uint32List.fromList([1, 2, 3, 4]),
+          ),
+        ),
+      ],
+    );
+    final engine = engineWith(capture, native);
+    engine.start(kind: VoiceTurnKind.dictation).listen((_) {});
+    await settle();
+    capture.speak(1600);
+    await settle();
+    String? heard;
+    final result = await engine.stopDictation(
+      'es',
+      onTranscript: (text) => heard = text,
+    );
+    expect(heard, 'Buy oat milk, no wait, almond milk');
+    expect(result.transcript, 'Buy oat milk, no wait, almond milk');
+    expect(result.cleaned, 'Buy almond milk');
+    expect(result.removedWordIndexes, [1, 2, 3, 4]);
+    expect(native.dictationLanguage, 'es');
+    expect(native.pcm!.length, 1600);
+  });
+
+  test('a dictation failure from Rust becomes a VoiceFailure', () async {
+    final engine = engineWith(
+      FakeCapture(),
+      FakeNative(
+        events: [const VoiceTurnEventDto(error: VoiceErrorKindDto.noSpeech)],
+      ),
+    );
+    engine.start(kind: VoiceTurnKind.dictation).listen((_) {});
+    await settle();
+    await expectLater(
+      engine.stopDictation('en'),
+      throwsA(
+        isA<VoiceFailure>().having(
+          (failure) => failure.kind,
+          'kind',
+          VoiceFailureKind.noSpeech,
+        ),
+      ),
+    );
   });
 
   test('capture stops at the time cap and ends the level stream', () async {

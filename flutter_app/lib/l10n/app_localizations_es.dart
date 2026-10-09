@@ -3481,4 +3481,62 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get commonUndo => 'Deshacer';
+
+  @override
+  String dictationMicLabel(String field) {
+    return 'Dictar en $field';
+  }
+
+  @override
+  String get dictationListening => 'Escuchando…';
+
+  @override
+  String dictationListeningAnnounce(String field) {
+    return 'Escuchando para $field';
+  }
+
+  @override
+  String get dictationCleaningUp => 'Limpiando…';
+
+  @override
+  String get dictatedTitle => 'Dictado';
+
+  @override
+  String dictatedInto(String field) {
+    return 'en $field';
+  }
+
+  @override
+  String get dictatedCleaned => 'Limpio';
+
+  @override
+  String get dictatedDefault => 'Predeterminado';
+
+  @override
+  String get dictatedAsHeard => 'Tal cual';
+
+  @override
+  String get dictatedNothingToClean => 'No hay nada que limpiar.';
+
+  @override
+  String dictatedInFieldNow(String text) {
+    return 'Ahora en el campo: «$text»';
+  }
+
+  @override
+  String get dictatedFieldEmpty => 'El campo está vacío.';
+
+  @override
+  String get dictatedAppend => 'Añadir';
+
+  @override
+  String get dictatedReplace => 'Reemplazar';
+
+  @override
+  String get dictatedInsert => 'Insertar';
+
+  @override
+  String dictatedRemovedWords(String words) {
+    return 'Quitado: $words';
+  }
 }

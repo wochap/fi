@@ -50,125 +50,68 @@ String _ordinal(AppLocalizations l, int n) => switch (n) {
   _ => l.voiceOrdinalOther(n),
 };
 
-/// The voice slot at the top of the New record sheet: the one-time tip, first-use setup,
-/// the running turn, its outcome, spoken feedback and the error panels.
-class VoicePanel extends StatefulWidget {
-  const VoicePanel({required this.controller, super.key});
-
-  final VoiceFillController controller;
-
-  @override
-  State<VoicePanel> createState() => _VoicePanelState();
-}
-
-class _VoicePanelState extends State<VoicePanel> {
-  VoiceFillController get c => widget.controller;
-  var _heardOpen = false;
-  NetworkKind? _network;
-  int? _freeBytes;
-  var _offerLoaded = false;
-
-  Future<void> _loadOffer() async {
-    _offerLoaded = true;
-    final network = await c.services.network.current();
-    final free = await c.services.models.freeStorageBytes();
-    if (!mounted) return;
-    setState(() {
-      _network = network;
-      _freeBytes = free;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) => ListenableBuilder(
-    listenable: Listenable.merge([c, c.services.prefs]),
-    builder: (context, _) {
-      final panel = _panel(context);
-      return AnimatedSize(
-        duration: const Duration(milliseconds: 150),
-        alignment: Alignment.topCenter,
-        child: panel == null
-            ? const SizedBox(width: double.infinity)
-            : KeyedSubtree(key: const Key('voice-panel'), child: panel),
-      );
-    },
-  );
-
-  Widget? _panel(BuildContext context) => switch (c.phase) {
-    VoicePhase.idle => c.services.prefs.tipDismissed ? null : _tip(),
-    VoicePhase.primer => _primer(),
-    VoicePhase.offer => _offer(),
-    VoicePhase.downloading => _downloading(),
-    VoicePhase.listening => _listening(),
-    VoicePhase.processing => _processing(),
-    VoicePhase.filled => _filled(),
-    VoicePhase.need => _need(),
-    VoicePhase.exhausted => _exhausted(),
-    VoicePhase.followup => _followup(),
-    VoicePhase.speaking => _speaking(),
-    VoicePhase.error => _error(c.failure ?? VoiceFailureKind.modelLoadFailed),
-  };
-
-  Widget _tip() => Container(
-    key: const Key('voice-tip'),
-    padding: _panelPadding,
-    decoration: _plain(),
-    child: Row(
-      children: [
-        const Icon(FiIcons.sparkle, size: 20, color: Nocturne.accent),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(context.l10n.voiceFillByVoice, style: _title),
-              const SizedBox(height: 2),
-              Text(context.l10n.voiceTipLine, style: _muted(.6)),
-            ],
-          ),
-        ),
-        IconButton(
-          key: const Key('voice-tip-dismiss'),
-          tooltip: context.l10n.voiceDismissTip,
-          onPressed: () => c.services.prefs.dismissTip(),
-          icon: Icon(FiIcons.close, size: 18, color: Nocturne.muted(.6)),
-        ),
-      ],
+Widget _twoButtons({
+  required Key secondaryKey,
+  required String secondary,
+  required VoidCallback onSecondary,
+  required Key primaryKey,
+  required String primary,
+  required VoidCallback onPrimary,
+  IconData? primaryIcon,
+}) => Row(
+  children: [
+    Expanded(
+      child: OutlinedButton(
+        key: secondaryKey,
+        style: OutlinedButton.styleFrom(minimumSize: const Size(0, 48)),
+        onPressed: onSecondary,
+        child: Text(secondary),
+      ),
     ),
-  );
-
-  Widget _twoButtons({
-    required Key secondaryKey,
-    required String secondary,
-    required VoidCallback onSecondary,
-    required Key primaryKey,
-    required String primary,
-    required VoidCallback onPrimary,
-    IconData? primaryIcon,
-  }) => Row(
-    children: [
-      Expanded(
-        child: OutlinedButton(
-          key: secondaryKey,
-          style: OutlinedButton.styleFrom(minimumSize: const Size(0, 48)),
-          onPressed: onSecondary,
-          child: Text(secondary),
-        ),
+    const SizedBox(width: 10),
+    Expanded(
+      child: FilledButton.icon(
+        key: primaryKey,
+        style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
+        onPressed: onPrimary,
+        icon: primaryIcon == null ? null : Icon(primaryIcon, size: 18),
+        label: Text(primary),
       ),
-      const SizedBox(width: 10),
-      Expanded(
-        child: FilledButton.icon(
-          key: primaryKey,
-          style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
-          onPressed: onPrimary,
-          icon: primaryIcon == null ? null : Icon(primaryIcon, size: 18),
-          label: Text(primary),
-        ),
-      ),
-    ],
-  );
+    ),
+  ],
+);
 
-  Widget _primer() => Container(
+Widget _infoRow({
+  required Key key,
+  required IconData icon,
+  required Color iconColor,
+  required String text,
+  String? trailing,
+  required Color trailingColor,
+}) => Row(
+  key: key,
+  children: [
+    Icon(icon, size: 16, color: iconColor),
+    const SizedBox(width: 8),
+    Expanded(child: Text(text, style: const TextStyle(fontSize: 13))),
+    if (trailing != null)
+      Text(trailing, style: TextStyle(fontSize: 12, color: trailingColor)),
+  ],
+);
+
+/// The microphone primer: why voice needs the microphone, before the system prompt.
+class VoicePrimerCard extends StatelessWidget {
+  const VoicePrimerCard({
+    required this.onNotNow,
+    required this.onContinue,
+    super.key,
+  });
+
+  final VoidCallback onNotNow;
+  final VoidCallback onContinue;
+
+  @override
+  Widget build(BuildContext context) => Container(
     key: const Key('voice-primer'),
     padding: const EdgeInsets.all(16),
     decoration: _glow(center: Alignment.topLeft, radius: 1.4),
@@ -204,27 +147,67 @@ class _VoicePanelState extends State<VoicePanel> {
         _twoButtons(
           secondaryKey: const Key('voice-primer-not-now'),
           secondary: context.l10n.voiceNotNow,
-          onSecondary: c.primerNotNow,
+          onSecondary: onNotNow,
           primaryKey: const Key('voice-primer-continue'),
           primary: context.l10n.voiceContinue,
-          onPrimary: c.primerContinue,
+          onPrimary: onContinue,
         ),
       ],
     ),
   );
+}
 
-  Widget _offer() {
-    if (!_offerLoaded) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _loadOffer());
-    }
-    final status = c.services.models.status;
+/// The voice model download offer: the set's size and files, network and free storage.
+class VoiceOfferCard extends StatefulWidget {
+  const VoiceOfferCard({
+    required this.services,
+    required this.onLater,
+    required this.onDownload,
+    this.error,
+    super.key,
+  });
+
+  final VoiceServices services;
+
+  /// Why the last download couldn't start, such as not enough storage.
+  final ModelErrorDto? error;
+  final VoidCallback onLater;
+  final VoidCallback onDownload;
+
+  @override
+  State<VoiceOfferCard> createState() => _VoiceOfferCardState();
+}
+
+class _VoiceOfferCardState extends State<VoiceOfferCard> {
+  NetworkKind? _network;
+  int? _freeBytes;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final network = await widget.services.network.current();
+    final free = await widget.services.models.freeStorageBytes();
+    if (!mounted) return;
+    setState(() {
+      _network = network;
+      _freeBytes = free;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final status = widget.services.models.status;
     final size = formatBytes(status.remainingBytes);
     final language = modelLanguageName(context.l10n, status.speechLanguage);
     final partlyStored = status.files.any(
       (file) => file.state == ModelFileStateDto.ready,
     );
     final mobile = _network == NetworkKind.mobile;
-    final error = c.downloadError;
+    final error = widget.error;
     return Container(
       key: const Key('voice-offer'),
       padding: const EdgeInsets.all(16),
@@ -321,16 +304,111 @@ class _VoicePanelState extends State<VoicePanel> {
           _twoButtons(
             secondaryKey: const Key('voice-offer-later'),
             secondary: context.l10n.modelLater,
-            onSecondary: c.offerLater,
+            onSecondary: widget.onLater,
             primaryKey: const Key('voice-offer-download'),
             primary: context.l10n.modelDownload(size),
             primaryIcon: FiIcons.download,
-            onPrimary: c.offerDownload,
+            onPrimary: widget.onDownload,
           ),
         ],
       ),
     );
   }
+
+  Widget _downloadErrorLine(ModelErrorDto error) {
+    final (title, line) = modelFailureText(
+      context.l10n,
+      widget.services.models.status.error == error
+          ? widget.services.models.status
+          : modelStatusOf(ModelStatusKindDto.failed, error: error),
+    );
+    return Text(
+      context.l10n.modelErrorLine(title, line),
+      key: const Key('voice-download-error'),
+      style: const TextStyle(fontSize: 12, color: Nocturne.error),
+    );
+  }
+}
+
+/// The voice slot at the top of the New record sheet: the one-time tip, first-use setup,
+/// the running turn, its outcome, spoken feedback and the error panels.
+class VoicePanel extends StatefulWidget {
+  const VoicePanel({required this.controller, super.key});
+
+  final VoiceFillController controller;
+
+  @override
+  State<VoicePanel> createState() => _VoicePanelState();
+}
+
+class _VoicePanelState extends State<VoicePanel> {
+  VoiceFillController get c => widget.controller;
+  var _heardOpen = false;
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: Listenable.merge([c, c.services.prefs]),
+    builder: (context, _) {
+      final panel = _panel(context);
+      return AnimatedSize(
+        duration: const Duration(milliseconds: 150),
+        alignment: Alignment.topCenter,
+        child: panel == null
+            ? const SizedBox(width: double.infinity)
+            : KeyedSubtree(key: const Key('voice-panel'), child: panel),
+      );
+    },
+  );
+
+  Widget? _panel(BuildContext context) => switch (c.phase) {
+    VoicePhase.idle => c.services.prefs.tipDismissed ? null : _tip(),
+    VoicePhase.primer => VoicePrimerCard(
+      onNotNow: c.primerNotNow,
+      onContinue: c.primerContinue,
+    ),
+    VoicePhase.offer => VoiceOfferCard(
+      services: c.services,
+      error: c.downloadError,
+      onLater: c.offerLater,
+      onDownload: c.offerDownload,
+    ),
+    VoicePhase.downloading => _downloading(),
+    VoicePhase.listening => _listening(),
+    VoicePhase.processing => _processing(),
+    VoicePhase.filled => _filled(),
+    VoicePhase.need => _need(),
+    VoicePhase.exhausted => _exhausted(),
+    VoicePhase.followup => _followup(),
+    VoicePhase.speaking => _speaking(),
+    VoicePhase.error => _error(c.failure ?? VoiceFailureKind.modelLoadFailed),
+  };
+
+  Widget _tip() => Container(
+    key: const Key('voice-tip'),
+    padding: _panelPadding,
+    decoration: _plain(),
+    child: Row(
+      children: [
+        const Icon(FiIcons.sparkle, size: 20, color: Nocturne.accent),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(context.l10n.voiceFillByVoice, style: _title),
+              const SizedBox(height: 2),
+              Text(context.l10n.voiceTipLine, style: _muted(.6)),
+            ],
+          ),
+        ),
+        IconButton(
+          key: const Key('voice-tip-dismiss'),
+          tooltip: context.l10n.voiceDismissTip,
+          onPressed: () => c.services.prefs.dismissTip(),
+          icon: Icon(FiIcons.close, size: 18, color: Nocturne.muted(.6)),
+        ),
+      ],
+    ),
+  );
 
   Widget _downloadErrorLine(ModelErrorDto error) {
     final (title, line) = modelFailureText(
@@ -360,24 +438,6 @@ class _VoicePanelState extends State<VoicePanel> {
       style: const TextStyle(fontSize: 12, color: Nocturne.error),
     );
   }
-
-  Widget _infoRow({
-    required Key key,
-    required IconData icon,
-    required Color iconColor,
-    required String text,
-    String? trailing,
-    required Color trailingColor,
-  }) => Row(
-    key: key,
-    children: [
-      Icon(icon, size: 16, color: iconColor),
-      const SizedBox(width: 8),
-      Expanded(child: Text(text, style: const TextStyle(fontSize: 13))),
-      if (trailing != null)
-        Text(trailing, style: TextStyle(fontSize: 12, color: trailingColor)),
-    ],
-  );
 
   Widget _downloading() {
     final status = c.services.models.status;
@@ -927,7 +987,6 @@ class _VoicePanelState extends State<VoicePanel> {
   Widget _error(VoiceFailureKind kind) {
     final openSettings = VoiceScope.openSettingsOf(context);
     final l = context.l10n;
-    final copy = voiceErrorCopy(l, kind);
     Widget text(String label, VoidCallback? onPressed, String key) =>
         TextButton(key: Key(key), onPressed: onPressed, child: Text(label));
     Widget primary(String label, VoidCallback? onPressed, String key) =>
@@ -969,6 +1028,37 @@ class _VoicePanelState extends State<VoicePanel> {
         primary(l.voiceSpeakAgain, c.retry, 'voice-error-retry'),
       ],
     };
+    return VoiceErrorCard(
+      kind: kind,
+      actions: actions,
+      extra: kind == VoiceFailureKind.nothingMatched
+          ? switch (c.failedTranscript) {
+              final transcript? => _failedHeard(transcript),
+              null => null,
+            }
+          : null,
+    );
+  }
+}
+
+/// A voice error panel: icon, title, line and actions (mock voice-errors).
+class VoiceErrorCard extends StatelessWidget {
+  const VoiceErrorCard({
+    required this.kind,
+    required this.actions,
+    this.extra,
+    super.key,
+  });
+
+  final VoiceFailureKind kind;
+  final List<Widget> actions;
+
+  /// Shown between the line and the actions.
+  final Widget? extra;
+
+  @override
+  Widget build(BuildContext context) {
+    final copy = voiceErrorCopy(context.l10n, kind);
     return Container(
       key: Key('voice-error-${kind.name}'),
       padding: _panelPadding,
@@ -985,9 +1075,7 @@ class _VoicePanelState extends State<VoicePanel> {
             ],
           ),
           Text(copy.line, style: _muted(.6, 13)),
-          if (kind == VoiceFailureKind.nothingMatched)
-            if (c.failedTranscript case final transcript?)
-              _failedHeard(transcript),
+          ?extra,
           Wrap(
             alignment: WrapAlignment.end,
             crossAxisAlignment: WrapCrossAlignment.center,

@@ -122,6 +122,8 @@ class FiTextInput extends StatelessWidget {
     this.suffixIcon,
     this.style,
     this.onClear,
+    this.trailingAction,
+    this.overlay,
     super.key,
   });
 
@@ -149,6 +151,8 @@ class FiTextInput extends StatelessWidget {
     this.suffixIcon,
     this.style,
     this.onClear,
+    this.trailingAction,
+    this.overlay,
     super.key,
   }) : size = InputSize.small;
 
@@ -189,34 +193,84 @@ class FiTextInput extends StatelessWidget {
   /// empties [controller] and then calls this.
   final VoidCallback? onClear;
 
+  /// An action at the end of the trailing slot, after the clear mark (the dictation mic). It
+  /// brings its own touch target. In a multiline input the slot stays pinned to the top.
+  final Widget? trailingAction;
+
+  /// Shown over the value inside the box, leaving the trailing slot uncovered (the dictation
+  /// listening and processing rows). The value underneath is kept.
+  final Widget? overlay;
+
   @override
   Widget build(BuildContext context) {
     final controller = this.controller;
+    final Widget field;
     if (onClear == null || controller == null) {
-      return _field(context, suffixIcon);
-    }
-    return ValueListenableBuilder(
-      valueListenable: controller,
-      builder: (context, value, _) => _field(
-        context,
-        value.text.isEmpty
-            ? suffixIcon
-            : Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  ClearMark(
+      field = _field(context, _suffix(clear: null));
+    } else {
+      field = ValueListenableBuilder(
+        valueListenable: controller,
+        builder: (context, value, _) => _field(
+          context,
+          _suffix(
+            clear: value.text.isEmpty
+                ? null
+                : ClearMark(
                     key: const Key('input-clear'),
                     onPressed: () {
                       controller.clear();
                       onClear!();
                     },
                   ),
-                  ?suffixIcon,
-                  if (suffixIcon == null) const SizedBox(width: 8),
-                ],
+          ),
+        ),
+      );
+    }
+    final overlay = this.overlay;
+    if (overlay == null) return field;
+    final height = Nocturne.inputHeight(context, size);
+    return Stack(
+      children: [
+        field,
+        Positioned(
+          left: 1,
+          top: 1,
+          right: Nocturne.touchTarget + 1,
+          height: height - 2,
+          child: ColoredBox(
+            color: Nocturne.surface,
+            child: Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: size == InputSize.small ? 9 : 11,
               ),
-      ),
+              child: Align(alignment: Alignment.centerLeft, child: overlay),
+            ),
+          ),
+        ),
+      ],
     );
+  }
+
+  /// `[ClearMark?, suffixIcon?, trailingAction?]`, pinned to the top in a multiline input.
+  Widget? _suffix({required Widget? clear}) {
+    final trailing = trailingAction;
+    if (trailing == null) {
+      if (clear == null) return suffixIcon;
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          clear,
+          ?suffixIcon,
+          if (suffixIcon == null) const SizedBox(width: 8),
+        ],
+      );
+    }
+    final row = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [?clear, ?suffixIcon, trailing],
+    );
+    if (maxLines <= 1) return row;
+    return Align(alignment: Alignment.topRight, widthFactor: 1, child: row);
   }
 
   Widget _field(BuildContext context, Widget? suffixIcon) => TextFormField(
@@ -235,6 +289,9 @@ class FiTextInput extends StatelessWidget {
     focusNode: focusNode,
     minLines: 1,
     maxLines: maxLines,
+    textAlignVertical: maxLines > 1 && trailingAction != null
+        ? TextAlignVertical.top
+        : null,
     style: style,
     strutStyle: _strut,
     decoration: _decoration(

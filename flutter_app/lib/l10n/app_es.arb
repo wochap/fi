@@ -894,5 +894,21 @@
   "recordsCloneOf": "Clon de ‘{title}’",
   "recordsClonedSnack": "{count, plural, =1{1 registro clonado} other{{count} registros clonados}}",
   "recordsActions": "Acciones del registro",
-  "commonUndo": "Deshacer"
+  "commonUndo": "Deshacer",
+  "dictationMicLabel": "Dictar en {field}",
+  "dictationListening": "Escuchando…",
+  "dictationListeningAnnounce": "Escuchando para {field}",
+  "dictationCleaningUp": "Limpiando…",
+  "dictatedTitle": "Dictado",
+  "dictatedInto": "en {field}",
+  "dictatedCleaned": "Limpio",
+  "dictatedDefault": "Predeterminado",
+  "dictatedAsHeard": "Tal cual",
+  "dictatedNothingToClean": "No hay nada que limpiar.",
+  "dictatedInFieldNow": "Ahora en el campo: «{text}»",
+  "dictatedFieldEmpty": "El campo está vacío.",
+  "dictatedAppend": "Añadir",
+  "dictatedReplace": "Reemplazar",
+  "dictatedInsert": "Insertar",
+  "dictatedRemovedWords": "Quitado: {words}"
 }

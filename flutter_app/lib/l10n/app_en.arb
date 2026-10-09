@@ -4676,5 +4676,94 @@
   "commonUndo": "Undo",
   "@commonUndo": {
     "description": "Snackbar action that reverts the last action"
+  },
+  "dictationMicLabel": "Dictate into {field}",
+  "@dictationMicLabel": {
+    "description": "Field dictation mic label",
+    "placeholders": {
+      "field": {
+        "type": "String"
+      }
+    }
+  },
+  "dictationListening": "Listening…",
+  "@dictationListening": {
+    "description": "Field dictation listening state"
+  },
+  "dictationListeningAnnounce": "Listening into {field}",
+  "@dictationListeningAnnounce": {
+    "description": "Announced when field dictation starts listening",
+    "placeholders": {
+      "field": {
+        "type": "String"
+      }
+    }
+  },
+  "dictationCleaningUp": "Cleaning up…",
+  "@dictationCleaningUp": {
+    "description": "Field dictation processing state"
+  },
+  "dictatedTitle": "Dictated",
+  "@dictatedTitle": {
+    "description": "Dictated review sheet title"
+  },
+  "dictatedInto": "into {field}",
+  "@dictatedInto": {
+    "description": "Dictated review sheet subtitle",
+    "placeholders": {
+      "field": {
+        "type": "String"
+      }
+    }
+  },
+  "dictatedCleaned": "Cleaned",
+  "@dictatedCleaned": {
+    "description": "The cleaned dictation version"
+  },
+  "dictatedDefault": "Default",
+  "@dictatedDefault": {
+    "description": "Tag on the default dictation version"
+  },
+  "dictatedAsHeard": "As heard",
+  "@dictatedAsHeard": {
+    "description": "The raw dictation version"
+  },
+  "dictatedNothingToClean": "Nothing to clean up.",
+  "@dictatedNothingToClean": {
+    "description": "Shown when cleanup changed nothing"
+  },
+  "dictatedInFieldNow": "In the field now: “{text}”",
+  "@dictatedInFieldNow": {
+    "description": "The field's current text in the review sheet",
+    "placeholders": {
+      "text": {
+        "type": "String"
+      }
+    }
+  },
+  "dictatedFieldEmpty": "The field is empty.",
+  "@dictatedFieldEmpty": {
+    "description": "Review sheet line for an empty field"
+  },
+  "dictatedAppend": "Append",
+  "@dictatedAppend": {
+    "description": "Adds the dictated text after the field's text"
+  },
+  "dictatedReplace": "Replace",
+  "@dictatedReplace": {
+    "description": "Replaces the field's text with the dictated text"
+  },
+  "dictatedInsert": "Insert",
+  "@dictatedInsert": {
+    "description": "Puts the dictated text into the empty field"
+  },
+  "dictatedRemovedWords": "Removed: {words}",
+  "@dictatedRemovedWords": {
+    "description": "Screen reader text for words the cleanup removed",
+    "placeholders": {
+      "words": {
+        "type": "String"
+      }
+    }
   }
 }
