@@ -79,7 +79,7 @@ While the model downloads, the panel SHALL show a compact card: a title, a pause
 ### Requirement: Mic button states
 The mic button SHALL present its state by icon and label, not by color alone:
 - Idle: an outlined accent circle with a microphone, labelled "Fill by voice".
-- Ready: an accent-900 fill with a halo, labelled "Answer by voice". It is used while the panel asks for missing fields.
+- Ready: a fill in the accent fill role with a halo, labelled "Answer by voice". It is used while the panel asks for missing fields.
 - Listening: a stop icon with a glow, labelled "Stop listening".
 - Processing: a progress ring with a dots icon, labelled "Processing speech" and busy.
 - Downloading: a percentage ring with a download icon, labelled "Voice model downloading, N percent".
@@ -141,7 +141,7 @@ The draft SHALL then be validated through the existing Rust draft validation. Af
 - **THEN** amount is not changed
 
 ### Requirement: Voice field markers and evidence
-A field filled by voice SHALL show the Voice chip in its label row, an accent-900 tint and an accent-700 border on its control. Tapping the chip SHALL open a "Heard" popover under the label with the transcript and the evidence words highlighted, plus "Clear field" and "Done". "Clear field" SHALL empty the field and remove its marker. When the user changes a voice-filled field by hand, its marker SHALL be removed and the field SHALL count as typed. A defaulted field SHALL show the Default marker, and a field the user typed SHALL show no marker.
+A field filled by voice SHALL show the Voice chip in its label row, a tint in the accent fill role and a border in the accent edge role on its control. Tapping the chip SHALL open a "Heard" popover under the label with the transcript and the evidence words highlighted, plus "Clear field" and "Done". "Clear field" SHALL empty the field and remove its marker. When the user changes a voice-filled field by hand, its marker SHALL be removed and the field SHALL count as typed. A defaulted field SHALL show the Default marker, and a field the user typed SHALL show no marker.
 
 #### Scenario: Evidence popover
 - **WHEN** the user taps the Voice chip on amount after “Lunch at Nando's, twelve fifty, food, yesterday”

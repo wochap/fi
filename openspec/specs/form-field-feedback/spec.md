@@ -5,15 +5,15 @@ TBD: Define how Flutter forms place Rust validation issues under fields or in a 
 ## Requirements
 
 ### Requirement: Errors placed under their field
-When a validation issue names exactly one field, Flutter SHALL show its message directly below that field's input. The message text and its warning icon SHALL use the theme's red error color, the same color as the form-level slot, never a near-white or accent tone. When one field has several issues, each issue SHALL be shown on its own line below that input, all of them, with no bullets or list markers.
+When a validation issue names exactly one field, Flutter SHALL show its message directly below that field's input. The message text and its warning icon SHALL use the theme's danger status color, the same color as the form-level slot, never a near-white or accent tone. When one field has several issues, each issue SHALL be shown on its own line below that input, all of them, with no bullets or list markers.
 
 #### Scenario: One issue on one field
 - **WHEN** the user saves a record whose Title is longer than the allowed 40 characters
 - **THEN** "Must be 1–40 characters" appears below the Title input and nowhere else
 
-#### Scenario: Message is red
+#### Scenario: Message is in the danger color
 - **WHEN** a field shows a validation issue
-- **THEN** its message text and warning icon are drawn in the theme's error color (`Nocturne.error`)
+- **THEN** its message text and warning icon are drawn in the theme's danger color, `#f38ba8` in the dark theme
 
 #### Scenario: Several issues on one field
 - **WHEN** a field has three issues
@@ -77,11 +77,11 @@ Live validation of record forms SHALL use the Rust dry-run validation query, so 
 - **THEN** Save remains enabled, and pressing it shows "Choose a saved query." under the query selector
 
 ### Requirement: Required field marker
-Every input whose value is required SHALL show an `*` after its label in the `accent300` color, and SHALL expose "required" to assistive technologies. A form with at least one marked input SHALL show a single "* required" legend line. A required field that has a default value SHALL NOT be marked.
+Every input whose value is required SHALL show an `*` after its label in the accent text role, and SHALL expose "required" to assistive technologies. A form with at least one marked input SHALL show a single "* required" legend line. A required field that has a default value SHALL NOT be marked.
 
 #### Scenario: Required text field
 - **WHEN** a schema field is required and has no default
-- **THEN** its input label reads "Title *" with the asterisk in `accent300`, and a screen reader announces it as required
+- **THEN** its input label reads "Title *" with the asterisk in the accent text role, and a screen reader announces it as required
 
 #### Scenario: Required with default
 - **WHEN** a schema field is required and has a default value
