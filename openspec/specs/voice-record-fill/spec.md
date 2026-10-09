@@ -193,6 +193,8 @@ Errors SHALL replace the voice panel at the top of the sheet, keep the form usab
 
 Each panel SHALL use its own icon. In every case the form's values SHALL be kept.
 
+When the failed turn produced a transcript, the Nothing matched panel SHALL show, between its line and its actions, a read-only "Heard" block (mock voice-errors): the label "Heard" ("Escuchado" in Spanish) with the sparkle icon, styled like the Heard disclosure, and the turn's transcript in the voice language's quotes, “…” in English and «…» in Spanish. The block SHALL NOT be editable and SHALL offer no action of its own. When the failed turn produced no transcript, the Nothing matched panel SHALL show no Heard block and SHALL otherwise be unchanged. The transcript shown SHALL follow the rules of "Audio stays on the device": it is held only in memory and SHALL be discarded when the panel is dismissed, when Try again starts a new turn, and when the sheet closes. No other error panel SHALL show a transcript.
+
 #### Scenario: App goes to background
 - **WHEN** the app goes to the background while listening
 - **THEN** recording stops, the captured audio is discarded, and on return the panel shows "Recording stopped" with "Speak again"
@@ -200,6 +202,22 @@ Each panel SHALL use its own icon. In every case the form's values SHALL be kept
 #### Scenario: Permission permanently denied
 - **WHEN** the microphone permission is denied and the user taps the mic
 - **THEN** the "Microphone access is off" panel shows, and "Open settings" opens the app's Android settings page
+
+#### Scenario: Nothing matched shows what was heard
+- **WHEN** the voice language is English and a turn transcribed as "a mount twelve fifty" fills no field
+- **THEN** the panel shows "Nothing matched", its line, a Heard block reading “a mount twelve fifty”, and Try again, and every field keeps its value
+
+#### Scenario: Spanish quotes
+- **WHEN** the voice language is Spanish and a turn transcribed as "un monte doce cincuenta" fills no field
+- **THEN** the Heard block is labelled "Escuchado" and reads «un monte doce cincuenta»
+
+#### Scenario: Nothing matched without a transcript
+- **WHEN** a turn fails as nothing matched before any transcript exists
+- **THEN** the Nothing matched panel shows its title, line and Try again with no Heard block
+
+#### Scenario: Transcript discarded on retry
+- **WHEN** the Nothing matched panel shows a Heard block and the user taps Try again
+- **THEN** the new turn starts listening and the previous transcript is no longer held by the sheet
 
 ### Requirement: Audio stays on the device
 Captured audio and transcripts SHALL be processed only on the device. Audio SHALL be held only in memory for the current turn and discarded when the turn ends, is cancelled, or fails. Audio and transcripts MUST NOT be written to disk, logs, diagnostics or synced data. Transcripts SHALL be kept only in the open sheet for the Heard disclosure and evidence, and discarded when the sheet closes.
