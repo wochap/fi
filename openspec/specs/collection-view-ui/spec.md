@@ -179,3 +179,78 @@ Every string of the views UI SHALL exist in English and Spanish with the same ke
 #### Scenario: Spanish select all
 - **WHEN** the app language is Spanish and "Headaches" shows 31 records in selection mode
 - **THEN** the action reads "Seleccionar los 31"
+
+### Requirement: Grouping in the editor and the view line
+The edit-view editor SHALL add a **Group by** section after Sort, offering None, any single-choice field, any yes/no field, or any Date or DateTime field with Day, Week or Month. Multi-option Choices fields SHALL NOT be offered. A grouping change SHALL make the view modified like any other change. When the selected view groups, the view line SHALL add "Group:" with the field and, for dates, the period.
+
+#### Scenario: Group line
+- **WHEN** "Headaches" groups by start at by Month
+- **THEN** the view line adds "Group: start at · month"
+
+#### Scenario: Multi-option Choices not offered for grouping
+- **WHEN** the Group by picker is opened on a collection with a "tags" field
+- **THEN** "tags" is not in the list
+
+### Requirement: Grouped record list
+When the selected view groups, the records SHALL be shown under section headers in group order. Each header reads the group label and its count, for example "October 2026 · 6". Group labels SHALL be:
+- Day: the localized date;
+- Week: "Week of <localized Monday date>";
+- Month: the localized month and year;
+- single Choice: the option label;
+- Boolean: Yes or No;
+- no value: "No <field>".
+
+Each header SHALL collapse and expand its group on tap, and SHALL be exposed as an expandable control with its expanded state. Collapsed groups SHALL be remembered for the selected view until the app closes. Select all SHALL include records in collapsed groups. At 720px and wider the grouped rows SHALL stay in the record table under full-width header rows that do not scroll sideways with the columns.
+
+#### Scenario: Collapse September
+- **WHEN** "Headaches" is grouped by month and the user taps "September 2026 · 14"
+- **THEN** its 14 records are hidden, the header stays with its count, and October's records stay visible
+
+#### Scenario: Select all includes collapsed groups
+- **WHEN** September is collapsed in "Headaches" and the user presses "Select all 31"
+- **THEN** 31 records are selected, including September's 14
+
+### Requirement: Sortable table headers
+At 720px and wider each record-table column header SHALL be a sort control.
+- Clicking the header of the primary sort key SHALL flip its direction.
+- Clicking any other orderable column SHALL make that field the only sort key, with its default direction: newest first for Date and DateTime, A→Z for Text, high first for numbers and Duration, option order for single Choice, yes first for Boolean.
+- Multi-option Choices headers SHALL NOT be sort controls.
+- The headers of sort keys SHALL show ↑ or ↓, and keys after the first SHALL also show their position.
+- A header click SHALL modify the selected view like any other change.
+- Sortable headers SHALL be exposed with their sort state.
+
+#### Scenario: Header click
+- **WHEN** All is selected and the user clicks the "level" header
+- **THEN** the table sorts by level high first, the header shows ↓, and All shows the modified dot
+
+### Requirement: Incomplete records hidden by the view
+The incomplete-records status line SHALL count only the incomplete records the selected view shows. When the view hides incomplete records, a muted second line SHALL read "N more in other views · Show", with N the number hidden, computed from the collection's full record list. When the view shows none but hides some, the status line SHALL show only that second line. Show SHALL select All.
+
+#### Scenario: Incomplete hidden
+- **WHEN** "pains" has 3 incomplete records and "Headaches" shows 1 of them
+- **THEN** the status line reads "1 record is missing a required field" with its finish prompt, and "2 more in other views · Show"
+
+### Requirement: Clones hidden by the view
+A clone made while a view is selected can create records the view hides, for example a record saved from the Clone editor after its values were changed, or a copy the filter no longer matches. The feedback SHALL then read "Cloned · hidden by <view>" for one record, or "Cloned N records · hidden by <view>" when every created record is hidden, or "Cloned N records · M hidden by <view>" when only some are. It SHALL carry Show and Undo. Show SHALL select All. Undo SHALL delete exactly the created records, as for a batch clone, including a record saved from the Clone editor. When the view hides no created record, the ordinary clone feedback applies. The clone badge SHALL survive the view hiding the record, because badges are kept against the collection's full record list.
+
+#### Scenario: Clone hidden by filter
+- **WHEN** "Headaches" is selected, the user opens Clone from a record's editor, changes type to stomach and saves
+- **THEN** the feedback reads "Cloned · hidden by Headaches" with Show and Undo, and Show selects All with the new record badged
+
+#### Scenario: Undo a hidden clone
+- **WHEN** the user presses Undo on "Cloned · hidden by Headaches"
+- **THEN** the record saved from the Clone editor is deleted and no other record changes
+
+### Requirement: New records hidden by the view
+When the user saves a new record (not a clone) that the selected view hides, the feedback SHALL read "Saved · hidden by <view>" with a Show action and no Undo. Show SHALL select All. A new record the view shows SHALL get no extra feedback.
+
+#### Scenario: New stomach record in Headaches
+- **WHEN** "Headaches" is selected and the user creates a record with type stomach
+- **THEN** the feedback reads "Saved · hidden by Headaches" with Show, and Show selects All with the new record listed
+
+### Requirement: Views extras copy in both languages
+Every string added by grouping, sortable headers, hidden-record feedback and the export outcome SHALL exist in English and Spanish with the same keys, and SHALL fit Spanish text about 30% longer without clipping at 360px.
+
+#### Scenario: Spanish hidden incomplete line
+- **WHEN** the app language is Spanish and the view hides 2 incomplete records
+- **THEN** the second status line is shown in Spanish with the count 2 and a Show action

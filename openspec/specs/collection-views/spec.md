@@ -118,3 +118,49 @@ A sort clause that no longer resolves to an orderable field SHALL NOT break the 
 #### Scenario: Sort field becomes multi-option
 - **WHEN** a view sorts by "type" and "type" is changed from single to multi-option Choices
 - **THEN** the view is degraded, not broken, and its effective sort no longer contains "type"
+
+### Requirement: View grouping
+A view body MAY hold one grouping. A grouping SHALL reference one active source field of type single Choice, Boolean, Date or DateTime. A Date or DateTime grouping SHALL carry one period of Day, Week or Month, and any other grouping SHALL carry no period. A multi-option Choices field SHALL NOT be a grouping field. A local create or body update with an invalid grouping SHALL fail with the validation code `view_grouping` and write nothing.
+
+Executing a grouping view SHALL also return the ordered list of groups, each with its typed key, its count and its slice of the ordered ids. Within a group, records SHALL keep view order. Group order SHALL be:
+- Single Choice: the options' stored position in the field's option order, active and removed options alike, the same order used to sort by that field. A removed option's group SHALL carry its last label. When the view's first sort clause is that field descending, the order is reversed.
+- Boolean: Yes before No, reversed when the first sort clause is that field ascending.
+- Date and DateTime buckets: newest first, unless the view's first sort clause is that field ascending, in which case oldest first.
+- The group of records with no value: always last.
+
+A grouping that no longer validates, because its field was deleted or changed to multi-option Choices, SHALL make the view broken with a diagnostic naming the field.
+
+#### Scenario: Grouped by month
+- **WHEN** "Headaches" groups by "start at" by Month and sorts by "start at" descending, with 6 headaches in October 2026 and 14 in September 2026 in the device time zone
+- **THEN** the groups are October 2026 with 6 ids, then September 2026 with 14 ids, each slice in descending start order
+
+#### Scenario: Grouped by single choice
+- **WHEN** All is changed to group by "type", whose options are headache, stomach, migraine in that order, and two records have no type
+- **THEN** the groups are headache, stomach, migraine, then the no-value group with the two records
+
+#### Scenario: Removed option keeps its place
+- **WHEN** a view groups by "type", stomach has been removed, and some records still hold stomach
+- **THEN** the stomach group appears between headache and migraine under the label "stomach"
+
+#### Scenario: Reject grouping by Choices
+- **WHEN** a view groups by "tags"
+- **THEN** validation fails with the code `view_grouping`
+
+#### Scenario: Grouping field becomes multi-option
+- **WHEN** a view groups by "type" and "type" is changed from single to multi-option Choices
+- **THEN** the view is listed as broken with a diagnostic naming "type"
+
+### Requirement: Date grouping uses the device time zone
+Grouping a DateTime field SHALL bucket each value by its calendar day in the device's current IANA time zone, read by Rust when the view executes, falling back to UTC when the zone cannot be determined. Week buckets SHALL start on Monday. Date values SHALL be bucketed as stored, without zone conversion. The time zone SHALL NOT be stored in the view, so two devices in different zones MAY group the same instant differently. When Rust falls back to UTC, group headers and the dates printed on cards and rows SHALL agree, so the app SHALL format record dates in the same zone the execution used, which the execution result SHALL report.
+
+#### Scenario: Late-night record
+- **WHEN** a record starts at 2026-10-01 03:30 UTC and the device is in America/Bogota (UTC−5)
+- **THEN** grouping by Day places it under 30 September 2026, and a device in UTC places it under 1 October 2026
+
+#### Scenario: Week across a daylight-saving change
+- **WHEN** a device in Europe/Madrid groups by Week records on Saturday 24 and Monday 26 October 2026, across the end of summer time
+- **THEN** both records land in their own Monday-starting weeks, 19 October and 26 October 2026
+
+#### Scenario: Zone unknown
+- **WHEN** the device time zone cannot be determined and a record starts at 2026-10-01 03:30 UTC
+- **THEN** the record is grouped under 1 October 2026 and its card shows 1 October 2026

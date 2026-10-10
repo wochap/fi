@@ -177,22 +177,26 @@ A Date value SHALL be a calendar day without a timezone, stored as a signed coun
 - **THEN** the stored value is the instant 2026-09-25 04:00 UTC, and a device in UTC+9 shows 2026-09-25 13:00
 
 ### Requirement: Structure-only collection cloning
-The application core SHALL provide a clone command that creates a new active collection from an existing active collection. The clone SHALL copy the source's active field definitions, active enum options, active computed fields, active saved queries and active widgets, and MUST NOT copy any record. Tombstoned fields, enum options, computed fields, queries and widgets MUST NOT be copied. The clone SHALL take the name supplied with the command, validated by the same rules as collection creation, and SHALL copy the source description. Field, enum option, computed field, query and widget order metadata SHALL be preserved.
+The application core SHALL provide a clone command that creates a new active collection from an existing active collection. The clone SHALL copy the source's active field definitions, active enum options, active computed fields, active saved queries, active widgets and active saved views, and MUST NOT copy any record. Tombstoned fields, enum options, computed fields, queries, widgets and views MUST NOT be copied. The clone SHALL take the name supplied with the command, validated by the same rules as collection creation, and SHALL copy the source description. Field, enum option, computed field, query, widget and view order metadata SHALL be preserved.
 
-Every cloned entity SHALL receive a fresh UUIDv7 identity. Every reference inside cloned definitions SHALL be rewritten to the fresh identities: source and computed field references in expressions (filters, grouping, sorting, aggregations, series and category expressions, record-set field lists, computed-field expressions), enum option constants in expressions, enum option defaults on fields, widget query references, and the owning collection identity on computed fields, queries and widgets. The source collection MUST NOT be modified.
+Every cloned entity SHALL receive a fresh UUIDv7 identity. Every reference inside cloned definitions SHALL be rewritten to the fresh identities: source and computed field references in expressions (filters, grouping, sorting, aggregations, series and category expressions, record-set field lists, computed-field expressions, and view filters, sort keys and grouping fields), enum option constants in expressions, enum option defaults on fields, widget query references, and the owning collection identity on computed fields, queries, widgets and views. The source collection MUST NOT be modified.
 
-The clone SHALL be applied as exactly one Automerge change under exactly one HLC stamp with exactly one projection pass and one data-changed notification. If validation of any cloned definition fails, or the source collection is missing or deleted, the command SHALL return a typed error and MUST NOT write to Automerge or the projection.
+The clone SHALL be applied as exactly one Automerge change under exactly one HLC stamp with exactly one projection pass and one data-changed notification. If validation of any cloned definition fails, or the source collection is missing or deleted, the command SHALL return a typed error and MUST NOT write to Automerge or the projection. A saved view that is broken in the source SHALL NOT be copied and SHALL NOT fail the clone; the command's result SHALL name the skipped views. A degraded view SHALL be copied with its effective sort, that is, without the sort clauses that no longer resolve.
 
 #### Scenario: Clone a populated collection
-- **WHEN** a user clones a collection that has 3 fields, 2 computed fields, 2 saved queries, 2 widgets and 40 records, giving the name "Migraine"
-- **THEN** a new active collection named "Migraine" exists with 3 fields, 2 computed fields, 2 saved queries, 2 widgets and 0 records, and the source collection still has 40 records
+- **WHEN** a user clones a collection that has 3 fields, 2 computed fields, 2 saved queries, 2 widgets, 2 saved views and 40 records, giving the name "Migraine"
+- **THEN** a new active collection named "Migraine" exists with 3 fields, 2 computed fields, 2 saved queries, 2 widgets, 2 saved views and 0 records, and the source collection still has 40 records
 
 #### Scenario: Identities and references are fresh
 - **WHEN** a collection whose widget references a query whose filter compares an enum field to an option constant is cloned
 - **THEN** no identity in the clone equals any identity in the source, the cloned widget references the cloned query, the cloned query references the cloned field and the cloned option, and evaluating the cloned query against the clone succeeds with no dangling-reference diagnostic
 
+#### Scenario: Views are remapped
+- **WHEN** a collection whose view "Headaches" filters "type has any of {headache}", sorts by "start at" and groups by "start at" by month is cloned
+- **THEN** the cloned view references the cloned "type" field, the cloned headache option and the cloned "start at" field, and executing it against the clone succeeds
+
 #### Scenario: Tombstones are skipped
-- **WHEN** the source has a removed field, a removed enum option and a removed widget
+- **WHEN** the source has a removed field, a removed enum option, a removed widget and a removed view
 - **THEN** the clone contains none of them and its active entities keep their relative order
 
 #### Scenario: Peer receives the clone
@@ -202,6 +206,14 @@ The clone SHALL be applied as exactly one Automerge change under exactly one HLC
 #### Scenario: Invalid clone writes nothing
 - **WHEN** the clone name is empty or the source collection is deleted
 - **THEN** the command returns a typed validation error and neither Automerge nor the projection changes and no data-changed notification is emitted
+
+#### Scenario: Broken view skipped
+- **WHEN** a collection whose view "Old scale" filters on a deleted field is cloned
+- **THEN** the clone succeeds without "Old scale", its other views are copied, and the result names "Old scale" as skipped
+
+#### Scenario: Degraded view cloned with its effective sort
+- **WHEN** a collection whose view sorts by the deleted field "level" and then by "start at" is cloned
+- **THEN** the cloned view sorts by "start at" only and executes without a diagnostic
 
 ### Requirement: Duration text grammar
 The core SHALL define one text grammar for durations and expose parsing and formatting to Flutter. A duration text SHALL be an optional sign (`-`, `−` or `+`) followed by one or more parts, each a whole number and a unit — `h`, `m` or `min`, `s` or `sec`, `ms` — in any order, each unit at most once, with optional spaces between parts. Units SHALL be case-insensitive. The value SHALL be the signed sum in milliseconds and SHALL be rejected when it overflows a signed 64-bit integer, when a unit repeats, when a part has no unit, or when the text is empty. Formatting SHALL produce the canonical short form with units in the order h, m, s, ms, omitting zero parts (for example "1h 30m", "-45s", "0s" for zero), and parsing a formatted value SHALL return the same number.
