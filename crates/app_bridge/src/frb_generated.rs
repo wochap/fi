@@ -5315,6 +5315,7 @@ impl SseDecode for crate::api::models::ExpressionKindDto {
             9 => crate::api::models::ExpressionKindDto::IsNotNull,
             10 => crate::api::models::ExpressionKindDto::Abs,
             11 => crate::api::models::ExpressionKindDto::StartOfCurrent,
+            12 => crate::api::models::ExpressionKindDto::RecordCreatedAt,
             _ => unreachable!("Invalid variant for ExpressionKindDto: {}", inner),
         };
     }
@@ -8870,6 +8871,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::models::ExpressionKindDto {
             Self::IsNotNull => 9.into_dart(),
             Self::Abs => 10.into_dart(),
             Self::StartOfCurrent => 11.into_dart(),
+            Self::RecordCreatedAt => 12.into_dart(),
             _ => unreachable!(),
         }
     }
@@ -11404,6 +11406,7 @@ impl SseEncode for crate::api::models::ExpressionKindDto {
                 crate::api::models::ExpressionKindDto::IsNotNull => 9,
                 crate::api::models::ExpressionKindDto::Abs => 10,
                 crate::api::models::ExpressionKindDto::StartOfCurrent => 11,
+                crate::api::models::ExpressionKindDto::RecordCreatedAt => 12,
                 _ => {
                     unimplemented!("");
                 }

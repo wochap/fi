@@ -401,6 +401,7 @@ pub enum ExpressionKindDto {
     IsNotNull,
     Abs,
     StartOfCurrent,
+    RecordCreatedAt,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1671,21 +1672,9 @@ impl From<app_core::RecordView> for RecordDto {
                 .collect(),
             valid: value.valid,
             diagnostics: value.diagnostics.into_iter().map(Into::into).collect(),
-            created_at_ms: uuid_v7_millis(value.record.id.as_uuid()),
+            created_at_ms: app_core::uuid_v7_millis(value.record.id.as_uuid()),
         }
     }
-}
-
-/// The Unix-millisecond timestamp embedded in a UUIDv7, or `None` for any other version.
-pub(crate) fn uuid_v7_millis(id: uuid::Uuid) -> Option<i64> {
-    if id.get_version_num() != 7 {
-        return None;
-    }
-    let (seconds, nanos) = id.get_timestamp()?.to_unix();
-    i64::try_from(seconds)
-        .ok()?
-        .checked_mul(1000)?
-        .checked_add(i64::from(nanos / 1_000_000))
 }
 
 impl From<DomainKind> for DomainKindDto {
@@ -1882,7 +1871,7 @@ mod tests {
 
     #[test]
     fn creation_time_comes_from_a_v7_id_only() {
-        use super::uuid_v7_millis;
+        use app_core::uuid_v7_millis;
         // 2026-09-22T10:15:00.000Z
         let millis: i64 = 1_790_072_100_000;
         let v7 = uuid::Uuid::new_v7(uuid::Timestamp::from_unix(

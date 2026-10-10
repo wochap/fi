@@ -487,6 +487,9 @@ fn encode_node(value: app_core::Expression, nodes: &mut Vec<ExpressionNodeDto>) 
                 app_core::CurrentBoundary::Year => CurrentBoundaryDto::Year,
             });
         }
+        app_core::Expression::RecordCreatedAt => {
+            node.kind = ExpressionKindDto::RecordCreatedAt;
+        }
     }
     let index = u32::try_from(nodes.len()).expect("expression node count fits u32");
     nodes.push(node);
@@ -584,6 +587,7 @@ fn decode_node(
                 CurrentBoundaryDto::Year => app_core::CurrentBoundary::Year,
             },
         },
+        ExpressionKindDto::RecordCreatedAt => app_core::Expression::RecordCreatedAt,
     };
     stack.pop();
     Ok(result)

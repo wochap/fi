@@ -233,6 +233,7 @@ pub fn remap_expression(
         Expression::StartOfCurrent { boundary } => Expression::StartOfCurrent {
             boundary: *boundary,
         },
+        Expression::RecordCreatedAt => Expression::RecordCreatedAt,
     })
 }
 

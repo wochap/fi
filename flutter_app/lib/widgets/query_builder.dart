@@ -40,6 +40,13 @@ enum ChoicesFilterOperator {
     _ => null,
   };
 
+  /// The operators offered for [kind]: a single-choice field holds at most one option, so
+  /// "has all of" is left out for it.
+  static List<ChoicesFilterOperator> offeredFor(FieldTypeKindDto? kind) => [
+    for (final operator in values)
+      if (operator != hasAllOf || kind != FieldTypeKindDto.enum_) operator,
+  ];
+
   String label(AppLocalizations l) => switch (this) {
     hasAnyOf => l.queryOpHasAnyOf,
     hasAllOf => l.queryOpHasAllOf,
@@ -321,7 +328,12 @@ final class QueryBuilderState {
       kind: ExpressionKindDto.field,
       field: FieldReferenceDto(kind: FieldReferenceKindDto.source, id: fieldId),
     );
-    if (field.fieldType.kind == FieldTypeKindDto.enumSet) {
+    if (isChoicesFilterKind(field.fieldType.kind)) {
+      if (!ChoicesFilterOperator.offeredFor(
+        field.fieldType.kind,
+      ).contains(choicesOperator)) {
+        return null;
+      }
       if (choicesOperator.setOperator case final operator?) {
         if (filterOptions.isEmpty) return null;
         return ExpressionDto(
@@ -789,7 +801,7 @@ _ParsedChoicesFilter? _parseChoicesFilter(
     final field = schema.fields
         .where((item) => item.id == reference.id)
         .firstOrNull;
-    return field?.fieldType.kind == FieldTypeKindDto.enumSet ? field : null;
+    return isChoicesFilterKind(field?.fieldType.kind) ? field : null;
   }
 
   if (filter.nodes.length == 2 && filter.root == 1) {
@@ -831,9 +843,19 @@ _ParsedChoicesFilter? _parseChoicesFilter(
     SetOperatorDto.hasNoneOf => ChoicesFilterOperator.hasNoneOf,
     null => null,
   };
-  if (operator == null) return null;
+  if (operator == null ||
+      !ChoicesFilterOperator.offeredFor(
+        field.fieldType.kind,
+      ).contains(operator)) {
+    return null;
+  }
   return (fieldId: field.id, operator: operator, options: value.listValue);
 }
+
+/// Whether a field of [kind] is filtered with the Choices operators: multi-option Choices and
+/// single choice alike.
+bool isChoicesFilterKind(FieldTypeKindDto? kind) =>
+    kind == FieldTypeKindDto.enumSet || kind == FieldTypeKindDto.enum_;
 
 final class _ParsedFilter {
   const _ParsedFilter(this.fieldId, this.operator, this.value);
@@ -1348,17 +1370,20 @@ class _QueryBuilderState extends State<QueryBuilder> {
                 DropdownMenuItem(value: field.id, child: Text(field.name)),
             ],
             onChanged: (value) {
-              final choices =
-                  fields
-                      .where((field) => field.id == value)
-                      .firstOrNull
-                      ?.fieldType
-                      .kind ==
-                  FieldTypeKindDto.enumSet;
+              final kind = fields
+                  .where((field) => field.id == value)
+                  .firstOrNull
+                  ?.fieldType
+                  .kind;
+              final choices = isChoicesFilterKind(kind);
+              final offered = ChoicesFilterOperator.offeredFor(kind);
               _emit(
                 state.copyWith(
                   filterFieldId: value,
                   filterChoices: choices,
+                  choicesOperator: offered.contains(state.choicesOperator)
+                      ? state.choicesOperator
+                      : ChoicesFilterOperator.hasAnyOf,
                   // Options belong to one field, so a new field starts with none picked.
                   filterOptions: const [],
                 ),
@@ -1373,7 +1398,9 @@ class _QueryBuilderState extends State<QueryBuilder> {
               value: state.choicesOperator,
               label: l.queryFilterOperator,
               items: [
-                for (final operator in ChoicesFilterOperator.values)
+                for (final operator in ChoicesFilterOperator.offeredFor(
+                  choicesField.fieldType.kind,
+                ))
                   DropdownMenuItem(
                     value: operator,
                     child: Text(operator.label(l)),

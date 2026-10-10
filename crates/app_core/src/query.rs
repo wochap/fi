@@ -289,6 +289,20 @@ pub enum Expression {
     StartOfCurrent {
         boundary: CurrentBoundary,
     },
+    /// The DateTime embedded in the record's UUIDv7 id, or Null for any other id.
+    RecordCreatedAt,
+}
+
+/// The Unix-millisecond timestamp embedded in a UUIDv7, or `None` for any other version.
+pub fn uuid_v7_millis(id: uuid::Uuid) -> Option<i64> {
+    if id.get_version_num() != 7 {
+        return None;
+    }
+    let (seconds, nanos) = id.get_timestamp()?.to_unix();
+    i64::try_from(seconds)
+        .ok()?
+        .checked_mul(1000)?
+        .checked_add(i64::from(nanos / 1_000_000))
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -702,7 +716,11 @@ fn infer_at(
                     || right.value_type == ValueType::Null,
             })
         }
-        Expression::SetCompare { left, right, .. } => {
+        Expression::SetCompare {
+            operator,
+            left,
+            right,
+        } => {
             let Expression::Field {
                 field: FieldReference::Source(field_id),
             } = &**left
@@ -723,10 +741,17 @@ fn infer_at(
                         "source field was not found or is removed",
                     )
                 })?;
-            if field.field_type != FieldType::EnumSet {
+            let single_allowed = *operator != SetOperator::HasAllOf;
+            if !(field.field_type == FieldType::EnumSet
+                || (single_allowed && field.field_type == FieldType::Enum))
+            {
                 return Err(QueryValidationError::new(
                     child("left"),
-                    "must be a Choices field",
+                    if single_allowed {
+                        "must be a Choices or single-choice field"
+                    } else {
+                        "must be a Choices field"
+                    },
                 ));
             }
             let Expression::Constant {
@@ -802,6 +827,14 @@ fn infer_at(
         Expression::StartOfCurrent { .. } => Err(QueryValidationError::new(
             path,
             "contextual time is not allowed in computed fields",
+        )),
+        Expression::RecordCreatedAt if computed_allowed => Ok(InferredType {
+            value_type: ValueType::DateTime,
+            nullable: true,
+        }),
+        Expression::RecordCreatedAt => Err(QueryValidationError::new(
+            path,
+            "record creation time is not allowed in computed fields",
         )),
     }
 }
@@ -923,10 +956,7 @@ pub fn validate_query(
     }
     for (index, sort) in query.sorting.iter().enumerate() {
         let inferred = infer_expression(&sort.expression, &env, true)?;
-        if matches!(
-            inferred.value_type,
-            ValueType::Boolean | ValueType::Null | ValueType::EnumSet
-        ) {
+        if matches!(inferred.value_type, ValueType::Null | ValueType::EnumSet) {
             return Err(QueryValidationError::new(
                 format!("sorting[{index}]"),
                 "type is not orderable",
@@ -1118,6 +1148,9 @@ pub fn evaluate_expression(
             *boundary,
             context.calendar,
         )?)),
+        Expression::RecordCreatedAt => {
+            Ok(uuid_v7_millis(record.id.as_uuid()).map_or(TypedValue::Null, TypedValue::DateTime))
+        }
     }
 }
 
@@ -1304,9 +1337,14 @@ fn set_compare(
     left: TypedValue,
     right: TypedValue,
 ) -> Result<TypedValue, QueryEvaluationError> {
+    let single;
     let held: &[EnumOptionId] = match &left {
         TypedValue::Null => &[],
         TypedValue::EnumOptionSet { options, .. } => options,
+        TypedValue::Enum(option) => {
+            single = [*option];
+            &single
+        }
         _ => {
             return Err(QueryEvaluationError::InvalidDefinition(
                 "set operand is not a set of options".into(),
@@ -1524,8 +1562,10 @@ pub fn execute_query(
             selected.push(record);
         }
     }
+    let positions = OptionPositions::new(schema);
     selected.sort_by(|a, b| {
-        compare_records(a, b, &query.sorting, &context).unwrap_or_else(|_| a.id.cmp(&b.id))
+        compare_records(a, b, &query.sorting, &context, &positions)
+            .unwrap_or_else(|_| a.id.cmp(&b.id))
     });
     match &query.shape {
         QueryShape::Scalar { aggregation } => {
@@ -1691,6 +1731,7 @@ fn compare_records(
     b: &GenericRecord,
     sorts: &[SortClause],
     context: &EvaluationContext<'_>,
+    positions: &OptionPositions,
 ) -> Result<Ordering, QueryEvaluationError> {
     for sort in sorts {
         let av = evaluate_expression(&sort.expression, a, context)?;
@@ -1698,7 +1739,7 @@ fn compare_records(
         let order = match (&av, &bv) {
             (TypedValue::Null, _) | (_, TypedValue::Null) => null_cmp(&av, &bv, sort.null_order),
             _ => {
-                let order = typed_cmp(&av, &bv).unwrap_or(Ordering::Equal);
+                let order = sort_cmp(&av, &bv, positions);
                 if sort.direction == SortDirection::Descending {
                     order.reverse()
                 } else {
@@ -1711,6 +1752,52 @@ fn compare_records(
         }
     }
     Ok(a.id.cmp(&b.id))
+}
+
+/// Each option's stored position across every Choices field of the schema, removed options
+/// included, built once per execution for sorting single-choice values.
+struct OptionPositions(std::collections::HashMap<EnumOptionId, i64>);
+
+impl OptionPositions {
+    fn new(schema: &CollectionSchema) -> Self {
+        Self(
+            schema
+                .fields
+                .iter()
+                .filter(|field| matches!(field.field_type, FieldType::Enum | FieldType::EnumSet))
+                .flat_map(|field| field.enum_options.iter())
+                .map(|option| (option.id, option.order))
+                .collect(),
+        )
+    }
+
+    fn position(&self, id: &EnumOptionId) -> i64 {
+        self.0.get(id).copied().unwrap_or(i64::MAX)
+    }
+}
+
+/// The sort key of Text: NFD, combining marks removed, then lowercase.
+fn fold_text(value: &str) -> String {
+    use unicode_normalization::{UnicodeNormalization, char::is_combining_mark};
+    value
+        .nfd()
+        .filter(|c| !is_combining_mark(*c))
+        .collect::<String>()
+        .to_lowercase()
+}
+
+/// Sort-only ordering of two non-null values; filter comparisons keep using `typed_cmp`.
+fn sort_cmp(left: &TypedValue, right: &TypedValue, positions: &OptionPositions) -> Ordering {
+    match (left, right) {
+        (TypedValue::Text(a), TypedValue::Text(b)) => {
+            fold_text(a).cmp(&fold_text(b)).then_with(|| a.cmp(b))
+        }
+        (TypedValue::Enum(a), TypedValue::Enum(b)) => positions
+            .position(a)
+            .cmp(&positions.position(b))
+            .then_with(|| a.cmp(b)),
+        _ => typed_cmp(left, right).unwrap_or(Ordering::Equal),
+    }
 }
 
 fn null_cmp(a: &TypedValue, b: &TypedValue, null_order: NullOrder) -> Ordering {
@@ -2080,6 +2167,7 @@ mod tests {
             Expression::StartOfCurrent {
                 boundary: CurrentBoundary::Year,
             },
+            Expression::RecordCreatedAt,
         ];
         for expression in expressions {
             round_trip(&VersionedExpression::new(expression));
@@ -3003,5 +3091,355 @@ mod tests {
             .message
             .contains("incompatible")
         );
+    }
+}
+
+#[cfg(test)]
+mod sort_semantics_tests {
+    use super::*;
+    use crate::{DisplayMetadata, EnumOption, FieldDefinition, ValidationMetadata};
+    use std::collections::BTreeMap;
+
+    fn field(name: &str, field_type: FieldType, order: i64) -> FieldDefinition {
+        FieldDefinition {
+            allow_options_from_records: false,
+            id: FieldId::new(),
+            name: name.into(),
+            field_type,
+            required: false,
+            default: None,
+            default_relative_days: None,
+            validation: ValidationMetadata::default(),
+            display: DisplayMetadata::default(),
+            order,
+            deleted: false,
+            enum_options: vec![],
+        }
+    }
+
+    fn option(label: &str, order: i64, deleted: bool) -> EnumOption {
+        EnumOption {
+            merged_into: None,
+            id: EnumOptionId::new(),
+            label: label.into(),
+            order,
+            deleted,
+        }
+    }
+
+    fn schema(fields: Vec<FieldDefinition>) -> CollectionSchema {
+        CollectionSchema {
+            id: CollectionSchemaId::new(),
+            name: "Log".into(),
+            description: String::new(),
+            deleted: false,
+            fields,
+        }
+    }
+
+    fn record(schema: &CollectionSchema, values: Vec<(FieldId, FieldValue)>) -> GenericRecord {
+        GenericRecord {
+            id: RecordId::new(),
+            collection_id: schema.id,
+            values: values.into_iter().collect::<BTreeMap<_, _>>(),
+            stamps: BTreeMap::new(),
+            deleted: false,
+        }
+    }
+
+    fn source(id: FieldId) -> Expression {
+        Expression::Field {
+            field: FieldReference::Source(id),
+        }
+    }
+
+    fn query(
+        schema: &CollectionSchema,
+        filter: Option<Expression>,
+        sorting: Vec<SortClause>,
+    ) -> CollectionQuery {
+        CollectionQuery {
+            collection_id: schema.id,
+            filter,
+            grouping: None,
+            shape: QueryShape::RecordSet { fields: vec![] },
+            sorting,
+            limit: None,
+            calendar: CalendarPolicy::default(),
+        }
+    }
+
+    fn sort(expression: Expression, direction: SortDirection, null_order: NullOrder) -> SortClause {
+        SortClause {
+            expression,
+            direction,
+            null_order,
+        }
+    }
+
+    fn ids(result: QueryResult) -> Vec<RecordId> {
+        match result {
+            QueryResult::RecordSet { records } => records.into_iter().map(|r| r.id).collect(),
+            other => panic!("expected a record set, got {other:?}"),
+        }
+    }
+
+    fn sorted_texts(values: &[&str]) -> Vec<String> {
+        let text = field("name", FieldType::Text, 0);
+        let schema = schema(vec![text.clone()]);
+        let rows: Vec<_> = values
+            .iter()
+            .map(|value| record(&schema, vec![(text.id, FieldValue::Text((*value).into()))]))
+            .collect();
+        let q = query(
+            &schema,
+            None,
+            vec![sort(
+                source(text.id),
+                SortDirection::Ascending,
+                NullOrder::Last,
+            )],
+        );
+        ids(execute_query(&q, &schema, &[], &rows, 0).unwrap())
+            .into_iter()
+            .map(|id| {
+                let row = rows.iter().find(|row| row.id == id).unwrap();
+                match &row.values[&text.id] {
+                    FieldValue::Text(value) => value.clone(),
+                    _ => unreachable!(),
+                }
+            })
+            .collect()
+    }
+
+    #[test]
+    fn text_sorts_case_and_accent_insensitive_with_code_point_ties() {
+        assert_eq!(
+            sorted_texts(&["banana", "apple", "Apple"]),
+            ["Apple", "apple", "banana"]
+        );
+        assert_eq!(
+            sorted_texts(&["zanahoria", "élite", "edad"]),
+            ["edad", "élite", "zanahoria"]
+        );
+        assert_eq!(sorted_texts(&["item 2", "item 10"]), ["item 10", "item 2"]);
+    }
+
+    #[test]
+    fn text_filter_equal_stays_exact() {
+        let text = field("name", FieldType::Text, 0);
+        let schema = schema(vec![text.clone()]);
+        let rows = vec![
+            record(&schema, vec![(text.id, FieldValue::Text("Apple".into()))]),
+            record(&schema, vec![(text.id, FieldValue::Text("apple".into()))]),
+        ];
+        let filter = Expression::Compare {
+            operator: ComparisonOperator::Equal,
+            left: Box::new(source(text.id)),
+            right: Box::new(Expression::Constant {
+                value: TypedValue::Text("apple".into()),
+            }),
+        };
+        let q = query(&schema, Some(filter), vec![]);
+        assert_eq!(
+            ids(execute_query(&q, &schema, &[], &rows, 0).unwrap()),
+            [rows[1].id]
+        );
+    }
+
+    #[test]
+    fn single_choice_sorts_by_option_order_with_removed_options_in_place() {
+        let mut kind = field("type", FieldType::Enum, 0);
+        // Ids are random, so their order is independent of the option order.
+        kind.enum_options = vec![
+            option("headache", 0, false),
+            option("stomach", 1, true),
+            option("migraine", 2, false),
+        ];
+        let schema = schema(vec![kind.clone()]);
+        let [headache, stomach, migraine] = [0, 1, 2].map(|index| kind.enum_options[index].id);
+        let rows = vec![
+            record(&schema, vec![(kind.id, FieldValue::Enum(migraine))]),
+            record(&schema, vec![]),
+            record(&schema, vec![(kind.id, FieldValue::Enum(stomach))]),
+            record(&schema, vec![(kind.id, FieldValue::Enum(headache))]),
+        ];
+        let q = query(
+            &schema,
+            None,
+            vec![sort(
+                source(kind.id),
+                SortDirection::Ascending,
+                NullOrder::Last,
+            )],
+        );
+        assert_eq!(
+            ids(execute_query(&q, &schema, &[], &rows, 0).unwrap()),
+            [rows[3].id, rows[2].id, rows[0].id, rows[1].id]
+        );
+    }
+
+    #[test]
+    fn boolean_sorts_both_directions_with_null_order() {
+        let flag = field("flag", FieldType::Boolean, 0);
+        let schema = schema(vec![flag.clone()]);
+        let rows = vec![
+            record(&schema, vec![(flag.id, FieldValue::Boolean(true))]),
+            record(&schema, vec![]),
+            record(&schema, vec![(flag.id, FieldValue::Boolean(false))]),
+        ];
+        let run = |direction, null_order| {
+            let q = query(
+                &schema,
+                None,
+                vec![sort(source(flag.id), direction, null_order)],
+            );
+            ids(execute_query(&q, &schema, &[], &rows, 0).unwrap())
+        };
+        assert_eq!(
+            run(SortDirection::Ascending, NullOrder::Last),
+            [rows[2].id, rows[0].id, rows[1].id]
+        );
+        assert_eq!(
+            run(SortDirection::Descending, NullOrder::Last),
+            [rows[0].id, rows[2].id, rows[1].id]
+        );
+        assert_eq!(
+            run(SortDirection::Descending, NullOrder::First),
+            [rows[1].id, rows[0].id, rows[2].id]
+        );
+    }
+
+    #[test]
+    fn multi_option_sort_is_rejected() {
+        let tags = field("tags", FieldType::EnumSet, 0);
+        let schema = schema(vec![tags.clone()]);
+        let q = query(
+            &schema,
+            None,
+            vec![sort(
+                source(tags.id),
+                SortDirection::Ascending,
+                NullOrder::Last,
+            )],
+        );
+        assert!(
+            validate_query(&q, &schema, &[])
+                .unwrap_err()
+                .message
+                .contains("not orderable")
+        );
+    }
+
+    #[test]
+    fn record_created_at_matches_uuid_and_is_query_only() {
+        let schema = schema(vec![]);
+        let context = EvaluationContext {
+            schema: &schema,
+            computed_definitions: &[],
+            now_utc_ms: 0,
+            calendar: &CalendarPolicy::default(),
+        };
+        let v7 = record(&schema, vec![]);
+        assert_eq!(
+            evaluate_expression(&Expression::RecordCreatedAt, &v7, &context).unwrap(),
+            TypedValue::DateTime(uuid_v7_millis(v7.id.as_uuid()).unwrap())
+        );
+        // Record ids are always v7; any other version carries no timestamp, so the node is Null.
+        assert_eq!(
+            uuid_v7_millis(uuid::Uuid::from_u128(
+                0x1234_5678_9abc_4def_8123_4567_89ab_cdef,
+            )),
+            None
+        );
+        let env = TypeEnvironment {
+            schema: &schema,
+            computed: &[],
+        };
+        assert_eq!(
+            infer_expression(&Expression::RecordCreatedAt, &env, true).unwrap(),
+            InferredType {
+                value_type: ValueType::DateTime,
+                nullable: true,
+            }
+        );
+        assert!(infer_expression(&Expression::RecordCreatedAt, &env, false).is_err());
+        let computed = ComputedFieldDefinition {
+            id: ComputedFieldId::new(),
+            collection_id: schema.id,
+            name: "created".into(),
+            declared_type: ValueType::DateTime,
+            nullable: true,
+            expression: VersionedExpression::new(Expression::RecordCreatedAt),
+            order: 0,
+            deleted: false,
+        };
+        assert!(validate_computed_field(&computed, &schema).is_err());
+        let versioned = VersionedExpression::new(Expression::RecordCreatedAt);
+        let decoded: VersionedExpression =
+            serde_json::from_str(&serde_json::to_string(&versioned).unwrap()).unwrap();
+        assert_eq!(decoded.expression().unwrap(), Expression::RecordCreatedAt);
+
+        // Sorting by creation time follows record creation.
+        let later = record(&schema, vec![]);
+        let q = query(
+            &schema,
+            None,
+            vec![sort(
+                Expression::RecordCreatedAt,
+                SortDirection::Descending,
+                NullOrder::Last,
+            )],
+        );
+        let rows = [v7.clone(), later.clone()];
+        let order = ids(execute_query(&q, &schema, &[], &rows, 0).unwrap());
+        let (first, second) = (
+            uuid_v7_millis(v7.id.as_uuid()).unwrap(),
+            uuid_v7_millis(later.id.as_uuid()).unwrap(),
+        );
+        if first == second {
+            assert_eq!(order, [v7.id, later.id]);
+        } else {
+            assert_eq!(order, [later.id, v7.id]);
+        }
+    }
+
+    #[test]
+    fn single_choice_any_of_and_none_of_with_null() {
+        let mut kind = field("type", FieldType::Enum, 0);
+        kind.enum_options = vec![
+            option("headache", 0, false),
+            option("stomach", 1, false),
+            option("migraine", 2, false),
+        ];
+        let schema = schema(vec![kind.clone()]);
+        let [headache, stomach, migraine] = [0, 1, 2].map(|index| kind.enum_options[index].id);
+        let rows = vec![
+            record(&schema, vec![(kind.id, FieldValue::Enum(headache))]),
+            record(&schema, vec![(kind.id, FieldValue::Enum(stomach))]),
+            record(&schema, vec![]),
+        ];
+        let set_filter = |operator| Expression::SetCompare {
+            operator,
+            left: Box::new(source(kind.id)),
+            right: Box::new(Expression::Constant {
+                value: TypedValue::EnumOptionSet {
+                    field: kind.id,
+                    options: vec![headache, migraine],
+                },
+            }),
+        };
+        let run = |operator| {
+            let q = query(&schema, Some(set_filter(operator)), vec![]);
+            ids(execute_query(&q, &schema, &[], &rows, 0).unwrap())
+        };
+        assert_eq!(run(SetOperator::HasAnyOf), [rows[0].id]);
+        let mut none = run(SetOperator::HasNoneOf);
+        none.sort();
+        let mut expected = vec![rows[1].id, rows[2].id];
+        expected.sort();
+        assert_eq!(none, expected);
+        let q = query(&schema, Some(set_filter(SetOperator::HasAllOf)), vec![]);
+        assert!(validate_query(&q, &schema, &[]).is_err());
     }
 }
