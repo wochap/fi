@@ -9,6 +9,7 @@ TrustedDeviceDto _device({
 }) => TrustedDeviceDto(
   deviceId: 'peer',
   friendlyName: 'Peer',
+  announcedName: 'Peer',
   pairedAtMs: 1,
   revoked: revoked,
   connection: connection,

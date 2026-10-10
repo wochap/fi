@@ -220,7 +220,7 @@ async fn local_device_name_matches_the_name_sent_in_the_hello() {
         .find(|record| record.device_id == pair.existing_id())
         .unwrap();
     assert_eq!(
-        seen_by_joining.friendly_name,
+        seen_by_joining.announced_name,
         pair.existing.local_device_name()
     );
     let seen_by_existing = pair
@@ -231,9 +231,104 @@ async fn local_device_name_matches_the_name_sent_in_the_hello() {
         .find(|record| record.device_id == pair.joining_id())
         .unwrap();
     assert_eq!(
-        seen_by_existing.friendly_name,
+        seen_by_existing.announced_name,
         pair.joining.local_device_name()
     );
+    pair.shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn local_name_defaults_validates_and_survives_dataset_reset() {
+    let directory = tempfile::tempdir().unwrap();
+    let policy = LifecyclePolicy::KeepNetworkingInBackground;
+    let (core, _) = open(directory.path(), 78, policy).await;
+    let generated = format!("Fi {}", &core.device_id().unwrap().to_string()[..8]);
+    assert_eq!(core.local_device_name(), generated);
+    assert_eq!(
+        core.set_local_device_name("  Gean's Pixel ").unwrap(),
+        "Gean's Pixel"
+    );
+    assert!(core.set_local_device_name("   ").is_err());
+    assert!(core.set_local_device_name(&"é".repeat(33)).is_err());
+    assert_eq!(core.local_device_name(), "Gean's Pixel");
+    core.create_new_dataset().await.unwrap();
+    core.shutdown().await.unwrap();
+    reset_dataset(
+        directory.path(),
+        Some(&InMemorySecureKeyStore::seeded([78; 32])),
+    )
+    .await
+    .unwrap();
+    let (core, _) = open(directory.path(), 78, policy).await;
+    assert_eq!(core.local_device_name(), "Gean's Pixel");
+    core.shutdown().await.unwrap();
+}
+
+/// Waits until `core` records `peer` with the given announced name.
+async fn wait_announced(core: &AppCore, peer: DeviceId, name: &str) {
+    tokio::time::timeout(Duration::from_secs(15), async {
+        loop {
+            let record = core
+                .trusted_devices()
+                .unwrap()
+                .into_iter()
+                .find(|record| record.device_id == peer)
+                .unwrap();
+            if record.announced_name == name {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap_or_else(|_| panic!("peer never announced {name:?}"));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_rename_reaches_the_peer_on_its_next_session_and_a_nickname_wins() {
+    let pair = paired(79, LifecyclePolicy::KeepNetworkingInBackground).await;
+    pair.joining.set_local_device_name("Gean's Pixel").unwrap();
+    let reconnected = drop_then_reestablish(&pair.existing, pair.joining_id());
+    pair.existing
+        .disconnect_peer(pair.joining_id())
+        .await
+        .unwrap();
+    reconnected.await;
+    wait_announced(&pair.existing, pair.joining_id(), "Gean's Pixel").await;
+    let record = pair
+        .existing
+        .trusted_devices()
+        .unwrap()
+        .into_iter()
+        .find(|record| record.device_id == pair.joining_id())
+        .unwrap();
+    assert_eq!(record.display_name(), "Gean's Pixel");
+    assert_eq!(record.nickname, None);
+
+    assert!(
+        pair.existing
+            .rename_trusted_device(pair.joining_id(), "Work phone")
+            .unwrap()
+    );
+    pair.joining
+        .set_local_device_name("Gean's Pixel 2")
+        .unwrap();
+    let reconnected = drop_then_reestablish(&pair.existing, pair.joining_id());
+    pair.existing
+        .disconnect_peer(pair.joining_id())
+        .await
+        .unwrap();
+    reconnected.await;
+    wait_announced(&pair.existing, pair.joining_id(), "Gean's Pixel 2").await;
+    let record = pair
+        .existing
+        .trusted_devices()
+        .unwrap()
+        .into_iter()
+        .find(|record| record.device_id == pair.joining_id())
+        .unwrap();
+    assert_eq!(record.nickname.as_deref(), Some("Work phone"));
+    assert_eq!(record.display_name(), "Work phone");
     pair.shutdown().await;
 }
 

@@ -319,6 +319,23 @@ pub async fn sync_status_stream(sink: StreamSink<SyncStatusDto>) -> Result<(), B
     Ok(())
 }
 
+/// Names this device; peers learn the name on their next session. Fails
+/// with a validation error for a blank name or one over 64 UTF-8 bytes.
+pub async fn set_local_device_name(name: String) -> Result<LocalDeviceDto, BridgeError> {
+    let core = core().await?;
+    let device_id = core
+        .device_id()
+        .ok_or_else(|| BridgeError::lifecycle("Device networking is unavailable."))?;
+    let pairing_name = core
+        .set_local_device_name(&name)
+        .map_err(BridgeError::from)?;
+    Ok(LocalDeviceDto {
+        device_id: device_id.to_string(),
+        pairing_name,
+    })
+}
+
+/// Sets a trusted device's local nickname; an empty name clears it.
 pub async fn rename_trusted_device(device_id: String, name: String) -> Result<bool, BridgeError> {
     let peer: DeviceId = device_id
         .parse()
@@ -507,7 +524,8 @@ mod tests {
         TrustedDeviceRecord {
             device_id: DeviceId::from_public_key(key.as_bytes()),
             public_key: key,
-            friendly_name: "peer".into(),
+            announced_name: "peer".into(),
+            nickname: None,
             paired_at_ms: 1,
             last_seen_ms: None,
             last_sync_ms: None,

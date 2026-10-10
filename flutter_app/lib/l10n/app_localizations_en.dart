@@ -3705,4 +3705,22 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get choiceNewOptionHint => 'New option';
+
+  @override
+  String get devicesRenameThisDevice => 'Rename this device';
+
+  @override
+  String get devicesNameThisDeviceTitle => 'Name this device';
+
+  @override
+  String get devicesNameThisDeviceSubtitle =>
+      'Other devices see this name when pairing';
+
+  @override
+  String get devicesNameTooLong => 'Use a shorter name (at most 64 bytes).';
+
+  @override
+  String devicesAnnouncesAs(String name) {
+    return 'Announces itself as $name. Clear the name to use that.';
+  }
 }

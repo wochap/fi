@@ -23,6 +23,7 @@ Future<void> pumpUntilFound(WidgetTester tester, Finder finder) async {
 const tablet = TrustedDeviceDto(
   deviceId: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
   friendlyName: 'Tablet',
+  announcedName: 'Tablet',
   pairedAtMs: 1,
   revoked: false,
   connection: PeerConnectionKindDto.connected,
@@ -157,6 +158,7 @@ void main() {
           TrustedDeviceDto(
             deviceId: '$n' * 64,
             friendlyName: 'Peer $n',
+            announcedName: 'Peer $n',
             pairedAtMs: 1,
             revoked: false,
             connection: PeerConnectionKindDto.offline,

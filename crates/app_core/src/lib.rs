@@ -4,6 +4,7 @@ pub mod adapters;
 pub mod application;
 pub mod control;
 pub mod control_message;
+pub mod device_name;
 pub mod diagnostics;
 pub mod discovery;
 pub mod discovery_control;
@@ -46,6 +47,10 @@ pub use control::{
     DiscoveryGroupMetadata, DiscoveryRotationJournal, DiscoveryRotationStage, LocalIdentityRecord,
     NetworkPreferences, PairingJournalRecord, PairingJournalStage, PeerConnectionMetadata,
     PeerTrustRecord, RememberedEndpoint, ResetIntent, TrustState, TrustedDeviceRecord,
+};
+pub use device_name::{
+    DeviceNameError, MAX_DEVICE_NAME_BYTES, generated_device_name, is_generated_device_name,
+    normalize_device_name,
 };
 pub use discovery::{
     Clock, DiscoveredEndpoint, DiscoveryAdvertisement, DiscoveryError, DiscoveryEvent,

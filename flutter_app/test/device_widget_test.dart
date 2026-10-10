@@ -76,6 +76,7 @@ const failedPeerId =
 const failedPeer = TrustedDeviceDto(
   deviceId: failedPeerId,
   friendlyName: 'Phone',
+  announcedName: 'Phone',
   pairedAtMs: 1,
   revoked: false,
   connection: PeerConnectionKindDto.error,
@@ -254,6 +255,7 @@ void diagnosticsTests() {
         const TrustedDeviceDto(
           deviceId: failedPeerId,
           friendlyName: 'Phone',
+          announcedName: 'Phone',
           pairedAtMs: 1,
           revoked: true,
           connection: PeerConnectionKindDto.offline,
@@ -417,6 +419,7 @@ void main() {
           deviceId:
               '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
           friendlyName: 'Tablet',
+          announcedName: 'Tablet',
           pairedAtMs: 1,
           lastSeenMs: now
               .subtract(const Duration(minutes: 30))
@@ -487,6 +490,7 @@ void main() {
           deviceId:
               '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
           friendlyName: 'Tablet',
+          announcedName: 'Tablet',
           pairedAtMs: 1,
           lastSeenMs: clock.now().millisecondsSinceEpoch,
           revoked: false,
@@ -510,6 +514,7 @@ void main() {
           deviceId:
               '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
           friendlyName: 'Tablet',
+          announcedName: 'Tablet',
           pairedAtMs: 1,
           revoked: false,
           connection: PeerConnectionKindDto.connected,
@@ -590,6 +595,7 @@ void main() {
         const TrustedDeviceDto(
           deviceId: 'peer',
           friendlyName: 'Peer',
+          announcedName: 'Peer',
           pairedAtMs: 1,
           lastSeenMs: null,
           lastSyncMs: null,
@@ -613,6 +619,7 @@ void main() {
     bridge.devices[0] = const TrustedDeviceDto(
       deviceId: 'peer',
       friendlyName: 'Peer',
+      announcedName: 'Peer',
       pairedAtMs: 1,
       lastSeenMs: null,
       lastSyncMs: null,
@@ -833,6 +840,7 @@ void main() {
           deviceId:
               '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
           friendlyName: 'Tablet',
+          announcedName: 'Tablet',
           pairedAtMs: 1,
           revoked: false,
           connection: PeerConnectionKindDto.offline,
@@ -841,6 +849,7 @@ void main() {
           deviceId:
               'fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210',
           friendlyName: 'Old phone',
+          announcedName: 'Old phone',
           pairedAtMs: 2,
           revoked: true,
           connection: PeerConnectionKindDto.offline,

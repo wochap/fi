@@ -196,6 +196,26 @@ async fn concurrent_offline_changes_converge_after_fresh_reconnection() {
 }
 
 #[tokio::test]
+async fn both_sides_see_each_others_hello_name() {
+    let (a, b, net_a, net_b, _, _, _, _) = open_pair().await;
+    a.set_local_name("Alpha");
+    b.set_local_name("Gean's Pixel ✓");
+    net_a.connect().await;
+    drive(&net_a, &net_b).await;
+    assert_eq!(
+        b.subscribe_peer_names().borrow().get(&PeerId::from("a")),
+        Some(&"Alpha".to_string())
+    );
+    assert_eq!(
+        a.subscribe_peer_names().borrow().get(&PeerId::from("b")),
+        Some(&"Gean's Pixel ✓".to_string())
+    );
+    net_a.disconnect().await;
+    drive(&net_a, &net_b).await;
+    assert!(b.subscribe_peer_names().borrow().is_empty());
+}
+
+#[tokio::test]
 async fn shutdown_closes_handles_and_repository() {
     let (repo, _, _, _, _, _, _, _) = open_pair().await;
     let root = repo.initialize_new().await.unwrap();
@@ -291,9 +311,10 @@ async fn duplicate_inventory_is_idempotent() {
     raw_peer
         .send(
             &PeerId::from("repo"),
-            Codec::encode(Message::Hello(
-                automerge_repo::protocol::BootstrapMode::Ready(root.id()),
-            ))
+            Codec::encode(Message::Hello {
+                mode: automerge_repo::protocol::BootstrapMode::Ready(root.id()),
+                name: "raw".into(),
+            })
             .unwrap(),
         )
         .await

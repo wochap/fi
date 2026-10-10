@@ -30,12 +30,23 @@ use crate::{
         PeerConnectionMetadata, PeerTrustRecord, RememberedEndpoint, ResetIntent, TrustState,
         TrustedDeviceRecord,
     },
+    device_name::{
+        DeviceNameError, generated_device_name, is_generated_device_name, normalize_device_name,
+    },
     endpoint_memory::{REMEMBER_WRITE_THROTTLE_MS, REMEMBERED_ENDPOINTS_PER_PEER},
     identity::{DeviceId, PublicDeviceKey},
     routing::{ConnectionFailure, PeerConnectionState},
 };
 
-type TrustedDeviceRow = (Vec<u8>, String, i64, Option<i64>, Option<i64>, String);
+type TrustedDeviceRow = (
+    Vec<u8>,
+    Option<String>,
+    String,
+    i64,
+    Option<i64>,
+    Option<i64>,
+    String,
+);
 
 fn storage_error(
     operation: &'static str,
@@ -312,7 +323,7 @@ impl SqliteControlStore {
             ensure_private_dir(parent)
                 .map_err(|e| storage_error("control_open", None, &path, e))?;
         }
-        let connection =
+        let mut connection =
             Connection::open(&path).map_err(|e| storage_error("control_open", None, &path, e))?;
         connection
             .pragma_update(None, "journal_mode", "WAL")
@@ -340,7 +351,8 @@ impl SqliteControlStore {
              ) STRICT;
              CREATE TABLE IF NOT EXISTS trusted_devices (
                 device_id TEXT PRIMARY KEY, public_key BLOB NOT NULL CHECK(length(public_key) = 32),
-                friendly_name TEXT NOT NULL, paired_at_ms INTEGER NOT NULL CHECK(paired_at_ms >= 0),
+                nickname TEXT, announced_name TEXT NOT NULL,
+                paired_at_ms INTEGER NOT NULL CHECK(paired_at_ms >= 0),
                 last_seen_ms INTEGER, last_sync_ms INTEGER,
                 trust_state TEXT NOT NULL CHECK(trust_state IN ('trusted', 'revoked'))
              ) STRICT;
@@ -381,6 +393,8 @@ impl SqliteControlStore {
                 PRIMARY KEY(device_id, address)
              ) STRICT;",
         )
+            .map_err(|e| storage_error("control_open", None, &path, e))?;
+        migrate_device_names(&mut connection)
             .map_err(|e| storage_error("control_open", None, &path, e))?;
         Ok(Self {
             path,
@@ -624,12 +638,13 @@ impl SqliteControlStore {
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(|error| storage_error("trusted_device_store", None, &self.path, error))?;
         transaction.execute(
-            "INSERT INTO trusted_devices(device_id,public_key,friendly_name,paired_at_ms,last_seen_ms,last_sync_ms,trust_state)
-             VALUES(?1,?2,?3,?4,?5,?6,?7)
-             ON CONFLICT(device_id) DO UPDATE SET public_key=excluded.public_key,friendly_name=excluded.friendly_name,
+            "INSERT INTO trusted_devices(device_id,public_key,nickname,announced_name,paired_at_ms,last_seen_ms,last_sync_ms,trust_state)
+             VALUES(?1,?2,?3,?4,?5,?6,?7,?8)
+             ON CONFLICT(device_id) DO UPDATE SET public_key=excluded.public_key,
+             nickname=COALESCE(excluded.nickname,trusted_devices.nickname),announced_name=excluded.announced_name,
              paired_at_ms=MIN(trusted_devices.paired_at_ms,excluded.paired_at_ms),last_seen_ms=excluded.last_seen_ms,
              last_sync_ms=excluded.last_sync_ms,trust_state=excluded.trust_state",
-            params![record.device_id.to_string(), record.public_key.as_bytes().as_slice(), record.friendly_name, paired, seen, sync, record.state.as_str()],
+            params![record.device_id.to_string(), record.public_key.as_bytes().as_slice(), record.nickname, record.announced_name, paired, seen, sync, record.state.as_str()],
         ).map_err(|error| storage_error("trusted_device_store", None, &self.path, error))?;
         transaction.execute(
             "INSERT INTO trusted_peers(device_id,public_key,trust_state,updated_at_ms,last_seen_ms) VALUES(?1,?2,?3,?4,?5)
@@ -656,39 +671,50 @@ impl SqliteControlStore {
         })?;
         let row: Option<TrustedDeviceRow> = connection
             .query_row(
-                "SELECT public_key,friendly_name,paired_at_ms,last_seen_ms,last_sync_ms,trust_state FROM trusted_devices WHERE device_id=?1",
+                "SELECT public_key,nickname,announced_name,paired_at_ms,last_seen_ms,last_sync_ms,trust_state FROM trusted_devices WHERE device_id=?1",
                 [device.to_string()],
-                |row| Ok((row.get(0)?,row.get(1)?,row.get(2)?,row.get(3)?,row.get(4)?,row.get(5)?)),
+                |row| Ok((row.get(0)?,row.get(1)?,row.get(2)?,row.get(3)?,row.get(4)?,row.get(5)?,row.get(6)?)),
             )
             .optional()
             .map_err(|error| storage_error("trusted_device_load", None, &self.path, error))?;
-        row.map(|(key, friendly_name, paired, seen, sync, state)| {
-            let public_key = decode_public_key(key, "trusted_device_load", &self.path)?;
-            if DeviceId::from_public_key(public_key.as_bytes()) != device {
-                return Err(storage_error(
-                    "trusted_device_load",
-                    None,
-                    &self.path,
-                    "device ID/key mismatch",
-                ));
-            }
-            Ok(TrustedDeviceRecord {
-                device_id: device,
-                public_key,
-                friendly_name,
-                paired_at_ms: decode_timestamp(paired, "trusted_device_load", &self.path)?,
-                last_seen_ms: decode_optional_timestamp(seen, "trusted_device_load", &self.path)?,
-                last_sync_ms: decode_optional_timestamp(sync, "trusted_device_load", &self.path)?,
-                state: TrustState::parse(&state).ok_or_else(|| {
-                    storage_error(
+        row.map(
+            |(key, nickname, announced_name, paired, seen, sync, state)| {
+                let public_key = decode_public_key(key, "trusted_device_load", &self.path)?;
+                if DeviceId::from_public_key(public_key.as_bytes()) != device {
+                    return Err(storage_error(
                         "trusted_device_load",
                         None,
                         &self.path,
-                        "malformed trust state",
-                    )
-                })?,
-            })
-        })
+                        "device ID/key mismatch",
+                    ));
+                }
+                Ok(TrustedDeviceRecord {
+                    device_id: device,
+                    public_key,
+                    announced_name,
+                    nickname,
+                    paired_at_ms: decode_timestamp(paired, "trusted_device_load", &self.path)?,
+                    last_seen_ms: decode_optional_timestamp(
+                        seen,
+                        "trusted_device_load",
+                        &self.path,
+                    )?,
+                    last_sync_ms: decode_optional_timestamp(
+                        sync,
+                        "trusted_device_load",
+                        &self.path,
+                    )?,
+                    state: TrustState::parse(&state).ok_or_else(|| {
+                        storage_error(
+                            "trusted_device_load",
+                            None,
+                            &self.path,
+                            "malformed trust state",
+                        )
+                    })?,
+                })
+            },
+        )
         .transpose()
     }
 
@@ -734,20 +760,26 @@ impl SqliteControlStore {
             .collect()
     }
 
+    /// Sets the local nickname, trimmed; an empty or blank name clears it.
+    /// Touches only `nickname`, so it cannot overwrite a name announcement.
     pub fn rename_trusted_device(
         &self,
         device: DeviceId,
         name: &str,
     ) -> Result<bool, StorageError> {
         self.ensure_open("trusted_device_rename")?;
-        if name.trim().is_empty() || name.len() > 64 {
-            return Err(storage_error(
-                "trusted_device_rename",
-                None,
-                &self.path,
-                "friendly name must contain 1..64 bytes",
-            ));
-        }
+        let nickname = match normalize_device_name(name) {
+            Ok(name) => Some(name),
+            Err(DeviceNameError::Empty) => None,
+            Err(error) => {
+                return Err(storage_error(
+                    "trusted_device_rename",
+                    None,
+                    &self.path,
+                    error,
+                ));
+            }
+        };
         self.connection
             .lock()
             .map_err(|_| {
@@ -759,11 +791,83 @@ impl SqliteControlStore {
                 )
             })?
             .execute(
-                "UPDATE trusted_devices SET friendly_name=?1 WHERE device_id=?2",
-                params![name, device.to_string()],
+                "UPDATE trusted_devices SET nickname=?1 WHERE device_id=?2",
+                params![nickname, device.to_string()],
             )
             .map(|changed| changed == 1)
             .map_err(|error| storage_error("trusted_device_rename", None, &self.path, error))
+    }
+
+    /// Records the name a peer announced, touching only `announced_name`.
+    /// Returns `false` without writing when the name is unchanged or the
+    /// device is unknown. The caller validates the name.
+    pub fn record_announced_name(
+        &self,
+        device: DeviceId,
+        name: &str,
+    ) -> Result<bool, StorageError> {
+        self.ensure_open("trusted_device_announce")?;
+        self.connection
+            .lock()
+            .map_err(|_| {
+                storage_error(
+                    "trusted_device_announce",
+                    None,
+                    &self.path,
+                    "connection lock poisoned",
+                )
+            })?
+            .execute(
+                "UPDATE trusted_devices SET announced_name=?1 WHERE device_id=?2 AND announced_name IS NOT ?1",
+                params![name, device.to_string()],
+            )
+            .map(|changed| changed == 1)
+            .map_err(|error| storage_error("trusted_device_announce", None, &self.path, error))
+    }
+
+    /// The name the user gave this installation, if any.
+    pub fn local_display_name(&self) -> Result<Option<String>, StorageError> {
+        self.ensure_open("identity_name_load")?;
+        self.connection
+            .lock()
+            .map_err(|_| {
+                storage_error(
+                    "identity_name_load",
+                    None,
+                    &self.path,
+                    "connection lock poisoned",
+                )
+            })?
+            .query_row(
+                "SELECT display_name FROM local_identity WHERE singleton=1",
+                [],
+                |row| row.get::<_, Option<String>>(0),
+            )
+            .optional()
+            .map(Option::flatten)
+            .map_err(|error| storage_error("identity_name_load", None, &self.path, error))
+    }
+
+    /// Stores this installation's name with its identity. The caller
+    /// validates the name. Returns `false` when no identity is stored.
+    pub fn set_local_display_name(&self, name: &str) -> Result<bool, StorageError> {
+        self.ensure_open("identity_name_store")?;
+        self.connection
+            .lock()
+            .map_err(|_| {
+                storage_error(
+                    "identity_name_store",
+                    None,
+                    &self.path,
+                    "connection lock poisoned",
+                )
+            })?
+            .execute(
+                "UPDATE local_identity SET display_name=?1 WHERE singleton=1",
+                [name],
+            )
+            .map(|changed| changed == 1)
+            .map_err(|error| storage_error("identity_name_store", None, &self.path, error))
     }
 
     /// Touches only the activity timestamps, leaving any `None` unchanged.
@@ -1492,15 +1596,79 @@ fn validate_trusted_device(record: &TrustedDeviceRecord, path: &Path) -> Result<
             "device ID/key mismatch",
         ));
     }
-    if record.friendly_name.trim().is_empty() || record.friendly_name.len() > 64 {
+    let valid = |name: &str| normalize_device_name(name).is_ok_and(|n| n == name);
+    if !valid(&record.announced_name) || record.nickname.as_deref().is_some_and(|n| !valid(n)) {
         return Err(storage_error(
             "trusted_device_store",
             None,
             path,
-            "friendly name must contain 1..64 bytes",
+            "device names must be trimmed and contain 1..64 bytes",
         ));
     }
     Ok(())
+}
+
+fn has_column(connection: &Connection, table: &str, column: &str) -> rusqlite::Result<bool> {
+    connection.query_row(
+        "SELECT EXISTS(SELECT 1 FROM pragma_table_info(?1) WHERE name=?2)",
+        params![table, column],
+        |row| row.get(0),
+    )
+}
+
+/// Upgrades stores created before device names were split into an announced
+/// name and a local nickname. Guarded by column checks, so reopening is a
+/// no-op; one transaction, so an interrupted upgrade leaves the old schema.
+/// If a second migration appears, start a `PRAGMA user_version` here.
+fn migrate_device_names(connection: &mut Connection) -> rusqlite::Result<()> {
+    let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    if !has_column(&transaction, "local_identity", "display_name")? {
+        transaction.execute(
+            "ALTER TABLE local_identity ADD COLUMN display_name TEXT",
+            [],
+        )?;
+    }
+    if !has_column(&transaction, "trusted_devices", "announced_name")? {
+        transaction.execute_batch(
+            "CREATE TABLE trusted_devices_v2 (
+                device_id TEXT PRIMARY KEY, public_key BLOB NOT NULL CHECK(length(public_key) = 32),
+                nickname TEXT, announced_name TEXT NOT NULL,
+                paired_at_ms INTEGER NOT NULL CHECK(paired_at_ms >= 0),
+                last_seen_ms INTEGER, last_sync_ms INTEGER,
+                trust_state TEXT NOT NULL CHECK(trust_state IN ('trusted', 'revoked'))
+             ) STRICT;",
+        )?;
+        let rows = {
+            let mut query =
+                transaction.prepare("SELECT device_id,friendly_name FROM trusted_devices")?;
+            query
+                .query_map([], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+                })?
+                .collect::<rusqlite::Result<Vec<_>>>()?
+        };
+        for (id, name) in rows {
+            let (nickname, announced) = match id.parse::<DeviceId>() {
+                Ok(device) if is_generated_device_name(&name, device) => (None, name),
+                Ok(device) => (
+                    Some(normalize_device_name(&name).unwrap_or(name)),
+                    generated_device_name(device),
+                ),
+                // A malformed id fails on load anyway; keep the name.
+                Err(_) => (None, name),
+            };
+            transaction.execute(
+                "INSERT INTO trusted_devices_v2(device_id,public_key,nickname,announced_name,paired_at_ms,last_seen_ms,last_sync_ms,trust_state)
+                 SELECT device_id,public_key,?2,?3,paired_at_ms,last_seen_ms,last_sync_ms,trust_state
+                 FROM trusted_devices WHERE device_id=?1",
+                params![id, nickname, announced],
+            )?;
+        }
+        transaction.execute_batch(
+            "DROP TABLE trusted_devices; ALTER TABLE trusted_devices_v2 RENAME TO trusted_devices;",
+        )?;
+    }
+    transaction.commit()
 }
 
 fn checked_timestamp(
@@ -1872,7 +2040,8 @@ mod tests {
             .upsert_trusted_device(&TrustedDeviceRecord {
                 device_id: device,
                 public_key: key,
-                friendly_name: "Phone".into(),
+                announced_name: "Phone".into(),
+                nickname: None,
                 paired_at_ms: 10,
                 last_seen_ms: Some(10),
                 last_sync_ms: None,
@@ -1883,18 +2052,24 @@ mod tests {
             let store = store.clone();
             std::thread::spawn(move || store.rename_trusted_device(device, "Pocket phone").unwrap())
         };
+        let announcer = {
+            let store = store.clone();
+            std::thread::spawn(move || store.record_announced_name(device, "Gean's Pixel").unwrap())
+        };
         assert!(
             store
                 .record_trusted_device_activity(device, Some(40), Some(40))
                 .unwrap()
         );
         assert!(renamer.join().unwrap());
+        assert!(announcer.join().unwrap());
         // A seen-only write leaves the recorded sync time alone.
         store
             .record_trusted_device_activity(device, Some(50), None)
             .unwrap();
         let record = store.trusted_device(device).unwrap().unwrap();
-        assert_eq!(record.friendly_name, "Pocket phone");
+        assert_eq!(record.nickname.as_deref(), Some("Pocket phone"));
+        assert_eq!(record.announced_name, "Gean's Pixel");
         assert_eq!(record.last_sync_ms, Some(40));
         assert_eq!(record.last_seen_ms, Some(50));
         let unknown = DeviceId::from_public_key(&[19; 32]);
@@ -1904,6 +2079,181 @@ mod tests {
                 .unwrap(),
             "never creates a row"
         );
+    }
+
+    fn phone_record(seed: u8, name: &str) -> TrustedDeviceRecord {
+        let key = PrivateDeviceKey::from_seed(&[seed; 32])
+            .unwrap()
+            .public_key();
+        TrustedDeviceRecord {
+            device_id: DeviceId::from_public_key(key.as_bytes()),
+            public_key: key,
+            announced_name: name.into(),
+            nickname: None,
+            paired_at_ms: 10,
+            last_seen_ms: None,
+            last_sync_ms: None,
+            state: TrustState::Trusted,
+        }
+    }
+
+    #[test]
+    fn nickname_is_trimmed_cleared_and_never_touched_by_announcements() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = SqliteControlStore::open(directory.path().join("control.sqlite")).unwrap();
+        let record = phone_record(21, "Gean's ThinkPad");
+        let device = record.device_id;
+        store.upsert_trusted_device(&record).unwrap();
+        assert!(
+            store
+                .rename_trusted_device(device, " Work laptop ")
+                .unwrap()
+        );
+        assert!(store.record_announced_name(device, "Gean's X1").unwrap());
+        let loaded = store.trusted_device(device).unwrap().unwrap();
+        assert_eq!(loaded.nickname.as_deref(), Some("Work laptop"));
+        assert_eq!(loaded.announced_name, "Gean's X1");
+        assert_eq!(loaded.display_name(), "Work laptop");
+        assert!(
+            !store.record_announced_name(device, "Gean's X1").unwrap(),
+            "an unchanged announcement does not write"
+        );
+        assert!(
+            store
+                .rename_trusted_device(device, &"x".repeat(65))
+                .is_err()
+        );
+        assert_eq!(
+            store
+                .trusted_device(device)
+                .unwrap()
+                .unwrap()
+                .nickname
+                .as_deref(),
+            Some("Work laptop")
+        );
+        assert!(store.rename_trusted_device(device, "  ").unwrap());
+        let cleared = store.trusted_device(device).unwrap().unwrap();
+        assert_eq!(cleared.nickname, None);
+        assert_eq!(cleared.display_name(), "Gean's X1");
+    }
+
+    #[test]
+    fn local_display_name_is_stored_with_the_identity() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = SqliteControlStore::open(directory.path().join("control.sqlite")).unwrap();
+        assert!(
+            !store.set_local_display_name("Nope").unwrap(),
+            "no identity yet"
+        );
+        let key = PrivateDeviceKey::from_seed(&[22; 32]).unwrap().public_key();
+        store
+            .store_local_identity(&LocalIdentityRecord {
+                device_id: DeviceId::from_public_key(key.as_bytes()),
+                public_key: key,
+                created_at_ms: 1,
+            })
+            .unwrap();
+        assert_eq!(store.local_display_name().unwrap(), None);
+        assert!(store.set_local_display_name("Gean's Pixel").unwrap());
+        assert_eq!(
+            store.local_display_name().unwrap().as_deref(),
+            Some("Gean's Pixel")
+        );
+    }
+
+    /// Builds a control store with the schema from before announced names.
+    fn legacy_store(path: &Path, rows: &[(&TrustedDeviceRecord, &str)]) {
+        let connection = Connection::open(path).unwrap();
+        connection
+            .execute_batch(
+                "CREATE TABLE local_identity (
+                    singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
+                    device_id TEXT NOT NULL UNIQUE, public_key BLOB NOT NULL CHECK(length(public_key) = 32),
+                    created_at_ms INTEGER NOT NULL CHECK(created_at_ms >= 0)
+                 ) STRICT;
+                 CREATE TABLE trusted_devices (
+                    device_id TEXT PRIMARY KEY, public_key BLOB NOT NULL CHECK(length(public_key) = 32),
+                    friendly_name TEXT NOT NULL, paired_at_ms INTEGER NOT NULL CHECK(paired_at_ms >= 0),
+                    last_seen_ms INTEGER, last_sync_ms INTEGER,
+                    trust_state TEXT NOT NULL CHECK(trust_state IN ('trusted', 'revoked'))
+                 ) STRICT;",
+            )
+            .unwrap();
+        for (record, name) in rows {
+            connection
+                .execute(
+                    "INSERT INTO trusted_devices VALUES(?1,?2,?3,10,11,12,'trusted')",
+                    params![
+                        record.device_id.to_string(),
+                        record.public_key.as_bytes().as_slice(),
+                        name
+                    ],
+                )
+                .unwrap();
+        }
+    }
+
+    #[test]
+    fn legacy_names_migrate_to_announced_name_or_nickname() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("control.sqlite");
+        let generated = phone_record(23, "x");
+        let typed = phone_record(24, "x");
+        let generated_name = generated_device_name(generated.device_id);
+        legacy_store(
+            &path,
+            &[
+                (&generated, generated_name.as_str()),
+                (&typed, "Kitchen tablet"),
+            ],
+        );
+        let store = SqliteControlStore::open(path.clone()).unwrap();
+        let first = store.trusted_device(generated.device_id).unwrap().unwrap();
+        assert_eq!(first.announced_name, generated_name);
+        assert_eq!(first.nickname, None);
+        assert_eq!(first.last_sync_ms, Some(12));
+        let second = store.trusted_device(typed.device_id).unwrap().unwrap();
+        assert_eq!(second.nickname.as_deref(), Some("Kitchen tablet"));
+        assert_eq!(
+            second.announced_name,
+            generated_device_name(typed.device_id)
+        );
+        assert_eq!(store.local_display_name().unwrap(), None);
+        let before = store.trusted_devices().unwrap();
+        drop(store);
+        let reopened = SqliteControlStore::open(path).unwrap();
+        assert_eq!(
+            reopened.trusted_devices().unwrap(),
+            before,
+            "reopening is a no-op"
+        );
+    }
+
+    #[test]
+    fn a_failed_migration_leaves_the_old_schema() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("control.sqlite");
+        let record = phone_record(25, "x");
+        legacy_store(&path, &[(&record, "Kitchen tablet")]);
+        {
+            // Occupy the rebuild's table name so the migration fails midway.
+            let connection = Connection::open(&path).unwrap();
+            connection
+                .execute_batch("CREATE TABLE trusted_devices_v2 (x INTEGER);")
+                .unwrap();
+        }
+        assert!(SqliteControlStore::open(path.clone()).is_err());
+        let connection = Connection::open(&path).unwrap();
+        assert!(has_column(&connection, "trusted_devices", "friendly_name").unwrap());
+        assert!(!has_column(&connection, "trusted_devices", "announced_name").unwrap());
+        assert!(!has_column(&connection, "local_identity", "display_name").unwrap());
+        let name: String = connection
+            .query_row("SELECT friendly_name FROM trusted_devices", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(name, "Kitchen tablet");
     }
 
     #[test]
@@ -1917,7 +2267,8 @@ mod tests {
             let trusted = TrustedDeviceRecord {
                 device_id: device,
                 public_key: key,
-                friendly_name: "Laptop".into(),
+                announced_name: "Laptop".into(),
+                nickname: None,
                 paired_at_ms: 10,
                 last_seen_ms: Some(11),
                 last_sync_ms: Some(12),
@@ -1983,7 +2334,7 @@ mod tests {
         }
         let reopened = SqliteControlStore::open(path).unwrap();
         let trusted = reopened.trusted_device(device).unwrap().unwrap();
-        assert_eq!(trusted.friendly_name, "Travel laptop");
+        assert_eq!(trusted.nickname.as_deref(), Some("Travel laptop"));
         assert_eq!(
             reopened.peer_trust(device).unwrap().unwrap().state,
             TrustState::Trusted
@@ -2011,7 +2362,8 @@ mod tests {
         TrustedDeviceRecord {
             device_id: DeviceId::from_public_key(key.as_bytes()),
             public_key: key,
-            friendly_name: format!("Device {seed}"),
+            announced_name: format!("Device {seed}"),
+            nickname: None,
             paired_at_ms,
             last_seen_ms: None,
             last_sync_ms: None,
@@ -2212,7 +2564,8 @@ mod tests {
                 .upsert_trusted_device(&TrustedDeviceRecord {
                     device_id: device,
                     public_key: key,
-                    friendly_name: "Laptop".into(),
+                    announced_name: "Laptop".into(),
+                    nickname: None,
                     paired_at_ms: 2,
                     last_seen_ms: None,
                     last_sync_ms: None,

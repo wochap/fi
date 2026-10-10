@@ -86,6 +86,7 @@ void main() {
         TrustedDeviceDto(
           deviceId: n * 64,
           friendlyName: 'Peer $n',
+          announcedName: 'Peer $n',
           pairedAtMs: 1,
           revoked: revoked,
           connection: PeerConnectionKindDto.offline,

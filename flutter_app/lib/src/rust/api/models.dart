@@ -1801,7 +1801,15 @@ enum SyncStatusDto {
 
 class TrustedDeviceDto {
   final String deviceId;
+
+  /// Display name: the nickname when set, otherwise the announced name.
   final String friendlyName;
+
+  /// Name the user gave this device locally, if any.
+  final String? nickname;
+
+  /// Name the device presents itself with.
+  final String announcedName;
   final int pairedAtMs;
   final int? lastSeenMs;
   final int? lastSyncMs;
@@ -1827,6 +1835,8 @@ class TrustedDeviceDto {
   const TrustedDeviceDto({
     required this.deviceId,
     required this.friendlyName,
+    this.nickname,
+    required this.announcedName,
     required this.pairedAtMs,
     this.lastSeenMs,
     this.lastSyncMs,
@@ -1843,6 +1853,8 @@ class TrustedDeviceDto {
   int get hashCode =>
       deviceId.hashCode ^
       friendlyName.hashCode ^
+      nickname.hashCode ^
+      announcedName.hashCode ^
       pairedAtMs.hashCode ^
       lastSeenMs.hashCode ^
       lastSyncMs.hashCode ^
@@ -1861,6 +1873,8 @@ class TrustedDeviceDto {
           runtimeType == other.runtimeType &&
           deviceId == other.deviceId &&
           friendlyName == other.friendlyName &&
+          nickname == other.nickname &&
+          announcedName == other.announcedName &&
           pairedAtMs == other.pairedAtMs &&
           lastSeenMs == other.lastSeenMs &&
           lastSyncMs == other.lastSyncMs &&

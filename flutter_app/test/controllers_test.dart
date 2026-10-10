@@ -577,6 +577,7 @@ void main() {
     const peer = TrustedDeviceDto(
       deviceId: 'peer',
       friendlyName: 'Peer',
+      announcedName: 'Peer',
       pairedAtMs: 1,
       revoked: false,
       connection: PeerConnectionKindDto.error,
@@ -603,6 +604,7 @@ void main() {
     const revoked = TrustedDeviceDto(
       deviceId: 'gone',
       friendlyName: 'Gone',
+      announcedName: 'Gone',
       pairedAtMs: 1,
       revoked: true,
       connection: PeerConnectionKindDto.offline,
@@ -627,6 +629,7 @@ void main() {
     const peer = TrustedDeviceDto(
       deviceId: 'peer',
       friendlyName: 'Peer',
+      announcedName: 'Peer',
       pairedAtMs: 1,
       revoked: false,
       connection: PeerConnectionKindDto.error,
@@ -650,6 +653,7 @@ void main() {
     const peer = TrustedDeviceDto(
       deviceId: 'peer',
       friendlyName: 'Peer',
+      announcedName: 'Peer',
       pairedAtMs: 1,
       revoked: false,
       connection: PeerConnectionKindDto.error,
@@ -692,6 +696,7 @@ void main() {
     const revoked = TrustedDeviceDto(
       deviceId: 'peer',
       friendlyName: 'Peer',
+      announcedName: 'Peer',
       pairedAtMs: 1,
       lastSeenMs: null,
       lastSyncMs: null,
@@ -722,6 +727,7 @@ void main() {
         const TrustedDeviceDto(
           deviceId: 'peer',
           friendlyName: 'Peer',
+          announcedName: 'Peer',
           pairedAtMs: 1,
           lastSeenMs: null,
           lastSyncMs: null,

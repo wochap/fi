@@ -260,6 +260,7 @@ void main() {
       const TrustedDeviceDto(
         deviceId: peerId,
         friendlyName: 'Fi 3f9a2c1b',
+        announcedName: 'Fi 3f9a2c1b',
         pairedAtMs: 1,
         revoked: false,
         connection: PeerConnectionKindDto.connected,

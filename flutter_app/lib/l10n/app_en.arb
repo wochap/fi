@@ -5012,5 +5012,30 @@
   "choiceNewOptionHint": "New option",
   "@choiceNewOptionHint": {
     "description": "Hint of the inline add input"
+  },
+  "devicesRenameThisDevice": "Rename this device",
+  "@devicesRenameThisDevice": {
+    "description": "Tooltip of the pencil on the This device row."
+  },
+  "devicesNameThisDeviceTitle": "Name this device",
+  "@devicesNameThisDeviceTitle": {
+    "description": "Title of the dialog or sheet that names this device."
+  },
+  "devicesNameThisDeviceSubtitle": "Other devices see this name when pairing",
+  "@devicesNameThisDeviceSubtitle": {
+    "description": "Line under the Name this device title."
+  },
+  "devicesNameTooLong": "Use a shorter name (at most 64 bytes).",
+  "@devicesNameTooLong": {
+    "description": "Inline error under a device name over 64 UTF-8 bytes."
+  },
+  "devicesAnnouncesAs": "Announces itself as {name}. Clear the name to use that.",
+  "@devicesAnnouncesAs": {
+    "description": "Hint under the Name field of the rename dialog; name is the device's announced name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
   }
 }

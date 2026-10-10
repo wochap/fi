@@ -129,6 +129,8 @@ pub enum AppError {
     Network(#[from] crate::quinn_transport::QuinnTransportError),
     #[error(transparent)]
     Pairing(#[from] crate::pairing::PairingError),
+    #[error(transparent)]
+    DeviceName(#[from] crate::device_name::DeviceNameError),
     /// A connection request failed, kept typed so a paused sync can be told
     /// apart from a route failure.
     #[error(transparent)]

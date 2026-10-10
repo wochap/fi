@@ -900,7 +900,7 @@ fn validate_hello(value: &PairingHello, role: PairingRole) -> Result<(), Pairing
     if value.role != role {
         return Err(PairingError::Malformed("incorrect role ordering"));
     }
-    if value.friendly_name.is_empty() || value.friendly_name.len() > MAX_FRIENDLY_NAME {
+    if crate::device_name::normalize_device_name(&value.friendly_name).is_err() {
         return Err(PairingError::Malformed("invalid friendly name"));
     }
     Ok(())

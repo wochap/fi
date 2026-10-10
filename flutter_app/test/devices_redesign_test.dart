@@ -21,6 +21,7 @@ TrustedDeviceDto _device(
 }) => TrustedDeviceDto(
   deviceId: id * 64,
   friendlyName: name,
+  announcedName: name,
   pairedAtMs: 1,
   revoked: revoked,
   connection: connection,
@@ -348,5 +349,168 @@ void main() {
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
     expect(find.text('Den'), findsOneWidget);
+  });
+
+  group('device names', () {
+    TrustedDeviceDto nicknamed() => FakeCollectionBridge.withNames(
+      _device('a', 'x', PeerConnectionKindDto.synced),
+      nickname: 'Work laptop',
+      announcedName: "Gean's ThinkPad",
+    );
+
+    testWidgets('naming this device in a dialog at 800px', (tester) async {
+      final bridge = FakeCollectionBridge();
+      await openDevices(tester, bridge);
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Rename this device'), findsOneWidget);
+      await tapVisible(tester, find.byKey(const Key('rename-local-device')));
+      await tester.pumpAndSettle();
+      expect(find.byType(Dialog), findsOneWidget);
+      expect(find.text('Name this device'), findsOneWidget);
+      expect(
+        find.text('Other devices see this name when pairing'),
+        findsOneWidget,
+      );
+      await tester.enterText(
+        find.descendant(
+          of: find.byKey(const Key('local-name-field')),
+          matching: find.byType(TextField),
+        ),
+        "  Gean's Pixel ",
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('local-name-save')));
+      await tester.pumpAndSettle();
+      expect(bridge.localNames, ["  Gean's Pixel "]);
+      expect(find.byType(Dialog), findsNothing);
+      expect(
+        tester.widget<Text>(find.byKey(const Key('local-device-name'))).data,
+        "Gean's Pixel",
+      );
+    });
+
+    testWidgets('naming this device in a sheet at 390px', (tester) async {
+      final bridge = FakeCollectionBridge();
+      await openDevices(tester, bridge);
+      await resize(tester, const Size(390, 844));
+      await tapVisible(tester, find.byKey(const Key('rename-local-device')));
+      await tester.pumpAndSettle();
+      expect(find.byType(BottomSheet), findsOneWidget);
+      expect(
+        tester.getSize(find.byKey(const Key('rename-local-device'))).height,
+        greaterThanOrEqualTo(44),
+      );
+      await tester.enterText(
+        find.descendant(
+          of: find.byKey(const Key('local-name-field')),
+          matching: find.byType(TextField),
+        ),
+        'Pocket',
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('local-name-save')));
+      await tester.pumpAndSettle();
+      expect(find.byType(BottomSheet), findsNothing);
+      expect(find.text('Pocket'), findsOneWidget);
+    });
+
+    testWidgets('a blank or overlong name cannot be saved', (tester) async {
+      final bridge = FakeCollectionBridge();
+      await openDevices(tester, bridge);
+      await tester.pumpAndSettle();
+      await tapVisible(tester, find.byKey(const Key('rename-local-device')));
+      await tester.pumpAndSettle();
+      final field = find.descendant(
+        of: find.byKey(const Key('local-name-field')),
+        matching: find.byType(TextField),
+      );
+      FilledButton save() =>
+          tester.widget<FilledButton>(find.byKey(const Key('local-name-save')));
+      await tester.enterText(field, '   ');
+      await tester.pump();
+      expect(save().onPressed, isNull);
+      await tester.enterText(field, 'é' * 33);
+      await tester.pump();
+      expect(save().onPressed, isNull);
+      expect(
+        find.text('Use a shorter name (at most 64 bytes).'),
+        findsOneWidget,
+      );
+      expect(bridge.localNames, isEmpty);
+    });
+
+    testWidgets('no identity means no rename action', (tester) async {
+      final bridge = FakeCollectionBridge()..localIdentity = null;
+      await openDevices(tester, bridge);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('local-device-missing')), findsOneWidget);
+      expect(find.byKey(const Key('rename-local-device')), findsNothing);
+    });
+
+    testWidgets('a nickname row shows the announced name under it', (
+      tester,
+    ) async {
+      final bridge = FakeCollectionBridge()
+        ..devices.addAll([
+          nicknamed(),
+          _device('b', 'Tablet', PeerConnectionKindDto.offline),
+        ]);
+      await openDevices(tester, bridge);
+      await tester.pumpAndSettle();
+      expect(find.text('Work laptop'), findsOneWidget);
+      expect(
+        tester
+            .widget<Text>(find.byKey(Key('device-announced-${'a' * 64}')))
+            .data,
+        "Gean's ThinkPad",
+      );
+      expect(find.byKey(Key('device-announced-${'b' * 64}')), findsNothing);
+      expect(find.text('Tablet'), findsOneWidget);
+    });
+
+    testWidgets('clearing the nickname shows the announced name', (
+      tester,
+    ) async {
+      final bridge = FakeCollectionBridge()..devices.add(nicknamed());
+      await openDevices(tester, bridge);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(PopupMenuButton<String>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Rename'));
+      await tester.pumpAndSettle();
+      expect(
+        find.text(
+          "Announces itself as Gean's ThinkPad. Clear the name to use that.",
+        ),
+        findsOneWidget,
+      );
+      final field = find.descendant(
+        of: find.byKey(const Key('device-name')),
+        matching: find.byType(TextField),
+      );
+      expect(tester.widget<TextField>(field).controller!.text, 'Work laptop');
+      await tester.enterText(field, '');
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('device-name-save')));
+      await tester.pumpAndSettle();
+      expect(bridge.devices.single.nickname, isNull);
+      expect(find.text("Gean's ThinkPad"), findsOneWidget);
+      expect(find.byKey(Key('device-announced-${'a' * 64}')), findsNothing);
+    });
+
+    testWidgets('an announced rename updates the row live', (tester) async {
+      final bridge = FakeCollectionBridge()
+        ..devices.add(
+          _device('a', 'Fi aaaaaaaa', PeerConnectionKindDto.synced),
+        );
+      await openDevices(tester, bridge);
+      await tester.pumpAndSettle();
+      expect(find.text('Fi aaaaaaaa'), findsOneWidget);
+      bridge.announceName('a' * 64, "Gean's ThinkPad");
+      await tester.pump();
+      await tester.pump();
+      expect(find.text("Gean's ThinkPad"), findsOneWidget);
+      expect(find.text('Fi aaaaaaaa'), findsNothing);
+    });
   });
 }

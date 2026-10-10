@@ -955,5 +955,10 @@
   "choiceAddChip": "Añadir",
   "choiceNewTag": "Nueva",
   "choiceExistingTag": "existente",
-  "choiceNewOptionHint": "Opción nueva"
+  "choiceNewOptionHint": "Opción nueva",
+  "devicesRenameThisDevice": "Renombrar este dispositivo",
+  "devicesNameThisDeviceTitle": "Nombrar este dispositivo",
+  "devicesNameThisDeviceSubtitle": "Otros dispositivos ven este nombre al emparejar",
+  "devicesNameTooLong": "Usa un nombre más corto (como máximo 64 bytes).",
+  "devicesAnnouncesAs": "Se anuncia como {name}. Borra el nombre para usar ese."
 }

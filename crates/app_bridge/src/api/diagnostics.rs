@@ -74,7 +74,7 @@ fn assemble_block(
     sync_port: Option<u16>,
 ) -> String {
     let peer_device_id = record.device_id.to_string();
-    let peer_name = record.friendly_name.clone();
+    let peer_name = record.display_name().to_owned();
     let row = TrustedDeviceDto::from_core(record, connection, last_attempt_ms, None, false);
     let connection_state = if row.revoked {
         "revoked".to_owned()
@@ -122,7 +122,8 @@ mod tests {
         TrustedDeviceRecord {
             device_id: DeviceId::from_public_key(key.as_bytes()),
             public_key: key,
-            friendly_name: "Fi peer".into(),
+            announced_name: "Fi peer".into(),
+            nickname: None,
             paired_at_ms: 1,
             last_seen_ms: None,
             last_sync_ms: None,

@@ -91,6 +91,8 @@ pub enum ProtocolError {
     UnknownBootstrapMode(u8),
     #[error("invalid inventory count")]
     InvalidInventoryCount,
+    #[error("Hello device name is not valid UTF-8")]
+    InvalidHelloName,
     #[error("invalid Automerge sync payload")]
     InvalidSyncPayload,
     #[error("Hello must be the first peer message")]

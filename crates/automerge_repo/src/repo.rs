@@ -54,6 +54,8 @@ pub struct RepoConfig {
     /// root before reporting `RecoveryOutcome::NoPeerAvailable`. The wait
     /// restarts whenever such a peer appears and later disappears.
     pub recovery_no_peer_after: Duration,
+    /// Device name sent in every Hello until replaced by `Repo::set_local_name`.
+    pub local_name: String,
 }
 impl Default for RepoConfig {
     fn default() -> Self {
@@ -68,6 +70,7 @@ impl Default for RepoConfig {
             peer_writer_capacity: 64,
             recovery_attempt_limit: 3,
             recovery_no_peer_after: Duration::from_secs(30),
+            local_name: String::new(),
         }
     }
 }
@@ -135,6 +138,8 @@ pub struct Repo {
     bootstrap: watch::Receiver<BootstrapStatus>,
     offers: watch::Receiver<Vec<BootstrapOffer>>,
     peer_sync: watch::Receiver<HashMap<PeerId, PeerSyncProgress>>,
+    peer_names: watch::Receiver<HashMap<PeerId, String>>,
+    local_name: Arc<std::sync::Mutex<String>>,
     recovery: watch::Receiver<Option<RecoveryRecord>>,
     errors: broadcast::Sender<Error>,
     lifecycle: Lifecycle,
@@ -314,6 +319,8 @@ impl Repo {
         let (bootstrap_tx, bootstrap) = watch::channel(initial.clone());
         let (offers_tx, offers) = watch::channel(Vec::new());
         let (peer_sync_tx, peer_sync) = watch::channel(HashMap::new());
+        let (peer_names_tx, peer_names) = watch::channel(HashMap::new());
+        let local_name = Arc::new(std::sync::Mutex::new(config.local_name.clone()));
         let (recovery_tx, recovery) = watch::channel(recovery);
         let (errors, _) = broadcast::channel(config.error_capacity.max(1));
         let (actor_tx, actor_rx) = mpsc::channel(config.coordinator_capacity.max(1));
@@ -352,6 +359,8 @@ impl Repo {
             status_tx: bootstrap_tx,
             offers_tx,
             peer_sync_tx,
+            peer_names_tx,
+            local_name: local_name.clone(),
             recovery_tx,
             recovery_timer: RecoveryTimer::default(),
             relationships: HashMap::new(),
@@ -369,6 +378,8 @@ impl Repo {
             bootstrap,
             offers,
             peer_sync,
+            peer_names,
+            local_name,
             recovery,
             errors,
             lifecycle,
@@ -399,6 +410,15 @@ impl Repo {
     /// Returns the latest retained synchronization snapshot.
     pub fn peer_sync_progress(&self) -> HashMap<PeerId, PeerSyncProgress> {
         self.peer_sync.borrow().clone()
+    }
+    #[must_use]
+    /// Watches the device name each connected peer sent in its Hello.
+    pub fn subscribe_peer_names(&self) -> watch::Receiver<HashMap<PeerId, String>> {
+        self.peer_names.clone()
+    }
+    /// Replaces the device name sent in every later Hello.
+    pub fn set_local_name(&self, name: impl Into<String>) {
+        *self.local_name.lock().unwrap_or_else(|e| e.into_inner()) = name.into();
     }
     #[must_use]
     /// Returns the recovery performed by this open, if any, with its latest outcome.
@@ -546,6 +566,8 @@ struct Coordinator {
     status_tx: watch::Sender<BootstrapStatus>,
     offers_tx: watch::Sender<Vec<BootstrapOffer>>,
     peer_sync_tx: watch::Sender<HashMap<PeerId, PeerSyncProgress>>,
+    peer_names_tx: watch::Sender<HashMap<PeerId, String>>,
+    local_name: Arc<std::sync::Mutex<String>>,
     recovery_tx: watch::Sender<Option<RecoveryRecord>>,
     recovery_timer: RecoveryTimer,
     relationships: HashMap<(PeerId, DocumentId), RelationshipSyncState>,
@@ -1094,7 +1116,19 @@ impl Coordinator {
                         },
                     );
                 });
-                self.send(&peer, Message::Hello(mode(&self.status()))).await;
+                let name = self
+                    .local_name
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .clone();
+                self.send(
+                    &peer,
+                    Message::Hello {
+                        mode: mode(&self.status()),
+                        name,
+                    },
+                )
+                .await;
             }
             NetworkEvent::PeerDisconnected(peer) => {
                 self.detach_peer(&peer).await;
@@ -1117,22 +1151,25 @@ impl Coordinator {
                 .await;
             return;
         };
-        if !state.hello && !matches!(message, Message::Hello(_)) {
+        if !state.hello && !matches!(message, Message::Hello { .. }) {
             self.protocol_failure(peer, ProtocolError::HelloRequired)
                 .await;
             return;
         }
-        if state.hello && matches!(message, Message::Hello(_)) {
+        if state.hello && matches!(message, Message::Hello { .. }) {
             self.protocol_failure(peer, ProtocolError::DuplicateHello)
                 .await;
             return;
         }
         match message {
-            Message::Hello(remote) => {
+            Message::Hello { mode: remote, name } => {
                 if let Some(state) = self.peers.get_mut(&peer) {
                     state.hello = true;
                     state.remote = Some(remote);
                 }
+                self.peer_names_tx.send_modify(|names| {
+                    names.insert(peer.clone(), name);
+                });
                 self.reconsider(peer).await;
             }
             Message::BootstrapState(remote) => {
@@ -1378,6 +1415,8 @@ impl Coordinator {
         self.peer_sync_tx.send_modify(|progress| {
             progress.remove(peer);
         });
+        self.peer_names_tx
+            .send_if_modified(|names| names.remove(peer).is_some());
     }
 
     fn refresh_peer_progress(&self, peer: &PeerId) {

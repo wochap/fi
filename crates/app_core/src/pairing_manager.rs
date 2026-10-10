@@ -1581,7 +1581,10 @@ impl PairingManager {
         let record = TrustedDeviceRecord {
             device_id,
             public_key: peer_key,
-            friendly_name: name,
+            announced_name: crate::device_name::normalize_device_name(&name)
+                .map_err(|_| PairingError::Malformed("invalid friendly name"))?,
+            // A re-pair keeps the nickname the user set for this device.
+            nickname: existing.as_ref().and_then(|record| record.nickname.clone()),
             paired_at_ms: existing.as_ref().map_or(now, |record| record.paired_at_ms),
             last_seen_ms: Some(now),
             // The sync bridge may already have recorded convergence (the
@@ -2184,13 +2187,20 @@ mod tests {
         manager
             .establish_trust(peer_key, "laptop".into(), 1_000)
             .unwrap();
+        assert_eq!(manager.trusted_devices().unwrap()[0].nickname, None);
+        assert!(manager.rename(peer, "Work laptop").unwrap());
         manager
             .establish_trust(peer_key, "laptop renamed".into(), 5_000)
             .unwrap();
         let trusted = manager.trusted_devices().unwrap();
         assert_eq!(trusted.len(), 1);
         assert_eq!(trusted[0].device_id, peer);
-        assert_eq!(trusted[0].friendly_name, "laptop renamed");
+        assert_eq!(trusted[0].announced_name, "laptop renamed");
+        assert_eq!(
+            trusted[0].nickname.as_deref(),
+            Some("Work laptop"),
+            "a re-pair keeps the nickname"
+        );
         assert_eq!(
             trusted[0].paired_at_ms, 1_000,
             "the original pairing time survives a re-pair"
@@ -2707,7 +2717,8 @@ mod tests {
                 .upsert_trusted_device(&TrustedDeviceRecord {
                     device_id: peer.identity.id(),
                     public_key: peer.identity.public_key(),
-                    friendly_name: "peer".into(),
+                    announced_name: "peer".into(),
+                    nickname: None,
                     paired_at_ms: 1,
                     last_seen_ms: None,
                     last_sync_ms: None,
@@ -2871,7 +2882,8 @@ mod tests {
                 .upsert_trusted_device(&TrustedDeviceRecord {
                     device_id: peer.identity.id(),
                     public_key: peer.identity.public_key(),
-                    friendly_name: "peer".into(),
+                    announced_name: "peer".into(),
+                    nickname: None,
                     paired_at_ms: 1,
                     last_seen_ms: None,
                     last_sync_ms: None,
@@ -3008,7 +3020,8 @@ mod tests {
             .upsert_trusted_device(&TrustedDeviceRecord {
                 device_id: revoked.identity.id(),
                 public_key: revoked.identity.public_key(),
-                friendly_name: "revoked".into(),
+                announced_name: "revoked".into(),
+                nickname: None,
                 paired_at_ms: 1,
                 last_seen_ms: None,
                 last_sync_ms: None,

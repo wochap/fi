@@ -1,11 +1,11 @@
-//! Repository protocol version 1.
+//! Repository protocol version 2.
 
 use automerge::sync::Message as SyncMessage;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
 use crate::{DocumentId, error::ProtocolError};
 
-pub const PROTOCOL_VERSION: u8 = 1;
+pub const PROTOCOL_VERSION: u8 = 2;
 pub const MAX_BODY_LEN: usize = 8 * 1024 * 1024;
 const MAGIC: &[u8; 4] = b"FIRP";
 const HEADER_LEN: usize = 8;
@@ -20,7 +20,11 @@ pub enum BootstrapMode {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Message {
-    Hello(BootstrapMode),
+    /// Opening message: bootstrap mode plus the sender's device name.
+    Hello {
+        mode: BootstrapMode,
+        name: String,
+    },
     BootstrapState(BootstrapMode),
     Inventory(Vec<DocumentId>),
     Announce(DocumentId),
@@ -33,7 +37,7 @@ pub enum Message {
 impl Message {
     const fn kind(&self) -> u8 {
         match self {
-            Self::Hello(_) => 1,
+            Self::Hello { .. } => 1,
             Self::BootstrapState(_) => 2,
             Self::Inventory(_) => 3,
             Self::Announce(_) => 4,
@@ -50,9 +54,13 @@ impl Codec {
         let kind = message.kind();
         let mut payload = BytesMut::new();
         match message {
-            Message::Hello(mode) | Message::BootstrapState(mode) => {
-                encode_bootstrap(&mut payload, mode)
+            Message::Hello { mode, name } => {
+                encode_bootstrap(&mut payload, mode);
+                let len = u16::try_from(name.len()).map_err(|_| ProtocolError::InvalidLength)?;
+                payload.put_u16(len);
+                payload.extend_from_slice(name.as_bytes());
             }
+            Message::BootstrapState(mode) => encode_bootstrap(&mut payload, mode),
             Message::Inventory(ids) => {
                 let count = u32::try_from(ids.len()).map_err(|_| ProtocolError::FrameTooLarge {
                     actual: usize::MAX,
@@ -142,7 +150,7 @@ impl Codec {
         }
         let payload = &body[HEADER_LEN..];
         match kind {
-            1 => Ok(Message::Hello(decode_bootstrap(payload)?)),
+            1 => decode_hello(payload),
             2 => Ok(Message::BootstrapState(decode_bootstrap(payload)?)),
             3 => decode_inventory(payload).map(Message::Inventory),
             4 => Ok(Message::Announce(exact_id(payload)?)),
@@ -193,6 +201,28 @@ fn decode_bootstrap(payload: &[u8]) -> Result<BootstrapMode, ProtocolError> {
     }
 }
 
+fn decode_hello(payload: &[u8]) -> Result<Message, ProtocolError> {
+    let mode_len = match payload.first() {
+        Some(0) => 1,
+        Some(1 | 2) => 17,
+        Some(mode) => return Err(ProtocolError::UnknownBootstrapMode(*mode)),
+        None => return Err(ProtocolError::InvalidLength),
+    };
+    if payload.len() < mode_len + 2 {
+        return Err(ProtocolError::InvalidLength);
+    }
+    let mode = decode_bootstrap(&payload[..mode_len])?;
+    let rest = &payload[mode_len..];
+    let len = u16::from_be_bytes([rest[0], rest[1]]) as usize;
+    if rest.len() - 2 != len {
+        return Err(ProtocolError::InvalidLength);
+    }
+    let name = std::str::from_utf8(&rest[2..])
+        .map_err(|_| ProtocolError::InvalidHelloName)?
+        .to_owned();
+    Ok(Message::Hello { mode, name })
+}
+
 fn exact_id(payload: &[u8]) -> Result<DocumentId, ProtocolError> {
     let bytes: [u8; 16] = payload
         .try_into()
@@ -237,9 +267,9 @@ mod tests {
     #[test]
     fn every_message_round_trips() {
         let values = vec![
-            Message::Hello(BootstrapMode::Uninitialized),
+            hello(BootstrapMode::Uninitialized, "Fi"),
             Message::BootstrapState(BootstrapMode::Joining(id())),
-            Message::Hello(BootstrapMode::Ready(id())),
+            hello(BootstrapMode::Ready(id()), "Gean's Pixel ✓"),
             Message::Inventory(vec![id()]),
             Message::Announce(id()),
             Message::Sync {
@@ -255,7 +285,7 @@ mod tests {
 
     #[test]
     fn partial_input_is_not_consumed_and_concatenated_frames_decode() {
-        let a = Codec::encode(Message::Hello(BootstrapMode::Uninitialized)).unwrap();
+        let a = Codec::encode(hello(BootstrapMode::Uninitialized, "Fi")).unwrap();
         let b = Codec::encode(Message::Announce(id())).unwrap();
         for boundary in 0..a.len() {
             let mut partial = BytesMut::from(&a[..boundary]);
@@ -265,7 +295,7 @@ mod tests {
         let mut both = BytesMut::from([a.as_ref(), b.as_ref()].concat().as_slice());
         assert_eq!(
             Codec::decode(&mut both).unwrap(),
-            Some(Message::Hello(BootstrapMode::Uninitialized))
+            Some(hello(BootstrapMode::Uninitialized, "Fi"))
         );
         assert_eq!(
             Codec::decode(&mut both).unwrap(),
@@ -274,22 +304,70 @@ mod tests {
         assert!(both.is_empty());
     }
 
+    fn hello(mode: BootstrapMode, name: &str) -> Message {
+        Message::Hello {
+            mode,
+            name: name.into(),
+        }
+    }
+
     #[test]
     fn hello_golden_bytes_are_stable() {
+        let ascii = b"\0\0\0\x0dFIRP\x02\x01\0\0\0\0\x02Fi";
         assert_eq!(
-            Codec::encode(Message::Hello(BootstrapMode::Uninitialized))
+            Codec::encode(hello(BootstrapMode::Uninitialized, "Fi"))
                 .unwrap()
                 .as_ref(),
-            b"\0\0\0\x09FIRP\x01\x01\0\0\0"
+            ascii
+        );
+        assert_eq!(
+            Codec::decode_exact(ascii).unwrap(),
+            hello(BootstrapMode::Uninitialized, "Fi")
+        );
+        let mut unicode = b"\0\0\0\x1bFIRP\x02\x01\0\0\0\0\x10".to_vec();
+        unicode.extend_from_slice("Gean's Pixel \u{2713}".as_bytes());
+        assert_eq!(
+            Codec::encode(hello(BootstrapMode::Uninitialized, "Gean's Pixel ✓"))
+                .unwrap()
+                .as_ref(),
+            unicode.as_slice()
+        );
+        assert_eq!(
+            Codec::decode_exact(&unicode).unwrap(),
+            hello(BootstrapMode::Uninitialized, "Gean's Pixel ✓")
+        );
+    }
+
+    #[test]
+    fn version_one_frames_are_unsupported() {
+        assert_eq!(
+            Codec::decode_exact(b"\0\0\0\x09FIRP\x01\x01\0\0\0").unwrap_err(),
+            ProtocolError::UnsupportedVersion(1)
+        );
+    }
+
+    #[test]
+    fn malformed_hello_names_are_rejected() {
+        assert_eq!(
+            Codec::decode_exact(&frame(1, &[0, 0, 2, 0xff, 0xfe])).unwrap_err(),
+            ProtocolError::InvalidHelloName
+        );
+        assert_eq!(
+            Codec::decode_exact(&frame(1, &[0, 0, 5, b'a'])).unwrap_err(),
+            ProtocolError::InvalidLength
+        );
+        assert_eq!(
+            Codec::decode_exact(&frame(1, &[0, 0])).unwrap_err(),
+            ProtocolError::InvalidLength
         );
     }
 
     #[test]
     fn malformed_headers_and_payloads_are_rejected() {
-        let base = Codec::encode(Message::Hello(BootstrapMode::Uninitialized)).unwrap();
+        let base = Codec::encode(hello(BootstrapMode::Uninitialized, "Fi")).unwrap();
         for (index, value, expected) in [
             (4, b'X', ProtocolError::BadMagic),
-            (8, 2, ProtocolError::UnsupportedVersion(2)),
+            (8, 3, ProtocolError::UnsupportedVersion(3)),
             (9, 99, ProtocolError::UnknownKind(99)),
             (10, 1, ProtocolError::ReservedFlags(256)),
         ] {
@@ -314,7 +392,7 @@ mod tests {
             ProtocolError::InvalidInventoryCount
         );
         assert_eq!(
-            Codec::decode_exact(&frame(1, &[9])).unwrap_err(),
+            Codec::decode_exact(&frame(2, &[9])).unwrap_err(),
             ProtocolError::UnknownBootstrapMode(9)
         );
         assert_eq!(
@@ -344,7 +422,7 @@ mod tests {
         let mut bytes = BytesMut::new();
         bytes.put_u32((HEADER_LEN + payload.len()) as u32);
         bytes.extend_from_slice(MAGIC);
-        bytes.put_u8(1);
+        bytes.put_u8(PROTOCOL_VERSION);
         bytes.put_u8(kind);
         bytes.put_u16(0);
         bytes.extend_from_slice(payload);

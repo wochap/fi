@@ -1423,6 +1423,16 @@ final class DevicesController extends ChangeNotifier {
   });
   Future<void> reject() => _run(() => bridge.rejectPairing(pairing.sessionId));
 
+  /// Names this device. Returns false and keeps the old name on failure.
+  Future<bool> renameLocalDevice(String name) async {
+    var saved = false;
+    await _run(() async {
+      localDevice = await bridge.setLocalDeviceName(name);
+      saved = true;
+    });
+    return saved;
+  }
+
   Future<void> rename(TrustedDeviceDto device, String name) async {
     await _run(() => bridge.renameTrustedDevice(device.deviceId, name));
     await refreshDevices();

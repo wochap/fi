@@ -84,6 +84,7 @@ FakeCollectionBridge _bridge() {
     const TrustedDeviceDto(
       deviceId: _deviceId,
       friendlyName: 'Laptop',
+      announcedName: 'Laptop',
       pairedAtMs: 1,
       revoked: false,
       connection: PeerConnectionKindDto.synced,

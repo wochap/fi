@@ -44,6 +44,10 @@ abstract interface class CollectionBridge {
   /// up.
   Future<LocalDeviceDto?> localDevice();
 
+  /// Names this device and returns what Rust stored (trimmed). Throws a
+  /// validation error for a blank name or one over 64 UTF-8 bytes.
+  Future<LocalDeviceDto> setLocalDeviceName(String name);
+
   /// Dials a trusted, non-revoked device now. Throws the typed failure.
   Future<void> connectDeviceNow(String deviceId);
 
@@ -74,6 +78,8 @@ abstract interface class CollectionBridge {
   Future<void> confirmPairing(String sessionId);
   Future<void> rejectPairing(String? sessionId);
   Future<List<TrustedDeviceDto>> trustedDevices();
+
+  /// Sets a trusted device's local nickname; an empty name clears it.
   Future<void> renameTrustedDevice(String deviceId, String name);
   Future<RevocationOutcomeDto> revokeTrustedDevice(String deviceId, int nowMs);
 
@@ -299,6 +305,9 @@ final class RustCollectionBridge implements CollectionBridge {
   Future<BuildInfoDto> buildInfo() => lifecycle.buildInfo();
   @override
   Future<LocalDeviceDto?> localDevice() => pairing.localDevice();
+  @override
+  Future<LocalDeviceDto> setLocalDeviceName(String name) =>
+      pairing.setLocalDeviceName(name: name);
   @override
   Future<void> connectDeviceNow(String deviceId) =>
       pairing.connectDeviceNow(deviceId: deviceId);

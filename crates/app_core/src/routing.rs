@@ -573,6 +573,12 @@ impl ConnectionManager {
         });
     }
 
+    /// Wakes state subscribers without changing any state, so streams that
+    /// re-query device records on every change pick up a record update.
+    pub fn notify_records_changed(&self) {
+        self.states.send_modify(|_| {});
+    }
+
     #[must_use]
     pub fn states(&self) -> HashMap<DeviceId, PeerConnectionState> {
         self.states.borrow().clone()

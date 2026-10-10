@@ -5833,6 +5833,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'New option'**
   String get choiceNewOptionHint;
+
+  /// Tooltip of the pencil on the This device row.
+  ///
+  /// In en, this message translates to:
+  /// **'Rename this device'**
+  String get devicesRenameThisDevice;
+
+  /// Title of the dialog or sheet that names this device.
+  ///
+  /// In en, this message translates to:
+  /// **'Name this device'**
+  String get devicesNameThisDeviceTitle;
+
+  /// Line under the Name this device title.
+  ///
+  /// In en, this message translates to:
+  /// **'Other devices see this name when pairing'**
+  String get devicesNameThisDeviceSubtitle;
+
+  /// Inline error under a device name over 64 UTF-8 bytes.
+  ///
+  /// In en, this message translates to:
+  /// **'Use a shorter name (at most 64 bytes).'**
+  String get devicesNameTooLong;
+
+  /// Hint under the Name field of the rename dialog; name is the device's announced name.
+  ///
+  /// In en, this message translates to:
+  /// **'Announces itself as {name}. Clear the name to use that.'**
+  String devicesAnnouncesAs(String name);
 }
 
 class _AppLocalizationsDelegate

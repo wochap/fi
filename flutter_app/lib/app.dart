@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:clock/clock.dart';
 import 'package:fi/l10n/error_text.dart';
@@ -24,6 +25,7 @@ import 'package:fi/setup_screens.dart';
 import 'package:fi/status_time.dart';
 import 'package:fi/theme/app_theme.dart';
 import 'package:fi/theme/confirm_dialog.dart';
+import 'package:fi/theme/form_surface.dart';
 import 'package:fi/theme/inputs.dart';
 import 'package:fi/theme/nocturne.dart';
 import 'package:fi/theme/nocturne_widgets.dart';
@@ -1410,6 +1412,9 @@ class _DevicesPageState extends State<DevicesPage> {
                 _LocalIdentity(
                   device: controller.localDevice,
                   phone: phone,
+                  onRename: controller.busy
+                      ? null
+                      : () => _nameThisDevice(context),
                   onReset: onResetDataset == null || controller.busy
                       ? null
                       : () => _resetDataset(context),
@@ -1465,6 +1470,17 @@ class _DevicesPageState extends State<DevicesPage> {
                   DeviceStateTag(device: device),
                 ],
               ),
+              if (device.nickname != null)
+                Text(
+                  device.announcedName,
+                  key: Key('device-announced-${device.deviceId}'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: context.nocturne.muted(.55),
+                  ),
+                ),
               const SizedBox(height: 2),
               Text(
                 _timesLine(context.l10n, device, now),
@@ -1698,44 +1714,79 @@ class _DevicesPageState extends State<DevicesPage> {
     BuildContext context,
     TrustedDeviceDto device,
   ) async {
-    var name = device.friendlyName;
+    var name = device.nickname ?? '';
     final l = context.l10n;
     await showDialog<void>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(l.devicesRenameTitle),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              l.devicesRenameSubtitle,
-              style: TextStyle(fontSize: 13, color: context.nocturne.muted(.6)),
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setState) {
+          final tooLong = deviceNameTooLong(name);
+          return AlertDialog(
+            title: Text(l.devicesRenameTitle),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  l.devicesRenameSubtitle,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: context.nocturne.muted(.6),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                FiTextInput(
+                  key: const Key('device-name'),
+                  initialValue: name,
+                  onChanged: (value) => setState(() => name = value),
+                  autofocus: true,
+                  label: l.devicesNameLabel,
+                  errors: [if (tooLong) l.devicesNameTooLong],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  l.devicesAnnouncesAs(device.announcedName),
+                  key: const Key('device-name-announced-hint'),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: context.nocturne.muted(.55),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 14),
-            FiTextInput(
-              key: const Key('device-name'),
-              initialValue: name,
-              onChanged: (value) => name = value,
-              autofocus: true,
-              label: l.devicesNameLabel,
-              required: true,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: Text(l.commonCancel),
-          ),
-          FilledButton(
-            onPressed: () async {
-              await controller.rename(device, name);
-              if (dialogContext.mounted) Navigator.pop(dialogContext);
-            },
-            child: Text(l.commonSave),
-          ),
-        ],
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: Text(l.commonCancel),
+              ),
+              FilledButton(
+                key: const Key('device-name-save'),
+                onPressed: tooLong
+                    ? null
+                    : () async {
+                        await controller.rename(device, name);
+                        if (dialogContext.mounted) {
+                          Navigator.pop(dialogContext);
+                        }
+                      },
+                child: Text(l.commonSave),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  /// "Name this device": a dialog at 720px and wider, a bottom sheet below.
+  Future<void> _nameThisDevice(BuildContext context) async {
+    final device = controller.localDevice;
+    if (device == null) return;
+    await showFormSurface<void>(
+      context,
+      builder: (_) => _NameThisDeviceForm(
+        controller: controller,
+        initial: device.pairingName,
       ),
     );
   }
@@ -2007,6 +2058,77 @@ class _PairedBanner extends StatelessWidget {
   );
 }
 
+/// Whether a device name, once trimmed, is over the 64 UTF-8 byte limit Rust enforces.
+bool deviceNameTooLong(String name) => utf8.encode(name.trim()).length > 64;
+
+/// The "Name this device" form: a required Name, Save unavailable while it is blank, an
+/// inline error over 64 bytes, and Rust's stored name shown once saved.
+class _NameThisDeviceForm extends StatefulWidget {
+  const _NameThisDeviceForm({required this.controller, required this.initial});
+  final DevicesController controller;
+  final String initial;
+
+  @override
+  State<_NameThisDeviceForm> createState() => _NameThisDeviceFormState();
+}
+
+class _NameThisDeviceFormState extends State<_NameThisDeviceForm> {
+  late String _name = widget.initial;
+  List<String> _errors = const [];
+
+  Future<void> _save() async {
+    final saved = await widget.controller.renameLocalDevice(_name);
+    if (!mounted) return;
+    if (saved) {
+      Navigator.pop(context);
+      return;
+    }
+    final failure = widget.controller.failure;
+    setState(
+      () =>
+          _errors = [if (failure != null) bridgeMessage(context.l10n, failure)],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = context.l10n;
+    final blank = _name.trim().isEmpty;
+    final tooLong = deviceNameTooLong(_name);
+    return FormSurface(
+      title: l.devicesNameThisDeviceTitle,
+      primaryLabel: l.commonSave,
+      primaryKey: const Key('local-name-save'),
+      onPrimary: blank || tooLong || widget.controller.busy
+          ? null
+          : () => unawaited(_save()),
+      errors: _errors,
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            l.devicesNameThisDeviceSubtitle,
+            style: TextStyle(fontSize: 13, color: context.nocturne.muted(.6)),
+          ),
+          const SizedBox(height: 14),
+          FiTextInput(
+            key: const Key('local-name-field'),
+            initialValue: _name,
+            autofocus: true,
+            label: l.devicesNameLabel,
+            required: true,
+            errors: [if (tooLong) l.devicesNameTooLong],
+            onChanged: (value) => setState(() {
+              _name = value;
+              _errors = const [];
+            }),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// The "This device" section (mock devices): pairing name, the DeviceId grouped (shortened on a
 /// phone) with Copy ID, and the reset entry. Without an identity it says networking is not set
 /// up.
@@ -2016,9 +2138,13 @@ class _LocalIdentity extends StatefulWidget {
     required this.phone,
     required this.showReset,
     required this.onReset,
+    this.onRename,
   });
   final LocalDeviceDto? device;
   final bool phone;
+
+  /// Opens "Name this device"; the pencil is disabled while null.
+  final VoidCallback? onRename;
   final bool showReset;
   final VoidCallback? onReset;
 
@@ -2135,6 +2261,13 @@ class _LocalIdentityState extends State<_LocalIdentity> {
                             ),
                           ],
                         ),
+                      ),
+                      FiIconButton(
+                        key: const Key('rename-local-device'),
+                        icon: FiIcons.edit,
+                        tooltip: context.l10n.devicesRenameThisDevice,
+                        onPressed: widget.onRename,
+                        size: 16,
                       ),
                       if (_copied != null)
                         Padding(

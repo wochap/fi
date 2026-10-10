@@ -23,6 +23,7 @@ LogEventDto _event(int atMs, String event, [String? deviceId]) => LogEventDto(
 const _trusted = TrustedDeviceDto(
   deviceId: failedPeerId,
   friendlyName: 'Fi f755167e',
+  announcedName: 'Fi f755167e',
   pairedAtMs: 1,
   revoked: false,
   connection: PeerConnectionKindDto.synced,
@@ -69,6 +70,8 @@ void main() {
       'peer_address_observed': LogCategory.address,
       'peer_connection_state': LogCategory.peer,
       'peer_dial_failed': LogCategory.peer,
+      'peer_name_invalid': LogCategory.peer,
+      'peer_name_record_failed': LogCategory.peer,
       'peer_endpoint_discovered': LogCategory.address,
       'peer_endpoint_remembered': LogCategory.address,
       'remember_endpoint_failed': LogCategory.address,

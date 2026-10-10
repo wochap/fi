@@ -18,6 +18,7 @@ TrustedDeviceDto unreachable({
 }) => TrustedDeviceDto(
   deviceId: peerId,
   friendlyName: 'Fi f755167e',
+  announcedName: 'Fi f755167e',
   pairedAtMs: 1,
   lastSeenMs: DateTime.now()
       .subtract(const Duration(hours: 3))

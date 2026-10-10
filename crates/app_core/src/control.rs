@@ -67,11 +67,22 @@ pub struct RememberedEndpoint {
 pub struct TrustedDeviceRecord {
     pub device_id: DeviceId,
     pub public_key: PublicDeviceKey,
-    pub friendly_name: String,
+    /// The name the peer presents itself with, refreshed on every session.
+    pub announced_name: String,
+    /// A local name the user chose for the peer; wins over `announced_name`.
+    pub nickname: Option<String>,
     pub paired_at_ms: u64,
     pub last_seen_ms: Option<u64>,
     pub last_sync_ms: Option<u64>,
     pub state: TrustState,
+}
+
+impl TrustedDeviceRecord {
+    /// The nickname when one is set, otherwise the announced name.
+    #[must_use]
+    pub fn display_name(&self) -> &str {
+        self.nickname.as_deref().unwrap_or(&self.announced_name)
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

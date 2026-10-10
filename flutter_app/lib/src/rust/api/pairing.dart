@@ -93,6 +93,12 @@ Stream<List<TrustedDeviceDto>> connectionStateStream() =>
 Stream<SyncStatusDto> syncStatusStream() =>
     RustLib.instance.api.crateApiPairingSyncStatusStream();
 
+/// Names this device; peers learn the name on their next session. Fails
+/// with a validation error for a blank name or one over 64 UTF-8 bytes.
+Future<LocalDeviceDto> setLocalDeviceName({required String name}) =>
+    RustLib.instance.api.crateApiPairingSetLocalDeviceName(name: name);
+
+/// Sets a trusted device's local nickname; an empty name clears it.
 Future<bool> renameTrustedDevice({
   required String deviceId,
   required String name,

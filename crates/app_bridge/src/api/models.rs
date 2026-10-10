@@ -975,7 +975,12 @@ pub struct PairingCandidateDto {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TrustedDeviceDto {
     pub device_id: String,
+    /// Display name: the nickname when set, otherwise the announced name.
     pub friendly_name: String,
+    /// Name the user gave this device locally, if any.
+    pub nickname: Option<String>,
+    /// Name the device presents itself with.
+    pub announced_name: String,
     pub paired_at_ms: u64,
     pub last_seen_ms: Option<u64>,
     pub last_sync_ms: Option<u64>,
@@ -1255,7 +1260,9 @@ impl TrustedDeviceDto {
         };
         Self {
             device_id: value.device_id.to_string(),
-            friendly_name: value.friendly_name,
+            friendly_name: value.display_name().to_owned(),
+            nickname: value.nickname,
+            announced_name: value.announced_name,
             paired_at_ms: value.paired_at_ms,
             last_seen_ms: value.last_seen_ms,
             last_sync_ms: value.last_sync_ms,
@@ -1795,6 +1802,12 @@ impl From<AppError> for BridgeError {
                     BridgeErrorKind::Lifecycle,
                     "The device could not be reached.",
                 ),
+                AppError::DeviceName(app_core::DeviceNameError::Empty) => {
+                    Self::validation("name", "Enter a name.")
+                }
+                AppError::DeviceName(app_core::DeviceNameError::TooLong) => {
+                    Self::validation("name", "Use at most 64 bytes.")
+                }
                 AppError::Clock(error) => {
                     Self::safe(BridgeErrorKind::Validation, error.to_string())
                 }
@@ -2011,7 +2024,8 @@ mod tests {
         app_core::TrustedDeviceRecord {
             device_id: app_core::DeviceId::from_public_key(key.as_bytes()),
             public_key: key,
-            friendly_name: "peer".into(),
+            announced_name: "peer".into(),
+            nickname: None,
             paired_at_ms: 1,
             last_seen_ms: None,
             last_sync_ms: None,

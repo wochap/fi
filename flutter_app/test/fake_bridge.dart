@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:fi/bridge/collection_bridge.dart';
 import 'package:fi/file_dialogs.dart';
@@ -1471,25 +1472,83 @@ final class FakeCollectionBridge implements CollectionBridge {
 
   @override
   Future<List<TrustedDeviceDto>> trustedDevices() async => List.of(devices);
+
+  /// Sets a nickname like Rust does: trimmed, empty clears it, over 64
+  /// UTF-8 bytes is a validation error.
   @override
   Future<void> renameTrustedDevice(String deviceId, String name) async {
+    final trimmed = name.trim();
+    if (utf8.encode(trimmed).length > 64) throw _nameTooLong();
     final index = devices.indexWhere((item) => item.deviceId == deviceId);
-    final old = devices[index];
-    devices[index] = TrustedDeviceDto(
-      deviceId: old.deviceId,
-      friendlyName: name,
-      pairedAtMs: old.pairedAtMs,
-      lastSeenMs: old.lastSeenMs,
-      lastSyncMs: old.lastSyncMs,
-      revoked: old.revoked,
-      connection: old.connection,
-      attemptEndpoint: old.attemptEndpoint,
-      lastAttemptMs: old.lastAttemptMs,
-      failure: old.failure,
-      failureKind: old.failureKind,
-      lastKnownEndpoint: old.lastKnownEndpoint,
+    devices[index] = withNames(
+      devices[index],
+      nickname: trimmed.isEmpty ? null : trimmed,
+      announcedName: devices[index].announcedName,
     );
     devicesController.add(List.of(devices));
+  }
+
+  /// Models a peer announcing a new name on its next session.
+  void announceName(String deviceId, String name) {
+    final index = devices.indexWhere((item) => item.deviceId == deviceId);
+    devices[index] = withNames(
+      devices[index],
+      nickname: devices[index].nickname,
+      announcedName: name,
+    );
+    devicesController.add(List.of(devices));
+  }
+
+  /// [device] with its names replaced and the display name recomputed.
+  static TrustedDeviceDto withNames(
+    TrustedDeviceDto device, {
+    required String? nickname,
+    required String announcedName,
+  }) => TrustedDeviceDto(
+    deviceId: device.deviceId,
+    friendlyName: nickname ?? announcedName,
+    nickname: nickname,
+    announcedName: announcedName,
+    pairedAtMs: device.pairedAtMs,
+    lastSeenMs: device.lastSeenMs,
+    lastSyncMs: device.lastSyncMs,
+    revoked: device.revoked,
+    connection: device.connection,
+    attemptEndpoint: device.attemptEndpoint,
+    lastAttemptMs: device.lastAttemptMs,
+    failure: device.failure,
+    failureKind: device.failureKind,
+    lastKnownEndpoint: device.lastKnownEndpoint,
+  );
+
+  static BridgeError _nameTooLong() => const BridgeError(
+    kind: BridgeErrorKind.validation,
+    issues: [
+      BridgeIssueDto(
+        fields: ['name'],
+        code: 'invalid',
+        message: 'Use at most 64 bytes.',
+      ),
+    ],
+    message: 'Use at most 64 bytes.',
+    resetResolvable: false,
+  );
+
+  /// Names passed to [setLocalDeviceName], in order.
+  final List<String> localNames = [];
+  @override
+  Future<LocalDeviceDto> setLocalDeviceName(String name) async {
+    localNames.add(name);
+    final trimmed = name.trim();
+    if (trimmed.isEmpty || utf8.encode(trimmed).length > 64) {
+      throw _nameTooLong();
+    }
+    final updated = LocalDeviceDto(
+      deviceId: localIdentity!.deviceId,
+      pairingName: trimmed,
+    );
+    localIdentity = updated;
+    return updated;
   }
 
   /// Rotation failure the next revocation reports after committing.
@@ -1507,6 +1566,8 @@ final class FakeCollectionBridge implements CollectionBridge {
     devices[index] = TrustedDeviceDto(
       deviceId: old.deviceId,
       friendlyName: old.friendlyName,
+      nickname: old.nickname,
+      announcedName: old.announcedName,
       pairedAtMs: old.pairedAtMs,
       lastSeenMs: old.lastSeenMs,
       lastSyncMs: old.lastSyncMs,

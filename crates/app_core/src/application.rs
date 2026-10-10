@@ -23,6 +23,7 @@ use crate::{
     LocalIdentityRecord, ResetIntent,
     adapters::{FileDocumentStore, LocalTransport, SqliteControlStore},
     control::{NetworkPreferences, TrustState},
+    device_name::{DeviceNameError, generated_device_name, normalize_device_name},
     discovery::{AddressPolicy, DiscoveryGroupSecret},
     endpoint_memory::{ManualConnectOutcome, REMEMBERED_ENDPOINT_TTL_MS, parse_manual_address},
     error::{AppError, BootstrapError, Result},
@@ -279,6 +280,8 @@ pub struct AppCore {
     connections: Option<Arc<ConnectionManager>>,
     pairing: Option<Arc<PairingManager>>,
     peer_sync: watch::Receiver<std::collections::HashMap<PeerId, PeerSyncProgress>>,
+    /// Repository handle kept only to update the name sent in later Hellos.
+    repo_names: Repo,
     network_foreground: Arc<AtomicBool>,
     lifecycle_policy: LifecyclePolicy,
     port_policy: PortPolicy,
@@ -633,14 +636,19 @@ impl AppCore {
             FileDocumentStore::open(documents_dir(&data_dir), quarantine_dir(&data_dir)).await?,
         );
         let read_model = ReadModel::open_disposable(data_dir.join("read-model.sqlite"))?;
+        let mut repo_config = config.repo.clone();
+        if let Some(identity) = network_components.identity.as_deref() {
+            repo_config.local_name = stored_or_generated_name(&control_store, identity.id());
+        }
         let repo = Repo::open(
             document_store,
             control_store.clone(),
             transport,
-            config.repo.clone(),
+            repo_config,
         )
         .await?;
         let peer_sync = repo.subscribe_peer_sync();
+        let repo_names = repo.clone();
         let recovery = repo.subscribe_recovery();
         if let Some(record) = recovery.borrow().as_ref() {
             info!(
@@ -655,9 +663,15 @@ impl AppCore {
         if let Some(manager) = network_components.connections.clone() {
             spawn_sync_bridge(
                 peer_sync.clone(),
-                manager,
+                manager.clone(),
                 network_components.pairing.clone(),
                 control_store.clone(),
+            );
+            spawn_peer_name_bridge(
+                repo.subscribe_peer_names(),
+                manager,
+                control_store.clone(),
+                network_components.network.clone(),
             );
         }
         if let (Some(pairing), Some(connections), Some(network)) = (
@@ -757,6 +771,7 @@ impl AppCore {
             connections: network_components.connections,
             pairing: network_components.pairing,
             peer_sync,
+            repo_names,
             network_foreground: Arc::new(AtomicBool::new(false)),
             lifecycle_policy: config.lifecycle_policy,
             port_policy: config.ports,
@@ -1459,7 +1474,11 @@ impl AppCore {
             .trusted_devices()
             .map_err(Into::into)
     }
+    /// Sets a trusted device's local nickname; an empty name clears it.
     pub fn rename_trusted_device(&self, peer: DeviceId, name: &str) -> Result<bool> {
+        if let Err(DeviceNameError::TooLong) = normalize_device_name(name) {
+            return Err(DeviceNameError::TooLong.into());
+        }
         self.pairing
             .as_ref()
             .ok_or_else(|| AppError::Storage("pairing requires networked mode".into()))?
@@ -1560,16 +1579,33 @@ impl AppCore {
         Ok(epoch)
     }
 
-    /// The friendly name this device presents to peers in the pairing hello.
+    /// The name this device presents to peers in the pairing hello and in
+    /// every repository Hello: the stored name, else "Fi <8 hex>".
     #[must_use]
     pub fn local_device_name(&self) -> String {
         self.local_pairing_name()
     }
 
+    /// Validates, stores and announces this device's name. Peers learn it on
+    /// their next session. Returns the stored (trimmed) name.
+    pub fn set_local_device_name(&self, name: &str) -> Result<String> {
+        if self.device_id().is_none() {
+            return Err(AppError::Storage(
+                "naming this device requires an identity".into(),
+            ));
+        }
+        let name = normalize_device_name(name)?;
+        if !self.control.set_local_display_name(&name)? {
+            return Err(AppError::Storage("no local identity is stored".into()));
+        }
+        self.repo_names.set_local_name(name.clone());
+        Ok(name)
+    }
+
     fn local_pairing_name(&self) -> String {
         self.device_id().map_or_else(
             || "Fi device".into(),
-            |device| format!("Fi {}", &device.to_string()[..8]),
+            |device| stored_or_generated_name(&self.control, device),
         )
     }
 
@@ -2760,6 +2796,82 @@ impl ActivityRecorder {
     }
 }
 
+/// The stored name for this installation, or the generated default.
+fn stored_or_generated_name(control: &SqliteControlStore, device: DeviceId) -> String {
+    control
+        .local_display_name()
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| generated_device_name(device))
+}
+
+/// Records the name each trusted peer announces in its repository Hello.
+/// Writes only the announced name, so a nickname always survives; an invalid
+/// name is a protocol failure for that peer.
+fn spawn_peer_name_bridge(
+    mut names: watch::Receiver<std::collections::HashMap<PeerId, String>>,
+    manager: Arc<ConnectionManager>,
+    control: Arc<SqliteControlStore>,
+    network: Option<Arc<QuinnTransport>>,
+) {
+    tokio::spawn(async move {
+        let mut recorded = std::collections::HashMap::<DeviceId, String>::new();
+        loop {
+            let snapshot = names.borrow_and_update().clone();
+            recorded.retain(|device, _| snapshot.contains_key(&PeerId::from(device.to_string())));
+            let mut changed = false;
+            for (peer, name) in snapshot {
+                let Ok(device) = peer.as_str().parse::<DeviceId>() else {
+                    continue;
+                };
+                if recorded.get(&device) == Some(&name) {
+                    continue;
+                }
+                recorded.insert(device, name.clone());
+                match normalize_device_name(&name) {
+                    Ok(valid) if valid == name => {
+                        match control.record_announced_name(device, &name) {
+                            Ok(wrote) => changed |= wrote,
+                            Err(error) => warn!(
+                                event = "peer_name_record_failed",
+                                device_id = %device,
+                                error = %error,
+                                "could not record the peer's announced name"
+                            ),
+                        }
+                    }
+                    _ => {
+                        warn!(
+                            event = "peer_name_invalid",
+                            device_id = %device,
+                            "peer announced an invalid device name"
+                        );
+                        if let Some(network) = network.as_ref() {
+                            let _ = NetworkTransport::close_peer(network.as_ref(), &peer).await;
+                        }
+                        manager.set_state(
+                            device,
+                            PeerConnectionState::Failed {
+                                failure: crate::routing::ConnectionFailure::Stream(
+                                    "invalid device name in Hello".into(),
+                                ),
+                                endpoint: None,
+                            },
+                        );
+                    }
+                }
+            }
+            if changed {
+                // The devices stream re-queries records on any state change.
+                manager.notify_records_changed();
+            }
+            if names.changed().await.is_err() {
+                break;
+            }
+        }
+    });
+}
+
 fn spawn_sync_bridge(
     mut sync: watch::Receiver<std::collections::HashMap<PeerId, PeerSyncProgress>>,
     manager: Arc<ConnectionManager>,
@@ -3784,7 +3896,8 @@ mod tests {
             .upsert_trusted_device(&crate::control::TrustedDeviceRecord {
                 device_id,
                 public_key: key,
-                friendly_name: format!("Device {seed}"),
+                announced_name: format!("Device {seed}"),
+                nickname: None,
                 paired_at_ms: 1,
                 last_seen_ms: None,
                 last_sync_ms: None,
