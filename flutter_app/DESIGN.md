@@ -141,7 +141,9 @@ fills only; every word, tag labels included, stays in `text`. Never fake an erro
 revoked, synced, ready, expired or locked state with the accent or a faded text color. The accent
 stays the color of active, selected, connected and syncing states. Tags: `Tag` (accent),
 `Tag.neutral`, `Tag.outline`, `Tag.danger` (1px danger edge, danger icon), `Tag.success` (success
-fill, success icon); there is no warning tag.
+fill, success icon); there is no warning tag. The temporary accent "Clone" tag (semantics
+"Recently cloned") marks the records the last clone in the open collection created, after the card
+title or in the table row's first cell; it is in-memory only and clears on leaving the collection.
 
 ## Input sizes
 
@@ -196,7 +198,7 @@ must write one, use these sizes:
 | Where | Breakpoint | Behavior |
 | --- | --- | --- |
 | Screen width (`MediaQuery`) | 720 | ≥720: 216px sidebar (`_Sidebar` in `app.dart`, Collections and Devices, the build label under the sync status). <720: slim logo row plus `NavigationBar` (Collections · Devices · Settings; the build label in Settings › About), bottom sheets instead of side sheets, larger touch targets (44–48px), create/edit forms as bottom sheets |
-| Screen width, collection screen | 720 | ≥720: records table. <720: record cards (newest first), a phone header with Schema and a ⋮ menu (Queries, Select records, Collection actions…), floating "+ Record" button, row menus as action sheets, device Details as a pushed screen |
+| Screen width, collection screen | 720 | ≥720: records table. <720: record cards (newest first) ending in a Clone icon (instant clone, Undo) then the immediate delete icon, a phone header with Schema and a ⋮ menu (Queries, Select records, Collection actions…), floating "+ Record" button, row menus as action sheets, device Details as a pushed screen |
 | Collection content width (`LayoutBuilder`) | 760 | Above the phone breakpoint: ≥760 labelled header buttons, <760 the same actions as icon buttons |
 | Form surface screen width | 820 | ≥820: a form with an aside (the widget editor's preview) shows it as a 280px pane beside the form; below, the aside is pinned above the buttons |
 

@@ -254,6 +254,26 @@ final class CollectionsController extends ChangeNotifier {
   List<WidgetEvaluationDto> widgetEvaluations = const [];
   List<WidgetDescriptorDto> widgetDescriptors = const [];
   String? selectedCollectionId;
+
+  /// Records the last clone in the open collection created, shown with a Clone badge. Plain
+  /// in-memory state: never persisted or synced, so a restart clears it.
+  Set<String> _recentCloneIds = const {};
+  String? _recentCloneCollectionId;
+  Set<String> get recentCloneIds => Set.unmodifiable(_recentCloneIds);
+  bool isRecentClone(String id) => _recentCloneIds.contains(id);
+
+  /// Replaces the badged set with [ids], in the open collection.
+  void markCloned(Iterable<String> ids) {
+    _recentCloneIds = ids.toSet();
+    _recentCloneCollectionId = selectedCollectionId;
+    notifyListeners();
+  }
+
+  void _clearRecentClones() {
+    _recentCloneIds = const {};
+    _recentCloneCollectionId = null;
+  }
+
   ProjectionDto projection = const ProjectionDto(
     kind: ProjectionKindDto.unavailable,
   );
@@ -365,6 +385,11 @@ final class CollectionsController extends ChangeNotifier {
         widgetEvaluations = const [];
       }
       _pruneSelection();
+      // Prunes against every active record of the collection, never a filtered list.
+      if (_recentCloneIds.isNotEmpty) {
+        final active = {for (final record in records) record.id};
+        _recentCloneIds = _recentCloneIds.where(active.contains).toSet();
+      }
       failure = null;
     } catch (error) {
       failure = error;
@@ -431,6 +456,7 @@ final class CollectionsController extends ChangeNotifier {
   }
 
   Future<void> selectCollection(String? id) async {
+    if (id != _recentCloneCollectionId) _clearRecentClones();
     selectedCollectionId = id;
     await refresh();
   }
@@ -576,6 +602,7 @@ final class CollectionsController extends ChangeNotifier {
   Future<void> deleteCollection(String id) async {
     await bridge.deleteCollection(id);
     if (selectedCollectionId == id) selectedCollectionId = null;
+    if (_recentCloneCollectionId == id) _clearRecentClones();
     await refresh();
   }
 
@@ -740,18 +767,19 @@ final class CollectionsController extends ChangeNotifier {
   }
 
   /// Saves a new record, with the options the form added ([pendingOptions]), in one Rust
-  /// command.
-  Future<void> createRecord(
+  /// command, and returns its id.
+  Future<String> createRecord(
     List<RecordValueDto> values, {
     List<PendingOptionDto> pendingOptions = const [],
   }) async {
-    await bridge.saveRecordDraft(
+    final id = await bridge.saveRecordDraft(
       selectedCollectionId!,
       null,
       values,
       pendingOptions,
     );
     await refresh();
+    return id;
   }
 
   /// Saves the changed [values] of an existing record, with the options the form added, in one
@@ -867,6 +895,21 @@ final class CollectionsController extends ChangeNotifier {
     }
     await refresh();
     clearSelection();
+    markCloned(created);
+    return created;
+  }
+
+  /// Clones one record, leaving the selection untouched, and returns the created ids.
+  Future<List<String>> cloneRecord(String recordId) async {
+    final List<String> created;
+    try {
+      created = await bridge.cloneRecords([recordId], selectedCollectionId!);
+    } catch (failure) {
+      await _reportBatchFailure(failure);
+      rethrow;
+    }
+    await refresh();
+    markCloned(created);
     return created;
   }
 
@@ -875,6 +918,10 @@ final class CollectionsController extends ChangeNotifier {
   Future<void> undoClone(List<String> ids) async {
     final present = {for (final record in records) record.id};
     final active = ids.where(present.contains).toList(growable: false);
+    if (_recentCloneIds.any(ids.contains)) {
+      _recentCloneIds = _recentCloneIds.difference(ids.toSet());
+      notifyListeners();
+    }
     if (active.isEmpty) return;
     try {
       await bridge.deleteRecords(active, selectedCollectionId!);

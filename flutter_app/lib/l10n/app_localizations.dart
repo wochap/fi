@@ -2696,6 +2696,18 @@ abstract class AppLocalizations {
   /// **'{count, plural, =1{+ 1 more field} other{+ {count} more fields}}'**
   String recordsMoreFields(int count);
 
+  /// Tag on a record a clone just created
+  ///
+  /// In en, this message translates to:
+  /// **'Clone'**
+  String get recordsCloneBadge;
+
+  /// Semantics label of the Clone tag
+  ///
+  /// In en, this message translates to:
+  /// **'Recently cloned'**
+  String get recordsCloneBadgeSemantics;
+
   /// Tag
   ///
   /// In en, this message translates to:

@@ -2197,6 +2197,14 @@
       }
     }
   },
+  "recordsCloneBadge": "Clone",
+  "@recordsCloneBadge": {
+    "description": "Tag on a record a clone just created"
+  },
+  "recordsCloneBadgeSemantics": "Recently cloned",
+  "@recordsCloneBadgeSemantics": {
+    "description": "Semantics label of the Clone tag"
+  },
   "recordsIncomplete": "Incomplete",
   "@recordsIncomplete": {
     "description": "Tag"

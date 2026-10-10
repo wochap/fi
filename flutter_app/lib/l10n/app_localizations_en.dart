@@ -1631,6 +1631,12 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get recordsCloneBadge => 'Clone';
+
+  @override
+  String get recordsCloneBadgeSemantics => 'Recently cloned';
+
+  @override
   String get recordsIncomplete => 'Incomplete';
 
   @override

@@ -785,19 +785,9 @@ class CollectionsPage extends StatelessWidget {
                     selectedIds: controller.selectedRecordIds,
                     onOpen: (record) => _openRecord(context, schema, record),
                     onToggle: controller.toggleSelected,
+                    isRecentClone: controller.isRecentClone,
                     onClone: (record) => unawaited(
-                      _recordEditor(
-                        context,
-                        schema,
-                        null,
-                        null,
-                        _cloneValues(fields, (id) => _recordValue(record, id)),
-                        _cloneTitle(
-                          context,
-                          fields,
-                          (id) => _recordValue(record, id),
-                        ),
-                      ),
+                      _cloneEditor(context, schema, fields, record),
                     ),
                     onDelete: (record) async {
                       if (await _confirmRecordDelete(context)) {
@@ -1283,11 +1273,20 @@ class CollectionsPage extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   spacing: 6,
                   children: [
-                    if (!record.valid)
-                      Tag.outline(
-                        l.recordsIncomplete,
-                        key: Key('record-incomplete-${record.id}'),
-                        leading: FiIcons.warning,
+                    if (!record.valid || controller.isRecentClone(record.id))
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: [
+                          if (!record.valid)
+                            Tag.outline(
+                              l.recordsIncomplete,
+                              key: Key('record-incomplete-${record.id}'),
+                              leading: FiIcons.warning,
+                            ),
+                          if (controller.isRecentClone(record.id))
+                            _CloneBadge(key: Key('clone-badge-${record.id}')),
+                        ],
                       ),
                     if (fields.isEmpty)
                       Text(
@@ -1353,7 +1352,18 @@ class CollectionsPage extends StatelessWidget {
               ),
               // The two delete affordances never coexist: single delete is immediate, the batch
               // one is confirmed.
-              if (!selecting)
+              if (!selecting) ...[
+                FiIconButton(
+                  key: Key('card-clone-${record.id}'),
+                  icon: FiIcons.copy,
+                  tooltip: l.recordsClone,
+                  color: context.nocturne.muted(.45),
+                  onPressed: () => unawaited(
+                    record.valid
+                        ? _cardClone(context, record.id)
+                        : _cloneEditor(context, schema, fields, record),
+                  ),
+                ),
                 FiIconButton(
                   icon: FiIcons.delete,
                   tooltip: l.recordsDeleteRecord,
@@ -1361,6 +1371,7 @@ class CollectionsPage extends StatelessWidget {
                   onPressed: () =>
                       unawaited(controller.deleteRecord(record.id)),
                 ),
+              ],
             ],
           ),
         ),
@@ -2087,31 +2098,66 @@ class CollectionsPage extends StatelessWidget {
 
   /// Clones the whole selection in one batch, without a form or confirmation, and offers Undo,
   /// which deletes exactly the created copies.
-  Future<void> _batchClone(BuildContext context) async {
+  Future<void> _batchClone(BuildContext context) =>
+      _cloneWith(context, controller.cloneSelected);
+
+  /// Clones one complete card's record instantly, with the same feedback and Undo as batch Clone.
+  Future<void> _cardClone(BuildContext context, String recordId) =>
+      _cloneWith(context, () => controller.cloneRecord(recordId));
+
+  Future<void> _cloneWith(
+    BuildContext context,
+    Future<List<String>> Function() clone,
+  ) async {
     final messenger = ScaffoldMessenger.of(context);
     final l = context.l10n;
     final width = MediaQuery.sizeOf(context).width;
     try {
-      final created = await controller.cloneSelected();
-      showOutcomeToastOn(
-        messenger,
-        l,
-        width,
-        l.recordsClonedSnack(created.length),
-        success: true,
-        action: SnackBarAction(
-          key: const Key('undo-clone'),
-          label: l.commonUndo,
-          onPressed: () => unawaited(
-            controller.undoClone(created).catchError((Object _) {}),
-          ),
-        ),
-      );
+      final created = await clone();
+      _showCloned(messenger, l, width, created);
     } catch (_) {
       // The typed error is already on the controller's banner and the
       // selection has been pruned.
     }
   }
+
+  /// "Cloned N records" with an Undo that deletes exactly the [created] copies.
+  void _showCloned(
+    ScaffoldMessengerState messenger,
+    AppLocalizations l,
+    double width,
+    List<String> created,
+  ) {
+    showOutcomeToastOn(
+      messenger,
+      l,
+      width,
+      l.recordsClonedSnack(created.length),
+      success: true,
+      action: SnackBarAction(
+        key: const Key('undo-clone'),
+        label: l.commonUndo,
+        onPressed: () =>
+            unawaited(controller.undoClone(created).catchError((Object _) {})),
+      ),
+    );
+  }
+
+  /// Opens the new-record editor prefilled with [record]'s values (desktop row menu and
+  /// incomplete cards).
+  Future<void> _cloneEditor(
+    BuildContext context,
+    CollectionSchemaDto schema,
+    List<FieldDefinitionDto> fields,
+    RecordDto record,
+  ) => _recordEditor(
+    context,
+    schema,
+    null,
+    null,
+    _cloneValues(fields, (id) => _recordValue(record, id)),
+    _cloneTitle(context, fields, (id) => _recordValue(record, id)),
+  );
 
   /// Picks one active field and one value, confirms, then sets it across the
   /// whole selection in one batch.
@@ -2246,7 +2292,8 @@ class CollectionsPage extends StatelessWidget {
 
   /// A dialog on a wide screen; on a phone, a bottom sheet with large inputs (mocks record-form-empty, record-form-errors, record-form-edit).
   /// [prefill] opens a new record holding those values instead of the defaults (Clone), and
-  /// [cloneOf] is the cloned record's title for the "Clone of ‘…’" line.
+  /// [cloneOf] is the cloned record's title for the "Clone of ‘…’" line. A non-null [prefill]
+  /// always comes from Clone, so saving it badges the new record.
   Future<void> _recordEditor(
     BuildContext context,
     CollectionSchemaDto schema, [
@@ -2269,6 +2316,7 @@ class CollectionsPage extends StatelessWidget {
           focusFieldId: focusFieldId,
           prefill: prefill,
           cloneOf: cloneOf,
+          fromClone: prefill != null,
           onClone: (values, title) {
             if (context.mounted) {
               unawaited(
@@ -2630,6 +2678,7 @@ class _RecordEditorForm extends StatefulWidget {
     this.focusFieldId,
     this.prefill,
     this.cloneOf,
+    this.fromClone = false,
     this.onClone,
   });
 
@@ -2645,6 +2694,9 @@ class _RecordEditorForm extends StatefulWidget {
 
   /// The cloned record's title, shown as "Clone of ‘<title>’"; null omits the line.
   final String? cloneOf;
+
+  /// Opened by Clone: saving marks the new record with the Clone badge.
+  final bool fromClone;
 
   /// Opens a new-record editor holding these values (and the source's title), after this
   /// editor has closed.
@@ -3052,10 +3104,11 @@ class _RecordEditorFormState extends State<_RecordEditorForm> {
     try {
       final existing = widget.existing;
       if (existing == null) {
-        await widget.controller.createRecord(
+        final id = await widget.controller.createRecord(
           _submitted,
           pendingOptions: List.of(_pending),
         );
+        if (widget.fromClone) widget.controller.markCloned([id]);
       } else if (_submitted.isNotEmpty) {
         await widget.controller.updateRecord(
           existing.id,
@@ -3440,6 +3493,7 @@ class _RecordTable extends StatefulWidget {
     required this.selectedIds,
     required this.onOpen,
     required this.onToggle,
+    required this.isRecentClone,
     required this.onClone,
     required this.onDelete,
   });
@@ -3459,6 +3513,9 @@ class _RecordTable extends StatefulWidget {
   final Set<String> selectedIds;
   final ValueChanged<RecordDto> onOpen;
   final ValueChanged<String> onToggle;
+
+  /// Whether a row gets the Clone badge.
+  final bool Function(String id) isRecentClone;
 
   /// Row menu actions; Delete… confirms before deleting.
   final ValueChanged<RecordDto> onClone;
@@ -3719,6 +3776,11 @@ class _RecordTableState extends State<_RecordTable> {
                 color: context.nocturne.warning,
               ),
             ),
+          if (widget.isRecentClone(record.id))
+            Padding(
+              padding: const EdgeInsets.only(right: 6),
+              child: _CloneBadge(key: Key('clone-badge-${record.id}')),
+            ),
           Expanded(child: content),
         ],
       );
@@ -3753,6 +3815,18 @@ class _RecordTableState extends State<_RecordTable> {
       ),
     );
   }
+}
+
+/// The temporary "Clone" tag on a record the last clone in this collection created.
+class _CloneBadge extends StatelessWidget {
+  const _CloneBadge({super.key});
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: context.l10n.recordsCloneBadgeSemantics,
+    excludeSemantics: true,
+    child: Tag(context.l10n.recordsCloneBadge),
+  );
 }
 
 /// The line under (or, on a phone, above) the records saying how many are incomplete.

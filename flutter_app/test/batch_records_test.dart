@@ -414,4 +414,186 @@ void main() {
     expect(find.text('row 0'), findsNothing);
     expect(find.text('row 1'), findsOneWidget);
   });
+
+  group('record clone ux', () {
+    void phone(WidgetTester tester, [double width = 390]) {
+      tester.view.physicalSize = Size(width, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+    }
+
+    Finder badge(String id) => find.byKey(Key('clone-badge-$id'));
+
+    testWidgets('card Clone clones instantly, badges and undoes', (
+      tester,
+    ) async {
+      phone(tester);
+      final bridge = seeded(2);
+      await openCollection(tester, bridge);
+      await tester.tap(find.byKey(const Key('card-clone-record-0')));
+      await tester.pumpAndSettle();
+      expect(bridge.batchCloneCalls, [
+        ['record-0'],
+      ]);
+      expect(find.text('New record'), findsNothing);
+      expect(find.text('Cloned 1 record'), findsOneWidget);
+      final created = bridge.records[_collection]!.last.id;
+      expect(badge(created), findsOneWidget);
+      expect(badge('record-0'), findsNothing);
+      expect(
+        find.descendant(
+          of: badge(created),
+          matching: find.byWidgetPredicate(
+            (w) => w is Semantics && w.properties.label == 'Recently cloned',
+          ),
+        ),
+        findsOneWidget,
+      );
+
+      // The badge outlasts the feedback.
+      ScaffoldMessenger.of(
+        tester.element(find.text('Cloned 1 record')),
+      ).removeCurrentSnackBar();
+      await tester.pumpAndSettle();
+      expect(badge(created), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('card-clone-record-1')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Undo'));
+      await tester.pumpAndSettle();
+      expect(bridge.batchDeleteCalls.last, hasLength(1));
+      expect(bridge.records[_collection], hasLength(3));
+      expect(find.byKey(const Key('clone-badge-record-0')), findsNothing);
+      expect(
+        badge(created),
+        findsNothing,
+        reason: 'replaced by the undone one',
+      );
+    });
+
+    testWidgets('an incomplete card opens the prefilled clone editor', (
+      tester,
+    ) async {
+      phone(tester);
+      final bridge = seeded(1);
+      final source = bridge.records[_collection]!.single;
+      bridge.records[_collection] = [
+        RecordDto(
+          id: source.id,
+          collectionId: _collection,
+          values: source.values,
+          valid: false,
+          diagnostics: const [],
+        ),
+      ];
+      await openCollection(tester, bridge);
+      await tester.tap(find.byKey(const Key('card-clone-record-0')));
+      await tester.pumpAndSettle();
+      expect(bridge.batchCloneCalls, isEmpty);
+      expect(find.text('Clone of ‘row 0’'), findsOneWidget);
+    });
+
+    testWidgets('at 360px a long title truncates before both buttons', (
+      tester,
+    ) async {
+      phone(tester, 360);
+      final bridge = seeded(1);
+      bridge.records[_collection] = [
+        RecordDto(
+          id: 'record-0',
+          collectionId: _collection,
+          values: [
+            RecordValueDto(
+              fieldId: _title,
+              value: FieldValueDto(
+                kind: FieldValueKindDto.text,
+                textValue: 'a very long title ' * 8,
+              ),
+            ),
+          ],
+          valid: true,
+          diagnostics: const [],
+        ),
+      ];
+      await openCollection(tester, bridge);
+      expect(tester.takeException(), isNull);
+      final clone = tester.getRect(
+        find.byKey(const Key('card-clone-record-0')),
+      );
+      final delete = tester.getRect(find.byTooltip('Delete record'));
+      expect(clone.right, lessThanOrEqualTo(delete.left));
+      expect(delete.right, lessThanOrEqualTo(360));
+      expect(clone.width, greaterThanOrEqualTo(44));
+      expect(delete.height, greaterThanOrEqualTo(44));
+    });
+
+    testWidgets('selection mode hides both card buttons', (tester) async {
+      phone(tester);
+      final bridge = seeded(2);
+      await openCollection(tester, bridge);
+      await tester.longPress(find.text('row 0'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('card-clone-record-0')), findsNothing);
+      expect(find.byTooltip('Delete record'), findsNothing);
+    });
+
+    testWidgets('batch clone badges rows and leaving clears them', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1240, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final bridge = seeded(2);
+      await openCollection(tester, bridge);
+      await tester.longPress(find.text('row 0'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('row 1'));
+      await tester.tap(find.byKey(const Key('selection-clone')));
+      await tester.pumpAndSettle();
+      final created = [
+        for (final r in bridge.records[_collection]!.skip(2)) r.id,
+      ];
+      for (final id in created) {
+        expect(badge(id), findsOneWidget);
+      }
+      expect(badge('record-0'), findsNothing);
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Headaches'));
+      await tester.pumpAndSettle();
+      for (final id in created) {
+        expect(badge(id), findsNothing);
+      }
+    });
+
+    testWidgets('a saved clone editor badges only the saved record', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1240, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      // One seeded record, so the fake's next record id ('record-1') is fresh.
+      final bridge = seeded(1);
+      await openCollection(tester, bridge);
+      await tester.tap(find.byKey(const Key('record-row-menu-record-0')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Clone'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Save record'));
+      await tester.pumpAndSettle();
+      final saved = bridge.records[_collection]!.last.id;
+      expect(badge(saved), findsOneWidget);
+      expect(find.textContaining('Cloned'), findsNothing);
+
+      // Cancelling another clone editor keeps the badge.
+      await tester.tap(find.byKey(const Key('record-row-menu-record-0')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Clone').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(badge(saved), findsOneWidget);
+    });
+  });
 }

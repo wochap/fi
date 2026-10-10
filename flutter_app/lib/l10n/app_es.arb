@@ -433,6 +433,8 @@
   "recordsEmpty": "Aún no hay registros.",
   "recordsFab": "Registro",
   "recordsMoreFields": "{count, plural, =1{+ 1 campo más} other{+ {count} campos más}}",
+  "recordsCloneBadge": "Copia",
+  "recordsCloneBadgeSemantics": "Clonado recientemente",
   "recordsIncomplete": "Incompleto",
   "recordsDeleteRecord": "Eliminar registro",
   "recordsSchemaTitle": "Esquema de la colección",

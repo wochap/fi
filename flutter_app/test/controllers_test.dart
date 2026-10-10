@@ -5,9 +5,11 @@ import 'package:fi/controllers.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'batch_records_test.dart' show seeded;
 import 'fake_bridge.dart';
 
 void main() {
+  _recentClonesTests();
   test('controller refreshes generic projection events and CRUD', () async {
     final bridge = FakeCollectionBridge();
     final controller = CollectionsController(bridge);
@@ -1105,3 +1107,79 @@ StructuredValueDto _integer(int value) => StructuredValueDto(
   items: const [],
   entries: const [],
 );
+
+void _recentClonesTests() {
+  group('recent clones', () {
+    const collection = 'collection-1';
+
+    Future<CollectionsController> open(FakeCollectionBridge bridge) async {
+      final controller = CollectionsController(bridge);
+      await controller.start();
+      await controller.selectCollection(collection);
+      return controller;
+    }
+
+    test('batch and single clones mark exactly the created ids', () async {
+      final bridge = seeded(3);
+      final controller = await open(bridge);
+      controller
+        ..toggleSelected('record-0')
+        ..toggleSelected('record-1');
+      final batch = await controller.cloneSelected();
+      expect(controller.recentCloneIds, batch.toSet());
+      expect(controller.isRecentClone('record-0'), isFalse);
+
+      final single = await controller.cloneRecord('record-2');
+      expect(single, hasLength(1));
+      expect(controller.recentCloneIds, single.toSet(), reason: 'replaced');
+      expect(controller.selectedRecordIds, isEmpty);
+      controller.dispose();
+    });
+
+    test('undo removes ids and deleted records are pruned', () async {
+      final bridge = seeded(2);
+      final controller = await open(bridge);
+      controller
+        ..toggleSelected('record-0')
+        ..toggleSelected('record-1');
+      final created = await controller.cloneSelected();
+      await controller.undoClone([created.first]);
+      expect(controller.recentCloneIds, {created.last});
+
+      // A remote deletion prunes on the next refresh; still-active ids stay.
+      controller.markCloned([...created, 'record-0']);
+      bridge.records[collection]!.removeWhere((r) => r.id == created.last);
+      await controller.refresh();
+      expect(controller.recentCloneIds, {'record-0'});
+
+      await controller.deleteRecord('record-0');
+      expect(controller.recentCloneIds, isEmpty);
+      controller.dispose();
+    });
+
+    test('leaving or switching the collection clears the set', () async {
+      final bridge = seeded(1);
+      final controller = await open(bridge);
+      await controller.cloneRecord('record-0');
+      expect(controller.recentCloneIds, hasLength(1));
+      await controller.selectCollection(collection);
+      expect(controller.recentCloneIds, hasLength(1), reason: 'same owner');
+      await controller.selectCollection(null);
+      expect(controller.recentCloneIds, isEmpty);
+
+      await controller.selectCollection(collection);
+      await controller.cloneRecord('record-0');
+      await controller.deleteCollection(collection);
+      expect(controller.recentCloneIds, isEmpty);
+      controller.dispose();
+    });
+
+    test('createRecord returns the new id', () async {
+      final bridge = seeded(0);
+      final controller = await open(bridge);
+      final id = await controller.createRecord(const []);
+      expect(controller.records.map((r) => r.id), contains(id));
+      controller.dispose();
+    });
+  });
+}
