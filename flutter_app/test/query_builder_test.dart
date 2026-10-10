@@ -387,6 +387,29 @@ void main() {
               ),
           ],
         ),
+        FieldDefinitionDto(
+          id: 'kind',
+          name: 'kind',
+          fieldType: const FieldTypeDto(kind: FieldTypeKindDto.enum_),
+          required_: false,
+          validation: const ValidationMetadataDto(),
+          display: const DisplayMetadataDto(
+            multiline: false,
+            slider: false,
+            sliderStep: null,
+          ),
+          order: 4,
+          deleted: false,
+          enumOptions: [
+            for (final (index, label) in ['headache', 'stomach'].indexed)
+              EnumOptionDto(
+                id: label,
+                label: label,
+                order: index,
+                deleted: false,
+              ),
+          ],
+        ),
       ],
     );
 
@@ -473,6 +496,32 @@ void main() {
       expect(loaded.filterChoices, isTrue);
       expect(loaded.choicesOperator, ChoicesFilterOperator.hasAnyOf);
       expect(loaded.filterOptions, ['work', 'urgent']);
+    });
+
+    test('a single-choice field is not offered has all of', () {
+      expect(
+        ChoicesFilterOperator.offeredFor(FieldTypeKindDto.enum_),
+        isNot(contains(ChoicesFilterOperator.hasAllOf)),
+      );
+      expect(
+        ChoicesFilterOperator.offeredFor(FieldTypeKindDto.enumSet),
+        ChoicesFilterOperator.values,
+      );
+    });
+
+    testWidgets('switching from Choices to a single choice drops has all of', (
+      tester,
+    ) async {
+      final state = await pumpBuilder(tester);
+      await pick(tester, const Key('filter-field'), 'tags');
+      await pick(tester, const Key('filter-choices-operator'), 'has all of');
+      expect(state().choicesOperator, ChoicesFilterOperator.hasAllOf);
+      await pick(tester, const Key('filter-field'), 'kind');
+      expect(state().filterFieldId, 'kind');
+      expect(state().choicesOperator, ChoicesFilterOperator.hasAnyOf);
+      await tester.tap(find.byKey(const Key('filter-choices-operator')));
+      await tester.pumpAndSettle();
+      expect(find.text('has all of'), findsNothing);
     });
 
     testWidgets('is empty takes no value and saves IsNull', (tester) async {

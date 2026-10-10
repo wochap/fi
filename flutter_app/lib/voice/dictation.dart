@@ -479,32 +479,24 @@ class DictationStateRow extends StatelessWidget {
               button: true,
               label: l.dictationSkipLabel,
               excludeSemantics: true,
-              // Drawn compact so it fits a single-line box; the 44px target may overhang it.
-              child: IntrinsicWidth(
-                child: SizedBox(
-                  height: 28,
-                  child: OverflowBox(
-                    maxHeight: Nocturne.touchTarget,
-                    child: TextButton(
-                      key: const Key('dictation-skip'),
-                      onPressed: onSkip,
-                      style: TextButton.styleFrom(
-                        minimumSize: const Size(
-                          Nocturne.touchTarget,
-                          Nocturne.touchTarget,
-                        ),
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        foregroundColor: context.nocturne.accentInk,
-                        textStyle: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      child: Text(l.dictationSkip),
-                    ),
+              // 44px on a phone (the 48px box holds it), 28px on a desktop (the 40px box), so
+              // the whole target stays inside the field and every tap on it lands.
+              child: TextButton(
+                key: const Key('dictation-skip'),
+                onPressed: onSkip,
+                style: TextButton.styleFrom(
+                  minimumSize: Size.square(
+                    Nocturne.isPhone(context) ? Nocturne.touchTarget : 28,
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  foregroundColor: context.nocturne.accentInk,
+                  textStyle: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
+                child: Text(l.dictationSkip),
               ),
             ),
         ],

@@ -6361,6 +6361,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count, plural, =1{1 broken view wasn\'t included: {names}.} other{{count} broken views weren\'t included: {names}.}}'**
   String collectionsExportViewsOmitted(int count, String names);
+
+  /// Clone collection outcome: broken views left out of the copy
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Collection cloned. 1 broken view wasn\'t copied: {names}.} other{Collection cloned. {count} broken views weren\'t copied: {names}.}}'**
+  String collectionsCloneViewsSkipped(int count, String names);
 }
 
 class _AppLocalizationsDelegate
