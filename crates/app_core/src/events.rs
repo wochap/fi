@@ -31,6 +31,8 @@ pub enum DomainKind {
     /// Widget definitions changed. Derived widget results are never synchronized, so this always
     /// means "reread definitions and reevaluate visible widgets".
     Widgets,
+    /// Collection view definitions changed.
+    Views,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

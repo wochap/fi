@@ -64,6 +64,7 @@ macro_rules! query_id {
 
 query_id!(QueryId, "query_id");
 query_id!(ComputedFieldId, "computed_field_id");
+query_id!(ViewId, "view_id");
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -1726,7 +1727,7 @@ fn group_keys(key: TypedValue) -> Vec<TypedValue> {
     }
 }
 
-fn compare_records(
+pub(crate) fn compare_records(
     a: &GenericRecord,
     b: &GenericRecord,
     sorts: &[SortClause],
@@ -1756,10 +1757,10 @@ fn compare_records(
 
 /// Each option's stored position across every Choices field of the schema, removed options
 /// included, built once per execution for sorting single-choice values.
-struct OptionPositions(std::collections::HashMap<EnumOptionId, i64>);
+pub(crate) struct OptionPositions(std::collections::HashMap<EnumOptionId, i64>);
 
 impl OptionPositions {
-    fn new(schema: &CollectionSchema) -> Self {
+    pub(crate) fn new(schema: &CollectionSchema) -> Self {
         Self(
             schema
                 .fields

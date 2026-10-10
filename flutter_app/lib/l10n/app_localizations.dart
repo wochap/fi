@@ -2672,12 +2672,6 @@ abstract class AppLocalizations {
   /// **'Records'**
   String get recordsSection;
 
-  /// Order note
-  ///
-  /// In en, this message translates to:
-  /// **'Newest first'**
-  String get recordsNewestFirst;
-
   /// Empty state
   ///
   /// In en, this message translates to:
@@ -2840,11 +2834,11 @@ abstract class AppLocalizations {
   /// **'in {name}'**
   String recordsInCollection(String name);
 
-  /// Button
+  /// Select every record the view shows
   ///
   /// In en, this message translates to:
-  /// **'Select all'**
-  String get recordsSelectAll;
+  /// **'{n, plural, other{Select all {n}}}'**
+  String recordsSelectAll(int n);
 
   /// Tooltip
   ///
@@ -5875,6 +5869,354 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Announces itself as {name}. Clear the name to use that.'**
   String devicesAnnouncesAs(String name);
+
+  /// Name of the implicit view holding every record.
+  ///
+  /// In en, this message translates to:
+  /// **'All'**
+  String get viewAllName;
+
+  /// Validation issue: view filter is not Boolean.
+  ///
+  /// In en, this message translates to:
+  /// **'The filter must be a yes/no condition'**
+  String get errorViewFilterType;
+
+  /// Validation issue: invalid view sort key.
+  ///
+  /// In en, this message translates to:
+  /// **'This field can\'t be used to sort'**
+  String get errorViewSortKey;
+
+  /// Validation issue: too many sort keys.
+  ///
+  /// In en, this message translates to:
+  /// **'Sort by at most 3 keys'**
+  String get errorViewSortLimit;
+
+  /// Validation issue: invalid view grouping.
+  ///
+  /// In en, this message translates to:
+  /// **'This grouping isn\'t supported'**
+  String get errorViewGrouping;
+
+  /// Validation issue: the view is broken.
+  ///
+  /// In en, this message translates to:
+  /// **'This view uses a field that was deleted'**
+  String get errorViewBroken;
+
+  /// Inline error: the view name equals the All view's name.
+  ///
+  /// In en, this message translates to:
+  /// **'“{name}” is reserved'**
+  String viewNameReserved(String name);
+
+  /// Inline warning: another saved view has this name.
+  ///
+  /// In en, this message translates to:
+  /// **'Another view is already called {name}'**
+  String viewNameDuplicate(String name);
+
+  /// Notice: the unsaved view changes became broken and were dropped.
+  ///
+  /// In en, this message translates to:
+  /// **'Your unsaved changes used a field that was deleted, so they were discarded.'**
+  String get viewDraftDiscarded;
+
+  /// Semantics label of the view chip row
+  ///
+  /// In en, this message translates to:
+  /// **'Views'**
+  String get viewTabsLabel;
+
+  /// View chip: name and count
+  ///
+  /// In en, this message translates to:
+  /// **'{name} · {count}'**
+  String viewChipLabel(String name, int count);
+
+  /// View chip tooltip
+  ///
+  /// In en, this message translates to:
+  /// **'{name}: right-click or long-press for options'**
+  String viewChipTooltip(String name);
+
+  /// Button after the view chips (shown after a plus icon)
+  ///
+  /// In en, this message translates to:
+  /// **'View'**
+  String get viewNewView;
+
+  /// Accessible label and editor title for a new view
+  ///
+  /// In en, this message translates to:
+  /// **'New view'**
+  String get viewNewViewLabel;
+
+  /// View tab: record count
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 record} other{{count} records}}'**
+  String viewSemanticsCount(int count);
+
+  /// View tab: the view is broken
+  ///
+  /// In en, this message translates to:
+  /// **'broken'**
+  String get viewSemanticsBroken;
+
+  /// View tab: unsaved changes
+  ///
+  /// In en, this message translates to:
+  /// **'modified'**
+  String get viewSemanticsModified;
+
+  /// Announced when a view becomes modified
+  ///
+  /// In en, this message translates to:
+  /// **'{name} modified'**
+  String viewModifiedAnnounce(String name);
+
+  /// View line: sort prefix
+  ///
+  /// In en, this message translates to:
+  /// **'Sort:'**
+  String get viewSortLabel;
+
+  /// View line: filter prefix
+  ///
+  /// In en, this message translates to:
+  /// **'Filter:'**
+  String get viewFilterLabel;
+
+  /// Sort key: record creation time
+  ///
+  /// In en, this message translates to:
+  /// **'Created'**
+  String get viewSortCreated;
+
+  /// View line: a further sort key
+  ///
+  /// In en, this message translates to:
+  /// **'then {field}'**
+  String viewThenField(String field);
+
+  /// Sort direction word
+  ///
+  /// In en, this message translates to:
+  /// **'newest'**
+  String get viewDirNewest;
+
+  /// Sort direction word
+  ///
+  /// In en, this message translates to:
+  /// **'oldest'**
+  String get viewDirOldest;
+
+  /// Sort direction word
+  ///
+  /// In en, this message translates to:
+  /// **'A→Z'**
+  String get viewDirAToZ;
+
+  /// Sort direction word
+  ///
+  /// In en, this message translates to:
+  /// **'Z→A'**
+  String get viewDirZToA;
+
+  /// Sort direction word
+  ///
+  /// In en, this message translates to:
+  /// **'high'**
+  String get viewDirHigh;
+
+  /// Sort direction word
+  ///
+  /// In en, this message translates to:
+  /// **'low'**
+  String get viewDirLow;
+
+  /// Sort direction word
+  ///
+  /// In en, this message translates to:
+  /// **'option order'**
+  String get viewDirOptionOrder;
+
+  /// Sort direction word
+  ///
+  /// In en, this message translates to:
+  /// **'reverse'**
+  String get viewDirReverse;
+
+  /// Sort direction word
+  ///
+  /// In en, this message translates to:
+  /// **'yes first'**
+  String get viewDirYesFirst;
+
+  /// Sort direction word
+  ///
+  /// In en, this message translates to:
+  /// **'no first'**
+  String get viewDirNoFirst;
+
+  /// Tooltip of the ⇅ button
+  ///
+  /// In en, this message translates to:
+  /// **'Flip sort direction'**
+  String get viewFlipSort;
+
+  /// Action and editor title
+  ///
+  /// In en, this message translates to:
+  /// **'Edit view'**
+  String get viewEditView;
+
+  /// Modified view action
+  ///
+  /// In en, this message translates to:
+  /// **'Save as new view'**
+  String get viewSaveAsNew;
+
+  /// Modified view action
+  ///
+  /// In en, this message translates to:
+  /// **'Reset'**
+  String get viewReset;
+
+  /// Editor section
+  ///
+  /// In en, this message translates to:
+  /// **'Name'**
+  String get viewEditorName;
+
+  /// Editor section
+  ///
+  /// In en, this message translates to:
+  /// **'Filter · all must match'**
+  String get viewEditorFilter;
+
+  /// Editor section
+  ///
+  /// In en, this message translates to:
+  /// **'Sort'**
+  String get viewEditorSort;
+
+  /// Editor: add a further sort key
+  ///
+  /// In en, this message translates to:
+  /// **'Then by'**
+  String get viewEditorThenBy;
+
+  /// Editor: sort key picker label
+  ///
+  /// In en, this message translates to:
+  /// **'Sort by'**
+  String get viewEditorSortField;
+
+  /// Editor: sort direction picker label
+  ///
+  /// In en, this message translates to:
+  /// **'Direction'**
+  String get viewEditorDirection;
+
+  /// Tooltip
+  ///
+  /// In en, this message translates to:
+  /// **'Remove condition'**
+  String get viewEditorRemoveCondition;
+
+  /// Tooltip
+  ///
+  /// In en, this message translates to:
+  /// **'Remove sort key'**
+  String get viewEditorRemoveSort;
+
+  /// Editor: an unrecognised filter condition
+  ///
+  /// In en, this message translates to:
+  /// **'A condition this editor can\'t show'**
+  String get viewEditorOtherCondition;
+
+  /// Choices filter operator
+  ///
+  /// In en, this message translates to:
+  /// **'is any of'**
+  String get viewOpIsAnyOf;
+
+  /// Choices filter operator
+  ///
+  /// In en, this message translates to:
+  /// **'is none of'**
+  String get viewOpIsNoneOf;
+
+  /// Chip menu
+  ///
+  /// In en, this message translates to:
+  /// **'Reorder views…'**
+  String get viewMenuReorder;
+
+  /// Chip menu
+  ///
+  /// In en, this message translates to:
+  /// **'Delete…'**
+  String get viewMenuDelete;
+
+  /// Dialog title
+  ///
+  /// In en, this message translates to:
+  /// **'Rename view'**
+  String get viewRenameTitle;
+
+  /// Sheet title
+  ///
+  /// In en, this message translates to:
+  /// **'Reorder views'**
+  String get viewReorderTitle;
+
+  /// Reorder sheet: note on All
+  ///
+  /// In en, this message translates to:
+  /// **'Always first'**
+  String get viewReorderAlwaysFirst;
+
+  /// Delete dialog title
+  ///
+  /// In en, this message translates to:
+  /// **'Delete view “{name}”?'**
+  String viewDeleteTitle(String name);
+
+  /// Delete dialog body
+  ///
+  /// In en, this message translates to:
+  /// **'Records aren\'t affected.'**
+  String get viewDeleteBody;
+
+  /// Delete dialog safe action
+  ///
+  /// In en, this message translates to:
+  /// **'Keep view'**
+  String get viewDeleteKeep;
+
+  /// Notice on a broken view
+  ///
+  /// In en, this message translates to:
+  /// **'This view uses a field that was deleted'**
+  String get viewBrokenNotice;
+
+  /// Empty view
+  ///
+  /// In en, this message translates to:
+  /// **'No records match {name}.'**
+  String viewEmpty(String name);
+
+  /// Empty view action
+  ///
+  /// In en, this message translates to:
+  /// **'Show all'**
+  String get viewShowAll;
 }
 
 class _AppLocalizationsDelegate

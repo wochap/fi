@@ -43,7 +43,7 @@ use crate::{
     projection::{ReadModel, project, reconcile},
     query::{
         CollectionQuery, ComputedFieldDefinition, ComputedFieldId, Expression, InferredType,
-        QueryDefinition, QueryId, QueryResult, QueryValidationError, TypeEnvironment,
+        QueryDefinition, QueryId, QueryResult, QueryValidationError, TypeEnvironment, ViewId,
         execute_query, infer_expression, validate_query,
     },
     quinn_transport::{QuinnTransport, QuinnTransportConfig, QuinnTransportError},
@@ -56,6 +56,7 @@ use crate::{
         CollectionSchema, CollectionSchemaId, EnumOption, EnumOptionId, FieldDefinition, FieldId,
     },
     values::FieldValue,
+    view::{VersionedViewBody, ViewBody, ViewDefinition, ViewListing, ViewResult},
     widget_registry::{ResolvedWidgetQuery, WidgetEvaluation, evaluate_widget},
     widgets::{WidgetDefinition, WidgetId, WidgetUpdate},
 };
@@ -2185,6 +2186,84 @@ impl AppCore {
         .await
     }
 
+    /// Creates a view placed after the last saved view of the collection.
+    pub async fn create_view(
+        &self,
+        collection_id: CollectionSchemaId,
+        id: ViewId,
+        name: String,
+        body: ViewBody,
+    ) -> Result<()> {
+        self.generic(
+            GenericCommand::CreateView(ViewDefinition {
+                id,
+                collection_id,
+                name,
+                body: VersionedViewBody::new(&body),
+                order: 0,
+                deleted: false,
+            }),
+            vec![DomainKind::Views],
+            vec![collection_id],
+        )
+        .await
+    }
+    pub async fn update_view_body(
+        &self,
+        collection_id: CollectionSchemaId,
+        id: ViewId,
+        body: ViewBody,
+    ) -> Result<()> {
+        self.generic(
+            GenericCommand::UpdateViewBody {
+                collection_id,
+                id,
+                body: VersionedViewBody::new(&body),
+            },
+            vec![DomainKind::Views],
+            vec![collection_id],
+        )
+        .await
+    }
+    pub async fn rename_view(
+        &self,
+        collection_id: CollectionSchemaId,
+        id: ViewId,
+        name: String,
+    ) -> Result<()> {
+        self.generic(
+            GenericCommand::RenameView {
+                collection_id,
+                id,
+                name,
+            },
+            vec![DomainKind::Views],
+            vec![collection_id],
+        )
+        .await
+    }
+    pub async fn reorder_views(
+        &self,
+        collection_id: CollectionSchemaId,
+        ids: Vec<ViewId>,
+    ) -> Result<()> {
+        self.generic(
+            GenericCommand::ReorderViews { collection_id, ids },
+            vec![DomainKind::Views],
+            vec![collection_id],
+        )
+        .await
+    }
+    /// Tombstones a view; records are never touched.
+    pub async fn remove_view(&self, collection_id: CollectionSchemaId, id: ViewId) -> Result<()> {
+        self.generic(
+            GenericCommand::RemoveView { collection_id, id },
+            vec![DomainKind::Views],
+            vec![collection_id],
+        )
+        .await
+    }
+
     pub async fn submit_generic(
         &self,
         command: GenericCommand,
@@ -2549,6 +2628,76 @@ impl AppCore {
     pub fn widget_diagnostics(&self, id: WidgetId) -> Result<Vec<crate::GenericDiagnostic>> {
         ensure_query_ready(self.lifecycle_state())?;
         self.read_model.entity_diagnostics(&id.to_string())
+    }
+    /// All first, then the active saved views, each with health, effective sort and count.
+    pub fn list_views(
+        &self,
+        collection_id: CollectionSchemaId,
+        now_utc_ms: i64,
+    ) -> Result<Vec<ViewListing>> {
+        ensure_query_ready(self.lifecycle_state())?;
+        let schema = self.active_schema(collection_id)?;
+        let computed = self.read_model.computed_fields(collection_id)?;
+        let records = self.view_records(collection_id)?;
+        let views = self.read_model.views(collection_id)?;
+        Ok(crate::view::list_views(
+            &schema, &computed, &records, &views, now_utc_ms,
+        ))
+    }
+    /// Executes a saved view, or All when `id` is `None`.
+    pub fn execute_view(
+        &self,
+        collection_id: CollectionSchemaId,
+        id: Option<ViewId>,
+        now_utc_ms: i64,
+    ) -> Result<ViewResult> {
+        let body = match id {
+            None => ViewBody::all(),
+            Some(id) => {
+                ensure_query_ready(self.lifecycle_state())?;
+                let definition = self
+                    .read_model
+                    .views(collection_id)?
+                    .into_iter()
+                    .find(|view| view.id == id)
+                    .ok_or_else(|| crate::DomainError::NotFound {
+                        kind: "view",
+                        id: id.to_string(),
+                    })?;
+                definition
+                    .body
+                    .body()
+                    .map_err(|diagnostic| crate::DomainError::BrokenView { diagnostic })?
+            }
+        };
+        self.execute_view_body(collection_id, &body, now_utc_ms)
+    }
+    /// Executes an unsaved body; nothing is written.
+    pub fn execute_view_body(
+        &self,
+        collection_id: CollectionSchemaId,
+        body: &ViewBody,
+        now_utc_ms: i64,
+    ) -> Result<ViewResult> {
+        ensure_query_ready(self.lifecycle_state())?;
+        let schema = self.active_schema(collection_id)?;
+        let computed = self.read_model.computed_fields(collection_id)?;
+        let records = self.view_records(collection_id)?;
+        Ok(crate::view::execute_view(
+            &schema,
+            &computed,
+            &records,
+            &body.clone().normalized(),
+            now_utc_ms,
+        )?)
+    }
+    fn view_records(&self, collection_id: CollectionSchemaId) -> Result<Vec<GenericRecord>> {
+        Ok(self
+            .read_model
+            .records(collection_id)?
+            .into_iter()
+            .map(|view| view.record)
+            .collect())
     }
     pub fn validate_collection_query(
         &self,
@@ -3639,6 +3788,11 @@ fn command_name(command: &GenericCommand) -> &'static str {
         GenericCommand::UpdateWidget(_) => "update_widget",
         GenericCommand::RemoveWidget { .. } => "remove_widget",
         GenericCommand::ReorderWidgets { .. } => "reorder_widgets",
+        GenericCommand::CreateView(_) => "create_view",
+        GenericCommand::UpdateViewBody { .. } => "update_view_body",
+        GenericCommand::RenameView { .. } => "rename_view",
+        GenericCommand::ReorderViews { .. } => "reorder_views",
+        GenericCommand::RemoveView { .. } => "remove_view",
         GenericCommand::Batch(_) => "batch",
         GenericCommand::SaveRecordDraft { .. } => "save_record_draft",
         GenericCommand::MergeEnumOptions { .. } => "merge_enum_options",

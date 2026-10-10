@@ -1625,9 +1625,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get recordsSection => 'Registros';
 
   @override
-  String get recordsNewestFirst => 'Más recientes primero';
-
-  @override
   String get recordsEmpty => 'Aún no hay registros.';
 
   @override
@@ -1736,7 +1733,15 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get recordsSelectAll => 'Seleccionar todo';
+  String recordsSelectAll(int n) {
+    String _temp0 = intl.Intl.pluralLogic(
+      n,
+      locale: localeName,
+      other: 'Seleccionar los $n',
+      one: 'Seleccionar el 1',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get recordsEditField => 'Editar campo';
@@ -3759,4 +3764,205 @@ class AppLocalizationsEs extends AppLocalizations {
   String devicesAnnouncesAs(String name) {
     return 'Se anuncia como $name. Borra el nombre para usar ese.';
   }
+
+  @override
+  String get viewAllName => 'Todos';
+
+  @override
+  String get errorViewFilterType =>
+      'El filtro debe ser una condición de sí o no';
+
+  @override
+  String get errorViewSortKey => 'Este campo no se puede usar para ordenar';
+
+  @override
+  String get errorViewSortLimit => 'Ordena por 3 claves como máximo';
+
+  @override
+  String get errorViewGrouping => 'Esta agrupación no es compatible';
+
+  @override
+  String get errorViewBroken => 'Esta vista usa un campo que se eliminó';
+
+  @override
+  String viewNameReserved(String name) {
+    return '“$name” está reservado';
+  }
+
+  @override
+  String viewNameDuplicate(String name) {
+    return 'Ya hay otra vista llamada $name';
+  }
+
+  @override
+  String get viewDraftDiscarded =>
+      'Tus cambios sin guardar usaban un campo que se eliminó, así que se descartaron.';
+
+  @override
+  String get viewTabsLabel => 'Vistas';
+
+  @override
+  String viewChipLabel(String name, int count) {
+    return '$name · $count';
+  }
+
+  @override
+  String viewChipTooltip(String name) {
+    return '$name: clic derecho o mantén pulsado para ver opciones';
+  }
+
+  @override
+  String get viewNewView => 'Vista';
+
+  @override
+  String get viewNewViewLabel => 'Nueva vista';
+
+  @override
+  String viewSemanticsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count registros',
+      one: '1 registro',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get viewSemanticsBroken => 'rota';
+
+  @override
+  String get viewSemanticsModified => 'modificada';
+
+  @override
+  String viewModifiedAnnounce(String name) {
+    return '$name modificada';
+  }
+
+  @override
+  String get viewSortLabel => 'Orden:';
+
+  @override
+  String get viewFilterLabel => 'Filtro:';
+
+  @override
+  String get viewSortCreated => 'Creación';
+
+  @override
+  String viewThenField(String field) {
+    return 'luego $field';
+  }
+
+  @override
+  String get viewDirNewest => 'más reciente';
+
+  @override
+  String get viewDirOldest => 'más antiguo';
+
+  @override
+  String get viewDirAToZ => 'A→Z';
+
+  @override
+  String get viewDirZToA => 'Z→A';
+
+  @override
+  String get viewDirHigh => 'alto';
+
+  @override
+  String get viewDirLow => 'bajo';
+
+  @override
+  String get viewDirOptionOrder => 'orden de opciones';
+
+  @override
+  String get viewDirReverse => 'inverso';
+
+  @override
+  String get viewDirYesFirst => 'sí primero';
+
+  @override
+  String get viewDirNoFirst => 'no primero';
+
+  @override
+  String get viewFlipSort => 'Invertir el orden';
+
+  @override
+  String get viewEditView => 'Editar vista';
+
+  @override
+  String get viewSaveAsNew => 'Guardar como vista nueva';
+
+  @override
+  String get viewReset => 'Restablecer';
+
+  @override
+  String get viewEditorName => 'Nombre';
+
+  @override
+  String get viewEditorFilter => 'Filtro · deben cumplirse todas';
+
+  @override
+  String get viewEditorSort => 'Orden';
+
+  @override
+  String get viewEditorThenBy => 'Luego por';
+
+  @override
+  String get viewEditorSortField => 'Ordenar por';
+
+  @override
+  String get viewEditorDirection => 'Dirección';
+
+  @override
+  String get viewEditorRemoveCondition => 'Quitar condición';
+
+  @override
+  String get viewEditorRemoveSort => 'Quitar criterio de orden';
+
+  @override
+  String get viewEditorOtherCondition =>
+      'Una condición que este editor no puede mostrar';
+
+  @override
+  String get viewOpIsAnyOf => 'es alguna de';
+
+  @override
+  String get viewOpIsNoneOf => 'no es ninguna de';
+
+  @override
+  String get viewMenuReorder => 'Reordenar vistas…';
+
+  @override
+  String get viewMenuDelete => 'Eliminar…';
+
+  @override
+  String get viewRenameTitle => 'Renombrar vista';
+
+  @override
+  String get viewReorderTitle => 'Reordenar vistas';
+
+  @override
+  String get viewReorderAlwaysFirst => 'Siempre primera';
+
+  @override
+  String viewDeleteTitle(String name) {
+    return '¿Eliminar la vista «$name»?';
+  }
+
+  @override
+  String get viewDeleteBody => 'Los registros no se modifican.';
+
+  @override
+  String get viewDeleteKeep => 'Conservar vista';
+
+  @override
+  String get viewBrokenNotice => 'Esta vista usa un campo que se eliminó';
+
+  @override
+  String viewEmpty(String name) {
+    return 'Ningún registro coincide con $name.';
+  }
+
+  @override
+  String get viewShowAll => 'Mostrar todos';
 }

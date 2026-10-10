@@ -50,6 +50,16 @@ String issueText(
       return l.issueInactiveOption;
     case 'field_unavailable':
       return l.issueFieldUnavailable;
+    case 'view_filter_type':
+      return l.errorViewFilterType;
+    case 'view_sort_key':
+      return l.errorViewSortKey;
+    case 'view_sort_limit':
+      return l.errorViewSortLimit;
+    case 'view_grouping':
+      return l.errorViewGrouping;
+    case 'view_broken':
+      return l.errorViewBroken;
     case 'choices_conversion_blocked':
       return l.fieldEditorChoicesConversionBlocked(issue.count ?? 0);
     case 'length':

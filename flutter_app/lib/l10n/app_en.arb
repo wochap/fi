@@ -2176,10 +2176,6 @@
   "@recordsSection": {
     "description": "Section label"
   },
-  "recordsNewestFirst": "Newest first",
-  "@recordsNewestFirst": {
-    "description": "Order note"
-  },
   "recordsEmpty": "No records yet.",
   "@recordsEmpty": {
     "description": "Empty state"
@@ -2313,9 +2309,14 @@
       }
     }
   },
-  "recordsSelectAll": "Select all",
+  "recordsSelectAll": "{n, plural, other{Select all {n}}}",
   "@recordsSelectAll": {
-    "description": "Button"
+    "description": "Select every record the view shows",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
   },
   "recordsEditField": "Edit field",
   "@recordsEditField": {
@@ -5045,5 +5046,285 @@
         "type": "String"
       }
     }
+  },
+  "viewAllName": "All",
+  "@viewAllName": {
+    "description": "Name of the implicit view holding every record."
+  },
+  "errorViewFilterType": "The filter must be a yes/no condition",
+  "@errorViewFilterType": {
+    "description": "Validation issue: view filter is not Boolean."
+  },
+  "errorViewSortKey": "This field can't be used to sort",
+  "@errorViewSortKey": {
+    "description": "Validation issue: invalid view sort key."
+  },
+  "errorViewSortLimit": "Sort by at most 3 keys",
+  "@errorViewSortLimit": {
+    "description": "Validation issue: too many sort keys."
+  },
+  "errorViewGrouping": "This grouping isn't supported",
+  "@errorViewGrouping": {
+    "description": "Validation issue: invalid view grouping."
+  },
+  "errorViewBroken": "This view uses a field that was deleted",
+  "@errorViewBroken": {
+    "description": "Validation issue: the view is broken."
+  },
+  "viewNameReserved": "“{name}” is reserved",
+  "@viewNameReserved": {
+    "description": "Inline error: the view name equals the All view's name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "viewNameDuplicate": "Another view is already called {name}",
+  "@viewNameDuplicate": {
+    "description": "Inline warning: another saved view has this name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "viewDraftDiscarded": "Your unsaved changes used a field that was deleted, so they were discarded.",
+  "@viewDraftDiscarded": {
+    "description": "Notice: the unsaved view changes became broken and were dropped."
+  },
+  "viewTabsLabel": "Views",
+  "@viewTabsLabel": {
+    "description": "Semantics label of the view chip row"
+  },
+  "viewChipLabel": "{name} · {count}",
+  "@viewChipLabel": {
+    "description": "View chip: name and count",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "viewChipTooltip": "{name}: right-click or long-press for options",
+  "@viewChipTooltip": {
+    "description": "View chip tooltip",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "viewNewView": "View",
+  "@viewNewView": {
+    "description": "Button after the view chips (shown after a plus icon)"
+  },
+  "viewNewViewLabel": "New view",
+  "@viewNewViewLabel": {
+    "description": "Accessible label and editor title for a new view"
+  },
+  "viewSemanticsCount": "{count, plural, =1{1 record} other{{count} records}}",
+  "@viewSemanticsCount": {
+    "description": "View tab: record count",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "viewSemanticsBroken": "broken",
+  "@viewSemanticsBroken": {
+    "description": "View tab: the view is broken"
+  },
+  "viewSemanticsModified": "modified",
+  "@viewSemanticsModified": {
+    "description": "View tab: unsaved changes"
+  },
+  "viewModifiedAnnounce": "{name} modified",
+  "@viewModifiedAnnounce": {
+    "description": "Announced when a view becomes modified",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "viewSortLabel": "Sort:",
+  "@viewSortLabel": {
+    "description": "View line: sort prefix"
+  },
+  "viewFilterLabel": "Filter:",
+  "@viewFilterLabel": {
+    "description": "View line: filter prefix"
+  },
+  "viewSortCreated": "Created",
+  "@viewSortCreated": {
+    "description": "Sort key: record creation time"
+  },
+  "viewThenField": "then {field}",
+  "@viewThenField": {
+    "description": "View line: a further sort key",
+    "placeholders": {
+      "field": {
+        "type": "String"
+      }
+    }
+  },
+  "viewDirNewest": "newest",
+  "@viewDirNewest": {
+    "description": "Sort direction word"
+  },
+  "viewDirOldest": "oldest",
+  "@viewDirOldest": {
+    "description": "Sort direction word"
+  },
+  "viewDirAToZ": "A→Z",
+  "@viewDirAToZ": {
+    "description": "Sort direction word"
+  },
+  "viewDirZToA": "Z→A",
+  "@viewDirZToA": {
+    "description": "Sort direction word"
+  },
+  "viewDirHigh": "high",
+  "@viewDirHigh": {
+    "description": "Sort direction word"
+  },
+  "viewDirLow": "low",
+  "@viewDirLow": {
+    "description": "Sort direction word"
+  },
+  "viewDirOptionOrder": "option order",
+  "@viewDirOptionOrder": {
+    "description": "Sort direction word"
+  },
+  "viewDirReverse": "reverse",
+  "@viewDirReverse": {
+    "description": "Sort direction word"
+  },
+  "viewDirYesFirst": "yes first",
+  "@viewDirYesFirst": {
+    "description": "Sort direction word"
+  },
+  "viewDirNoFirst": "no first",
+  "@viewDirNoFirst": {
+    "description": "Sort direction word"
+  },
+  "viewFlipSort": "Flip sort direction",
+  "@viewFlipSort": {
+    "description": "Tooltip of the ⇅ button"
+  },
+  "viewEditView": "Edit view",
+  "@viewEditView": {
+    "description": "Action and editor title"
+  },
+  "viewSaveAsNew": "Save as new view",
+  "@viewSaveAsNew": {
+    "description": "Modified view action"
+  },
+  "viewReset": "Reset",
+  "@viewReset": {
+    "description": "Modified view action"
+  },
+  "viewEditorName": "Name",
+  "@viewEditorName": {
+    "description": "Editor section"
+  },
+  "viewEditorFilter": "Filter · all must match",
+  "@viewEditorFilter": {
+    "description": "Editor section"
+  },
+  "viewEditorSort": "Sort",
+  "@viewEditorSort": {
+    "description": "Editor section"
+  },
+  "viewEditorThenBy": "Then by",
+  "@viewEditorThenBy": {
+    "description": "Editor: add a further sort key"
+  },
+  "viewEditorSortField": "Sort by",
+  "@viewEditorSortField": {
+    "description": "Editor: sort key picker label"
+  },
+  "viewEditorDirection": "Direction",
+  "@viewEditorDirection": {
+    "description": "Editor: sort direction picker label"
+  },
+  "viewEditorRemoveCondition": "Remove condition",
+  "@viewEditorRemoveCondition": {
+    "description": "Tooltip"
+  },
+  "viewEditorRemoveSort": "Remove sort key",
+  "@viewEditorRemoveSort": {
+    "description": "Tooltip"
+  },
+  "viewEditorOtherCondition": "A condition this editor can't show",
+  "@viewEditorOtherCondition": {
+    "description": "Editor: an unrecognised filter condition"
+  },
+  "viewOpIsAnyOf": "is any of",
+  "@viewOpIsAnyOf": {
+    "description": "Choices filter operator"
+  },
+  "viewOpIsNoneOf": "is none of",
+  "@viewOpIsNoneOf": {
+    "description": "Choices filter operator"
+  },
+  "viewMenuReorder": "Reorder views…",
+  "@viewMenuReorder": {
+    "description": "Chip menu"
+  },
+  "viewMenuDelete": "Delete…",
+  "@viewMenuDelete": {
+    "description": "Chip menu"
+  },
+  "viewRenameTitle": "Rename view",
+  "@viewRenameTitle": {
+    "description": "Dialog title"
+  },
+  "viewReorderTitle": "Reorder views",
+  "@viewReorderTitle": {
+    "description": "Sheet title"
+  },
+  "viewReorderAlwaysFirst": "Always first",
+  "@viewReorderAlwaysFirst": {
+    "description": "Reorder sheet: note on All"
+  },
+  "viewDeleteTitle": "Delete view “{name}”?",
+  "@viewDeleteTitle": {
+    "description": "Delete dialog title",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "viewDeleteBody": "Records aren't affected.",
+  "@viewDeleteBody": {
+    "description": "Delete dialog body"
+  },
+  "viewDeleteKeep": "Keep view",
+  "@viewDeleteKeep": {
+    "description": "Delete dialog safe action"
+  },
+  "viewBrokenNotice": "This view uses a field that was deleted",
+  "@viewBrokenNotice": {
+    "description": "Notice on a broken view"
+  },
+  "viewEmpty": "No records match {name}.",
+  "@viewEmpty": {
+    "description": "Empty view",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "viewShowAll": "Show all",
+  "@viewShowAll": {
+    "description": "Empty view action"
   }
 }

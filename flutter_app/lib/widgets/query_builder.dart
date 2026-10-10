@@ -54,6 +54,13 @@ enum ChoicesFilterOperator {
     isEmpty => l.queryOpIsEmpty,
     isNotEmpty => l.queryOpIsNotEmpty,
   };
+
+  /// The edit-view editor's words: "is any of" / "is none of".
+  String viewLabel(AppLocalizations l) => switch (this) {
+    hasAnyOf => l.viewOpIsAnyOf,
+    hasNoneOf => l.viewOpIsNoneOf,
+    _ => label(l),
+  };
 }
 
 /// Everything the guided query builder can express, as plain data.
@@ -219,7 +226,7 @@ final class QueryBuilderState {
     queryVersion: queryVersion,
     query: CollectionQueryDto(
       collectionId: schema.id,
-      filter: _filterExpression(schema, decimalSeparator),
+      filter: filterExpression(schema, decimalSeparator),
       grouping: bucket == null || categoryFieldId == null
           ? null
           : GroupingDto(
@@ -316,7 +323,8 @@ final class QueryBuilderState {
     ),
   };
 
-  ExpressionDto? _filterExpression(
+  /// The filter condition as an expression, or null when there is none or it is incomplete.
+  ExpressionDto? filterExpression(
     CollectionSchemaDto schema,
     String decimalSeparator,
   ) {
@@ -420,6 +428,31 @@ final class QueryBuilderState {
       ),
       _ => TypedValueDto(valueType: valueType, integerValue: int.tryParse(raw)),
     };
+  }
+
+  /// Reads one filter condition the builder emits into the filter part of a state, or null when
+  /// [filter] is not such a condition.
+  static QueryBuilderState? fromFilter(
+    ExpressionDto filter,
+    CollectionSchemaDto schema, {
+    String decimalSeparator = '.',
+  }) {
+    final choices = _parseChoicesFilter(filter, schema);
+    if (choices != null) {
+      return QueryBuilderState(
+        filterFieldId: choices.fieldId,
+        filterChoices: true,
+        choicesOperator: choices.operator,
+        filterOptions: choices.options,
+      );
+    }
+    final parsed = _parseFilter(filter, schema, decimalSeparator);
+    if (parsed == null) return null;
+    return QueryBuilderState(
+      filterFieldId: parsed.fieldId,
+      filterOperator: parsed.operator,
+      filterValue: parsed.value,
+    );
   }
 
   /// Loads a saved definition back into builder state, or returns `null` when the definition says
@@ -1003,34 +1036,11 @@ final class QueryBuilder extends StatefulWidget {
 }
 
 class _QueryBuilderState extends State<QueryBuilder> {
-  final filterValue = TextEditingController();
-
   /// Chip style: the condition row is open, either from "Add filter" or by tapping the chip.
   bool editingFilter = false;
 
   QueryBuilderState get state => widget.state;
   CollectionSchemaDto get schema => widget.schema;
-
-  @override
-  void initState() {
-    super.initState();
-    filterValue.text = state.filterValue;
-  }
-
-  @override
-  void didUpdateWidget(QueryBuilder oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    // A preset can rewrite the filter text; anything the user typed is already in the state.
-    if (state.filterValue != filterValue.text) {
-      filterValue.text = state.filterValue;
-    }
-  }
-
-  @override
-  void dispose() {
-    filterValue.dispose();
-    super.dispose();
-  }
 
   void _emit(QueryBuilderState next) => widget.onChanged(next);
 
@@ -1213,7 +1223,7 @@ class _QueryBuilderState extends State<QueryBuilder> {
               l.queryOnlyRecordsWhere,
               style: TextStyle(fontSize: 12, color: context.nocturne.muted(.7)),
             ),
-            _conditionRow(l),
+            QueryConditionRow(schema: schema, state: state, onChanged: _emit),
           ],
           QueryFilterStyle.chip => _filterChip(l),
         },
@@ -1239,46 +1249,6 @@ class _QueryBuilderState extends State<QueryBuilder> {
     ],
   );
 
-  /// The condition in words, e.g. `Type is headache`.
-  String _conditionText(AppLocalizations l) {
-    final field = schema.fields
-        .where((item) => item.id == state.filterFieldId)
-        .firstOrNull;
-    if (state.filterChoices) {
-      final labels = field == null
-          ? const <String>[]
-          : FieldRendererRegistry.optionLabels(
-              field,
-              FieldValueDto(
-                kind: FieldValueKindDto.enumSet,
-                listValue: state.filterOptions,
-              ),
-            );
-      return l
-          .queryFilterChip(
-            field?.name ?? '?',
-            state.choicesOperator.label(l),
-            labels.join(', '),
-          )
-          .trim();
-    }
-    final value = field?.fieldType.kind == FieldTypeKindDto.enum_
-        ? field!.enumOptions
-                  .where((option) => option.id == state.filterValue.trim())
-                  .firstOrNull
-                  ?.label ??
-              state.filterValue.trim()
-        : state.filterValue.trim();
-    return l.queryFilterChip(field?.name ?? '?', switch (state.filterOperator) {
-      ComparisonOperatorDto.equal => l.queryOpIs,
-      ComparisonOperatorDto.notEqual => l.queryOpIsNot,
-      ComparisonOperatorDto.greaterThan => l.queryOpGreaterThan,
-      ComparisonOperatorDto.greaterThanOrEqual => l.queryOpAtLeast,
-      ComparisonOperatorDto.lessThan => l.queryOpLessThan,
-      ComparisonOperatorDto.lessThanOrEqual => l.queryOpAtMost,
-    }, value);
-  }
-
   void _clearFilter() {
     setState(() => editingFilter = false);
     _emit(
@@ -1297,7 +1267,7 @@ class _QueryBuilderState extends State<QueryBuilder> {
     final complete = state.filterFieldId != null && state.filterComplete;
     if (editingFilter || (state.filterFieldId != null && !complete)) {
       return [
-        _conditionRow(l),
+        QueryConditionRow(schema: schema, state: state, onChanged: _emit),
         Row(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
@@ -1323,7 +1293,7 @@ class _QueryBuilderState extends State<QueryBuilder> {
           alignment: Alignment.centerLeft,
           child: InputChip(
             key: const Key('filter-chip'),
-            label: Text(_conditionText(l)),
+            label: Text(queryConditionText(l, schema, state)),
             onPressed: () => setState(() => editingFilter = true),
             onDeleted: _clearFilter,
             deleteIcon: const Icon(FiIcons.clear, size: 14),
@@ -1347,9 +1317,140 @@ class _QueryBuilderState extends State<QueryBuilder> {
     ];
   }
 
-  /// Field, operator and value side by side.
-  Widget _conditionRow(AppLocalizations l) {
-    final fields = activeFieldsOf(schema);
+  Widget _fieldDropdown({
+    required Key key,
+    required String label,
+    required HelpId help,
+    required List<FieldDefinitionDto> fields,
+    required String? value,
+    required ValueChanged<String?> onChanged,
+    bool enabled = true,
+  }) {
+    final current = fields.any((field) => field.id == value) ? value : null;
+    return FiSelect<String>(
+      key: key,
+      value: current,
+      label: label,
+      suffixIcon: HelpButton(help),
+      items: [
+        for (final field in fields)
+          DropdownMenuItem(value: field.id, child: Text(field.name)),
+      ],
+      onChanged: enabled ? onChanged : null,
+    );
+  }
+}
+
+/// The condition in words, e.g. `Type is headache`.
+String queryConditionText(
+  AppLocalizations l,
+  CollectionSchemaDto schema,
+  QueryBuilderState state, {
+  bool viewWords = false,
+}) {
+  final field = schema.fields
+      .where((item) => item.id == state.filterFieldId)
+      .firstOrNull;
+  if (state.filterChoices) {
+    final labels = field == null
+        ? const <String>[]
+        : FieldRendererRegistry.optionLabels(
+            field,
+            FieldValueDto(
+              kind: FieldValueKindDto.enumSet,
+              listValue: state.filterOptions,
+            ),
+          );
+    return l
+        .queryFilterChip(
+          field?.name ?? '?',
+          viewWords
+              ? state.choicesOperator.viewLabel(l)
+              : state.choicesOperator.label(l),
+          labels.join(', '),
+        )
+        .trim();
+  }
+  final value = field?.fieldType.kind == FieldTypeKindDto.enum_
+      ? field!.enumOptions
+                .where((option) => option.id == state.filterValue.trim())
+                .firstOrNull
+                ?.label ??
+            state.filterValue.trim()
+      : state.filterValue.trim();
+  return l.queryFilterChip(field?.name ?? '?', switch (state.filterOperator) {
+    ComparisonOperatorDto.equal => l.queryOpIs,
+    ComparisonOperatorDto.notEqual => l.queryOpIsNot,
+    ComparisonOperatorDto.greaterThan => l.queryOpGreaterThan,
+    ComparisonOperatorDto.greaterThanOrEqual => l.queryOpAtLeast,
+    ComparisonOperatorDto.lessThan => l.queryOpLessThan,
+    ComparisonOperatorDto.lessThanOrEqual => l.queryOpAtMost,
+  }, value);
+}
+
+/// One filter condition: field, operator and value side by side. Shared by the query builder
+/// and the edit-view editor, which shows one per condition.
+final class QueryConditionRow extends StatefulWidget {
+  const QueryConditionRow({
+    required this.schema,
+    required this.state,
+    required this.onChanged,
+    this.viewWords = false,
+    this.fields,
+    super.key,
+  });
+
+  final CollectionSchemaDto schema;
+  final QueryBuilderState state;
+  final ValueChanged<QueryBuilderState> onChanged;
+
+  /// The view editor's Choices operators: "is any of", "is none of", "is empty", "is not empty".
+  final bool viewWords;
+
+  /// The fields offered; the schema's active fields by default.
+  final List<FieldDefinitionDto>? fields;
+
+  @override
+  State<QueryConditionRow> createState() => _QueryConditionRowState();
+}
+
+class _QueryConditionRowState extends State<QueryConditionRow> {
+  final filterValue = TextEditingController();
+
+  QueryBuilderState get state => widget.state;
+  CollectionSchemaDto get schema => widget.schema;
+
+  @override
+  void initState() {
+    super.initState();
+    filterValue.text = state.filterValue;
+  }
+
+  @override
+  void didUpdateWidget(QueryConditionRow oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // A preset can rewrite the filter text; anything the user typed is already in the state.
+    if (state.filterValue != filterValue.text) {
+      filterValue.text = state.filterValue;
+    }
+  }
+
+  @override
+  void dispose() {
+    filterValue.dispose();
+    super.dispose();
+  }
+
+  List<ChoicesFilterOperator> _operators(FieldTypeKindDto? kind) => [
+    for (final operator in ChoicesFilterOperator.offeredFor(kind))
+      if (!widget.viewWords || operator != ChoicesFilterOperator.hasAllOf)
+        operator,
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final l = context.l10n;
+    final fields = widget.fields ?? activeFieldsOf(schema);
     final choicesField = state.filterChoices
         ? fields.where((field) => field.id == state.filterFieldId).firstOrNull
         : null;
@@ -1376,8 +1477,8 @@ class _QueryBuilderState extends State<QueryBuilder> {
                   ?.fieldType
                   .kind;
               final choices = isChoicesFilterKind(kind);
-              final offered = ChoicesFilterOperator.offeredFor(kind);
-              _emit(
+              final offered = _operators(kind);
+              widget.onChanged(
                 state.copyWith(
                   filterFieldId: value,
                   filterChoices: choices,
@@ -1398,15 +1499,17 @@ class _QueryBuilderState extends State<QueryBuilder> {
               value: state.choicesOperator,
               label: l.queryFilterOperator,
               items: [
-                for (final operator in ChoicesFilterOperator.offeredFor(
-                  choicesField.fieldType.kind,
-                ))
+                for (final operator in _operators(choicesField.fieldType.kind))
                   DropdownMenuItem(
                     value: operator,
-                    child: Text(operator.label(l)),
+                    child: Text(
+                      widget.viewWords
+                          ? operator.viewLabel(l)
+                          : operator.label(l),
+                    ),
                   ),
               ],
-              onChanged: (value) => _emit(
+              onChanged: (value) => widget.onChanged(
                 state.copyWith(choicesOperator: value ?? state.choicesOperator),
               ),
             ),
@@ -1425,7 +1528,7 @@ class _QueryBuilderState extends State<QueryBuilder> {
                     value: state.filterOptions,
                     allowClear: true,
                     onChanged: (value) =>
-                        _emit(state.copyWith(filterOptions: value)),
+                        widget.onChanged(state.copyWith(filterOptions: value)),
                   )
                 : const SizedBox.shrink(),
           ),
@@ -1463,7 +1566,7 @@ class _QueryBuilderState extends State<QueryBuilder> {
               ],
               onChanged: state.filterFieldId == null
                   ? null
-                  : (value) => _emit(
+                  : (value) => widget.onChanged(
                       state.copyWith(
                         filterOperator: value ?? state.filterOperator,
                       ),
@@ -1476,34 +1579,12 @@ class _QueryBuilderState extends State<QueryBuilder> {
               controller: filterValue,
               enabled: state.filterFieldId != null,
               label: l.queryFilterValue,
-              onChanged: (value) => _emit(state.copyWith(filterValue: value)),
+              onChanged: (value) =>
+                  widget.onChanged(state.copyWith(filterValue: value)),
             ),
           ),
         ],
       ],
-    );
-  }
-
-  Widget _fieldDropdown({
-    required Key key,
-    required String label,
-    required HelpId help,
-    required List<FieldDefinitionDto> fields,
-    required String? value,
-    required ValueChanged<String?> onChanged,
-    bool enabled = true,
-  }) {
-    final current = fields.any((field) => field.id == value) ? value : null;
-    return FiSelect<String>(
-      key: key,
-      value: current,
-      label: label,
-      suffixIcon: HelpButton(help),
-      items: [
-        for (final field in fields)
-          DropdownMenuItem(value: field.id, child: Text(field.name)),
-      ],
-      onChanged: enabled ? onChanged : null,
     );
   }
 }

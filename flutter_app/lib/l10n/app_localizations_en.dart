@@ -1611,9 +1611,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get recordsSection => 'Records';
 
   @override
-  String get recordsNewestFirst => 'Newest first';
-
-  @override
   String get recordsEmpty => 'No records yet.';
 
   @override
@@ -1721,7 +1718,14 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get recordsSelectAll => 'Select all';
+  String recordsSelectAll(int n) {
+    String _temp0 = intl.Intl.pluralLogic(
+      n,
+      locale: localeName,
+      other: 'Select all $n',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get recordsEditField => 'Edit field';
@@ -3729,4 +3733,203 @@ class AppLocalizationsEn extends AppLocalizations {
   String devicesAnnouncesAs(String name) {
     return 'Announces itself as $name. Clear the name to use that.';
   }
+
+  @override
+  String get viewAllName => 'All';
+
+  @override
+  String get errorViewFilterType => 'The filter must be a yes/no condition';
+
+  @override
+  String get errorViewSortKey => 'This field can\'t be used to sort';
+
+  @override
+  String get errorViewSortLimit => 'Sort by at most 3 keys';
+
+  @override
+  String get errorViewGrouping => 'This grouping isn\'t supported';
+
+  @override
+  String get errorViewBroken => 'This view uses a field that was deleted';
+
+  @override
+  String viewNameReserved(String name) {
+    return '“$name” is reserved';
+  }
+
+  @override
+  String viewNameDuplicate(String name) {
+    return 'Another view is already called $name';
+  }
+
+  @override
+  String get viewDraftDiscarded =>
+      'Your unsaved changes used a field that was deleted, so they were discarded.';
+
+  @override
+  String get viewTabsLabel => 'Views';
+
+  @override
+  String viewChipLabel(String name, int count) {
+    return '$name · $count';
+  }
+
+  @override
+  String viewChipTooltip(String name) {
+    return '$name: right-click or long-press for options';
+  }
+
+  @override
+  String get viewNewView => 'View';
+
+  @override
+  String get viewNewViewLabel => 'New view';
+
+  @override
+  String viewSemanticsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count records',
+      one: '1 record',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get viewSemanticsBroken => 'broken';
+
+  @override
+  String get viewSemanticsModified => 'modified';
+
+  @override
+  String viewModifiedAnnounce(String name) {
+    return '$name modified';
+  }
+
+  @override
+  String get viewSortLabel => 'Sort:';
+
+  @override
+  String get viewFilterLabel => 'Filter:';
+
+  @override
+  String get viewSortCreated => 'Created';
+
+  @override
+  String viewThenField(String field) {
+    return 'then $field';
+  }
+
+  @override
+  String get viewDirNewest => 'newest';
+
+  @override
+  String get viewDirOldest => 'oldest';
+
+  @override
+  String get viewDirAToZ => 'A→Z';
+
+  @override
+  String get viewDirZToA => 'Z→A';
+
+  @override
+  String get viewDirHigh => 'high';
+
+  @override
+  String get viewDirLow => 'low';
+
+  @override
+  String get viewDirOptionOrder => 'option order';
+
+  @override
+  String get viewDirReverse => 'reverse';
+
+  @override
+  String get viewDirYesFirst => 'yes first';
+
+  @override
+  String get viewDirNoFirst => 'no first';
+
+  @override
+  String get viewFlipSort => 'Flip sort direction';
+
+  @override
+  String get viewEditView => 'Edit view';
+
+  @override
+  String get viewSaveAsNew => 'Save as new view';
+
+  @override
+  String get viewReset => 'Reset';
+
+  @override
+  String get viewEditorName => 'Name';
+
+  @override
+  String get viewEditorFilter => 'Filter · all must match';
+
+  @override
+  String get viewEditorSort => 'Sort';
+
+  @override
+  String get viewEditorThenBy => 'Then by';
+
+  @override
+  String get viewEditorSortField => 'Sort by';
+
+  @override
+  String get viewEditorDirection => 'Direction';
+
+  @override
+  String get viewEditorRemoveCondition => 'Remove condition';
+
+  @override
+  String get viewEditorRemoveSort => 'Remove sort key';
+
+  @override
+  String get viewEditorOtherCondition => 'A condition this editor can\'t show';
+
+  @override
+  String get viewOpIsAnyOf => 'is any of';
+
+  @override
+  String get viewOpIsNoneOf => 'is none of';
+
+  @override
+  String get viewMenuReorder => 'Reorder views…';
+
+  @override
+  String get viewMenuDelete => 'Delete…';
+
+  @override
+  String get viewRenameTitle => 'Rename view';
+
+  @override
+  String get viewReorderTitle => 'Reorder views';
+
+  @override
+  String get viewReorderAlwaysFirst => 'Always first';
+
+  @override
+  String viewDeleteTitle(String name) {
+    return 'Delete view “$name”?';
+  }
+
+  @override
+  String get viewDeleteBody => 'Records aren\'t affected.';
+
+  @override
+  String get viewDeleteKeep => 'Keep view';
+
+  @override
+  String get viewBrokenNotice => 'This view uses a field that was deleted';
+
+  @override
+  String viewEmpty(String name) {
+    return 'No records match $name.';
+  }
+
+  @override
+  String get viewShowAll => 'Show all';
 }

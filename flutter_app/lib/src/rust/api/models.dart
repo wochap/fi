@@ -546,6 +546,9 @@ enum DomainKindDto {
   /// Widget definitions changed. Derived results are never synchronized, so this always means
   /// "reread definitions and reevaluate visible widgets".
   widgets,
+
+  /// Saved view definitions changed.
+  views,
 }
 
 class EnumOptionDto {

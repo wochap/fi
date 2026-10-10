@@ -5,6 +5,7 @@ pub mod lifecycle;
 pub mod models;
 pub mod pairing;
 pub mod queries;
+pub mod views;
 pub mod voice;
 pub mod voice_models;
 pub mod widgets;

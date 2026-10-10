@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:clock/clock.dart';
+import 'package:fi/collection_views.dart';
 import 'package:fi/l10n/error_text.dart';
 import 'package:fi/l10n/l10n.dart';
 import 'package:fi/status_time.dart';
@@ -51,6 +52,9 @@ const double _phoneScreen = 720;
 /// The open collection's title, so the header ⋮ Rename can start its inline editor. Only one
 /// collection screen is shown at a time.
 final _titleKey = GlobalKey<_EditableTitleState>();
+
+/// The view chip row, which the edit-view popover hangs from at 720px and wider.
+final _viewAnchor = GlobalKey();
 
 /// `6 records · 3 fields`.
 String _counts(AppLocalizations l, int records, int fields) =>
@@ -734,24 +738,49 @@ class CollectionsPage extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 22),
-                  Row(
-                    children: [
-                      SectionLabel(l.recordsSection),
-                      const Spacer(),
-                      if (phone && records.isNotEmpty)
-                        Flexible(
-                          flex: 3,
-                          child: Text(
-                            l.recordsNewestFirst,
-                            textAlign: TextAlign.right,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: context.nocturne.muted(.5),
-                            ),
-                          ),
-                        ),
-                    ],
+                  SectionLabel(l.recordsSection),
+                  const SizedBox(height: 8),
+                  KeyedSubtree(
+                    key: _viewAnchor,
+                    child: ViewChipRow(
+                      controller: controller,
+                      schema: schema,
+                      anchor: _viewAnchor,
+                    ),
                   ),
+                  const SizedBox(height: 4),
+                  ViewLine(
+                    controller: controller,
+                    schema: schema,
+                    anchor: _viewAnchor,
+                  ),
+                  if (controller.brokenView != null) ...[
+                    const SizedBox(height: 8),
+                    ViewNotice(
+                      key: const Key('view-broken-notice'),
+                      text: l.viewBrokenNotice,
+                      action: l.viewEditView,
+                      onAction: () => unawaited(
+                        showViewEditor(
+                          context,
+                          controller: controller,
+                          schema: schema,
+                          view: controller.activeView,
+                          body: controller.activeBody,
+                          anchor: _viewAnchor,
+                        ),
+                      ),
+                    ),
+                  ],
+                  if (controller.draftDiscarded) ...[
+                    const SizedBox(height: 8),
+                    ViewNotice(
+                      key: const Key('view-discarded-notice'),
+                      text: l.viewDraftDiscarded,
+                      action: l.commonOk,
+                      onAction: controller.dismissDraftDiscarded,
+                    ),
+                  ],
                   const SizedBox(height: 8),
                   if (phone && incomplete > 0) ...[
                     _IncompleteLine(count: incomplete, phone: true),
@@ -766,10 +795,18 @@ class CollectionsPage extends StatelessWidget {
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 32),
                   child: Center(
-                    child: Text(
-                      l.recordsEmpty,
-                      style: TextStyle(color: context.nocturne.muted(.55)),
-                    ),
+                    child: controller.allRecords.isNotEmpty
+                        ? EmptyViewState(
+                            controller: controller,
+                            schema: schema,
+                            anchor: _viewAnchor,
+                          )
+                        : Text(
+                            l.recordsEmpty,
+                            style: TextStyle(
+                              color: context.nocturne.muted(.55),
+                            ),
+                          ),
                   ),
                 ),
               )
@@ -867,7 +904,7 @@ class CollectionsPage extends StatelessWidget {
     AppLocalizations l,
     CollectionSchemaDto schema,
     List<FieldDefinitionDto> fields,
-  ) => _counts(l, controller.records.length, fields.length);
+  ) => _counts(l, controller.allRecords.length, fields.length);
 
   /// The list row's entry for the open collection, for the actions it shares with the list.
   CollectionDto _openCollectionEntry(
@@ -881,9 +918,9 @@ class CollectionsPage extends StatelessWidget {
         id: schema.id,
         name: schema.name,
         description: schema.description,
-        recordCount: controller.records.length,
+        recordCount: controller.allRecords.length,
         fieldCount: fields.length,
-        incompleteCount: controller.records
+        incompleteCount: controller.allRecords
             .where((record) => !record.valid)
             .length,
       );
@@ -1937,11 +1974,7 @@ class CollectionsPage extends StatelessWidget {
       foregroundColor: context.nocturne.accentInkStrong,
       side: BorderSide(color: context.nocturne.accentEdge),
     );
-    void selectAll() {
-      for (final id in unselected) {
-        controller.toggleSelected(id);
-      }
-    }
+    void selectAll() => controller.selectAllShown();
 
     void edit() => unawaited(_batchEdit(context, schema));
     void delete() => unawaited(_batchDelete(context));
@@ -1992,7 +2025,7 @@ class CollectionsPage extends StatelessWidget {
               ),
               onPressed: unselected.isEmpty ? null : selectAll,
               icon: const Icon(FiIcons.selectAll),
-              label: Text(l.recordsSelectAll),
+              label: Text(l.recordsSelectAll(controller.viewCount)),
             ),
             const SizedBox(width: 8),
             OutlinedButton.icon(
@@ -2020,7 +2053,7 @@ class CollectionsPage extends StatelessWidget {
             ),
           ] else ...[
             IconButton(
-              tooltip: l.recordsSelectAll,
+              tooltip: l.recordsSelectAll(controller.viewCount),
               style: onAccent,
               onPressed: unselected.isEmpty ? null : selectAll,
               icon: const Icon(FiIcons.selectAll),

@@ -1,5 +1,4 @@
 import 'package:fi/src/rust/api/models.dart';
-import 'package:fi/controllers.dart';
 import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/theme/nocturne_widgets.dart';
 import 'package:flutter/material.dart';
@@ -255,7 +254,10 @@ void main() {
         ]),
         _phone,
       );
-      expect(find.text('Newest first'), findsOneWidget);
+      expect(find.text('Sort: Created · newest'), findsOneWidget);
+      expect(find.text('Newest first'), findsNothing);
+      expect(find.text('All · 1'), findsNothing);
+      expect(find.byKey(const Key('view-chip-all')), findsOneWidget);
       expect(find.text('integer slider'), findsOneWidget);
       expect(find.text('text multiline'), findsOneWidget);
       expect(find.text('extra 2'), findsOneWidget);
@@ -297,17 +299,6 @@ void main() {
       expect(find.byType(NeededMarker), findsOneWidget);
       expect(find.text('1 record is missing a required field'), findsOneWidget);
       expect(find.text('Tap it to finish.'), findsOneWidget);
-    });
-
-    test('newestFirst orders by creation time, then id', () {
-      final ordered = newestFirst([
-        _record('b'),
-        _record('x', createdAtMs: 1),
-        _record('a'),
-        _record('z', createdAtMs: 9),
-        _record('y', createdAtMs: 9),
-      ]);
-      expect(ordered.map((r) => r.id), ['y', 'z', 'x', 'a', 'b']);
     });
   });
 

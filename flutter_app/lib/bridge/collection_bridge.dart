@@ -5,7 +5,12 @@ import 'package:fi/src/rust/api/lifecycle.dart' as lifecycle;
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/src/rust/api/pairing.dart' as pairing;
 import 'package:fi/src/rust/api/queries.dart' as queries;
+import 'package:fi/src/rust/api/views.dart' as views;
+import 'package:fi/src/rust/api/views.dart'
+    show ViewBodyDto, ViewDto, ViewResultDto;
 import 'package:fi/src/rust/api/widgets.dart' as widgets;
+export 'package:fi/src/rust/api/views.dart'
+    show ViewBodyDto, ViewDto, ViewResultDto;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
@@ -241,7 +246,38 @@ abstract interface class CollectionBridge {
     int nowUtcMs,
   );
   Future<List<DiagnosticDto>> widgetDiagnostics(String id);
+
+  /// All first (id [allViewId]), then the saved views in order, each with its count or
+  /// broken diagnostic.
+  Future<List<ViewDto>> listViews(String collectionId, int nowUtcMs);
+
+  /// Creates a saved view after the last one and returns its id.
+  Future<String> createView(String collectionId, String name, ViewBodyDto body);
+  Future<void> updateView(String collectionId, String viewId, ViewBodyDto body);
+  Future<void> renameView(String collectionId, String viewId, String name);
+
+  /// Stores the saved views' order; [allViewId] is ignored.
+  Future<void> reorderViews(String collectionId, List<String> ids);
+  Future<void> removeView(String collectionId, String viewId);
+
+  /// Executes a saved view, or All for [allViewId]. Throws a validation [BridgeError] with code
+  /// `view_broken` for a broken view.
+  Future<ViewResultDto> executeView(
+    String collectionId,
+    String viewId,
+    int nowUtcMs,
+  );
+
+  /// Executes an unsaved body; nothing is written.
+  Future<ViewResultDto> executeViewBody(
+    String collectionId,
+    ViewBodyDto body,
+    int nowUtcMs,
+  );
 }
+
+/// The reserved id of the implicit All view.
+const allViewId = 'all';
 
 final class RustCollectionBridge implements CollectionBridge {
   static const _platform = MethodChannel('fi/platform');
@@ -632,4 +668,49 @@ final class RustCollectionBridge implements CollectionBridge {
   @override
   Future<List<DiagnosticDto>> widgetDiagnostics(String id) =>
       widgets.widgetDiagnostics(id: id);
+
+  @override
+  Future<List<ViewDto>> listViews(String collectionId, int nowUtcMs) =>
+      views.listViews(collectionId: collectionId, nowUtcMs: nowUtcMs);
+  @override
+  Future<String> createView(
+    String collectionId,
+    String name,
+    ViewBodyDto body,
+  ) => views.createView(collectionId: collectionId, name: name, body: body);
+  @override
+  Future<void> updateView(
+    String collectionId,
+    String viewId,
+    ViewBodyDto body,
+  ) => views.updateView(collectionId: collectionId, viewId: viewId, body: body);
+  @override
+  Future<void> renameView(String collectionId, String viewId, String name) =>
+      views.renameView(collectionId: collectionId, viewId: viewId, name: name);
+  @override
+  Future<void> reorderViews(String collectionId, List<String> ids) =>
+      views.reorderViews(collectionId: collectionId, ids: ids);
+  @override
+  Future<void> removeView(String collectionId, String viewId) =>
+      views.removeView(collectionId: collectionId, viewId: viewId);
+  @override
+  Future<ViewResultDto> executeView(
+    String collectionId,
+    String viewId,
+    int nowUtcMs,
+  ) => views.executeView(
+    collectionId: collectionId,
+    viewId: viewId,
+    nowUtcMs: nowUtcMs,
+  );
+  @override
+  Future<ViewResultDto> executeViewBody(
+    String collectionId,
+    ViewBodyDto body,
+    int nowUtcMs,
+  ) => views.executeViewBody(
+    collectionId: collectionId,
+    body: body,
+    nowUtcMs: nowUtcMs,
+  );
 }

@@ -40,6 +40,32 @@ enum AppThemeMode {
       values.where((value) => value.code == code).firstOrNull ?? system;
 }
 
+/// The view state one collection remembers on this device: the selected view and its unsaved
+/// body. [draft] is the full view body as JSON (decoded by the controller), never a diff.
+final class ViewPrefs {
+  const ViewPrefs({this.selected = 'all', this.draft});
+
+  /// The selected view id, or `all`.
+  final String selected;
+
+  /// The unsaved body as JSON, or null when the view is unmodified.
+  final Object? draft;
+
+  Map<String, Object?> toJson() => {
+    'selected': selected,
+    if (draft != null) 'draft': draft,
+  };
+
+  /// Reads what [toJson] wrote; null when [json] is not a readable entry.
+  static ViewPrefs? fromJson(Object? json) {
+    if (json is! Map) return null;
+    final selected = json['selected'];
+    if (selected is! String || selected.isEmpty) return null;
+    final draft = json['draft'];
+    return ViewPrefs(selected: selected, draft: draft is Map ? draft : null);
+  }
+}
+
 /// Device-local presentation choices. They never enter Rust or sync.
 final class UiPrefs {
   const UiPrefs({
@@ -48,6 +74,7 @@ final class UiPrefs {
     this.handsFree = false,
     this.appLanguage = AppLanguage.system,
     this.appTheme = AppThemeMode.system,
+    this.views = const {},
   });
 
   final CollectionSort collectionSort;
@@ -64,18 +91,40 @@ final class UiPrefs {
   /// The color theme; follows the system by default.
   final AppThemeMode appTheme;
 
+  /// Per-collection view state, keyed by collection id.
+  final Map<String, ViewPrefs> views;
+
   UiPrefs copyWith({
     CollectionSort? collectionSort,
     bool? voiceTipDismissed,
     bool? handsFree,
     AppLanguage? appLanguage,
     AppThemeMode? appTheme,
+    Map<String, ViewPrefs>? views,
   }) => UiPrefs(
     collectionSort: collectionSort ?? this.collectionSort,
     voiceTipDismissed: voiceTipDismissed ?? this.voiceTipDismissed,
     handsFree: handsFree ?? this.handsFree,
     appLanguage: appLanguage ?? this.appLanguage,
     appTheme: appTheme ?? this.appTheme,
+    views: views ?? this.views,
+  );
+
+  /// A copy with [collectionId]'s view state replaced, or removed when [entry] is null.
+  UiPrefs withView(String collectionId, ViewPrefs? entry) => copyWith(
+    views: {
+      for (final MapEntry(:key, :value) in views.entries)
+        if (key != collectionId) key: value,
+      collectionId: ?entry,
+    },
+  );
+
+  /// A copy keeping only the view state of [collectionIds].
+  UiPrefs keepingViews(Set<String> collectionIds) => copyWith(
+    views: {
+      for (final MapEntry(:key, :value) in views.entries)
+        if (collectionIds.contains(key)) key: value,
+    },
   );
 
   Map<String, Object?> toJson() => {
@@ -84,6 +133,9 @@ final class UiPrefs {
     'hands_free': handsFree,
     'app_language': appLanguage.code,
     'app_theme': appTheme.code,
+    'views': {
+      for (final MapEntry(:key, :value) in views.entries) key: value.toJson(),
+    },
   };
 
   /// Reads what [toJson] wrote; anything unreadable falls back to the defaults.
@@ -98,7 +150,16 @@ final class UiPrefs {
       handsFree: json['hands_free'] == true,
       appLanguage: AppLanguage.fromCode(json['app_language']),
       appTheme: AppThemeMode.fromCode(json['app_theme']),
+      views: _readViews(json['views']),
     );
+  }
+
+  static Map<String, ViewPrefs> _readViews(Object? json) {
+    if (json is! Map) return const {};
+    return {
+      for (final MapEntry(:key, :value) in json.entries)
+        if (key is String) key: ?ViewPrefs.fromJson(value),
+    };
   }
 }
 

@@ -141,6 +141,7 @@ class FormSurface extends StatelessWidget {
     this.submitOnCtrlEnter = false,
     this.summary,
     this.showContextInDialog = false,
+    this.anchor,
     super.key,
   });
 
@@ -211,6 +212,10 @@ class FormSurface extends StatelessWidget {
 
   /// Shows [contextLabel] beside the title in a dialog too, not only on a phone.
   final bool showContextInDialog;
+
+  /// In a dialog, the top-left point (in global coordinates) the dialog hangs from, which makes
+  /// it a popover anchored there instead of a centred dialog.
+  final Offset? anchor;
 
   @override
   Widget build(BuildContext context) {
@@ -549,6 +554,11 @@ class FormSurface extends StatelessWidget {
   Widget _dialog(BuildContext context) => _shortcuts(
     Dialog(
       clipBehavior: Clip.antiAlias,
+      alignment: anchor == null ? null : AlignmentDirectional.topStart,
+      insetPadding: switch (anchor) {
+        final anchor? => EdgeInsets.fromLTRB(anchor.dx, anchor.dy, 16, 16),
+        null => null,
+      },
       child: SizedBox(
         width: width + 44,
         child: Column(

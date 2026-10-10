@@ -19,10 +19,11 @@ use crate::{
     records::{GenericRecord, RecordId},
     schema::{CollectionSchema, CollectionSchemaId, FieldDefinition, FieldId},
     values::FieldValue,
+    view::ViewDefinition,
     widgets::{WidgetDefinition, WidgetId},
 };
 
-pub const PROJECTION_SCHEMA_VERSION: i64 = 6;
+pub const PROJECTION_SCHEMA_VERSION: i64 = 7;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProjectionCheckpoint {
@@ -140,6 +141,12 @@ impl ReadModel {
                 order_value INTEGER NOT NULL, deleted INTEGER NOT NULL CHECK(deleted IN (0,1)),
                 definition_json TEXT NOT NULL, FOREIGN KEY(collection_id) REFERENCES collections(id)
              ) STRICT;
+             CREATE TABLE IF NOT EXISTS view_definitions (
+                id TEXT PRIMARY KEY NOT NULL, collection_id TEXT NOT NULL, name TEXT NOT NULL,
+                order_value INTEGER NOT NULL, deleted INTEGER NOT NULL CHECK(deleted IN (0,1)),
+                broken INTEGER NOT NULL CHECK(broken IN (0,1)),
+                definition_json TEXT NOT NULL, FOREIGN KEY(collection_id) REFERENCES collections(id)
+             ) STRICT;
              CREATE TABLE IF NOT EXISTS record_values (
                 record_id TEXT NOT NULL, collection_id TEXT NOT NULL, field_id TEXT NOT NULL,
                 value_kind TEXT NOT NULL, integer_value INTEGER, text_value TEXT, boolean_value INTEGER,
@@ -170,6 +177,7 @@ impl ReadModel {
              CREATE INDEX IF NOT EXISTS computed_fields_collection_order ON computed_fields(collection_id,deleted,order_value,id);
              CREATE INDEX IF NOT EXISTS query_definitions_collection_order ON query_definitions(collection_id,deleted,order_value,id);
              CREATE INDEX IF NOT EXISTS widgets_collection_order ON widgets(collection_id,deleted,order_value,id);
+             CREATE INDEX IF NOT EXISTS view_definitions_collection_order ON view_definitions(collection_id,deleted,order_value,id);
              CREATE INDEX IF NOT EXISTS record_values_integer ON record_values(collection_id,field_id,integer_value,record_id);
              CREATE INDEX IF NOT EXISTS record_values_text ON record_values(collection_id,field_id,text_value,record_id);"
         ).map_err(|error| projection_db(&path, error))?;
@@ -247,6 +255,18 @@ impl ReadModel {
                     "title",
                     "order_value",
                     "deleted",
+                    "definition_json",
+                ][..],
+            ),
+            (
+                "view_definitions",
+                &[
+                    "id",
+                    "collection_id",
+                    "name",
+                    "order_value",
+                    "deleted",
+                    "broken",
                     "definition_json",
                 ][..],
             ),
@@ -336,7 +356,7 @@ impl ReadModel {
         let transaction = connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(|error| projection_db(&self.path, error))?;
-        transaction.execute_batch("DELETE FROM collection_summaries; DELETE FROM record_values; DELETE FROM projection_diagnostics; DELETE FROM widgets; DELETE FROM query_definitions; DELETE FROM computed_fields; DELETE FROM records; DELETE FROM enum_options; DELETE FROM fields; DELETE FROM collections;").map_err(|error| projection_db(&self.path, error))?;
+        transaction.execute_batch("DELETE FROM collection_summaries; DELETE FROM record_values; DELETE FROM projection_diagnostics; DELETE FROM view_definitions; DELETE FROM widgets; DELETE FROM query_definitions; DELETE FROM computed_fields; DELETE FROM records; DELETE FROM enum_options; DELETE FROM fields; DELETE FROM collections;").map_err(|error| projection_db(&self.path, error))?;
         for schema in &snapshot.collections {
             transaction
                 .execute(
@@ -395,6 +415,28 @@ impl ReadModel {
             let encoded =
                 serde_json::to_string(widget).map_err(|error| projection_db(&self.path, error))?;
             transaction.execute("INSERT INTO widgets(id,collection_id,widget_type,query_id,title,order_value,deleted,definition_json) VALUES(?1,?2,?3,?4,?5,?6,?7,?8)", params![widget.id.to_string(), widget.collection_id.to_string(), widget.widget_type.to_string(), widget.query_id.to_string(), widget.title, widget.order, widget.deleted, encoded]).map_err(|error| projection_db(&self.path, error))?;
+        }
+        // A view whose body does not decode or no longer validates is projected as broken; it
+        // never fails the projection.
+        for view in &snapshot.views {
+            let broken = snapshot
+                .collections
+                .iter()
+                .find(|schema| schema.id == view.collection_id)
+                .is_none_or(|schema| {
+                    let computed: Vec<_> = snapshot
+                        .computed_fields
+                        .iter()
+                        .filter(|item| item.collection_id == schema.id && !item.deleted)
+                        .cloned()
+                        .collect();
+                    crate::view::view_health(&view.body, schema, &computed)
+                        .broken
+                        .is_some()
+                });
+            let encoded =
+                serde_json::to_string(view).map_err(|error| projection_db(&self.path, error))?;
+            transaction.execute("INSERT INTO view_definitions(id,collection_id,name,order_value,deleted,broken,definition_json) VALUES(?1,?2,?3,?4,?5,?6,?7)", params![view.id.to_string(), view.collection_id.to_string(), view.name, view.order, view.deleted, broken, encoded]).map_err(|error| projection_db(&self.path, error))?;
         }
         for diagnostic in &snapshot.diagnostics {
             // `field_id` participates in the STRICT primary key, so an entity-level diagnostic
@@ -569,6 +611,13 @@ impl ReadModel {
     pub fn widgets(&self, collection_id: CollectionSchemaId) -> Result<Vec<WidgetDefinition>> {
         self.load_definitions(
             "SELECT definition_json FROM widgets WHERE collection_id=?1 AND deleted=0 ORDER BY order_value,id",
+            collection_id,
+        )
+    }
+    /// Active saved views in deterministic order: explicit order first, stable ID as tie breaker.
+    pub fn views(&self, collection_id: CollectionSchemaId) -> Result<Vec<ViewDefinition>> {
+        self.load_definitions(
+            "SELECT definition_json FROM view_definitions WHERE collection_id=?1 AND deleted=0 ORDER BY order_value,id",
             collection_id,
         )
     }
@@ -1082,6 +1131,18 @@ mod tests {
             order: 3,
             deleted: false,
         };
+        // A view written by a newer build is projected as broken, never failing the projection.
+        let future_view = crate::view::ViewDefinition {
+            id: crate::query::ViewId::new(),
+            collection_id,
+            name: "Future".into(),
+            body: crate::view::VersionedViewBody {
+                version: 9,
+                body: serde_json::Value::Null,
+            },
+            order: 0,
+            deleted: false,
+        };
         let snapshot = GenericSnapshot {
             schema_version: APP_SCHEMA_VERSION,
             collections: vec![CollectionSchema {
@@ -1108,6 +1169,7 @@ mod tests {
             computed_fields: vec![],
             query_definitions: vec![],
             widgets: vec![unknown_widget.clone()],
+            views: vec![future_view.clone()],
             diagnostics: vec![
                 diagnostic.clone(),
                 GenericDiagnostic {
@@ -1146,6 +1208,14 @@ mod tests {
                 .any(|item| item.kind == "widget_validation")
         );
 
+        assert_eq!(model.views(collection_id).unwrap(), vec![future_view]);
+        let broken: bool = model
+            .lock()
+            .unwrap()
+            .query_row("SELECT broken FROM view_definitions", [], |row| row.get(0))
+            .unwrap();
+        assert!(broken);
+
         let empty = GenericSnapshot {
             schema_version: APP_SCHEMA_VERSION,
             collections: vec![],
@@ -1153,6 +1223,7 @@ mod tests {
             computed_fields: vec![],
             query_definitions: vec![],
             widgets: vec![],
+            views: vec![],
             diagnostics: vec![],
             max_stamp: None,
         };

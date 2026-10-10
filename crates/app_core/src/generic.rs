@@ -15,7 +15,7 @@ use crate::{
     import_export::ImportedCollection,
     option_edits::{DraftTarget, PendingOption, plan_merge, plan_record_draft},
     query::{
-        ComputedFieldDefinition, ComputedFieldId, QueryDefinition, QueryId,
+        ComputedFieldDefinition, ComputedFieldId, QueryDefinition, QueryId, ViewId,
         validate_computed_field, validate_query,
     },
     records::{
@@ -28,6 +28,10 @@ use crate::{
         FieldType,
     },
     values::FieldValue,
+    view::{
+        VersionedViewBody, ViewBody, ViewDefinition, validate_view, validate_view_name,
+        view_body_issues,
+    },
     widget_registry::{QueryResultShape, descriptor_for, validate_widget_configuration},
     widgets::{
         WidgetConfiguration, WidgetDefinition, WidgetId, WidgetLayout, WidgetType, WidgetUpdate,
@@ -53,6 +57,7 @@ pub struct GenericSnapshot {
     pub computed_fields: Vec<ComputedFieldDefinition>,
     pub query_definitions: Vec<QueryDefinition>,
     pub widgets: Vec<WidgetDefinition>,
+    pub views: Vec<ViewDefinition>,
     pub diagnostics: Vec<GenericDiagnostic>,
     pub max_stamp: Option<HlcStamp>,
 }
@@ -160,6 +165,26 @@ pub enum GenericCommand {
     ReorderWidgets {
         collection_id: CollectionSchemaId,
         ids: Vec<WidgetId>,
+    },
+    /// `definition.order` is replaced by "after the last view" during validation.
+    CreateView(ViewDefinition),
+    UpdateViewBody {
+        collection_id: CollectionSchemaId,
+        id: ViewId,
+        body: VersionedViewBody,
+    },
+    RenameView {
+        collection_id: CollectionSchemaId,
+        id: ViewId,
+        name: String,
+    },
+    ReorderViews {
+        collection_id: CollectionSchemaId,
+        ids: Vec<ViewId>,
+    },
+    RemoveView {
+        collection_id: CollectionSchemaId,
+        id: ViewId,
     },
     /// Record-scoped members applied atomically under one stamp. Members are
     /// restricted to `CreateRecord`, `UpdateRecordField` and `DeleteRecord` over
@@ -533,6 +558,74 @@ impl GenericCommand {
                     "widget_ids",
                 )?;
             }
+            Self::CreateView(definition) => {
+                let schema = active_collection(snapshot, definition.collection_id)?;
+                if definition.deleted {
+                    return Err(invalid("view", "cannot create a removed view"));
+                }
+                if snapshot.views.iter().any(|item| item.id == definition.id) {
+                    return Err(invalid("view_id", "already exists"));
+                }
+                let body = normalized_view_body(&definition.body)?;
+                validate_view(
+                    &definition.name,
+                    &body,
+                    schema,
+                    &view_computed(snapshot, definition.collection_id),
+                )?;
+                definition.name = definition.name.trim().into();
+                definition.body = VersionedViewBody::new(&body);
+                definition.order = snapshot
+                    .views
+                    .iter()
+                    .filter(|item| item.collection_id == definition.collection_id && !item.deleted)
+                    .map(|item| item.order + 1)
+                    .max()
+                    .unwrap_or(0);
+            }
+            Self::UpdateViewBody {
+                collection_id,
+                id,
+                body,
+            } => {
+                let schema = active_collection(snapshot, *collection_id)?;
+                active_view(snapshot, *collection_id, *id)?;
+                let normalized = normalized_view_body(body)?;
+                let issues = view_body_issues(
+                    &normalized,
+                    schema,
+                    &view_computed(snapshot, *collection_id),
+                );
+                if !issues.is_empty() {
+                    return Err(DomainError::InvalidMany(issues));
+                }
+                *body = VersionedViewBody::new(&normalized);
+            }
+            Self::RenameView {
+                collection_id,
+                id,
+                name,
+            } => {
+                active_collection(snapshot, *collection_id)?;
+                active_view(snapshot, *collection_id, *id)?;
+                validate_view_name(name).map_err(|issue| DomainError::InvalidMany(vec![issue]))?;
+            }
+            Self::RemoveView { collection_id, id } => {
+                active_collection(snapshot, *collection_id)?;
+                active_view(snapshot, *collection_id, *id)?;
+            }
+            Self::ReorderViews { collection_id, ids } => {
+                active_collection(snapshot, *collection_id)?;
+                validate_reorder(
+                    ids,
+                    snapshot
+                        .views
+                        .iter()
+                        .filter(|item| item.collection_id == *collection_id && !item.deleted)
+                        .map(|item| item.id),
+                    "view_ids",
+                )?;
+            }
             Self::SaveRecordDraft {
                 collection_id,
                 record,
@@ -744,6 +837,7 @@ impl GenericSnapshot {
             computed_fields: self.computed_fields.clone(),
             query_definitions: self.query_definitions.clone(),
             widgets: self.widgets.clone(),
+            views: self.views.clone(),
             diagnostics: Vec::new(),
             max_stamp: self.max_stamp,
         }
@@ -760,6 +854,7 @@ impl GenericSnapshot {
             computed_fields: Vec::new(),
             query_definitions: Vec::new(),
             widgets: Vec::new(),
+            views: Vec::new(),
             diagnostics: Vec::new(),
             max_stamp: None,
         }
@@ -1212,6 +1307,46 @@ pub fn apply_generic_command(
                 )?;
             }
         }
+        GenericCommand::CreateView(definition) => write_view(tx, &collections, definition, stamp)?,
+        GenericCommand::UpdateViewBody {
+            collection_id,
+            id,
+            body,
+        } => {
+            let entry = view_entry(tx, &collections, *collection_id, *id).map_err(repo_change)?;
+            write_widget_json(tx, &entry, "body", body, stamp)?;
+        }
+        GenericCommand::RenameView {
+            collection_id,
+            id,
+            name,
+        } => {
+            let entry = view_entry(tx, &collections, *collection_id, *id).map_err(repo_change)?;
+            write_lww_register(
+                tx,
+                &entry,
+                "name",
+                &FieldValue::Text(name.trim().into()),
+                stamp,
+            )?;
+        }
+        GenericCommand::ReorderViews { collection_id, ids } => {
+            for (order, id) in ids.iter().enumerate() {
+                let entry =
+                    view_entry(tx, &collections, *collection_id, *id).map_err(repo_change)?;
+                write_lww_register(
+                    tx,
+                    &entry,
+                    "order",
+                    &FieldValue::Integer(order as i64),
+                    stamp,
+                )?;
+            }
+        }
+        GenericCommand::RemoveView { collection_id, id } => {
+            let entry = view_entry(tx, &collections, *collection_id, *id).map_err(repo_change)?;
+            write_lww_register(tx, &entry, "deleted", &FieldValue::Boolean(true), stamp)?;
+        }
     }
     Ok(())
 }
@@ -1337,6 +1472,126 @@ fn write_widget(
     )
 }
 
+fn view_entry(
+    doc: &impl ReadDoc,
+    collections: &ObjId,
+    collection_id: CollectionSchemaId,
+    id: ViewId,
+) -> Result<ObjId, DomainError> {
+    definition_entry(doc, collections, collection_id, "views", &id.to_string())
+}
+
+/// Name, body, order and tombstone are independent registers, so concurrent edits of different
+/// parts of one view all survive.
+fn write_view(
+    tx: &mut AutomergeTransaction<'_>,
+    collections: &ObjId,
+    definition: &ViewDefinition,
+    stamp: HlcStamp,
+) -> automerge_repo::Result<()> {
+    let collection =
+        object(tx, collections, &definition.collection_id.to_string()).map_err(repo_change)?;
+    // Collections created before views existed have no `views` map yet.
+    let views = match tx.get(&collection, "views").map_err(repo_change)? {
+        Some((value, object)) if value.is_object() => object,
+        Some(_) => return Err(repo_change("views is not an object")),
+        None => tx
+            .put_object(&collection, "views", ObjType::Map)
+            .map_err(repo_change)?,
+    };
+    let entry = tx
+        .put_object(&views, definition.id.to_string(), ObjType::Map)
+        .map_err(repo_change)?;
+    tx.put(&entry, "id", definition.id.to_string())
+        .map_err(repo_change)?;
+    tx.put(
+        &entry,
+        "collection_id",
+        definition.collection_id.to_string(),
+    )
+    .map_err(repo_change)?;
+    write_lww_register(
+        tx,
+        &entry,
+        "name",
+        &FieldValue::Text(definition.name.trim().into()),
+        stamp,
+    )?;
+    write_widget_json(tx, &entry, "body", &definition.body, stamp)?;
+    write_lww_register(
+        tx,
+        &entry,
+        "order",
+        &FieldValue::Integer(definition.order),
+        stamp,
+    )?;
+    write_lww_register(
+        tx,
+        &entry,
+        "deleted",
+        &FieldValue::Boolean(definition.deleted),
+        stamp,
+    )
+}
+
+/// A body that does not decode is kept as an unsupported version (version 0) so it surfaces as
+/// a broken view instead of failing the whole decode.
+fn decode_view_tracking(
+    doc: &impl ReadDoc,
+    entry: &ObjId,
+    max: &mut Option<HlcStamp>,
+) -> Result<ViewDefinition, DomainError> {
+    let id = ViewId::from_str(&string(doc, entry, "id")?)
+        .map_err(|error| malformed(error.to_string()))?;
+    let collection_id = CollectionSchemaId::from_str(&string(doc, entry, "collection_id")?)?;
+    let name = expect_text(read_winner_tracking(doc, entry, "name", max)?, "name")?;
+    let encoded = expect_text(read_winner_tracking(doc, entry, "body", max)?, "body")?;
+    let body = serde_json::from_str(&encoded).unwrap_or(VersionedViewBody {
+        version: 0,
+        body: serde_json::Value::String(encoded),
+    });
+    let order = expect_integer(read_winner_tracking(doc, entry, "order", max)?, "order")?;
+    let deleted = expect_bool(read_winner_tracking(doc, entry, "deleted", max)?, "deleted")?;
+    Ok(ViewDefinition {
+        id,
+        collection_id,
+        name,
+        body,
+        order,
+        deleted,
+    })
+}
+
+fn normalized_view_body(body: &VersionedViewBody) -> Result<ViewBody, DomainError> {
+    body.body()
+        .map(ViewBody::normalized)
+        .map_err(|message| invalid("body", message))
+}
+
+fn view_computed(
+    snapshot: &GenericSnapshot,
+    collection_id: CollectionSchemaId,
+) -> Vec<ComputedFieldDefinition> {
+    snapshot
+        .computed_fields
+        .iter()
+        .filter(|item| item.collection_id == collection_id && !item.deleted)
+        .cloned()
+        .collect()
+}
+
+fn active_view(
+    snapshot: &GenericSnapshot,
+    collection_id: CollectionSchemaId,
+    id: ViewId,
+) -> Result<&ViewDefinition, DomainError> {
+    snapshot
+        .views
+        .iter()
+        .find(|item| item.id == id && item.collection_id == collection_id && !item.deleted)
+        .ok_or_else(|| not_found("view", id))
+}
+
 pub fn decode_generic(doc: &Automerge) -> Result<GenericSnapshot, DomainError> {
     let app = match doc.get(ROOT, "application").map_err(malformed)? {
         Some((value, object)) if value.is_object() => object,
@@ -1357,6 +1612,7 @@ pub fn decode_generic(doc: &Automerge) -> Result<GenericSnapshot, DomainError> {
     let mut computed_fields = Vec::new();
     let mut query_definitions = Vec::new();
     let mut widgets = Vec::new();
+    let mut views = Vec::new();
     for key in doc.keys(&collections_map) {
         let entry = object(doc, &collections_map, &key)?;
         let id = CollectionSchemaId::from_str(&string(doc, &entry, "id")?)?;
@@ -1415,6 +1671,18 @@ pub fn decode_generic(doc: &Automerge) -> Result<GenericSnapshot, DomainError> {
             }
             widgets.push(widget);
         }
+        if let Some((value, view_map)) = doc.get(&entry, "views").map_err(malformed)?
+            && value.is_object()
+        {
+            for view_key in doc.keys(&view_map) {
+                let view_entry = object(doc, &view_map, &view_key)?;
+                let view = decode_view_tracking(doc, &view_entry, &mut max_stamp)?;
+                if view.id.to_string() != view_key || view.collection_id != id {
+                    return Err(malformed("view key/id mismatch"));
+                }
+                views.push(view);
+            }
+        }
         collections.push(CollectionSchema {
             id,
             name,
@@ -1427,6 +1695,7 @@ pub fn decode_generic(doc: &Automerge) -> Result<GenericSnapshot, DomainError> {
     computed_fields.sort_by_key(|field| (field.collection_id, field.order, field.id));
     query_definitions.sort_by_key(|query| (query.collection_id, query.order, query.id));
     widgets.sort_by_key(|widget| (widget.collection_id, widget.order, widget.id));
+    views.sort_by_key(|view| (view.collection_id, view.order, view.id));
     let mut records = Vec::new();
     for key in doc.keys(&records_map) {
         let entry = object(doc, &records_map, &key)?;
@@ -1605,6 +1874,7 @@ pub fn decode_generic(doc: &Automerge) -> Result<GenericSnapshot, DomainError> {
         computed_fields,
         query_definitions,
         widgets,
+        views,
         diagnostics,
         max_stamp,
     })
@@ -1653,6 +1923,8 @@ fn write_collection(
     tx.put_object(&entry, "queries", ObjType::Map)
         .map_err(repo_change)?;
     tx.put_object(&entry, "widgets", ObjType::Map)
+        .map_err(repo_change)?;
+    tx.put_object(&entry, "views", ObjType::Map)
         .map_err(repo_change)?;
     Ok(())
 }

@@ -27,6 +27,9 @@ pub enum DomainError {
         field: crate::schema::FieldId,
         records: u32,
     },
+    /// A view whose filter no longer validates, or whose body version is unsupported.
+    #[error("view is broken: {diagnostic}")]
+    BrokenView { diagnostic: String },
 }
 
 /// Stable machine-readable category of a validation issue.
@@ -39,6 +42,10 @@ pub enum IssueCode {
     InactiveOption,
     FieldUnavailable,
     Invalid,
+    ViewFilterType,
+    ViewSortKey,
+    ViewSortLimit,
+    ViewGrouping,
 }
 
 impl IssueCode {
@@ -52,6 +59,10 @@ impl IssueCode {
             Self::InactiveOption => "inactive_option",
             Self::FieldUnavailable => "field_unavailable",
             Self::Invalid => "invalid",
+            Self::ViewFilterType => "view_filter_type",
+            Self::ViewSortKey => "view_sort_key",
+            Self::ViewSortLimit => "view_sort_limit",
+            Self::ViewGrouping => "view_grouping",
         }
     }
 }

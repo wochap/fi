@@ -10,6 +10,7 @@ import 'api/lifecycle.dart';
 import 'api/models.dart';
 import 'api/pairing.dart';
 import 'api/queries.dart';
+import 'api/views.dart';
 import 'api/voice.dart';
 import 'api/voice_models.dart';
 import 'api/widgets.dart';
@@ -225,6 +226,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ValueTypeDto dco_decode_box_autoadd_value_type_dto(dynamic raw);
+
+  @protected
+  ViewBodyDto dco_decode_box_autoadd_view_body_dto(dynamic raw);
 
   @protected
   VoiceDictationDto dco_decode_box_autoadd_voice_dictation_dto(dynamic raw);
@@ -477,6 +481,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<TrustedDeviceDto> dco_decode_list_trusted_device_dto(dynamic raw);
 
   @protected
+  List<ViewDto> dco_decode_list_view_dto(dynamic raw);
+
+  @protected
   List<VoiceDraftValueDto> dco_decode_list_voice_draft_value_dto(dynamic raw);
 
   @protected
@@ -666,6 +673,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   ValueTypeDto? dco_decode_opt_box_autoadd_value_type_dto(dynamic raw);
 
   @protected
+  ViewBodyDto? dco_decode_opt_box_autoadd_view_body_dto(dynamic raw);
+
+  @protected
   VoiceDictationDto? dco_decode_opt_box_autoadd_voice_dictation_dto(
     dynamic raw,
   );
@@ -840,6 +850,15 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ValueTypeKindDto dco_decode_value_type_kind_dto(dynamic raw);
+
+  @protected
+  ViewBodyDto dco_decode_view_body_dto(dynamic raw);
+
+  @protected
+  ViewDto dco_decode_view_dto(dynamic raw);
+
+  @protected
+  ViewResultDto dco_decode_view_result_dto(dynamic raw);
 
   @protected
   VoiceDictationDto dco_decode_voice_dictation_dto(dynamic raw);
@@ -1134,6 +1153,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ValueTypeDto sse_decode_box_autoadd_value_type_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ViewBodyDto sse_decode_box_autoadd_view_body_dto(
     SseDeserializer deserializer,
   );
 
@@ -1472,6 +1496,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  List<ViewDto> sse_decode_list_view_dto(SseDeserializer deserializer);
+
+  @protected
   List<VoiceDraftValueDto> sse_decode_list_voice_draft_value_dto(
     SseDeserializer deserializer,
   );
@@ -1717,6 +1744,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  ViewBodyDto? sse_decode_opt_box_autoadd_view_body_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   VoiceDictationDto? sse_decode_opt_box_autoadd_voice_dictation_dto(
     SseDeserializer deserializer,
   );
@@ -1933,6 +1965,15 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ValueTypeKindDto sse_decode_value_type_kind_dto(SseDeserializer deserializer);
+
+  @protected
+  ViewBodyDto sse_decode_view_body_dto(SseDeserializer deserializer);
+
+  @protected
+  ViewDto sse_decode_view_dto(SseDeserializer deserializer);
+
+  @protected
+  ViewResultDto sse_decode_view_result_dto(SseDeserializer deserializer);
 
   @protected
   VoiceDictationDto sse_decode_voice_dictation_dto(
@@ -2308,6 +2349,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_box_autoadd_value_type_dto(
     ValueTypeDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_view_body_dto(
+    ViewBodyDto self,
     SseSerializer serializer,
   );
 
@@ -2738,6 +2785,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_list_view_dto(List<ViewDto> self, SseSerializer serializer);
+
+  @protected
   void sse_encode_list_voice_draft_value_dto(
     List<VoiceDraftValueDto> self,
     SseSerializer serializer,
@@ -3029,6 +3079,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_opt_box_autoadd_view_body_dto(
+    ViewBodyDto? self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_opt_box_autoadd_voice_dictation_dto(
     VoiceDictationDto? self,
     SseSerializer serializer,
@@ -3309,6 +3365,15 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
     ValueTypeKindDto self,
     SseSerializer serializer,
   );
+
+  @protected
+  void sse_encode_view_body_dto(ViewBodyDto self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_view_dto(ViewDto self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_view_result_dto(ViewResultDto self, SseSerializer serializer);
 
   @protected
   void sse_encode_voice_dictation_dto(

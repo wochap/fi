@@ -631,6 +631,8 @@ pub enum DomainKindDto {
     /// Widget definitions changed. Derived results are never synchronized, so this always means
     /// "reread definitions and reevaluate visible widgets".
     Widgets,
+    /// Saved view definitions changed.
+    Views,
 }
 
 /// The result shape contract a widget declares it can render.
@@ -1686,6 +1688,7 @@ impl From<DomainKind> for DomainKindDto {
             DomainKind::ComputedFields => Self::ComputedFields,
             DomainKind::Queries => Self::Queries,
             DomainKind::Widgets => Self::Widgets,
+            DomainKind::Views => Self::Views,
         }
     }
 }
@@ -1744,6 +1747,17 @@ impl From<AppError> for BridgeError {
                         reset_resolvable: false,
                     }
                 }
+                AppError::Domain(DomainError::BrokenView { diagnostic }) => Self {
+                    kind: BridgeErrorKind::Validation,
+                    issues: vec![BridgeIssueDto {
+                        fields: Vec::new(),
+                        code: "view_broken".into(),
+                        message: diagnostic.clone(),
+                        count: None,
+                    }],
+                    message: diagnostic,
+                    reset_resolvable: false,
+                },
                 AppError::Domain(DomainError::NotFound { kind, .. }) => Self::safe(
                     BridgeErrorKind::Validation,
                     format!("The selected {kind} no longer exists."),

@@ -6,6 +6,7 @@ import 'package:fi/l10n/app_localizations.dart';
 import 'package:fi/l10n/error_text.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/ui_prefs.dart';
+import 'package:fi/view_body_json.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
@@ -229,9 +230,14 @@ final class CollectionsController extends ChangeNotifier {
     this.bridge, {
     this.fileDialogs = const PlatformFileDialogs(),
     this.uiPrefs,
+    this.refreshDebounce = const Duration(milliseconds: 150),
   });
 
   final CollectionBridge bridge;
+
+  /// How long data-changed notifications are gathered before one refresh runs for the burst.
+  final Duration refreshDebounce;
+  Timer? _refreshTimer;
 
   /// Device-local list preferences; none are remembered when null.
   final UiPrefsStore? uiPrefs;
@@ -239,6 +245,8 @@ final class CollectionsController extends ChangeNotifier {
   /// The collections list order, remembered through [uiPrefs].
   CollectionSort collectionSort = CollectionSort.lastEdited;
   UiPrefs _prefs = const UiPrefs();
+  bool _prefsLoaded = false;
+  Future<void>? _prefsLoad;
 
   /// Bumped by [setCollectionSort], so a slow initial load never overrides a newer choice.
   var _sortChanges = 0;
@@ -247,7 +255,32 @@ final class CollectionsController extends ChangeNotifier {
   final FileDialogs fileDialogs;
   List<CollectionDto> collections = const [];
   CollectionSchemaDto? schema;
+
+  /// The records the selected view shows, in its order (All's order when the view is broken).
   List<RecordDto> records = const [];
+
+  /// Every active record of the open collection, unordered; state about records the view hides
+  /// (clone badges, incomplete counts, the dashboard) reads this.
+  List<RecordDto> allRecords = const [];
+
+  /// All first, then the saved views in order, each with its count. Kept until a new listing
+  /// arrives, so counts never blank while recomputing.
+  List<ViewDto> views = const [];
+
+  /// The selected view's id, or [allViewId].
+  String activeViewId = allViewId;
+  ViewBodyDto? _draft;
+
+  /// The result of executing the active body; its ids are what the view shows.
+  ViewResultDto? viewResult;
+
+  /// Why the selected saved view is broken, or null. While set, [records] is All's order.
+  String? brokenView;
+
+  /// One-shot notice: unsaved changes became broken (a field they used was deleted) and were
+  /// discarded. Cleared by [dismissDraftDiscarded].
+  bool draftDiscarded = false;
+  var _viewGeneration = 0;
   List<ComputedFieldDefinitionDto> computedFields = const [];
   List<QueryDefinitionDto> queryDefinitions = const [];
   List<WidgetDefinitionDto> widgetDefinitions = const [];
@@ -294,7 +327,7 @@ final class CollectionsController extends ChangeNotifier {
 
   Future<void> start() async {
     // Not awaited: the list must never wait on a preferences file.
-    unawaited(_loadPrefs());
+    unawaited(_prefsLoad = _loadPrefs());
     projection = await bridge.projectionState();
     _listenForInvalidations();
     _listenForProjection();
@@ -311,9 +344,15 @@ final class CollectionsController extends ChangeNotifier {
     if (store == null) return;
     final changes = _sortChanges;
     final loaded = await store.load();
-    if (_disposed || changes != _sortChanges) return;
-    _prefs = loaded;
-    collectionSort = loaded.collectionSort;
+    if (_disposed) return;
+    _prefsLoaded = true;
+    if (changes != _sortChanges) {
+      _prefs = loaded.copyWith(collectionSort: collectionSort);
+    } else {
+      _prefs = loaded;
+      collectionSort = loaded.collectionSort;
+    }
+    if (_collectionsLoaded) _pruneViewPrefs();
     notifyListeners();
   }
 
@@ -333,7 +372,7 @@ final class CollectionsController extends ChangeNotifier {
 
   void _listenForInvalidations() {
     _dataSubscription = bridge.dataChangedEvents().listen(
-      (_) => unawaited(refresh()),
+      (_) => _scheduleRefresh(),
       onError: (_) {
         if (!_disposed) {
           unawaited(_dataSubscription?.cancel());
@@ -365,20 +404,44 @@ final class CollectionsController extends ChangeNotifier {
     );
   }
 
+  /// Gathers a burst of data-changed notifications into one refresh after [refreshDebounce].
+  void _scheduleRefresh() {
+    _refreshTimer?.cancel();
+    _refreshTimer = Timer(refreshDebounce, () {
+      _refreshTimer = null;
+      if (!_disposed) unawaited(refresh());
+    });
+  }
+
+  bool _collectionsLoaded = false;
+
   Future<void> refresh() async {
+    // This refresh reads everything a pending debounced one would.
+    _refreshTimer?.cancel();
+    _refreshTimer = null;
     loading = true;
     notifyListeners();
     try {
       collections = await bridge.listCollections();
+      _collectionsLoaded = true;
+      _pruneViewPrefs();
       if (selectedCollectionId case final id?) {
         schema = await bridge.getCollectionSchema(id);
-        records = newestFirst(await bridge.listRecords(id));
+        allRecords = await bridge.listRecords(id);
         computedFields = await bridge.listComputedFields(id);
         queryDefinitions = await bridge.listQueryDefinitions(id);
         widgetDefinitions = await bridge.listWidgets(id);
+        views = await bridge.listViews(id, _nowUtcMs());
+        await _executeActiveView(id);
       } else {
         schema = null;
         records = const [];
+        allRecords = const [];
+        views = const [];
+        viewResult = null;
+        brokenView = null;
+        _draft = null;
+        activeViewId = allViewId;
         computedFields = const [];
         queryDefinitions = const [];
         widgetDefinitions = const [];
@@ -387,7 +450,7 @@ final class CollectionsController extends ChangeNotifier {
       _pruneSelection();
       // Prunes against every active record of the collection, never a filtered list.
       if (_recentCloneIds.isNotEmpty) {
-        final active = {for (final record in records) record.id};
+        final active = {for (final record in allRecords) record.id};
         _recentCloneIds = _recentCloneIds.where(active.contains).toSet();
       }
       failure = null;
@@ -457,7 +520,271 @@ final class CollectionsController extends ChangeNotifier {
 
   Future<void> selectCollection(String? id) async {
     if (id != _recentCloneCollectionId) _clearRecentClones();
+    if (id != selectedCollectionId) {
+      views = const [];
+      viewResult = null;
+      brokenView = null;
+      draftDiscarded = false;
+    }
     selectedCollectionId = id;
+    // The remembered view state must be in hand before the collection's view runs.
+    await _prefsLoad;
+    if (id != null) {
+      final entry = _prefs.views[id] ?? const ViewPrefs();
+      activeViewId = entry.selected;
+      _draft = viewBodyFromJson(entry.draft);
+    }
+    await refresh();
+  }
+
+  static int _nowUtcMs() => DateTime.now().toUtc().millisecondsSinceEpoch;
+
+  static bool _isBrokenView(Object error) =>
+      error is BridgeError &&
+      error.kind == BridgeErrorKind.validation &&
+      error.issues.any((issue) => issue.code == 'view_broken');
+
+  static String _brokenReason(BridgeError error) =>
+      error.issues
+          .where((issue) => issue.code == 'view_broken')
+          .firstOrNull
+          ?.message ??
+      error.message;
+
+  /// The constant body of All: newest first.
+  static final ViewBodyDto allViewBody = ViewBodyDto(
+    sorting: [
+      SortClauseDto(
+        expression: const ExpressionDto(
+          root: 0,
+          nodes: [ExpressionNodeDto(kind: ExpressionKindDto.recordCreatedAt)],
+        ),
+        direction: SortDirectionDto.descending,
+        nullOrder: NullOrderDto.last,
+      ),
+    ],
+  );
+
+  /// The selected view's listing entry; null only before the first listing.
+  ViewDto? get activeView =>
+      views.where((view) => view.id == activeViewId).firstOrNull;
+
+  /// The selected view's saved body (All's constant body for All).
+  ViewBodyDto get savedBody => activeView?.body ?? allViewBody;
+
+  /// The unsaved body, or null when the selected view is unmodified.
+  ViewBodyDto? get viewDraft => _draft;
+
+  /// The body the list follows: the draft, else the saved body.
+  ViewBodyDto get activeBody => _draft ?? savedBody;
+
+  /// The selected view holds unsaved changes that differ from its saved body.
+  bool get isModified => _draft != null && !sameViewBody(_draft, savedBody);
+
+  /// Save replaces a saved view's body; All has no Save, only "Save as new view".
+  bool get canSaveView => isModified && activeViewId != allViewId;
+
+  /// How many records the selected view shows.
+  int get viewCount => records.length;
+
+  void dismissDraftDiscarded() {
+    if (!draftDiscarded) return;
+    draftDiscarded = false;
+    notifyListeners();
+  }
+
+  /// Runs the active body and orders [records] by its ids. A broken draft is discarded with
+  /// [draftDiscarded]; a broken saved view shows All's order and sets [brokenView].
+  Future<void> _executeActiveView(String collectionId) async {
+    final generation = ++_viewGeneration;
+    final now = _nowUtcMs();
+    final remembered = (activeViewId, _draft);
+    if (!views.any((view) => view.id == activeViewId)) {
+      activeViewId = allViewId;
+      _draft = null;
+    }
+    String? broken;
+    ViewResultDto? result;
+    if (_draft case final draft?) {
+      try {
+        result = await bridge.executeViewBody(collectionId, draft, now);
+      } catch (error) {
+        if (!_isBrokenView(error)) rethrow;
+        if (generation != _viewGeneration) return;
+        _draft = null;
+        draftDiscarded = true;
+      }
+    }
+    if (result == null) {
+      try {
+        result = await bridge.executeView(collectionId, activeViewId, now);
+      } catch (error) {
+        if (!_isBrokenView(error)) rethrow;
+        broken = _brokenReason(error as BridgeError);
+        result = await bridge.executeView(collectionId, allViewId, now);
+      }
+    }
+    if (generation != _viewGeneration || selectedCollectionId != collectionId) {
+      return;
+    }
+    brokenView = broken;
+    viewResult = result;
+    final byId = {for (final record in allRecords) record.id: record};
+    records = [for (final id in result.ids) ?byId[id]];
+    _pruneSelection();
+    if (remembered != (activeViewId, _draft)) _rememberView(collectionId);
+  }
+
+  /// Stores the selected view and draft of [collectionId] on this device.
+  void _rememberView(String collectionId) {
+    final entry = activeViewId == allViewId && _draft == null
+        ? null
+        : ViewPrefs(
+            selected: activeViewId,
+            draft: _draft == null ? null : viewBodyToJson(_draft!),
+          );
+    _prefs = _prefs.withView(collectionId, entry);
+    unawaited(uiPrefs?.update((prefs) => prefs.withView(collectionId, entry)));
+  }
+
+  /// Drops remembered view state of collections that no longer exist.
+  void _pruneViewPrefs() {
+    if (!_prefsLoaded && uiPrefs != null) return;
+    final ids = {for (final collection in collections) collection.id};
+    if (_prefs.views.keys.every(ids.contains)) return;
+    _prefs = _prefs.keepingViews(ids);
+    unawaited(uiPrefs?.update((prefs) => prefs.keepingViews(ids)));
+  }
+
+  /// Re-runs the active view without reloading anything else.
+  Future<void> _applyView() async {
+    final id = selectedCollectionId;
+    if (id == null) return;
+    _rememberView(id);
+    notifyListeners();
+    try {
+      await _executeActiveView(id);
+      failure = null;
+    } catch (error) {
+      failure = error;
+    }
+    if (!_disposed) notifyListeners();
+  }
+
+  /// Selects [viewId] (or [allViewId]) with no unsaved changes.
+  Future<void> selectView(String viewId) async {
+    if (viewId == activeViewId && _draft == null) return;
+    activeViewId = viewId;
+    _draft = null;
+    await _applyView();
+  }
+
+  /// Makes [body] the unsaved body of the selected view; a body equal to the saved one clears
+  /// the modified state.
+  Future<void> setDraft(ViewBodyDto body) async {
+    _draft = sameViewBody(body, savedBody) ? null : body;
+    await _applyView();
+  }
+
+  /// Flips the direction of the active body's primary sort key (the effective sort when the
+  /// body has none).
+  Future<void> flipPrimarySort() async {
+    final body = activeBody;
+    final sorting = body.sorting.isNotEmpty
+        ? body.sorting
+        : (activeView?.effectiveSort ?? allViewBody.sorting);
+    if (sorting.isEmpty) return;
+    final first = sorting.first;
+    await setDraft(
+      ViewBodyDto(
+        filter: body.filter,
+        sorting: [
+          SortClauseDto(
+            expression: first.expression,
+            direction: first.direction == SortDirectionDto.ascending
+                ? SortDirectionDto.descending
+                : SortDirectionDto.ascending,
+            nullOrder: first.nullOrder,
+          ),
+          ...sorting.skip(1),
+        ],
+      ),
+    );
+  }
+
+  /// Discards the unsaved changes.
+  Future<void> resetView() async {
+    if (_draft == null) return;
+    _draft = null;
+    await _applyView();
+  }
+
+  /// Replaces the selected saved view's body with the draft. Does nothing for All.
+  Future<void> saveView() async {
+    final draft = _draft;
+    if (activeViewId == allViewId || draft == null) return;
+    await bridge.updateView(selectedCollectionId!, activeViewId, draft);
+    _draft = null;
+    _rememberView(selectedCollectionId!);
+    await refresh();
+  }
+
+  /// Creates a saved view named [name] from [body] (the active body by default), selects it and
+  /// returns its id. The selected view's unsaved changes move into the new view.
+  Future<String> saveAsNewView(String name, {ViewBodyDto? body}) async {
+    final collectionId = selectedCollectionId!;
+    final id = await bridge.createView(collectionId, name, body ?? activeBody);
+    activeViewId = id;
+    _draft = null;
+    _rememberView(collectionId);
+    await refresh();
+    return id;
+  }
+
+  /// Updates a saved view's body and, when given, its name, then selects it with no changes.
+  Future<void> editView(
+    String viewId, {
+    required ViewBodyDto body,
+    String? name,
+  }) async {
+    final collectionId = selectedCollectionId!;
+    if (viewId == allViewId) {
+      // All cannot be stored; an edit of All becomes its draft.
+      activeViewId = allViewId;
+      await setDraft(body);
+      return;
+    }
+    if (name != null) await bridge.renameView(collectionId, viewId, name);
+    await bridge.updateView(collectionId, viewId, body);
+    activeViewId = viewId;
+    _draft = null;
+    _rememberView(collectionId);
+    await refresh();
+  }
+
+  Future<void> renameView(String viewId, String name) async {
+    await bridge.renameView(selectedCollectionId!, viewId, name);
+    await refresh();
+  }
+
+  /// Stores the saved views' order; All stays first.
+  Future<void> reorderViews(List<String> ids) async {
+    await bridge.reorderViews(selectedCollectionId!, [
+      for (final id in ids)
+        if (id != allViewId) id,
+    ]);
+    await refresh();
+  }
+
+  /// Deletes a saved view, selecting All when it was the selected one.
+  Future<void> deleteView(String viewId) async {
+    final collectionId = selectedCollectionId!;
+    await bridge.removeView(collectionId, viewId);
+    if (activeViewId == viewId) {
+      activeViewId = allViewId;
+      _draft = null;
+      _rememberView(collectionId);
+    }
     await refresh();
   }
 
@@ -851,6 +1178,12 @@ final class CollectionsController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Selects every record the view shows.
+  void selectAllShown() {
+    selectedRecordIds.addAll([for (final record in records) record.id]);
+    notifyListeners();
+  }
+
   void clearSelection() {
     if (!selecting) return;
     _selectionRequested = false;
@@ -858,8 +1191,8 @@ final class CollectionsController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Drops selected IDs that are no longer in the projected list, which is how
-  /// a record deleted on another device leaves the selection.
+  /// Drops selected IDs the view no longer shows, which is how a record deleted on another
+  /// device, or hidden by a view change, leaves the selection.
   void _pruneSelection() {
     if (selectedRecordIds.isEmpty) return;
     final present = {for (final record in records) record.id};
@@ -916,7 +1249,7 @@ final class CollectionsController extends ChangeNotifier {
   /// Deletes the clones [ids] that are still active, in one batch. Clones
   /// already deleted are skipped so the undo never fails on them.
   Future<void> undoClone(List<String> ids) async {
-    final present = {for (final record in records) record.id};
+    final present = {for (final record in allRecords) record.id};
     final active = ids.where(present.contains).toList(growable: false);
     if (_recentCloneIds.any(ids.contains)) {
       _recentCloneIds = _recentCloneIds.difference(ids.toSet());
@@ -958,6 +1291,7 @@ final class CollectionsController extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _refreshTimer?.cancel();
     unawaited(_dataSubscription?.cancel());
     unawaited(_projectionSubscription?.cancel());
     unawaited(_errorSubscription?.cancel());
@@ -988,19 +1322,6 @@ List<CollectionDto> sortCollections(
     },
   });
 }
-
-/// The default record order: newest first by creation time, records without one last; ties and
-/// the undated tail by id.
-List<RecordDto> newestFirst(List<RecordDto> records) =>
-    [...records]..sort((a, b) {
-      final order = switch ((a.createdAtMs, b.createdAtMs)) {
-        (final x?, final y?) => y.compareTo(x),
-        (null, null) => 0,
-        (null, _) => 1,
-        (_, null) => -1,
-      };
-      return order != 0 ? order : a.id.compareTo(b.id);
-    });
 
 /// The active required fields [record] is missing, in form order: those its `record_validation`
 /// diagnostics name.
@@ -1728,3 +2049,44 @@ final class FormIssues {
           form: form,
         );
 }
+
+/// Why a view name can't be used as typed: [empty] and [reserved] block saving, [duplicate] only
+/// warns.
+enum ViewNameProblem { empty, reserved, duplicate }
+
+String _viewNameKey(String name) => name.trim().toLowerCase();
+
+/// [name] equals, ignoring case and surrounding spaces, the localized name of All ([allName]).
+bool isReservedViewName(String name, String allName) =>
+    _viewNameKey(name) == _viewNameKey(allName);
+
+/// Another saved view in [views] (other than [exceptViewId]) is already called [name].
+bool isDuplicateViewName(
+  String name,
+  Iterable<ViewDto> views, {
+  String? exceptViewId,
+}) => views.any(
+  (view) =>
+      view.id != allViewId &&
+      view.id != exceptViewId &&
+      _viewNameKey(view.name) == _viewNameKey(name),
+);
+
+/// The first problem with [name] for a view of a collection listing [views], or null.
+ViewNameProblem? viewNameProblem(
+  String name, {
+  required String allName,
+  required Iterable<ViewDto> views,
+  String? exceptViewId,
+}) {
+  if (name.trim().isEmpty) return ViewNameProblem.empty;
+  if (isReservedViewName(name, allName)) return ViewNameProblem.reserved;
+  if (isDuplicateViewName(name, views, exceptViewId: exceptViewId)) {
+    return ViewNameProblem.duplicate;
+  }
+  return null;
+}
+
+/// Whether [problem] makes Save unavailable.
+bool viewNameBlocksSave(ViewNameProblem? problem) =>
+    problem == ViewNameProblem.empty || problem == ViewNameProblem.reserved;

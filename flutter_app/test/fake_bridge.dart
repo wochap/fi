@@ -1344,6 +1344,295 @@ final class FakeCollectionBridge implements CollectionBridge {
     changedWidgets(collectionId);
   }
 
+  /// Saved views per collection, in stored order. All is synthesized by [listViews].
+  final Map<String, List<ViewDto>> views = {};
+
+  /// Saved view ids reported as broken, with their diagnostic.
+  final Map<String, String> brokenViews = {};
+
+  /// Decides whether a record matches a view filter; null matches every record.
+  bool Function(RecordDto record, ExpressionDto filter)? viewFilter;
+
+  /// Marks an unsaved body as broken (e.g. it names a field deleted remotely).
+  bool Function(ViewBodyDto body)? isBrokenBody;
+  int viewListings = 0;
+  int viewExecutions = 0;
+  final List<ViewBodyDto> executedBodies = [];
+
+  void changedViews([String? id]) => dataController.add(
+    DataChangedDto(
+      kinds: const [DomainKindDto.views],
+      collectionIds: id == null ? const [] : [id],
+      checkpoint: 'fake',
+    ),
+  );
+
+  static final ViewBodyDto allViewBody = ViewBodyDto(
+    sorting: [
+      SortClauseDto(
+        expression: const ExpressionDto(
+          root: 0,
+          nodes: [ExpressionNodeDto(kind: ExpressionKindDto.recordCreatedAt)],
+        ),
+        direction: SortDirectionDto.descending,
+        nullOrder: NullOrderDto.last,
+      ),
+    ],
+  );
+
+  static BridgeError _viewError(String code, String field, String message) =>
+      BridgeError(
+        kind: BridgeErrorKind.validation,
+        issues: [
+          BridgeIssueDto(fields: [field], code: code, message: message),
+        ],
+        message: message,
+        resetResolvable: false,
+      );
+
+  static BridgeError _brokenView(String diagnostic) => BridgeError(
+    kind: BridgeErrorKind.validation,
+    issues: [
+      BridgeIssueDto(
+        fields: const [],
+        code: 'view_broken',
+        message: diagnostic,
+      ),
+    ],
+    message: diagnostic,
+    resetResolvable: false,
+  );
+
+  void _validateViewName(String name) {
+    final length = name.trim().characters.length;
+    if (length < 1 || length > 40) {
+      throw _viewError('length', 'name', 'Use 1 to 40 characters.');
+    }
+  }
+
+  ViewBodyDto _normalizeView(ViewBodyDto body) {
+    if (body.sorting.length > 3) {
+      throw _viewError('view_sort_limit', 'sorting', 'Sort by at most 3 keys.');
+    }
+    return ViewBodyDto(
+      filter: body.filter,
+      sorting: [
+        for (final clause in body.sorting)
+          SortClauseDto(
+            expression: clause.expression,
+            direction: clause.direction,
+            nullOrder: NullOrderDto.last,
+          ),
+      ],
+    );
+  }
+
+  ViewResultDto _runView(String collectionId, ViewBodyDto body) {
+    viewExecutions++;
+    executedBodies.add(body);
+    final filter = body.filter;
+    final matcher = viewFilter;
+    final matching = [
+      for (final record in records[collectionId] ?? const <RecordDto>[])
+        if (filter == null || matcher == null || matcher(record, filter))
+          record,
+    ];
+    // Only created-at sorting is mirrored; any other key falls back to created desc.
+    final first = body.sorting.firstOrNull;
+    final ascending =
+        first != null &&
+        first.expression.nodes[first.expression.root].kind ==
+            ExpressionKindDto.recordCreatedAt &&
+        first.direction == SortDirectionDto.ascending;
+    // Records without a creation time sort last either way; ties by id.
+    matching.sort((a, b) {
+      final order = switch ((a.createdAtMs, b.createdAtMs)) {
+        (final x?, final y?) => ascending ? x.compareTo(y) : y.compareTo(x),
+        (null, null) => 0,
+        (null, _) => 1,
+        (_, null) => -1,
+      };
+      return order != 0 ? order : a.id.compareTo(b.id);
+    });
+    return ViewResultDto(
+      ids: [for (final record in matching) record.id],
+      count: matching.length,
+    );
+  }
+
+  List<ViewDto> _savedViews(String collectionId) =>
+      views.putIfAbsent(collectionId, () => []);
+
+  int _viewIndex(String collectionId, String viewId) {
+    final index = _savedViews(
+      collectionId,
+    ).indexWhere((view) => view.id == viewId);
+    if (viewId == allViewId || index < 0) {
+      throw _viewError('invalid', 'id', 'The selected view no longer exists.');
+    }
+    return index;
+  }
+
+  ViewDto _copyView(
+    ViewDto view, {
+    String? name,
+    ViewBodyDto? body,
+    int? order,
+  }) => ViewDto(
+    id: view.id,
+    name: name ?? view.name,
+    body: body ?? view.body,
+    order: order ?? view.order,
+    effectiveSort: (body ?? view.body)?.sorting ?? view.effectiveSort,
+  );
+
+  @override
+  Future<List<ViewDto>> listViews(String collectionId, int nowUtcMs) async {
+    _fail();
+    viewListings++;
+    final all = _runView(collectionId, allViewBody);
+    viewExecutions--;
+    executedBodies.removeLast();
+    return [
+      ViewDto(
+        id: allViewId,
+        name: 'All',
+        body: allViewBody,
+        order: -1 << 62,
+        count: all.count,
+        effectiveSort: allViewBody.sorting,
+      ),
+      for (final view in _savedViews(collectionId))
+        if (brokenViews[view.id] case final diagnostic?)
+          ViewDto(
+            id: view.id,
+            name: view.name,
+            body: view.body,
+            order: view.order,
+            broken: diagnostic,
+            effectiveSort: view.effectiveSort,
+          )
+        else
+          ViewDto(
+            id: view.id,
+            name: view.name,
+            body: view.body,
+            order: view.order,
+            count: (() {
+              final result = _runView(collectionId, view.body ?? allViewBody);
+              viewExecutions--;
+              executedBodies.removeLast();
+              return result.count;
+            })(),
+            effectiveSort: view.effectiveSort,
+          ),
+    ];
+  }
+
+  @override
+  Future<String> createView(
+    String collectionId,
+    String name,
+    ViewBodyDto body,
+  ) async {
+    _fail();
+    _validateViewName(name);
+    final normalized = _normalizeView(body);
+    final saved = _savedViews(collectionId);
+    final id = 'view-${_next++}';
+    saved.add(
+      ViewDto(
+        id: id,
+        name: name.trim(),
+        body: normalized,
+        order: saved.isEmpty ? 0 : saved.last.order + 1,
+        effectiveSort: normalized.sorting,
+      ),
+    );
+    changedViews(collectionId);
+    return id;
+  }
+
+  @override
+  Future<void> updateView(
+    String collectionId,
+    String viewId,
+    ViewBodyDto body,
+  ) async {
+    _fail();
+    final index = _viewIndex(collectionId, viewId);
+    final saved = _savedViews(collectionId);
+    saved[index] = _copyView(saved[index], body: _normalizeView(body));
+    brokenViews.remove(viewId);
+    changedViews(collectionId);
+  }
+
+  @override
+  Future<void> renameView(
+    String collectionId,
+    String viewId,
+    String name,
+  ) async {
+    _fail();
+    _validateViewName(name);
+    final index = _viewIndex(collectionId, viewId);
+    final saved = _savedViews(collectionId);
+    saved[index] = _copyView(saved[index], name: name.trim());
+    changedViews(collectionId);
+  }
+
+  @override
+  Future<void> reorderViews(String collectionId, List<String> ids) async {
+    _fail();
+    final saved = _savedViews(collectionId);
+    final byId = {for (final view in saved) view.id: view};
+    final ordered = [for (final id in ids) ?byId.remove(id), ...byId.values];
+    saved
+      ..clear()
+      ..addAll([
+        for (var i = 0; i < ordered.length; i++)
+          _copyView(ordered[i], order: i),
+      ]);
+    changedViews(collectionId);
+  }
+
+  @override
+  Future<void> removeView(String collectionId, String viewId) async {
+    _fail();
+    final index = _viewIndex(collectionId, viewId);
+    _savedViews(collectionId).removeAt(index);
+    brokenViews.remove(viewId);
+    changedViews(collectionId);
+  }
+
+  @override
+  Future<ViewResultDto> executeView(
+    String collectionId,
+    String viewId,
+    int nowUtcMs,
+  ) async {
+    _fail();
+    if (viewId == allViewId) return _runView(collectionId, allViewBody);
+    final view = _savedViews(collectionId)[_viewIndex(collectionId, viewId)];
+    if (brokenViews[viewId] case final diagnostic?) {
+      throw _brokenView(diagnostic);
+    }
+    return _runView(collectionId, view.body ?? allViewBody);
+  }
+
+  @override
+  Future<ViewResultDto> executeViewBody(
+    String collectionId,
+    ViewBodyDto body,
+    int nowUtcMs,
+  ) async {
+    _fail();
+    if (isBrokenBody?.call(body) ?? false) {
+      throw _brokenView('This view uses a field that was deleted.');
+    }
+    return _runView(collectionId, _normalizeView(body));
+  }
+
   @override
   Future<List<WidgetDescriptorDto>> listWidgetDescriptors() async =>
       List.of(descriptors.where((descriptor) => descriptor.supported));

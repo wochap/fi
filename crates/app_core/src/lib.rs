@@ -32,6 +32,7 @@ pub mod schema;
 #[doc(hidden)]
 pub mod test_support;
 pub mod values;
+pub mod view;
 pub mod widget_registry;
 pub mod widgets;
 
@@ -124,6 +125,7 @@ pub use schema::{
     FieldDefinition, FieldId, FieldType, ValidationMetadata,
 };
 pub use values::{DecimalError, FieldValue, FixedDecimal};
+pub use view::*;
 pub use widget_registry::{
     AggregateNumberConfig, BarChartConfig, CORE_AGGREGATE_NUMBER, CORE_BAR_CHART, CORE_LINE_CHART,
     CORE_SCATTER_PLOT, DecodedConfiguration, LineChartConfig, QueryResultShape,
