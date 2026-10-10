@@ -5516,11 +5516,29 @@ abstract class AppLocalizations {
   /// **'Listening into {field}'**
   String dictationListeningAnnounce(String field);
 
+  /// Field dictation state while speech is turned into text, before cleanup
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribing…'**
+  String get dictationTranscribing;
+
   /// Field dictation processing state
   ///
   /// In en, this message translates to:
   /// **'Cleaning up…'**
   String get dictationCleaningUp;
+
+  /// Text button on the Cleaning up state: use the raw transcript without cleanup
+  ///
+  /// In en, this message translates to:
+  /// **'Skip'**
+  String get dictationSkip;
+
+  /// Screen-reader label of the Skip button on the Cleaning up state
+  ///
+  /// In en, this message translates to:
+  /// **'Skip cleanup'**
+  String get dictationSkipLabel;
 
   /// Dictated review sheet title
   ///

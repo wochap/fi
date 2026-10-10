@@ -75,7 +75,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => 730619296;
+  int get rustContentHash => -473431171;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -517,6 +517,8 @@ abstract class RustLibApi extends BaseApi {
   void crateApiVoiceVoicePrepare({required String modelsDir});
 
   void crateApiVoiceVoiceRelease();
+
+  void crateApiVoiceVoiceSkipCleanup();
 
   Future<List<DiagnosticDto>> crateApiWidgetsWidgetDiagnostics({
     required String id,
@@ -4381,6 +4383,32 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "voice_release", argNames: []);
 
   @override
+  void crateApiVoiceVoiceSkipCleanup() {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 121,
+          )!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiVoiceVoiceSkipCleanupConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiVoiceVoiceSkipCleanupConstMeta =>
+      const TaskConstMeta(debugName: "voice_skip_cleanup", argNames: []);
+
+  @override
   Future<List<DiagnosticDto>> crateApiWidgetsWidgetDiagnostics({
     required String id,
   }) {
@@ -4392,7 +4420,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 121,
+            funcId: 122,
             port: port_,
           );
         },

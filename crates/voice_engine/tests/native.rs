@@ -6,8 +6,8 @@ use std::path::PathBuf;
 
 use chrono::{NaiveDate, NaiveTime};
 use voice_engine::{
-    ChoiceOption, FieldKind, FillRequest, ModelRunner, VoiceEngine, VoiceError, VoiceField,
-    VoiceLanguage,
+    ChoiceOption, FieldKind, FillRequest, ForTurn, TurnControl, TurnRunner, VoiceEngine,
+    VoiceError, VoiceField, VoiceLanguage,
     audio::wav_pcm16,
     native::{CancelFlag, LlamaRunner, speech_model_file, transcribe, understanding_model_file},
     patch::normalize_text,
@@ -132,19 +132,19 @@ fn spanish_speech_model_missing_fails_to_load() {
 fn a_missing_or_damaged_model_fails_to_load() {
     let dir = tempdir();
     assert_eq!(
-        LlamaRunner::load(&dir.join("missing.gguf"), CancelFlag::default()).err(),
+        LlamaRunner::load(&dir.join("missing.gguf")).err(),
         Some(VoiceError::ModelLoadFailed)
     );
     let damaged = dir.join("damaged.gguf");
     std::fs::write(&damaged, b"not a model").unwrap();
     assert_eq!(
-        LlamaRunner::load(&damaged, CancelFlag::default()).err(),
+        LlamaRunner::load(&damaged).err(),
         Some(VoiceError::ModelLoadFailed)
     );
     let truncated = dir.join("truncated.gguf");
     std::fs::write(&truncated, b"GGUF\x03\x00").unwrap();
     assert_eq!(
-        LlamaRunner::load(&truncated, CancelFlag::default()).err(),
+        LlamaRunner::load(&truncated).err(),
         Some(VoiceError::ModelLoadFailed)
     );
 }
@@ -158,35 +158,51 @@ fn tempdir() -> PathBuf {
 #[test]
 fn llama_output_follows_the_grammar() {
     let Some(dir) = models_dir() else { return };
-    let mut runner =
-        LlamaRunner::load(&dir.join(understanding_model_file()), CancelFlag::default()).unwrap();
+    let mut runner = LlamaRunner::load(&dir.join(understanding_model_file())).unwrap();
     let request = expense_request();
     let mut engine = VoiceEngine::new();
     let transcript = "Lunch at Nando's, twelve fifty, food, yesterday.";
     let grammar = voice_engine::GrammarCache::default().get("x", &request.fields);
     assert_eq!(grammar.gbnf(), build_grammar(&request.fields));
     let prompt = voice_engine::schema::build_prompt(&request.fields, &request, transcript);
-    let output = runner.complete(&prompt, &grammar).unwrap();
+    let output = runner
+        .generate(&prompt, &grammar, &TurnControl::fill())
+        .unwrap();
     let entries: Vec<serde_json::Value> = serde_json::from_str(&output).unwrap();
     for entry in &entries {
         let field = entry["field"].as_str().unwrap();
         assert!(request.fields.iter().any(|f| f.name == field), "{output}");
     }
-    let outcome = engine.fill(&mut runner, transcript, &request).unwrap();
+    let outcome = engine
+        .fill(
+            &mut ForTurn {
+                runner: &mut runner,
+                turn: &TurnControl::fill(),
+            },
+            transcript,
+            &request,
+        )
+        .unwrap();
     assert!(!outcome.patch.is_empty());
 }
 
 #[test]
 fn cancel_stops_generation() {
     let Some(dir) = models_dir() else { return };
-    let cancel = CancelFlag::default();
-    let mut runner =
-        LlamaRunner::load(&dir.join(understanding_model_file()), cancel.clone()).unwrap();
-    cancel.cancel();
+    let turn = TurnControl::fill();
+    let mut runner = LlamaRunner::load(&dir.join(understanding_model_file())).unwrap();
+    turn.cancel.cancel();
     let request = expense_request();
     assert_eq!(
         VoiceEngine::new()
-            .fill(&mut runner, "Taxi home", &request)
+            .fill(
+                &mut ForTurn {
+                    runner: &mut runner,
+                    turn: &turn
+                },
+                "Taxi home",
+                &request
+            )
             .err(),
         Some(VoiceError::Cancelled)
     );

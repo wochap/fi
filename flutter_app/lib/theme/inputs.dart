@@ -228,7 +228,10 @@ class FiTextInput extends StatelessWidget {
     }
     final overlay = this.overlay;
     if (overlay == null) return field;
-    final height = Nocturne.inputHeight(context, size);
+    // The overlay covers the whole box at any height. A multiline input pins it to the top
+    // line; a single-line input keeps it centred.
+    final multiline = maxLines != 1;
+    final firstLine = Nocturne.inputHeight(context, size) - 2;
     return Stack(
       children: [
         field,
@@ -236,14 +239,26 @@ class FiTextInput extends StatelessWidget {
           left: 1,
           top: 1,
           right: Nocturne.touchTarget + 1,
-          height: height - 2,
+          bottom: 1,
           child: ColoredBox(
+            key: const Key('input-overlay'),
             color: context.nocturne.surface,
             child: Padding(
               padding: EdgeInsets.symmetric(
                 horizontal: size == InputSize.small ? 9 : 11,
               ),
-              child: Align(alignment: Alignment.centerLeft, child: overlay),
+              child: multiline
+                  ? Align(
+                      alignment: Alignment.topLeft,
+                      child: SizedBox(
+                        height: firstLine,
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: overlay,
+                        ),
+                      ),
+                    )
+                  : Align(alignment: Alignment.centerLeft, child: overlay),
             ),
           ),
         ),

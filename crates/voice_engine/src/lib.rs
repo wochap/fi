@@ -12,6 +12,7 @@ pub mod native;
 pub mod normalize;
 pub mod patch;
 pub mod schema;
+pub mod turn;
 
 use chrono::{NaiveDate, NaiveTime};
 use thiserror::Error;
@@ -19,6 +20,7 @@ use thiserror::Error;
 pub use dictation::Dictation;
 pub use patch::{PatchStats, RawEntry};
 pub use schema::{Grammar, GrammarCache};
+pub use turn::{CancelFlag, CurrentTurn, ForTurn, TurnControl, TurnRunner};
 
 /// The type of a field as the engine sees it.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]

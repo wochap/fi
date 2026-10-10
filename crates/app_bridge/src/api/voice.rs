@@ -289,6 +289,14 @@ pub fn voice_cancel() {
     crate::voice_worker::cancel();
 }
 
+/// Ends the running dictation turn's cleanup at the next token; the turn returns its transcript
+/// unchanged. Unlike [`voice_cancel`] it keeps the transcript, and it is a no-op for fill turns,
+/// before the transcript exists and after the result.
+#[frb(sync)]
+pub fn voice_skip_cleanup() {
+    crate::voice_worker::skip_cleanup();
+}
+
 /// Releases the instruction model (backgrounded app or memory pressure).
 #[frb(sync)]
 pub fn voice_release() {
@@ -401,6 +409,7 @@ mod tests {
         );
         voice_prepare("x".into());
         voice_cancel();
+        voice_skip_cleanup();
         voice_release();
     }
 }

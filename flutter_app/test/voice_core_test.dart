@@ -16,6 +16,65 @@ import 'package:intl/intl.dart';
 import 'voice_fixtures.dart';
 
 void main() {
+  group('fake dictation skip', () {
+    const turn = DictationResult(
+      transcript: 'Lunch, I mean, dinner',
+      cleaned: 'Dinner',
+      removedWordIndexes: [0, 1, 2],
+    );
+
+    FakeVoiceEngine engine() => FakeVoiceEngine(
+      dictations: const [FakeDictationTurn.result(turn)],
+      transcribeDelay: const Duration(milliseconds: 5),
+      fillDelay: const Duration(seconds: 5),
+    );
+
+    test('the transcript is reported before the cleanup delay', () async {
+      final fake = FakeVoiceEngine(
+        dictations: const [FakeDictationTurn.result(turn)],
+        transcribeDelay: Duration.zero,
+        fillDelay: const Duration(milliseconds: 5),
+      );
+      fake.start(kind: VoiceTurnKind.dictation).listen((_) {});
+      final log = <String>[];
+      final result = await fake.stopDictation(
+        'en',
+        onTranscript: (_) => log.add('transcript'),
+      );
+      log.add('result');
+      expect(log, ['transcript', 'result']);
+      expect(result.cleaned, 'Dinner');
+    });
+
+    test('skip after the transcript returns it unchanged', () async {
+      final fake = engine();
+      fake.start(kind: VoiceTurnKind.dictation).listen((_) {});
+      final heard = Completer<void>();
+      final result = fake.stopDictation(
+        'en',
+        onTranscript: (_) => heard.complete(),
+      );
+      await heard.future;
+      await fake.skipCleanup();
+      final dictation = await result.timeout(const Duration(seconds: 1));
+      expect(dictation.cleaned, 'Lunch, I mean, dinner');
+      expect(dictation.removedWordIndexes, isEmpty);
+      expect(fake.skips, 1);
+    });
+
+    test('skip before the transcript is a no-op', () async {
+      final fake = FakeVoiceEngine(
+        dictations: const [FakeDictationTurn.result(turn)],
+        transcribeDelay: const Duration(milliseconds: 5),
+        fillDelay: const Duration(milliseconds: 5),
+      );
+      fake.start(kind: VoiceTurnKind.dictation).listen((_) {});
+      final result = fake.stopDictation('en');
+      await fake.skipCleanup();
+      expect((await result).cleaned, 'Dinner');
+    });
+  });
+
   group('model sizes and status', () {
     test('formatBytes shows GB with up to two decimals and MB rounded', () {
       expect(formatBytes(1433458515), '1.43 GB');

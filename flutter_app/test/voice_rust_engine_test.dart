@@ -107,6 +107,11 @@ final class FakeNative implements VoiceNative {
   @override
   void cancel() => cancels++;
 
+  var skips = 0;
+
+  @override
+  void skipCleanup() => skips++;
+
   @override
   void release() => releases++;
 }
@@ -233,6 +238,95 @@ void main() {
     expect(result.removedWordIndexes, [1, 2, 3, 4]);
     expect(native.dictationLanguage, 'es');
     expect(native.pcm!.length, 1600);
+  });
+
+  group('skip cleanup', () {
+    const heardText = 'Pick up oat milk, no wait, almond milk';
+
+    /// A dictation turn whose Rust events the test sends through `native.running`.
+    Future<(RustVoiceEngine, FakeNative, Future<DictationResult>, List<String>)>
+    started() async {
+      final capture = FakeCapture();
+      final native = FakeNative(events: []);
+      final engine = engineWith(capture, native);
+      engine.start(kind: VoiceTurnKind.dictation).listen((_) {});
+      await settle();
+      final log = <String>[];
+      final result = engine
+          .stopDictation('en', onTranscript: (text) => log.add('transcript'))
+          .then((result) {
+            log.add('result');
+            return result;
+          });
+      await settle();
+      return (engine, native, result, log);
+    }
+
+    test('the transcript is reported before the result', () async {
+      final (_, native, result, log) = await started();
+      native.running!.add(const VoiceTurnEventDto(transcript: heardText));
+      await settle();
+      expect(log, ['transcript']);
+      native.running!.add(
+        VoiceTurnEventDto(
+          dictation: VoiceDictationDto(
+            cleaned: 'Pick up almond milk',
+            removed: Uint32List.fromList([2, 3, 4, 5]),
+          ),
+        ),
+      );
+      expect((await result).cleaned, 'Pick up almond milk');
+      expect(log, ['transcript', 'result']);
+    });
+
+    test('before the transcript it is a no-op', () async {
+      final (engine, native, result, log) = await started();
+      await engine.skipCleanup();
+      expect(native.skips, 0);
+      native.running!.add(const VoiceTurnEventDto(transcript: heardText));
+      native.running!.add(
+        VoiceTurnEventDto(
+          dictation: VoiceDictationDto(
+            cleaned: 'Pick up almond milk',
+            removed: Uint32List.fromList([2, 3, 4, 5]),
+          ),
+        ),
+      );
+      expect((await result).cleaned, 'Pick up almond milk');
+    });
+
+    test('during cleanup it returns the transcript unchanged', () async {
+      final (engine, native, result, _) = await started();
+      native.running!.add(const VoiceTurnEventDto(transcript: heardText));
+      await settle();
+      await engine.skipCleanup();
+      final dictation = await result;
+      expect(dictation.cleaned, heardText);
+      expect(dictation.transcript, heardText);
+      expect(dictation.removedWordIndexes, isEmpty);
+      expect(native.skips, 1);
+      expect(native.cancels, 0);
+    });
+
+    test('racing a cleaned result completes exactly once', () async {
+      final (engine, native, result, log) = await started();
+      native.running!.add(const VoiceTurnEventDto(transcript: heardText));
+      await settle();
+      await engine.skipCleanup();
+      native.running!.add(
+        VoiceTurnEventDto(
+          dictation: VoiceDictationDto(
+            cleaned: 'Pick up almond milk',
+            removed: Uint32List.fromList([2, 3, 4, 5]),
+          ),
+        ),
+      );
+      await settle();
+      expect((await result).cleaned, heardText);
+      expect(log, ['transcript', 'result']);
+      await engine.skipCleanup();
+      expect(native.skips, 1);
+    });
   });
 
   test('a dictation failure from Rust becomes a VoiceFailure', () async {

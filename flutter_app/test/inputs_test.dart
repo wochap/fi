@@ -645,6 +645,45 @@ void main() {
     expect(find.text(' *'), findsOneWidget);
   });
 
+  group('overlay', () {
+    Future<void> pumpOverlay(WidgetTester tester, {required int maxLines}) =>
+        _pump(
+          tester,
+          390,
+          FiTextInput(
+            key: const Key('input'),
+            initialValue: maxLines == 1 ? 'One line' : 'One\nTwo\nThree\nFour',
+            maxLines: maxLines,
+            trailingAction: const SizedBox.square(dimension: 44),
+            overlay: const Text('Listening…', key: Key('overlay-row')),
+          ),
+        );
+
+    testWidgets('covers a four-line input and sits at the top', (tester) async {
+      await pumpOverlay(tester, maxLines: 6);
+      final box = tester.getRect(
+        find.descendant(
+          of: find.byKey(const Key('input')),
+          matching: find.byType(InputDecorator),
+        ),
+      );
+      expect(box.height, greaterThan(48));
+      final overlay = tester.getRect(find.byKey(const Key('input-overlay')));
+      expect(overlay.top, box.top + 1);
+      expect(overlay.bottom, box.bottom - 1);
+      final row = tester.getRect(find.byKey(const Key('overlay-row')));
+      expect(row.center.dy, closeTo(box.top + 24, 1));
+    });
+
+    testWidgets('stays centred in a single-line input', (tester) async {
+      await pumpOverlay(tester, maxLines: 1);
+      final overlay = tester.getRect(find.byKey(const Key('input-overlay')));
+      expect(overlay.height, 46);
+      final row = tester.getRect(find.byKey(const Key('overlay-row')));
+      expect(row.center.dy, closeTo(overlay.center.dy, 0.5));
+    });
+  });
+
   group('FiSegmented', () {
     Widget host(List<String?> reported, {required bool allowClear}) {
       String? value = 'mid';

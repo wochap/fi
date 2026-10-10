@@ -3511,7 +3511,16 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String get dictationTranscribing => 'Transcribiendo…';
+
+  @override
   String get dictationCleaningUp => 'Limpiando…';
+
+  @override
+  String get dictationSkip => 'Omitir';
+
+  @override
+  String get dictationSkipLabel => 'Omitir limpieza';
 
   @override
   String get dictatedTitle => 'Dictado';

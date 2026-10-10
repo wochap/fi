@@ -14,9 +14,9 @@ use std::{collections::BTreeMap, path::PathBuf, process::ExitCode, time::Instant
 use chrono::{DateTime, NaiveDate, NaiveTime};
 use serde::Deserialize;
 use voice_engine::{
-    ChoiceOption, FieldKind, FillRequest, Grammar, ModelRunner, TypedValue, VoiceEngine,
-    VoiceError, VoiceField, VoiceLanguage,
-    native::{CancelFlag, LlamaRunner, understanding_model_file},
+    ChoiceOption, FieldKind, FillRequest, Grammar, ModelRunner, TurnControl, TurnRunner,
+    TypedValue, VoiceEngine, VoiceError, VoiceField, VoiceLanguage,
+    native::{LlamaRunner, understanding_model_file},
     patch::normalize_text,
 };
 
@@ -66,7 +66,7 @@ struct Recording<'a> {
 
 impl ModelRunner for Recording<'_> {
     fn complete(&mut self, prompt: &str, grammar: &Grammar) -> Result<String, VoiceError> {
-        let output = self.inner.complete(prompt, grammar)?;
+        let output = self.inner.generate(prompt, grammar, &TurnControl::fill())?;
         self.last.clone_from(&output);
         Ok(output)
     }
@@ -158,14 +158,13 @@ fn main() -> ExitCode {
     println!("language: {}", language.code());
     let now = NaiveTime::parse_from_str(&fixture.now, "%H:%M").unwrap();
     let load = Instant::now();
-    let mut runner =
-        match LlamaRunner::load(&dir.join(understanding_model_file()), CancelFlag::default()) {
-            Ok(runner) => runner,
-            Err(error) => {
-                eprintln!("model load failed: {error}");
-                return ExitCode::from(2);
-            }
-        };
+    let mut runner = match LlamaRunner::load(&dir.join(understanding_model_file())) {
+        Ok(runner) => runner,
+        Err(error) => {
+            eprintln!("model load failed: {error}");
+            return ExitCode::from(2);
+        }
+    };
     println!("model loaded in {:.1}s", load.elapsed().as_secs_f64());
     let mut engine = VoiceEngine::new();
     let (mut expected, mut correct, mut returned, mut invented) = (0usize, 0, 0, 0);

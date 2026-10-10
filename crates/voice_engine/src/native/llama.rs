@@ -11,8 +11,8 @@ use llama_cpp_2::{
     sampling::LlamaSampler,
 };
 
-use super::{CancelFlag, THREADS, check_model_file, load_failure, run_failure};
-use crate::{Grammar, ModelRunner, VoiceError};
+use super::{THREADS, check_model_file, load_failure, run_failure};
+use crate::{Grammar, TurnControl, TurnRunner, VoiceError};
 
 const CONTEXT: u32 = 4096;
 const MAX_OUTPUT: usize = 256;
@@ -28,7 +28,6 @@ fn backend() -> &'static LlamaBackend {
 
 pub struct LlamaRunner {
     model: LlamaModel,
-    cancel: CancelFlag,
 }
 
 impl std::fmt::Debug for LlamaRunner {
@@ -39,25 +38,25 @@ impl std::fmt::Debug for LlamaRunner {
 
 impl LlamaRunner {
     /// Loads the GGUF model. `ModelLoadFailed` for a missing or unreadable file, `LowMemory` when
-    /// the load fails for want of memory.
-    pub fn load(path: &Path, cancel: CancelFlag) -> Result<Self, VoiceError> {
+    /// the load fails for want of memory. Each generation takes its turn's flags; see
+    /// [`TurnRunner`] and [`crate::ForTurn`].
+    pub fn load(path: &Path) -> Result<Self, VoiceError> {
         let size = check_model_file(path, &[b"GGUF"])?;
         let model = LlamaModel::load_from_file(backend(), path, &LlamaModelParams::default())
             .map_err(|error| load_failure("llama model", error, size))?;
-        Ok(Self { model, cancel })
+        Ok(Self { model })
     }
 }
 
-impl ModelRunner for LlamaRunner {
-    fn complete(&mut self, prompt: &str, grammar: &Grammar) -> Result<String, VoiceError> {
-        let cancelled = || {
-            if self.cancel.is_cancelled() {
-                Err(VoiceError::Cancelled)
-            } else {
-                Ok(())
-            }
-        };
-        cancelled()?;
+impl TurnRunner for LlamaRunner {
+    /// Stops at the next token with `Cancelled` once the turn is cancelled or its cleanup skipped.
+    fn generate(
+        &mut self,
+        prompt: &str,
+        grammar: &Grammar,
+        turn: &TurnControl,
+    ) -> Result<String, VoiceError> {
+        turn.check()?;
         let params = LlamaContextParams::default()
             .with_n_ctx(NonZeroU32::new(CONTEXT))
             .with_n_batch(CONTEXT)
@@ -98,7 +97,7 @@ impl ModelRunner for LlamaRunner {
         let mut bytes = Vec::new();
         let mut position = tokens.len() as i32;
         for _ in 0..MAX_OUTPUT {
-            cancelled()?;
+            turn.check()?;
             // `sample` also accepts the token into the grammar.
             let token = sampler.sample(&context, batch.n_tokens() - 1);
             if self.model.is_eog_token(token) {

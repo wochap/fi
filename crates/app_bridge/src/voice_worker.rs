@@ -12,10 +12,8 @@ mod imp {
     };
 
     use voice_engine::{
-        FillRequest, VoiceEngine, VoiceError, VoiceLanguage,
-        native::{
-            CancelFlag, LlamaRunner, speech_model_file, transcribe, understanding_model_file,
-        },
+        CurrentTurn, FillRequest, ForTurn, TurnControl, VoiceEngine, VoiceError, VoiceLanguage,
+        native::{LlamaRunner, speech_model_file, transcribe, understanding_model_file},
     };
 
     use crate::api::voice::VoiceTurnEventDto;
@@ -35,9 +33,10 @@ mod imp {
         SLOT.get_or_init(Mutex::default)
     }
 
-    fn cancel_flag() -> &'static CancelFlag {
-        static FLAG: OnceLock<CancelFlag> = OnceLock::new();
-        FLAG.get_or_init(CancelFlag::default)
+    /// The turn that cancel and skip target. Each turn has its own flags, never reset.
+    fn current_turn() -> &'static CurrentTurn {
+        static TURN: OnceLock<CurrentTurn> = OnceLock::new();
+        TURN.get_or_init(CurrentTurn::default)
     }
 
     fn version_dir(models_dir: &str) -> PathBuf {
@@ -55,7 +54,7 @@ mod imp {
             return Ok(());
         }
         slot.model = None;
-        let runner = LlamaRunner::load(path, cancel_flag().clone())?;
+        let runner = LlamaRunner::load(path)?;
         slot.model = Some((path.clone(), runner));
         Ok(())
     }
@@ -74,28 +73,30 @@ mod imp {
     }
 
     /// Transcribes, emits the transcript, then runs `finish` with the loaded model and emits its
-    /// event or the failure. Fill and dictation turns share the model slot and cancel flag.
+    /// event or the failure. Fill and dictation turns share the model slot; each has its own flags.
     fn run_turn(
         models_dir: &str,
+        turn: TurnControl,
         pcm: Vec<i16>,
         language: VoiceLanguage,
         emit: impl Fn(VoiceTurnEventDto) + Send + 'static,
         finish: impl FnOnce(
             &mut VoiceEngine,
-            &mut LlamaRunner,
+            &mut ForTurn<'_, LlamaRunner>,
+            &TurnControl,
             &str,
         ) -> Result<VoiceTurnEventDto, VoiceError>
         + Send
         + 'static,
     ) {
         let dir = version_dir(models_dir);
-        cancel_flag().reset();
+        let turn = current_turn().begin(turn);
         std::thread::spawn(move || {
             let result = transcribe(
                 &dir.join(speech_model_file(language)),
                 &pcm,
                 language,
-                cancel_flag(),
+                &turn.cancel,
             )
             .and_then(|transcript| {
                 drop(pcm);
@@ -103,13 +104,21 @@ mod imp {
                 let mut slot = slot()
                     .lock()
                     .unwrap_or_else(|poisoned| poisoned.into_inner());
-                if cancel_flag().is_cancelled() {
+                if turn.cancel.is_cancelled() {
                     return Err(VoiceError::Cancelled);
                 }
                 ensure_loaded(&mut slot, &dir.join(understanding_model_file()))?;
                 let Slot { model, engine } = &mut *slot;
                 let (_, runner) = model.as_mut().expect("loaded above");
-                let event = finish(engine, runner, &transcript);
+                let event = finish(
+                    engine,
+                    &mut ForTurn {
+                        runner,
+                        turn: &turn,
+                    },
+                    &turn,
+                    &transcript,
+                );
                 if matches!(event, Err(VoiceError::LowMemory)) {
                     *model = None;
                 }
@@ -127,10 +136,11 @@ mod imp {
     ) {
         run_turn(
             models_dir,
+            TurnControl::fill(),
             pcm,
             request.language,
             emit,
-            move |engine, runner, transcript| {
+            move |engine, runner, _, transcript| {
                 engine
                     .fill(runner, transcript, &request)
                     .map(|outcome| VoiceTurnEventDto::patch(outcome.patch))
@@ -146,19 +156,23 @@ mod imp {
     ) {
         run_turn(
             models_dir,
+            TurnControl::dictation(),
             pcm,
             language,
             emit,
-            move |engine, runner, transcript| {
-                engine
-                    .clean(runner, transcript, language)
+            move |engine, runner, turn, transcript| {
+                turn.settle_dictation(engine.clean(runner, transcript, language), transcript)
                     .map(VoiceTurnEventDto::dictation)
             },
         );
     }
 
     pub fn cancel() {
-        cancel_flag().cancel();
+        current_turn().cancel();
+    }
+
+    pub fn skip_cleanup() {
+        current_turn().skip_cleanup();
     }
 
     pub fn release() {
@@ -203,6 +217,8 @@ mod imp {
     }
 
     pub fn cancel() {}
+
+    pub fn skip_cleanup() {}
 
     pub fn release() {}
 }

@@ -47,6 +47,11 @@ Stream<VoiceTurnEventDto> voiceDictateTurn({
 /// Stops the running turn at the next opportunity; it fails with `Cancelled`.
 void voiceCancel() => RustLib.instance.api.crateApiVoiceVoiceCancel();
 
+/// Ends the running dictation turn's cleanup at the next token; the turn returns its transcript
+/// unchanged. Unlike [`voice_cancel`] it keeps the transcript, and it is a no-op for fill turns,
+/// before the transcript exists and after the result.
+void voiceSkipCleanup() => RustLib.instance.api.crateApiVoiceVoiceSkipCleanup();
+
 /// Releases the instruction model (backgrounded app or memory pressure).
 void voiceRelease() => RustLib.instance.api.crateApiVoiceVoiceRelease();
 

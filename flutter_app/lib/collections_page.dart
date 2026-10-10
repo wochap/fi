@@ -2875,6 +2875,7 @@ class _RecordEditorFormState extends State<_RecordEditorForm> {
               phase: phase,
               levels: dictation.levels,
               elapsed: dictation.elapsed,
+              onSkip: () => unawaited(dictation.skip()),
             ),
     );
   }

@@ -39,8 +39,17 @@ class VoiceTurnCoordinator extends ChangeNotifier {
   }
 }
 
-/// What a dictation turn into one field shows.
-enum DictationPhase { idle, listening, processing }
+/// What a dictation turn into one field shows. Processing runs [transcribing] until the
+/// transcript exists, then [cleaning] while the instruction model cleans it.
+enum DictationPhase {
+  idle,
+  listening,
+  transcribing,
+  cleaning;
+
+  /// Transcribing or cleaning: the mic shows a ring and is disabled.
+  bool get processing => this == transcribing || this == cleaning;
+}
 
 /// A setup step a mic tap needs first. The form shows it in a sheet (phone) or dialog (wide).
 enum DictationSetup { primer, permissionOff, offer }
@@ -92,6 +101,9 @@ class DictationController extends ChangeNotifier with WidgetsBindingObserver {
   var _disposed = false;
 
   bool get busy => _phase != DictationPhase.idle;
+
+  /// Transcribing or cleaning up.
+  bool get processing => _phase.processing;
 
   /// Whether [fieldId]'s mic is disabled: another field's turn or a fill turn runs.
   bool disabledFor(String fieldId) =>
@@ -227,10 +239,20 @@ class DictationController extends ChangeNotifier with WidgetsBindingObserver {
     final token = _turnToken;
     final fieldId = _fieldId!;
     _stopCapture();
-    _set(DictationPhase.processing);
+    _set(DictationPhase.transcribing);
     DictationResult result;
     try {
-      result = await services.engine.stopDictation(services.language);
+      result = await services.engine.stopDictation(
+        services.language,
+        onTranscript: (transcript) {
+          if (token != _turnToken || _disposed) return;
+          // An empty transcript fails with no speech; it never shows "Cleaning up…".
+          if (transcript.trim().isEmpty) return;
+          if (_phase == DictationPhase.transcribing) {
+            _set(DictationPhase.cleaning);
+          }
+        },
+      );
     } on VoiceFailure catch (failure) {
       if (token != _turnToken) return;
       _endTurn();
@@ -255,6 +277,13 @@ class DictationController extends ChangeNotifier with WidgetsBindingObserver {
     }
     _errors[fieldId] = kind;
     _changed();
+  }
+
+  /// Skip on "Cleaning up…": the turn continues with the raw transcript as both versions, and
+  /// the result flows through [onResult] like any other. Ignored outside cleaning.
+  Future<void> skip() async {
+    if (_phase != DictationPhase.cleaning) return;
+    await services.engine.skipCleanup();
   }
 
   /// Retry under [fieldId]'s inline error.
@@ -336,11 +365,12 @@ class DictationMic extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = context.l10n;
-    final processing = phase == DictationPhase.processing;
+    final processing = phase.processing;
     final enabled = !disabled && !processing;
     final label = switch (phase) {
       DictationPhase.listening => l.voiceMicStopListening,
-      DictationPhase.processing => l.voiceMicProcessing,
+      DictationPhase.transcribing ||
+      DictationPhase.cleaning => l.voiceMicProcessing,
       DictationPhase.idle when downloadPercent != null => l.voiceMicDownloading(
         downloadPercent!,
       ),
@@ -356,7 +386,8 @@ class DictationMic extends StatelessWidget {
           borderRadius: BorderRadius.circular(2),
         ),
       ),
-      DictationPhase.processing => const VoiceProgressRing(size: 18),
+      DictationPhase.transcribing ||
+      DictationPhase.cleaning => const VoiceProgressRing(size: 18),
       DictationPhase.idle => Icon(
         FiIcons.microphone,
         size: 18,
@@ -394,12 +425,14 @@ class DictationMic extends StatelessWidget {
   }
 }
 
-/// "Listening… m:ss" with live level bars, or "Cleaning up…" with a ring, drawn inside the field.
+/// "Listening… m:ss" with live level bars, "Transcribing…" with a ring, or "Cleaning up…" with a
+/// ring and Skip, drawn inside the field.
 class DictationStateRow extends StatelessWidget {
   const DictationStateRow({
     required this.phase,
     required this.levels,
     required this.elapsed,
+    this.onSkip,
     super.key,
   });
 
@@ -407,28 +440,74 @@ class DictationStateRow extends StatelessWidget {
   final List<double> levels;
   final Duration elapsed;
 
+  /// Skip on "Cleaning up…".
+  final VoidCallback? onSkip;
+
   @override
   Widget build(BuildContext context) {
     final l = context.l10n;
-    if (phase == DictationPhase.processing) {
-      return Semantics(
-        key: const Key('dictation-processing'),
-        liveRegion: true,
-        label: l.dictationCleaningUp,
-        excludeSemantics: true,
-        child: Row(
-          spacing: 8,
-          children: [
-            const VoiceProgressRing(size: 14),
-            Text(
-              l.dictationCleaningUp,
-              style: TextStyle(
-                fontSize: 13,
-                color: context.nocturne.muted(.75),
+    if (phase.processing) {
+      final cleaning = phase == DictationPhase.cleaning;
+      final label = cleaning ? l.dictationCleaningUp : l.dictationTranscribing;
+      return Row(
+        spacing: 8,
+        children: [
+          // Each state is its own live region, so the switch is announced.
+          Semantics(
+            key: Key(
+              cleaning ? 'dictation-cleaning' : 'dictation-transcribing',
+            ),
+            liveRegion: true,
+            label: label,
+            excludeSemantics: true,
+            child: Row(
+              spacing: 8,
+              children: [
+                const VoiceProgressRing(size: 14),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: context.nocturne.muted(.75),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (cleaning)
+            Semantics(
+              button: true,
+              label: l.dictationSkipLabel,
+              excludeSemantics: true,
+              // Drawn compact so it fits a single-line box; the 44px target may overhang it.
+              child: IntrinsicWidth(
+                child: SizedBox(
+                  height: 28,
+                  child: OverflowBox(
+                    maxHeight: Nocturne.touchTarget,
+                    child: TextButton(
+                      key: const Key('dictation-skip'),
+                      onPressed: onSkip,
+                      style: TextButton.styleFrom(
+                        minimumSize: const Size(
+                          Nocturne.touchTarget,
+                          Nocturne.touchTarget,
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        foregroundColor: context.nocturne.accentInk,
+                        textStyle: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      child: Text(l.dictationSkip),
+                    ),
+                  ),
+                ),
               ),
             ),
-          ],
-        ),
+        ],
       );
     }
     final seconds = elapsed.inSeconds;

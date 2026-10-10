@@ -170,6 +170,11 @@ abstract interface class VoiceEngine {
   /// Stops the turn and discards its audio and transcript.
   Future<void> cancel();
 
+  /// Ends a dictation turn's cleanup and keeps its transcript: the pending [stopDictation]
+  /// completes with [DictationResult.unchanged]. Unlike [cancel] the turn succeeds. A no-op
+  /// before the transcript exists, after the result, and for fill turns.
+  Future<void> skipCleanup();
+
   /// Starts loading the instruction model in the background; called when a record form that
   /// offers voice opens with the models ready.
   void prepare();
@@ -241,6 +246,9 @@ final class UnavailableVoiceEngine implements VoiceEngine {
 
   @override
   Future<void> cancel() async {}
+
+  @override
+  Future<void> skipCleanup() async {}
 
   @override
   void prepare() {}
@@ -371,6 +379,7 @@ final class FakeVoiceEngine implements VoiceEngine {
   StreamController<double>? _levels;
   Timer? _ticker;
   Completer<void>? _cancelled;
+  Completer<void>? _skipped;
 
   /// Turns started so far, of both kinds.
   int get turns => _turn;
@@ -385,6 +394,9 @@ final class FakeVoiceEngine implements VoiceEngine {
   final kinds = <VoiceTurnKind>[];
 
   var _dictation = 0;
+
+  /// [skipCleanup] calls so far, whether or not they took effect.
+  int skips = 0;
 
   /// [prepare] and [release] calls so far.
   int prepares = 0;
@@ -487,7 +499,15 @@ final class FakeVoiceEngine implements VoiceEngine {
     if (turn.failure case final failure?) throw VoiceFailure(failure);
     final result = turn.result!;
     onTranscript?.call(result.transcript);
-    await _wait(fillDelay);
+    final skipped = _skipped = Completer<void>();
+    try {
+      await Future.any([_wait(fillDelay), skipped.future]);
+    } finally {
+      _skipped = null;
+    }
+    if (skipped.isCompleted) {
+      return DictationResult.unchanged(result.transcript);
+    }
     return result;
   }
 
@@ -496,6 +516,13 @@ final class FakeVoiceEngine implements VoiceEngine {
     _stopLevels();
     final cancelled = _cancelled;
     if (cancelled != null && !cancelled.isCompleted) cancelled.complete();
+  }
+
+  @override
+  Future<void> skipCleanup() async {
+    skips++;
+    final skipped = _skipped;
+    if (skipped != null && !skipped.isCompleted) skipped.complete();
   }
 }
 

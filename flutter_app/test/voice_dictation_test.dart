@@ -131,6 +131,7 @@ final class _Harness {
     List<RecordDto> records = const [],
     Map<String, String> names = const {},
     this.engine = true,
+    Duration cleanupDelay = const Duration(milliseconds: 5),
   }) : prefs = MemoryUiPrefsStore(const UiPrefs(voiceTipDismissed: true)),
        models = FakeVoiceModels(status),
        permission = FakeMicrophonePermission(permission),
@@ -139,7 +140,7 @@ final class _Harness {
       script: script ?? [FakeVoiceTurn.result(lunchResult)],
       dictations: dictations,
       transcribeDelay: const Duration(milliseconds: 5),
-      fillDelay: const Duration(milliseconds: 5),
+      fillDelay: cleanupDelay,
       levelInterval: const Duration(milliseconds: 50),
     );
     services = fakeVoiceServices(
@@ -344,7 +345,11 @@ void main() {
       expect(_textOf(tester, 'amount'), '12.50');
       await tester.tap(_mic('description'));
       await tester.pump();
+      expect(find.text('Transcribing…'), findsOneWidget);
+      expect(find.byKey(const Key('dictation-skip')), findsNothing);
+      await tester.pump(const Duration(milliseconds: 5));
       expect(find.text('Cleaning up…'), findsOneWidget);
+      expect(find.byKey(const Key('dictation-skip')), findsOneWidget);
       expect(harness.fake.kinds, [VoiceTurnKind.dictation]);
       expect(harness.fake.languages, ['en']);
       await tester.pump(const Duration(milliseconds: 20));
@@ -381,6 +386,90 @@ void main() {
         tester.widget<VoiceMicButton>(find.byType(VoiceMicButton)).enabled,
         isTrue,
       );
+    });
+  });
+
+  group('skip', () {
+    const slow = Duration(seconds: 5);
+
+    /// Listens on [field], stops, and waits for "Cleaning up…".
+    Future<void> toCleaning(WidgetTester tester, String field) async {
+      await tester.tap(_mic(field));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 60));
+      await tester.tap(_mic(field));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 6));
+    }
+
+    testWidgets('each state is its own announced live region', (tester) async {
+      final handle = tester.ensureSemantics();
+      await _openNew(tester, _Harness(cleanupDelay: slow));
+      await tester.tap(_mic('description'));
+      await tester.pump();
+      await tester.tap(_mic('description'));
+      await tester.pump();
+      Semantics region(String key) =>
+          tester.widget<Semantics>(find.byKey(Key(key)));
+      expect(region('dictation-transcribing').properties.liveRegion, isTrue);
+      expect(
+        region('dictation-transcribing').properties.label,
+        'Transcribing…',
+      );
+      await tester.pump(const Duration(milliseconds: 6));
+      expect(find.byKey(const Key('dictation-transcribing')), findsNothing);
+      expect(region('dictation-cleaning').properties.liveRegion, isTrue);
+      expect(region('dictation-cleaning').properties.label, 'Cleaning up…');
+      final skip = find.byKey(const Key('dictation-skip'));
+      final skipSemantics = tester.widget<Semantics>(
+        find.ancestor(of: skip, matching: find.byType(Semantics)).first,
+      );
+      expect(skipSemantics.properties.label, 'Skip cleanup');
+      expect(tester.getSize(skip).width, greaterThanOrEqualTo(44));
+      expect(tester.getSize(skip).height, greaterThanOrEqualTo(44));
+      await tester.tap(skip);
+      await tester.pumpAndSettle();
+      await tester.pump(slow);
+      handle.dispose();
+    });
+
+    testWidgets('into an empty field inserts the raw transcript, no sheet', (
+      tester,
+    ) async {
+      final harness = _Harness(cleanupDelay: slow);
+      await _openNew(tester, harness);
+      await toCleaning(tester, 'description');
+      await tester.tap(find.byKey(const Key('dictation-skip')));
+      await tester.pumpAndSettle();
+      expect(harness.fake.skips, 1);
+      expect(find.byKey(const Key('dictation-review')), findsNothing);
+      expect(_textOf(tester, 'description'), _selfCorrection.transcript);
+      expect(find.byKey(const Key('dictation-cleaning')), findsNothing);
+      await tester.pump(slow);
+    });
+
+    testWidgets('into a field with text shows the one-version sheet', (
+      tester,
+    ) async {
+      final harness = _Harness(
+        cleanupDelay: slow,
+        records: [
+          _record({'title': 'Errand', 'notes': 'Buy oat milk'}),
+        ],
+      );
+      await _openEdit(tester, harness, 'Errand');
+      await toCleaning(tester, 'notes');
+      await tester.tap(find.byKey(const Key('dictation-skip')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('dictation-review')), findsOneWidget);
+      expect(find.text('Nothing to clean up.'), findsOneWidget);
+      expect(find.byKey(const Key('dictation-version-cleaned')), findsNothing);
+      expect(find.byKey(const Key('dictation-version-only')), findsOneWidget);
+      expect(find.text(_selfCorrection.transcript), findsOneWidget);
+      expect(find.text('In the field now: “Buy oat milk”'), findsOneWidget);
+      expect(find.byKey(const Key('dictation-append')), findsOneWidget);
+      expect(find.byKey(const Key('dictation-replace')), findsOneWidget);
+      await tester.pump(slow);
     });
   });
 
@@ -669,6 +758,35 @@ void main() {
     expect(appendDictation('Buy oat milk ', 'eggs'), 'Buy oat milk eggs');
     expect(appendDictation('Line one\n', 'eggs'), 'Line one\neggs');
     expect(appendDictation('', 'eggs'), 'eggs');
+  });
+
+  testWidgets('the Spanish processing states', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('es'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: Column(
+            children: [
+              for (final phase in [
+                DictationPhase.transcribing,
+                DictationPhase.cleaning,
+              ])
+                DictationStateRow(
+                  phase: phase,
+                  levels: const [],
+                  elapsed: Duration.zero,
+                  onSkip: () {},
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+    for (final text in ['Transcribiendo…', 'Limpiando…', 'Omitir']) {
+      expect(find.text(text), findsOneWidget, reason: text);
+    }
   });
 
   testWidgets('the Spanish review sheet', (tester) async {

@@ -135,6 +135,7 @@ abstract interface class VoiceNative {
     String language,
   );
   void cancel();
+  void skipCleanup();
   void release();
 }
 
@@ -164,6 +165,9 @@ final class RustVoiceNative implements VoiceNative {
 
   @override
   void cancel() => rust.voiceCancel();
+
+  @override
+  void skipCleanup() => rust.voiceSkipCleanup();
 
   @override
   void release() => rust.voiceRelease();
@@ -296,6 +300,9 @@ final class RustVoiceEngine implements VoiceEngine {
   StreamSubscription<void>? _interruptions;
   Timer? _levelTimer;
   Completer<Object>? _pending;
+
+  /// Completes the pending dictation turn with its transcript; set once the transcript arrives.
+  VoidCallback? _skip;
   StreamSubscription<VoiceTurnEventDto>? _events;
 
   /// The latest ~100 ms of samples, for the level meter.
@@ -435,6 +442,7 @@ final class RustVoiceEngine implements VoiceEngine {
   }) => _process<DictationResult>(
     (pcm) => native.dictateTurn(modelsDir, pcm, language),
     onTranscript: onTranscript,
+    skipped: DictationResult.unchanged,
     finish: (event, transcript) => switch (event.dictation) {
       final VoiceDictationDto dictation => DictationResult(
         transcript: transcript,
@@ -446,10 +454,12 @@ final class RustVoiceEngine implements VoiceEngine {
   );
 
   /// Stops capture and runs the turn's events: the transcript, then the result [finish] reads
-  /// from an event, or a failure.
+  /// from an event, or a failure. With [skipped], [skipCleanup] after the transcript completes
+  /// the turn with `skipped(transcript)`; whichever completes first wins.
   Future<T> _process<T extends Object>(
     Stream<VoiceTurnEventDto> Function(Int16List pcm) run, {
     required ValueChanged<String>? onTranscript,
+    T Function(String transcript)? skipped,
     required T? Function(VoiceTurnEventDto event, String transcript) finish,
   }) async {
     final audio = _audio;
@@ -468,6 +478,11 @@ final class RustVoiceEngine implements VoiceEngine {
         if (pending.isCompleted) return;
         if (event.transcript case final text?) {
           transcript = text;
+          if (skipped != null) {
+            _skip = () {
+              if (!pending.isCompleted) pending.complete(skipped(text));
+            };
+          }
           onTranscript?.call(text);
         }
         if (event.error case final error?) {
@@ -496,12 +511,25 @@ final class RustVoiceEngine implements VoiceEngine {
     } finally {
       unawaited(_events?.cancel());
       _events = null;
-      if (identical(_pending, pending)) _pending = null;
+      if (identical(_pending, pending)) {
+        _pending = null;
+        _skip = null;
+      }
     }
   }
 
   @override
+  Future<void> skipCleanup() async {
+    final skip = _skip;
+    _skip = null;
+    if (skip == null) return;
+    skip();
+    native.skipCleanup();
+  }
+
+  @override
   Future<void> cancel() async {
+    _skip = null;
     await _discardCapture();
     final pending = _pending;
     if (pending != null) {

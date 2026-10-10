@@ -4719,9 +4719,21 @@
       }
     }
   },
+  "dictationTranscribing": "Transcribing…",
+  "@dictationTranscribing": {
+    "description": "Field dictation state while speech is turned into text, before cleanup"
+  },
   "dictationCleaningUp": "Cleaning up…",
   "@dictationCleaningUp": {
     "description": "Field dictation processing state"
+  },
+  "dictationSkip": "Skip",
+  "@dictationSkip": {
+    "description": "Text button on the Cleaning up state: use the raw transcript without cleanup"
+  },
+  "dictationSkipLabel": "Skip cleanup",
+  "@dictationSkipLabel": {
+    "description": "Screen-reader label of the Skip button on the Cleaning up state"
   },
   "dictatedTitle": "Dictated",
   "@dictatedTitle": {

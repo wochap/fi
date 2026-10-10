@@ -3,19 +3,14 @@
 mod llama;
 mod whisper;
 
-use std::{
-    path::Path,
-    sync::{
-        Arc, OnceLock,
-        atomic::{AtomicBool, Ordering},
-    },
-};
+use std::{path::Path, sync::OnceLock};
 
 pub use llama::LlamaRunner;
 pub use whisper::transcribe;
 
 use app_core::models::{ModelManifest, ModelRole};
 
+pub use crate::turn::{CancelFlag, TurnControl};
 use crate::{VoiceError, VoiceLanguage};
 
 fn manifest() -> &'static ModelManifest {
@@ -44,29 +39,6 @@ pub fn understanding_model_file() -> &'static str {
 }
 /// Big cores on the target device.
 pub const THREADS: i32 = 4;
-
-/// A cancel flag shared with the whisper abort callback and the decode loop.
-#[derive(Clone, Debug, Default)]
-pub struct CancelFlag(Arc<AtomicBool>);
-
-impl CancelFlag {
-    pub fn cancel(&self) {
-        self.0.store(true, Ordering::SeqCst);
-    }
-
-    pub fn reset(&self) {
-        self.0.store(false, Ordering::SeqCst);
-    }
-
-    pub fn is_cancelled(&self) -> bool {
-        self.0.load(Ordering::SeqCst)
-    }
-
-    /// The flag itself, for C callbacks. Valid while this `CancelFlag` (or a clone) is alive.
-    fn as_ptr(&self) -> *const AtomicBool {
-        Arc::as_ptr(&self.0)
-    }
-}
 
 /// `ModelLoadFailed` when the file is missing, unreadable or lacks `magic`; otherwise the load
 /// failure is read as an allocation failure when memory is short.
