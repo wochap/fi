@@ -304,7 +304,7 @@ State tags SHALL pair an icon with their text, never color alone. Retry SHALL re
 - **THEN** the dialog asks "Delete this speech model?" with "Frees 148 MB. English voice input won't work until you download it again.", "Delete" and "Keep model"
 
 ### Requirement: Voice engine boundary and fake engine
-The app SHALL reach speech-to-text and field filling only through one voice engine boundary. It takes the audio of one turn, the voice language (`en` or `es`), the collection's active fields (id, name, type, required, options, bounds) and the current draft values, and returns a transcript and a patch. It SHALL report typed failures (no speech, model not loaded, out of memory, microphone busy, cancelled). It SHALL report input levels while listening, so the level bars reflect the microphone. A scripted fake engine SHALL be available in debug builds, or when the build defines `FI_VOICE_FAKE=true`. It returns scripted transcripts and patches after realistic delays, records the voice language of each turn, and can be set to produce each typed failure.
+The app SHALL reach speech-to-text and field filling only through one voice engine boundary. It takes the audio of one turn, the voice language (`en` or `es`), the collection's active fields (id, name, type, required, options, bounds) and the current draft values, and returns a transcript and a patch. It SHALL report typed failures (no speech, model not loaded, out of memory, microphone busy, cancelled). It SHALL report input levels while listening, so the level bars reflect the microphone. For dictation turns it SHALL report the transcript before the cleaned result, and SHALL offer a skip-cleanup operation, separate from cancel, that makes the turn return the transcript as its cleaned text. A scripted fake engine SHALL be available in debug builds, or when the build defines `FI_VOICE_FAKE=true`. It returns scripted transcripts and patches after realistic delays, reports a dictation transcript before its cleanup delay, honours skip-cleanup during that delay, records the voice language of each turn, and can be set to produce each typed failure.
 
 The native on-device engine SHALL be the engine of every build that includes it, which is Android arm64 release and debug builds. It is not used when the build defines `FI_VOICE_FAKE=true`, which forces the fake engine. The native engine SHALL report itself available whether or not the models are downloaded, so the first-use download flow can run. Builds without the native engine and without `FI_VOICE_FAKE` SHALL use the fake engine in debug mode and report the engine as unavailable in release mode.
 
@@ -319,6 +319,10 @@ The native on-device engine SHALL be the engine of every build that includes it,
 #### Scenario: Fake engine drives every state
 - **WHEN** the fake engine is scripted to return “Taxi home yesterday” with description and date entries, and then to fail with no speech
 - **THEN** the sheet shows the filled state with "Still need" for the missing required fields, and then the "Didn't hear anything" panel
+
+#### Scenario: Fake dictation skip
+- **WHEN** the fake engine is scripted with a dictation turn whose transcript is “Lunch, I mean, dinner” and cleaned text “Dinner”, and skip-cleanup is called after the transcript is reported
+- **THEN** the turn returns the cleaned text “Lunch, I mean, dinner” with no removed indexes
 
 #### Scenario: Turn carries the voice language
 - **WHEN** the interface is Spanish and the user completes a turn with the fake engine

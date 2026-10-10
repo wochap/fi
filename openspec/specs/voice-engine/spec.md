@@ -186,6 +186,8 @@ The engine SHALL offer a dictation turn alongside the fill turn. A dictation tur
 
 The engine SHALL accept the cleaned text only when its words, compared after normalizing case and accents and ignoring punctuation, are a subsequence of the transcript's words and at least one word remains. Otherwise the cleaned text SHALL equal the transcript. The engine SHALL also return the indexes of the transcript words the cleanup removed, so the app can strike them through. A dictation turn SHALL NOT fail with `nothingMatched`. When the cleanup itself fails with `lowMemory` or `modelLoadFailed`, the turn SHALL fail with that error.
 
+After the transcript is reported, the app SHALL be able to skip the cleanup of a dictation turn. Skipping SHALL stop generation at the next opportunity and return within one second. The turn SHALL then succeed with the cleaned text equal to the transcript and no removed indexes. Skipping SHALL NOT fail the turn, SHALL NOT discard the transcript, and SHALL have no effect once the turn has returned its result or failed, or before the transcript exists.
+
 #### Scenario: Self-correction removed
 - **WHEN** an English dictation turn's transcript is “Lunch at Nando's, scratch that, lunch at Wagamama with Sam”
 - **THEN** the cleaned text is “Lunch at Wagamama with Sam” and the removed indexes cover “Lunch at Nando's, scratch that,”
@@ -202,8 +204,16 @@ The engine SHALL accept the cleaned text only when its words, compared after nor
 - **WHEN** a Spanish dictation turn's transcript is “Comprar leche de avena, digo, leche de almendra”
 - **THEN** the cleaned text is “Comprar leche de almendra”
 
+#### Scenario: Cleanup skipped
+- **WHEN** a dictation turn has reported the transcript “Pick up oat milk, no wait, almond milk” and the app skips the cleanup while the model is generating
+- **THEN** the turn returns within one second with the cleaned text “Pick up oat milk, no wait, almond milk” and no removed indexes
+
+#### Scenario: Skip after the result
+- **WHEN** the app skips the cleanup of a dictation turn that has already returned its cleaned text
+- **THEN** the returned result is unchanged
+
 ### Requirement: Model lifecycle and failures
-The engine SHALL load the instruction model, without blocking the form, when a New record sheet opens with whole-form voice fill offered or a record form opens that offers field dictation, in both cases with the models ready. It SHALL keep the model loaded while the app is in the foreground. It SHALL release the model after 5 minutes in the background or when Android reports memory pressure. A turn that needs the model while it is loading SHALL wait for the load. A missing or unreadable model file SHALL fail the turn with `modelLoadFailed`. An allocation failure while loading or running SHALL fail with `lowMemory` and release the partial state. Cancel SHALL stop transcription or generation at the next opportunity and return within one second. Model files, audio and transcripts SHALL never be sent over the network or written to logs.
+The engine SHALL load the instruction model, without blocking the form, when a New record sheet opens with whole-form voice fill offered or a record form opens that offers field dictation, in both cases with the models ready. It SHALL keep the model loaded while the app is in the foreground. It SHALL release the model after 5 minutes in the background or when Android reports memory pressure. A turn that needs the model while it is loading SHALL wait for the load. A missing or unreadable model file SHALL fail the turn with `modelLoadFailed`. An allocation failure while loading or running SHALL fail with `lowMemory` and release the partial state. Cancel SHALL stop transcription or generation at the next opportunity and return within one second. Cancelling or skipping SHALL apply only to the turn it was issued for: starting a new turn SHALL NOT clear it, so an earlier turn's transcription or generation still stops at its next opportunity, and SHALL NOT stop the new turn. Model files, audio and transcripts SHALL never be sent over the network or written to logs.
 
 #### Scenario: Warm on sheet open
 - **WHEN** the models are ready and the user opens New record
@@ -220,6 +230,10 @@ The engine SHALL load the instruction model, without blocking the form, when a N
 #### Scenario: Damaged model
 - **WHEN** the instruction model file cannot be loaded
 - **THEN** the turn fails with `modelLoadFailed`
+
+#### Scenario: New turn right after a skip
+- **WHEN** the app skips a dictation turn's cleanup and immediately starts a new dictation turn
+- **THEN** the earlier generation stops within one second, and the new turn is neither cancelled nor kept waiting for the earlier cleanup to finish
 
 ### Requirement: Performance targets on the target device
 On the target device class (Dimensity 8300-Ultra, 8 GB RAM, arm64), measured on a release build with a warm instruction model and a schema of up to 12 fields:

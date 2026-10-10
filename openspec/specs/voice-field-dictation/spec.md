@@ -30,11 +30,43 @@ Field dictation SHALL be offered on Text and multiline Text inputs in the New re
 - **THEN** no Text input shows a dictation mic
 
 ### Requirement: Dictation states in the field
-Tapping the mic SHALL start a dictation turn for that field. While listening, the field SHALL show live level bars, "Listening…" with an elapsed timer (m:ss), and a stop square in place of the mic, labelled "Stop listening". Tapping the stop square SHALL stop listening and start processing. While processing, the field SHALL show "Cleaning up…" with a small progress ring and be busy for screen readers. The turn SHALL stop listening on its own after 30 seconds and continue as if stopped. Every other field SHALL stay editable in every state. The field being dictated into SHALL keep its current text until the user applies the result. State changes SHALL be announced to screen readers, and no state SHALL be shown by color alone.
+Tapping the mic SHALL start a dictation turn for that field. While a turn runs, its state SHALL be drawn over the whole input box, covering every line of a multiline input, and the field's text SHALL NOT show through. In a multiline input the state SHALL sit at the top-left of the box; in a single-line input it SHALL be vertically centred. The trailing slot SHALL stay visible beside it.
+
+While listening, the field SHALL show live level bars, "Listening…" with an elapsed timer (m:ss), and a stop square in place of the mic, labelled "Stop listening". Tapping the stop square SHALL stop listening and start processing. Processing SHALL show two states in order:
+- "Transcribing…" with a small progress ring, and nothing to tap, until the transcript exists.
+- "Cleaning up…" with a small progress ring and a "Skip" text button, while the transcript is cleaned. Skip SHALL be labelled "Skip cleanup" for screen readers and have a touch target of at least 44px.
+
+Tapping Skip SHALL stop the cleanup and continue with the raw transcript as both the cleaned and the as-heard version, so the review that follows treats the result as identical versions (see Dictated review sheet). When the cleanup finishes before Skip takes effect, the cleaned result SHALL be used and the Skip tap SHALL be ignored. Skip SHALL NOT be offered once the turn has a result, and a turn whose transcript is empty SHALL fail with no speech without showing "Cleaning up…".
+
+The field SHALL be busy for screen readers in both processing states. The turn SHALL stop listening on its own after 30 seconds and continue as if stopped. Every other field SHALL stay editable in every state. The field being dictated into SHALL keep its current text until the user applies the result. Each state change, including from "Transcribing…" to "Cleaning up…", SHALL be announced to screen readers, and no state SHALL be shown by color alone.
 
 #### Scenario: Listen then process
 - **WHEN** the user taps the description mic, speaks, and taps the stop square
-- **THEN** the field shows "Listening… 0:04" with level bars, then "Cleaning up…" with a ring
+- **THEN** the field shows "Listening… 0:04" with level bars, then "Transcribing…" with a ring, then "Cleaning up…" with a ring and Skip
+
+#### Scenario: Multiline field fully covered
+- **WHEN** the notes field shows four lines of text and the user starts dictating into it
+- **THEN** the listening state covers all four lines, sits at the top-left of the box, and the stop square stays in the trailing slot
+
+#### Scenario: Single-line field stays centred
+- **WHEN** the user dictates into the single-line description field
+- **THEN** the listening state is vertically centred in the box
+
+#### Scenario: Nothing to tap while transcribing
+- **WHEN** the description turn shows "Transcribing…"
+- **THEN** the field offers no Skip and no other action
+
+#### Scenario: Skip into an empty field
+- **WHEN** description is empty, the turn shows "Cleaning up…", and the user taps Skip
+- **THEN** no sheet appears and description holds the raw transcript exactly
+
+#### Scenario: Skip into a field with text
+- **WHEN** notes holds "Buy oat milk", the turn shows "Cleaning up…", and the user taps Skip
+- **THEN** the Dictated sheet shows one version (the raw transcript), "Nothing to clean up.", "In the field now: “Buy oat milk”", Append and Replace
+
+#### Scenario: Cleanup wins the race
+- **WHEN** the cleanup finishes at the moment the user taps Skip
+- **THEN** exactly one result is reviewed, and the turn does not fail
 
 #### Scenario: Other fields stay usable
 - **WHEN** the description field is listening
@@ -111,11 +143,15 @@ At most one voice turn, whole-form fill or dictation, SHALL run at a time. While
 - **THEN** the notes mic and the footer mic are disabled
 
 ### Requirement: Dictation privacy and language
-Dictation SHALL use the voice language (the app's resolved interface language) and the same on-device models as voice fill. Audio SHALL be held only in memory for the turn, and audio and transcripts MUST NOT be written to disk, logs, diagnostics or synced data. A dictation's transcript SHALL be discarded once the result is applied, dismissed or failed. In Spanish the copy SHALL read "Escuchando…", "Limpiando…", "Dictado", "en <field name>", "Limpio", "Predeterminado", "Tal cual", "Ahora en el campo: «<text>»", "Añadir", "Reemplazar" and "Insertar", and quotes SHALL use «».
+Dictation SHALL use the voice language (the app's resolved interface language) and the same on-device models as voice fill. Audio SHALL be held only in memory for the turn, and audio and transcripts MUST NOT be written to disk, logs, diagnostics or synced data. A dictation's transcript SHALL be discarded once the result is applied, dismissed or failed, including when cleanup was skipped. In Spanish the copy SHALL read "Escuchando…", "Transcribiendo…", "Limpiando…", "Omitir", "Dictado", "en <field name>", "Limpio", "Predeterminado", "Tal cual", "Ahora en el campo: «<text>»", "Añadir", "Reemplazar" and "Insertar", and quotes SHALL use «».
 
 #### Scenario: Spanish review
 - **WHEN** the interface is Spanish and notes holds "Comprar pan"
 - **THEN** the sheet reads "Dictado", "en notas", "Limpio", "Tal cual", "Ahora en el campo: «Comprar pan»", "Añadir" and "Reemplazar"
+
+#### Scenario: Spanish processing states
+- **WHEN** the interface is Spanish and the user stops a dictation turn
+- **THEN** the field shows "Transcribiendo…", then "Limpiando…" with "Omitir"
 
 #### Scenario: Nothing kept
 - **WHEN** a dictation result is applied and the form is closed
