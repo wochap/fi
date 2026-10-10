@@ -60,7 +60,7 @@ Every text the Flutter app shows to the user SHALL come from the active language
 - **THEN** the spoken and shown line is Spanish
 
 ### Requirement: Rust-originated errors are shown in the active language
-When a failure reported by Rust carries a typed kind or code, the app SHALL show text for that kind or code in the active language, not the English message Rust attached. This SHALL apply to: bridge error kinds other than validation; validation issues with the codes required, type_mismatch, length, out_of_range, inactive_option and field_unavailable; networking-deferred reasons (locked keyring, unavailable secure store, exhausted port range, which names the UDP range); widget evaluation error kinds; pairing failure kinds; voice error kinds; and voice model error kinds. A length or out_of_range issue SHALL state the field's bounds when the form knows the field. The Rust message SHALL be shown as given only for an `invalid` validation issue, for the reason of a stopped import, and inside technical details such as logs.
+When a failure reported by Rust carries a typed kind or code, the app SHALL show text for that kind or code in the active language, not the English message Rust attached. This SHALL apply to: bridge error kinds other than validation; validation issues with the codes required, type_mismatch, length, out_of_range, inactive_option, field_unavailable, view_filter_type, view_sort_key, view_sort_limit and view_grouping; networking-deferred reasons (locked keyring, unavailable secure store, exhausted port range, which names the UDP range); widget evaluation error kinds; pairing failure kinds; voice error kinds; and voice model error kinds. A length or out_of_range issue SHALL state the field's bounds when the form knows the field. The Rust message SHALL be shown as given only for an `invalid` validation issue, for the reason of a stopped import, and inside technical details such as logs.
 
 #### Scenario: Required field in Spanish
 - **WHEN** the interface is in Spanish and saving a record fails with a required issue on one field
@@ -73,6 +73,10 @@ When a failure reported by Rust carries a typed kind or code, the app SHALL show
 #### Scenario: Ports exhausted in Spanish
 - **WHEN** the interface is in Spanish and networking is deferred because UDP ports 47380–47389 are in use
 - **THEN** the networking banner explains the condition in Spanish, names the range 47380–47389, and offers the retry action
+
+#### Scenario: View sort limit in Spanish
+- **WHEN** the interface is in Spanish and saving a view fails with a view_sort_limit issue
+- **THEN** the edit-view editor shows the Spanish text for that code on its Sort section
 
 ### Requirement: Locale-aware formatting
 Human-readable dates, times, relative status times ("just now", "5 min ago"), month and weekday names, byte sizes, percentages, counts and fixed-decimal values SHALL be formatted for the active language. Spanish SHALL use a comma as the decimal separator ("1,43 GB", "12,50") and Spanish month abbreviations ("28 sept"). No grouping separators SHALL be added to fixed-decimal values. A fixed-decimal input SHALL accept the active language's decimal separator, and in Spanish SHALL also accept a period as the decimal separator. Machine-oriented forms SHALL stay the same in every language: sortable editor dates (`2026-09-24`, `2026-09-24 14:05`), duration text, formulas, ids, addresses and ports.

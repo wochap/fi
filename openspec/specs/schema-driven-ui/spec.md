@@ -341,7 +341,7 @@ The FixedDecimal editor SHALL accept signed decimal text appropriate to the fiel
 - **THEN** the form submits representation `-2350` and displays the projected value as `-23.50`
 
 ### Requirement: Sensible record list defaults
-The collection screen SHALL select deterministic generic primary/secondary display defaults from active schema fields, with stable-ID tie breaking when metadata is equal. The default order SHALL be newest first by record creation time, with the record id as the tie breaker; a record without a creation time SHALL sort after those that have one, by record id.
+The collection screen SHALL select deterministic generic primary/secondary display defaults from active schema fields, with stable-ID tie breaking when metadata is equal. The records SHALL be listed in the order of the selected collection view. The default view All SHALL order them newest first by record creation time, with the record id as the tie breaker; a record without a creation time SHALL sort after those that have one, by record id.
 
 At 720px and wider the records SHALL be shown as a table:
 - It SHALL have one column per active field in form order.
@@ -352,11 +352,15 @@ At 720px and wider the records SHALL be shown as a table:
 - A Choices value SHALL show its picked labels as small tags in the field's option order; the tags that don't fit SHALL collapse into one "+N" tag. The same SHALL apply to Choices values on mobile cards.
 - The header row SHALL stay visible while the rows scroll vertically.
 
-Below 720px each record SHALL be a card showing up to its first three active fields in form order, each with its type icon, name and value, followed by "+ N more fields · <creation date>" when more fields exist, or by the creation date alone. The records section SHALL read "Newest first".
+Below 720px each record SHALL be a card showing up to its first three active fields in form order, each with its type icon, name and value, followed by "+ N more fields · <creation date>" when more fields exist, or by the creation date alone. On every width the records section SHALL show the view chip row and the view line instead of a fixed order label.
 
 #### Scenario: No explicit list configuration
-- **WHEN** a new schema has records but no chosen display fields
-- **THEN** the UI lists them predictably, newest first by creation time, with record ID as the tie breaker
+- **WHEN** a new schema has records but no saved views
+- **THEN** the UI selects All and lists them predictably, newest first by creation time, with record ID as the tie breaker
+
+#### Scenario: List follows the selected view
+- **WHEN** the view "Headaches", sorted by start at ascending, is selected
+- **THEN** the cards or rows appear in ascending start order and the view line reads "Sort: start at · oldest"
 
 #### Scenario: Table keeps its first column
 - **WHEN** a collection with nine fields is shown on a 1240px-wide screen and the user scrolls the table sideways
@@ -373,6 +377,10 @@ Below 720px each record SHALL be a card showing up to its first three active fie
 #### Scenario: Choices tags in a row
 - **WHEN** a record's "tags" holds five options and only three tags fit the column
 - **THEN** the cell shows the first three tags and "+2"
+
+#### Scenario: No fixed order label
+- **WHEN** a collection with records is shown on a 390px-wide screen
+- **THEN** the records section shows the chip row and "Sort: Created · newest" in the view line, and no "Newest first" label
 
 ### Requirement: Reactive projection refresh
 Collection and record controllers SHALL react to typed data/projection events by rereading SQLite-backed queries, and stream lag SHALL recover through a complete refresh.

@@ -27,7 +27,7 @@ For each projection cycle the engine SHALL capture a self-consistent generic app
 - **THEN** the next startup observes mismatched heads and rebuilds the generic read model
 
 ### Requirement: Transactional complete projection
-The engine SHALL structurally validate and map the complete root state, replace collection, field, enum-option, record, typed-value, and diagnostic rows, and update projection metadata in one SQLite transaction with the checkpoint written last.
+The engine SHALL structurally validate and map the complete root state, replace collection, field, enum-option, record, typed-value, diagnostic and saved-view rows, and update projection metadata in one SQLite transaction with the checkpoint written last.
 
 #### Scenario: Structural projection mapping fails
 - **WHEN** authoritative data cannot be structurally decoded under the supported application schema
@@ -40,6 +40,10 @@ The engine SHALL structurally validate and map the complete root state, replace 
 #### Scenario: Projection succeeds
 - **WHEN** the complete authoritative snapshot is mapped
 - **THEN** all generic rows and the exact captured checkpoint become visible atomically
+
+#### Scenario: Saved views projected with the rest
+- **WHEN** a snapshot holding records and saved views is projected
+- **THEN** the view rows and the record rows become visible in the same transaction, and a view with an unsupported body version is projected with a broken status instead of failing the projection
 
 ### Requirement: Authoritative-state checkpoint
 Projection metadata SHALL include the root document ID, generic projection schema version, and a canonical versioned encoding of sorted Automerge head hashes.

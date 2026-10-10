@@ -156,3 +156,18 @@ The bridge SHALL open the networked core with the fixed port policy for the docu
 #### Scenario: Ports while deferred
 - **WHEN** Flutter queries the network ports while networking is deferred for an exhausted range
 - **THEN** the DTO carries no bound ports, still reports the range bounds, and the networking-deferred query returns the ports-exhausted kind with a message naming `47380-47389`
+
+### Requirement: View bridge APIs
+The bridge SHALL expose typed APIs to list a collection's views with their counts, health and effective sort; create, rename, replace the body of, reorder and remove a saved view; execute a saved view by id; and execute an unsaved view body. They SHALL use canonical string IDs and owned typed DTOs, and SHALL NOT expose Automerge, SQLite or engine objects. The listing SHALL put All first under its reserved identifier, and executing that identifier SHALL execute All. Validation failures SHALL cross as typed validation errors with stable issue codes. The bridge SHALL store null order "last" for every sort clause of a view whatever the DTO carries.
+
+#### Scenario: List views
+- **WHEN** Dart lists the views of "pains", which has two saved views
+- **THEN** the bridge returns All first under its reserved identifier, then the two views in order, each with its count or broken diagnostic
+
+#### Scenario: Execute an unsaved body
+- **WHEN** Dart executes an unsaved body that filters "type is any of {stomach}"
+- **THEN** the bridge returns the ordered ids of the matching records and their count, and nothing is written
+
+#### Scenario: Invalid view crosses typed
+- **WHEN** Dart creates a view with four sort clauses
+- **THEN** the bridge returns a typed validation error carrying the code `view_sort_limit`
