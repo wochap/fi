@@ -82,6 +82,9 @@ Future<void> _listAction(WidgetTester tester, String label) async {
 final _en = lookupAppLocalizations(const Locale('en'));
 final _es = lookupAppLocalizations(const Locale('es'));
 
+/// The JSON export outcome, "Exported N records and M views."
+final _exportedJson = RegExp(r'^Exported \d+ records? and \d+ views?\.$');
+
 void main() {
   group('controller', () {
     test('exports pass Rust text to the save dialog', () async {
@@ -313,7 +316,7 @@ void main() {
       await _showList(tester, bridge, dialogs);
       await _collectionAction(tester, 'Export JSON');
       expect(bridge.exports, ['json $_collection']);
-      expect(find.text('Exported to Headaches.json'), findsOneWidget);
+      expect(find.textContaining(_exportedJson), findsOneWidget);
     });
 
     testWidgets('cancelling the save dialog shows nothing', (tester) async {
@@ -382,7 +385,7 @@ void main() {
       await _showList(tester, bridge, dialogs);
       await _listAction(tester, 'Export all');
       expect(bridge.exports, ['json all']);
-      expect(find.text('Exported to collections.json'), findsOneWidget);
+      expect(find.textContaining(_exportedJson), findsOneWidget);
     });
 
     testWidgets('Export selected exports only the picked collections', (
@@ -414,7 +417,7 @@ void main() {
       await tester.tap(confirm);
       await tester.pumpAndSettle();
       expect(bridge.exports, ['json collection-2']);
-      expect(find.text('Exported to collections.json'), findsOneWidget);
+      expect(find.textContaining(_exportedJson), findsOneWidget);
     });
 
     testWidgets('a phone picks from a sheet with a short primary label', (
@@ -439,7 +442,7 @@ void main() {
       await tester.tap(confirm);
       await tester.pumpAndSettle();
       expect(bridge.exports, ['json $_collection,collection-2']);
-      expect(find.text('Exported to collections.json'), findsOneWidget);
+      expect(find.textContaining(_exportedJson), findsOneWidget);
     });
 
     testWidgets('a wide picker names the count in full', (tester) async {

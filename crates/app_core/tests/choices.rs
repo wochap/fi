@@ -704,7 +704,8 @@ async fn clone_and_json_round_trip_remap_sets() {
     let clone = app
         .clone_collection(tasks.collection, "Tasks copy".into())
         .await
-        .unwrap();
+        .unwrap()
+        .id;
     let schema = app.collection_schema(clone).unwrap().unwrap();
     let cloned = schema
         .fields
@@ -746,7 +747,10 @@ async fn clone_and_json_round_trip_remap_sets() {
         .unwrap();
 
     // JSON: the record's set is remapped to the imported options.
-    let json = app.export_collections_json(vec![tasks.collection]).unwrap();
+    let json = app
+        .export_collections_json(vec![tasks.collection])
+        .unwrap()
+        .text;
     let ImportOutcome::Imported { collections, .. } =
         app.import_collections_json(json.clone()).await.unwrap()
     else {

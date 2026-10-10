@@ -33,13 +33,47 @@ pub async fn rename_collection(id: String, name: String) -> Result<(), BridgeErr
         .await
         .map_err(Into::into)
 }
-/// Copies a collection's structure (no records) and returns the new collection id.
-pub async fn clone_collection(source_id: String, name: String) -> Result<String, BridgeError> {
+/// The new collection of a structure clone and the broken views that were not copied.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CloneOutcomeDto {
+    pub collection_id: String,
+    pub skipped_views: Vec<String>,
+}
+
+/// A `fi-collection` document with what went into it; the caller writes the file.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct JsonExportDto {
+    pub text: String,
+    pub record_count: u32,
+    pub views_written: u32,
+    /// Names of the broken views left out.
+    pub views_omitted: Vec<String>,
+}
+
+impl From<app_core::JsonExport> for JsonExportDto {
+    fn from(value: app_core::JsonExport) -> Self {
+        Self {
+            text: value.text,
+            record_count: u32::try_from(value.records).unwrap_or(u32::MAX),
+            views_written: u32::try_from(value.views_written).unwrap_or(u32::MAX),
+            views_omitted: value.views_omitted,
+        }
+    }
+}
+
+/// Copies a collection's structure and views (no records); broken views are skipped and named.
+pub async fn clone_collection(
+    source_id: String,
+    name: String,
+) -> Result<CloneOutcomeDto, BridgeError> {
     core()
         .await?
         .clone_collection(parse_collection(&source_id)?, name)
         .await
-        .map(|id| id.to_string())
+        .map(|outcome| CloneOutcomeDto {
+            collection_id: outcome.id.to_string(),
+            skipped_views: outcome.skipped_views,
+        })
         .map_err(Into::into)
 }
 /// Active records of one collection as CSV text; the caller writes the file.
@@ -50,7 +84,7 @@ pub async fn export_collection_csv(id: String) -> Result<String, BridgeError> {
         .map_err(Into::into)
 }
 /// The given collections as one `fi-collection` JSON document.
-pub async fn export_collections_json(ids: Vec<String>) -> Result<String, BridgeError> {
+pub async fn export_collections_json(ids: Vec<String>) -> Result<JsonExportDto, BridgeError> {
     let ids = ids
         .iter()
         .map(|id| parse_collection(id))
@@ -58,11 +92,16 @@ pub async fn export_collections_json(ids: Vec<String>) -> Result<String, BridgeE
     core()
         .await?
         .export_collections_json(ids)
+        .map(Into::into)
         .map_err(Into::into)
 }
 /// Every active collection as one `fi-collection` JSON document.
-pub async fn export_all_json() -> Result<String, BridgeError> {
-    core().await?.export_all_json().map_err(Into::into)
+pub async fn export_all_json() -> Result<JsonExportDto, BridgeError> {
+    core()
+        .await?
+        .export_all_json()
+        .map(Into::into)
+        .map_err(Into::into)
 }
 /// Adds every row of `text` as a new record; a rejected file writes nothing.
 pub async fn import_collection_csv(

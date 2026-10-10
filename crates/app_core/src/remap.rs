@@ -19,6 +19,7 @@ use crate::{
         CollectionSchema, CollectionSchemaId, EnumOption, EnumOptionId, FieldDefinition, FieldId,
     },
     values::FieldValue,
+    view::{VersionedViewBody, ViewBody, ViewDefinition, ViewGrouping, portable_views},
     widgets::{WidgetDefinition, WidgetId},
 };
 
@@ -40,6 +41,9 @@ pub struct ClonePlan {
     pub computed_fields: Vec<ComputedFieldDefinition>,
     pub query_definitions: Vec<QueryDefinition>,
     pub widgets: Vec<WidgetDefinition>,
+    pub views: Vec<ViewDefinition>,
+    /// Names of the source's broken views, which were not copied.
+    pub skipped_views: Vec<String>,
 }
 
 impl IdRemap {
@@ -101,8 +105,9 @@ impl IdRemap {
 }
 
 /// Copies the active structure of `source` under `target` named `name`: fields, enum options,
-/// computed fields, queries and widgets with fresh identities and rewritten references. Records
-/// are never part of a plan. Order metadata is copied unchanged.
+/// computed fields, queries, widgets and views with fresh identities and rewritten references.
+/// Records are never part of a plan. Order metadata is copied unchanged. Broken views are
+/// skipped and named in the plan; degraded views are copied with their effective sort.
 pub fn clone_plan(
     source: &CollectionSchema,
     target: CollectionSchemaId,
@@ -110,13 +115,18 @@ pub fn clone_plan(
     computed: &[ComputedFieldDefinition],
     queries: &[QueryDefinition],
     widgets: &[WidgetDefinition],
+    views: &[ViewDefinition],
 ) -> Result<ClonePlan, DomainError> {
     let remap = IdRemap::for_collection(source.id, target, &source.fields, computed, queries);
-    plan_with_remap(source, &remap, name, computed, queries, widgets)
+    let (views, skipped) = portable_views(source, computed, views);
+    let mut plan = plan_with_remap(source, &remap, name, computed, queries, widgets, &views)?;
+    plan.skipped_views = skipped;
+    Ok(plan)
 }
 
 /// [`clone_plan`] with a caller-built table, so the caller can reuse it for further references
-/// (imported record values).
+/// (imported record values). Every active view of `views` is remapped as is; a reference outside
+/// the table is an error.
 pub fn plan_with_remap(
     source: &CollectionSchema,
     remap: &IdRemap,
@@ -124,6 +134,7 @@ pub fn plan_with_remap(
     computed: &[ComputedFieldDefinition],
     queries: &[QueryDefinition],
     widgets: &[WidgetDefinition],
+    views: &[ViewDefinition],
 ) -> Result<ClonePlan, DomainError> {
     let target = remap.collection_id(source.id)?;
     let owned_active =
@@ -156,6 +167,12 @@ pub fn plan_with_remap(
             .filter(|item| owned_active(item.collection_id, item.deleted))
             .map(|item| remap_widget(item, remap))
             .collect::<Result<_, _>>()?,
+        views: views
+            .iter()
+            .filter(|item| owned_active(item.collection_id, item.deleted))
+            .map(|item| remap_view(item, remap))
+            .collect::<Result<_, _>>()?,
+        skipped_views: Vec::new(),
     })
 }
 
@@ -445,6 +462,51 @@ pub fn remap_widget(
         id: WidgetId::new(),
         collection_id: remap.collection_id(definition.collection_id)?,
         query_id: remap.query(definition.query_id)?,
+        ..definition.clone()
+    })
+}
+
+/// A view with a fresh id and its filter, sort keys and grouping field rewritten.
+pub fn remap_view(
+    definition: &ViewDefinition,
+    remap: &IdRemap,
+) -> Result<ViewDefinition, DomainError> {
+    let ViewBody {
+        filter,
+        sorting,
+        grouping,
+    } = definition
+        .body
+        .body()
+        .map_err(|message| invalid("view", message))?;
+    let body = ViewBody {
+        filter: filter
+            .as_ref()
+            .map(|filter| remap_expression(filter, remap))
+            .transpose()?,
+        sorting: sorting
+            .iter()
+            .map(|sort| {
+                Ok(SortClause {
+                    expression: remap_expression(&sort.expression, remap)?,
+                    direction: sort.direction,
+                    null_order: sort.null_order,
+                })
+            })
+            .collect::<Result<_, DomainError>>()?,
+        grouping: grouping
+            .map(|grouping| {
+                Ok::<_, DomainError>(ViewGrouping {
+                    field: remap.field(grouping.field)?,
+                    period: grouping.period,
+                })
+            })
+            .transpose()?,
+    };
+    Ok(ViewDefinition {
+        id: crate::query::ViewId::new(),
+        collection_id: remap.collection_id(definition.collection_id)?,
+        body: VersionedViewBody::new(&body),
         ..definition.clone()
     })
 }
@@ -905,6 +967,7 @@ mod tests {
             &fixture.computed,
             &fixture.queries,
             &fixture.widgets,
+            &[],
         )
         .unwrap();
         assert_eq!(plan.schema.id, target);

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:clock/clock.dart';
+import 'package:fi/bridge/collection_bridge.dart' show allViewId;
 import 'package:fi/collection_views.dart';
 import 'package:fi/l10n/error_text.dart';
 import 'package:fi/l10n/l10n.dart';
@@ -17,6 +18,7 @@ import 'package:fi/platform_capabilities.dart';
 import 'package:fi/help_button.dart';
 import 'package:fi/help_copy.dart';
 import 'package:fi/record_form.dart';
+import 'package:fi/src/rust/api/collections.dart' show JsonExportDto;
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/theme/form_errors.dart';
 import 'package:fi/theme/form_surface.dart';
@@ -448,9 +450,15 @@ class CollectionsPage extends StatelessWidget {
       case _CollectionAction.importCsv:
         unawaited(_importCsv(context, item));
       case _CollectionAction.exportCsv:
-        unawaited(_export(context, () => controller.exportCsv(item)));
+        final l = context.l10n;
+        unawaited(
+          _export(context, () async {
+            final name = await controller.exportCsv(item);
+            return name == null ? null : l.collectionsExportedTo(name);
+          }),
+        );
       case _CollectionAction.exportJson:
-        unawaited(_export(context, () => controller.exportJson([item])));
+        unawaited(_exportJson(context, () => controller.exportJson([item])));
       case _CollectionAction.delete:
         unawaited(_confirmDeleteCollection(context, item));
     }
@@ -489,8 +497,8 @@ class CollectionsPage extends StatelessWidget {
     _runCollectionAction(context, item, chosen);
   }
 
-  /// Runs one export and reports the written file. A dismissed save dialog reports nothing; a
-  /// failed export (for example two columns sharing a name) reports Rust's reason.
+  /// Runs one export and reports [export]'s outcome text. A dismissed save dialog reports
+  /// nothing; a failed export (for example two columns sharing a name) reports Rust's reason.
   Future<void> _export(
     BuildContext context,
     Future<String?> Function() export,
@@ -499,15 +507,9 @@ class CollectionsPage extends StatelessWidget {
     final l = context.l10n;
     final width = MediaQuery.sizeOf(context).width;
     try {
-      final name = await export();
-      if (name != null) {
-        showOutcomeToastOn(
-          messenger,
-          l,
-          width,
-          l.collectionsExportedTo(name),
-          success: true,
-        );
+      final outcome = await export();
+      if (outcome != null) {
+        showOutcomeToastOn(messenger, l, width, outcome, success: true);
       }
     } catch (failure) {
       showOutcomeToastOn(
@@ -521,7 +523,20 @@ class CollectionsPage extends StatelessWidget {
   }
 
   Future<void> _exportAll(BuildContext context) =>
-      _export(context, controller.exportAll);
+      _exportJson(context, controller.exportAll);
+
+  /// A JSON export, reporting "Exported N records and M views." and any broken views left out.
+  Future<void> _exportJson(
+    BuildContext context,
+    Future<JsonExportDto?> Function() export,
+  ) {
+    final l = context.l10n;
+    return _export(context, () async {
+      final done = await export();
+      if (done == null) return null;
+      return exportOutcomeText(l, done);
+    });
+  }
 
   /// Picks several collections (mock collections-import-export), then exports them as one JSON
   /// document: a dialog on wide screens, a bottom sheet on a phone. Dismissing the picker exports
@@ -590,7 +605,7 @@ class CollectionsPage extends StatelessWidget {
     );
     final selection = picked;
     if (selection == null || selection.isEmpty || !context.mounted) return;
-    await _export(context, () => controller.exportJson(selection));
+    await _exportJson(context, () => controller.exportJson(selection));
   }
 
   /// Imports a CSV file into [item] and reports the count, or the row, column and reason that
@@ -692,11 +707,20 @@ class CollectionsPage extends StatelessWidget {
         final selecting = controller.selecting;
         final horizontal = phone ? 16.0 : (wide ? 32.0 : 24.0);
         final records = controller.records;
-        final incomplete = records.where((record) => !record.valid).length;
+        final incomplete = controller.visibleIncomplete;
+        final hiddenIncomplete = controller.hiddenIncomplete;
+        Widget incompleteLine({required bool phone}) => _IncompleteLine(
+          count: incomplete,
+          hidden: hiddenIncomplete,
+          phone: phone,
+          onShow: () => unawaited(controller.selectView(allViewId)),
+        );
         // The table scrolls inside its own viewport so its header row can stay pinned; it is
         // never taller than the screen leaves room for.
+        final groups = _listGroups(context, schema);
+        final rows = _tableRows(records, groups);
         final tableHeight = math.min(
-          _RecordTable.headerHeight + records.length * _RecordTable.rowHeight,
+          _RecordTable.headerHeight + rows.length * _RecordTable.rowHeight,
           math.max(constraints.maxHeight - 160, 280.0),
         );
         final list = CustomScrollView(
@@ -782,8 +806,8 @@ class CollectionsPage extends StatelessWidget {
                     ),
                   ],
                   const SizedBox(height: 8),
-                  if (phone && incomplete > 0) ...[
-                    _IncompleteLine(count: incomplete, phone: true),
+                  if (phone && (incomplete > 0 || hiddenIncomplete > 0)) ...[
+                    incompleteLine(phone: true),
                     const SizedBox(height: 10),
                   ],
                 ],
@@ -817,7 +841,10 @@ class CollectionsPage extends StatelessWidget {
                   child: _RecordTable(
                     height: tableHeight,
                     fields: fields,
-                    records: records,
+                    rows: rows,
+                    sorting: controller.effectiveSorting,
+                    onSort: (field) =>
+                        unawaited(controller.sortByColumn(field)),
                     selecting: selecting,
                     selectedIds: controller.selectedRecordIds,
                     onOpen: (record) => _openRecord(context, schema, record),
@@ -834,21 +861,32 @@ class CollectionsPage extends StatelessWidget {
                   ),
                 ),
               ),
-              if (incomplete > 0)
+              if (incomplete > 0 || hiddenIncomplete > 0)
                 SliverPadding(
                   padding: EdgeInsets.fromLTRB(horizontal, 12, horizontal, 0),
                   sliver: SliverToBoxAdapter(
-                    child: _IncompleteLine(count: incomplete, phone: false),
+                    child: incompleteLine(phone: false),
                   ),
                 ),
             ] else
               SliverPadding(
                 padding: EdgeInsets.symmetric(horizontal: horizontal),
                 sliver: SliverList.separated(
-                  itemCount: records.length,
+                  itemCount: rows.length,
                   separatorBuilder: (_, _) => const SizedBox(height: 8),
-                  itemBuilder: (context, index) =>
-                      _recordCard(context, schema, fields, records[index]),
+                  itemBuilder: (context, index) => switch (rows[index]) {
+                    final _GroupRow group => _GroupHeader(
+                      group: group,
+                      phone: true,
+                    ),
+                    final RecordDto record => _recordCard(
+                      context,
+                      schema,
+                      fields,
+                      record,
+                    ),
+                    _ => const SizedBox.shrink(),
+                  },
                 ),
               ),
             SliverToBoxAdapter(child: SizedBox(height: phone ? 96 : 32)),
@@ -882,6 +920,45 @@ class CollectionsPage extends StatelessWidget {
       },
     );
   }
+
+  /// The selected view's groups with their labels, or null when it doesn't group.
+  List<_GroupRow>? _listGroups(
+    BuildContext context,
+    CollectionSchemaDto schema,
+  ) {
+    final grouping = controller.activeBody.grouping;
+    if (grouping == null ||
+        controller.brokenView != null ||
+        controller.recordGroups.isEmpty) {
+      return null;
+    }
+    final l = context.l10n;
+    return [
+      for (final (:group, :records) in controller.recordGroups)
+        _GroupRow(
+          id: groupKeyId(group.key),
+          label: groupLabel(l, schema, grouping, group),
+          count: records.length,
+          collapsed: controller.isGroupCollapsed(group.key),
+          onToggle: () => controller.toggleGroup(group.key),
+          records: records,
+        ),
+    ];
+  }
+
+  /// The list's rows in order: each group's header then, unless collapsed, its records; just
+  /// the records when the view doesn't group.
+  static List<Object> _tableRows(
+    List<RecordDto> records,
+    List<_GroupRow>? groups,
+  ) => groups == null
+      ? records
+      : [
+          for (final group in groups) ...[
+            group,
+            if (!group.collapsed) ...group.records,
+          ],
+        ];
 
   /// Opens [record] for editing, or toggles it while selecting. An incomplete record opens on
   /// its first missing required field.
@@ -2147,7 +2224,9 @@ class CollectionsPage extends StatelessWidget {
     final width = MediaQuery.sizeOf(context).width;
     try {
       final created = await clone();
-      _showCloned(messenger, l, width, created);
+      if (!showClonedHidden(messenger, l, width, controller, created)) {
+        _showCloned(messenger, l, width, created);
+      }
     } catch (_) {
       // The typed error is already on the controller's banner and the
       // selection has been pruned.
@@ -3125,6 +3204,9 @@ class _RecordEditorFormState extends State<_RecordEditorForm> {
 
   Future<void> _save() async {
     _debounce?.cancel();
+    final messenger = ScaffoldMessenger.of(context);
+    final l = context.l10n;
+    final width = MediaQuery.sizeOf(context).width;
     final request = ++_request;
     setState(() => attempted = true);
     final found = await _check(request);
@@ -3137,11 +3219,17 @@ class _RecordEditorFormState extends State<_RecordEditorForm> {
     try {
       final existing = widget.existing;
       if (existing == null) {
-        final id = await widget.controller.createRecord(
+        final controller = widget.controller;
+        final id = await controller.createRecord(
           _submitted,
           pendingOptions: List.of(_pending),
         );
-        if (widget.fromClone) widget.controller.markCloned([id]);
+        if (widget.fromClone) {
+          controller.markCloned([id]);
+          showClonedHidden(messenger, l, width, controller, [id]);
+        } else {
+          showSavedHidden(messenger, l, width, controller, id);
+        }
       } else if (_submitted.isNotEmpty) {
         await widget.controller.updateRecord(
           existing.id,
@@ -3521,7 +3609,9 @@ class _RecordTable extends StatefulWidget {
   const _RecordTable({
     required this.height,
     required this.fields,
-    required this.records,
+    required this.rows,
+    required this.sorting,
+    required this.onSort,
     required this.selecting,
     required this.selectedIds,
     required this.onOpen,
@@ -3541,7 +3631,15 @@ class _RecordTable extends StatefulWidget {
   /// The table viewport's height; the scroll hint goes below it.
   final double height;
   final List<FieldDefinitionDto> fields;
-  final List<RecordDto> records;
+
+  /// Records, and the group headers ([_GroupRow]) of a grouping view, in list order.
+  final List<Object> rows;
+
+  /// The sort the list follows, for the headers' ↑/↓ marks.
+  final List<SortClauseDto> sorting;
+
+  /// A header click: flip the primary key or sort by that column alone.
+  final ValueChanged<FieldDefinitionDto> onSort;
   final bool selecting;
   final Set<String> selectedIds;
   final ValueChanged<RecordDto> onOpen;
@@ -3585,6 +3683,7 @@ class _RecordTableState extends State<_RecordTable> {
   }
 
   int get _dataColumns => math.max(widget.fields.length, 1);
+  int get _columnCount => _dataColumns + (_hasActions ? 1 : 0);
   bool get _hasActions => !widget.selecting;
 
   @override
@@ -3596,8 +3695,8 @@ class _RecordTableState extends State<_RecordTable> {
       horizontalDetails: ScrollableDetails.horizontal(controller: _horizontal),
       pinnedRowCount: 1,
       pinnedColumnCount: 1,
-      rowCount: widget.records.length + 1,
-      columnCount: _dataColumns + (_hasActions ? 1 : 0),
+      rowCount: widget.rows.length + 1,
+      columnCount: _columnCount,
       columnBuilder: (index) => TableSpan(
         extent: FixedTableSpanExtent(
           index == 0
@@ -3615,9 +3714,13 @@ class _RecordTableState extends State<_RecordTable> {
         backgroundDecoration: TableSpanDecoration(
           color: index == 0
               ? context.nocturne.bg
-              : widget.selectedIds.contains(widget.records[index - 1].id)
-              ? context.nocturne.accentFill
-              : null,
+              : switch (widget.rows[index - 1]) {
+                  _GroupRow() => context.nocturne.neutralFill,
+                  final RecordDto record
+                      when widget.selectedIds.contains(record.id) =>
+                    context.nocturne.accentFill,
+                  _ => null,
+                },
         ),
         foregroundDecoration: TableSpanDecoration(
           border: TableSpanBorder(
@@ -3627,11 +3730,29 @@ class _RecordTableState extends State<_RecordTable> {
           ),
         ),
       ),
-      cellBuilder: (context, vicinity) => TableViewCell(
-        child: vicinity.row == 0
-            ? _header(vicinity.column)
-            : _cell(widget.records[vicinity.row - 1], vicinity.column),
-      ),
+      cellBuilder: (context, vicinity) {
+        if (vicinity.row == 0) {
+          return TableViewCell(child: _header(vicinity.column));
+        }
+        final row = widget.rows[vicinity.row - 1];
+        if (row is _GroupRow) {
+          // The label sits in the pinned column; the rest of the row is one merged, empty cell,
+          // so the header reads full-width and never scrolls sideways.
+          if (vicinity.column == 0) {
+            return TableViewCell(child: _GroupHeader(group: row, phone: false));
+          }
+          return TableViewCell(
+            columnMergeStart: 1,
+            columnMergeSpan: _columnCount - 1,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: row.onToggle,
+              child: const SizedBox.expand(),
+            ),
+          );
+        }
+        return TableViewCell(child: _cell(row as RecordDto, vicinity.column));
+      },
     );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -3681,10 +3802,21 @@ class _RecordTableState extends State<_RecordTable> {
     if (column >= _dataColumns || widget.fields.isEmpty) {
       return const SizedBox.shrink();
     }
+    final l = context.l10n;
+    final c = context.nocturne;
     final field = widget.fields[column];
-    return Container(
+    final sortable = field.fieldType.kind != FieldTypeKindDto.enumSet;
+    final position = widget.sorting.indexWhere(
+      (clause) => sortFieldId(clause) == field.id,
+    );
+    final clause = position < 0 ? null : widget.sorting[position];
+    final ascending = clause?.direction == SortDirectionDto.ascending;
+    final mark = clause == null
+        ? null
+        : '${ascending ? '↑' : '↓'}${position > 0 ? '${position + 1}' : ''}';
+    final header = Container(
       key: Key('column-header-${field.id}'),
-      color: context.nocturne.bg,
+      color: c.bg,
       padding: EdgeInsets.only(
         left: column == 0 && widget.selecting ? 52 : 12,
         right: 8,
@@ -3695,7 +3827,7 @@ class _RecordTableState extends State<_RecordTable> {
           Icon(
             fieldTypeIcon(field.fieldType.kind),
             size: 13,
-            color: context.nocturne.muted(.5),
+            color: c.muted(.5),
           ),
           const SizedBox(width: 6),
           Flexible(
@@ -3706,7 +3838,7 @@ class _RecordTableState extends State<_RecordTable> {
               style: TextStyle(
                 fontSize: 11,
                 letterSpacing: .88,
-                color: context.nocturne.muted(.6),
+                color: clause == null ? c.muted(.6) : c.accentText,
               ),
             ),
           ),
@@ -3714,12 +3846,42 @@ class _RecordTableState extends State<_RecordTable> {
             Text(
               ' *',
               key: Key('required-mark'),
-              style: TextStyle(
-                fontSize: 11,
-                color: context.nocturne.accentText,
+              style: TextStyle(fontSize: 11, color: c.accentText),
+            ),
+          if (mark != null)
+            Padding(
+              padding: const EdgeInsets.only(left: 4),
+              child: Text(
+                mark,
+                key: Key('sort-mark-${field.id}'),
+                style: TextStyle(
+                  fontSize: 11,
+                  fontFeatures: Nocturne.tabular,
+                  color: c.accentText,
+                ),
               ),
             ),
         ],
+      ),
+    );
+    if (!sortable) return header;
+    final state = [
+      field.name,
+      if (clause != null)
+        ascending ? l.viewSortHeaderAscending : l.viewSortHeaderDescending,
+      if (position > 0) l.viewSortHeaderKey(position + 1),
+    ].join(', ');
+    return Semantics(
+      button: true,
+      label: state,
+      excludeSemantics: true,
+      child: Tooltip(
+        message: l.viewSortHeaderHint(field.name),
+        child: InkWell(
+          key: Key('sort-header-${field.id}'),
+          onTap: () => widget.onSort(field),
+          child: header,
+        ),
       ),
     );
   }
@@ -3850,6 +4012,80 @@ class _RecordTableState extends State<_RecordTable> {
   }
 }
 
+/// One group of a grouping view: its header label and count, and the records it holds.
+final class _GroupRow {
+  const _GroupRow({
+    required this.id,
+    required this.label,
+    required this.count,
+    required this.collapsed,
+    required this.onToggle,
+    required this.records,
+  });
+
+  final String id;
+  final String label;
+  final int count;
+  final bool collapsed;
+  final VoidCallback onToggle;
+  final List<RecordDto> records;
+}
+
+/// A group's header, "October 2026 · 6", that collapses and expands the group on tap; exposed
+/// as an expandable control with its state.
+class _GroupHeader extends StatelessWidget {
+  const _GroupHeader({required this.group, required this.phone});
+
+  final _GroupRow group;
+  final bool phone;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = context.l10n;
+    final c = context.nocturne;
+    return Semantics(
+      key: Key('group-header-${group.id}'),
+      button: true,
+      expanded: !group.collapsed,
+      label: l.viewGroupSemantics(group.label, group.count),
+      excludeSemantics: true,
+      onTap: group.onToggle,
+      child: InkWell(
+        onTap: group.onToggle,
+        borderRadius: phone ? BorderRadius.circular(Nocturne.radius) : null,
+        child: Container(
+          constraints: BoxConstraints(minHeight: phone ? 44 : 0),
+          padding: EdgeInsets.symmetric(horizontal: phone ? 4 : 12),
+          alignment: Alignment.centerLeft,
+          child: Row(
+            children: [
+              Icon(
+                group.collapsed ? FiIcons.chevronRight : FiIcons.expand,
+                size: 14,
+                color: c.muted(.55),
+              ),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  l.viewGroupHeader(group.label, group.count),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    fontFeatures: Nocturne.tabular,
+                    color: c.muted(.75),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// The temporary "Clone" tag on a record the last clone in this collection created.
 class _CloneBadge extends StatelessWidget {
   const _CloneBadge({super.key});
@@ -3862,50 +4098,81 @@ class _CloneBadge extends StatelessWidget {
   );
 }
 
-/// The line under (or, on a phone, above) the records saying how many are incomplete.
+/// The line under (or, on a phone, above) the records saying how many incomplete records the
+/// view shows, then, muted, how many more it hides ("2 more in other views · Show"). When the
+/// view shows none but hides some, only that second line is shown.
 class _IncompleteLine extends StatelessWidget {
-  const _IncompleteLine({required this.count, required this.phone});
+  const _IncompleteLine({
+    required this.count,
+    required this.phone,
+    this.hidden = 0,
+    this.onShow,
+  });
 
   final int count;
   final bool phone;
 
+  /// Incomplete records the selected view hides.
+  final int hidden;
+
+  /// Selects All.
+  final VoidCallback? onShow;
+
   @override
   Widget build(BuildContext context) {
     final l = context.l10n;
-    final lead = l.recordIncompleteLead(count);
+    final c = context.nocturne;
+    final style = TextStyle(fontSize: 13, color: c.accentText);
+    final mutedStyle = TextStyle(fontSize: 12, color: c.muted(.55));
+    final more = hidden > 0
+        ? Wrap(
+            key: const Key('incomplete-hidden'),
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Text('${l.recordIncompleteHidden(hidden)} · ', style: mutedStyle),
+              TextButton(
+                key: const Key('incomplete-hidden-show'),
+                style: TextButton.styleFrom(
+                  minimumSize: Size(0, phone ? 44 : 28),
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  textStyle: const TextStyle(fontSize: 12),
+                ),
+                onPressed: onShow,
+                child: Text(l.viewShowAction),
+              ),
+            ],
+          )
+        : null;
+    final lead = count > 0 ? l.recordIncompleteLead(count) : null;
     final action = phone
         ? l.recordTapToFinish(count)
         : l.recordClickToFinish(count);
-    final style = TextStyle(fontSize: 13, color: context.nocturne.accentText);
     return Row(
       key: const Key('incomplete-status'),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: EdgeInsets.only(top: 1),
+          padding: EdgeInsets.only(top: lead == null ? 6 : 1),
           child: Icon(
             FiIcons.warning,
             size: 15,
-            color: context.nocturne.warning,
+            color: lead == null ? c.muted(.45) : c.warning,
           ),
         ),
         const SizedBox(width: 8),
         Expanded(
-          child: phone
-              ? Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(lead, style: style),
-                    Text(
-                      action,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: context.nocturne.muted(.55),
-                      ),
-                    ),
-                  ],
-                )
-              : Text('$lead. $action', style: style),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (lead != null && phone) ...[
+                Text(lead, style: style),
+                Text(action, style: mutedStyle),
+              ] else if (lead != null)
+                Text('$lead. $action', style: style),
+              ?more,
+            ],
+          ),
         ),
       ],
     );
@@ -4110,5 +4377,83 @@ final class _DesktopSchemaRowState extends State<_DesktopSchemaRow> {
         ),
       ),
     ),
+  );
+}
+
+/// "Exported 47 records and 2 views." and, when broken views were left out, "1 broken view
+/// wasn't included: Old scale."
+String exportOutcomeText(AppLocalizations l, JsonExportDto export) => [
+  l.collectionsExportedJson(export.recordCount, export.viewsWritten),
+  if (export.viewsOmitted.isNotEmpty)
+    l.collectionsExportViewsOmitted(
+      export.viewsOmitted.length,
+      export.viewsOmitted.join(', '),
+    ),
+].join(' ');
+
+/// The name the feedback uses for the selected view.
+String _activeViewName(AppLocalizations l, CollectionsController controller) {
+  final view = controller.activeView;
+  return view == null ? l.viewAllName : viewDisplayName(l, view);
+}
+
+SnackBarAction _showAll(AppLocalizations l, CollectionsController controller) =>
+    SnackBarAction(
+      key: const Key('feedback-show'),
+      label: l.viewShowAction,
+      onPressed: () => unawaited(controller.selectView(allViewId)),
+    );
+
+/// When the selected view hides some of the [created] clones: "Cloned · hidden by ‹view›" (or
+/// the N-record forms) with Show, which selects All, and Undo, which deletes exactly [created].
+/// Returns false, showing nothing, when the view shows every clone.
+bool showClonedHidden(
+  ScaffoldMessengerState messenger,
+  AppLocalizations l,
+  double width,
+  CollectionsController controller,
+  List<String> created,
+) {
+  final hidden = controller.hiddenByView(created);
+  if (hidden.isEmpty) return false;
+  final view = _activeViewName(l, controller);
+  final message = created.length == 1
+      ? l.recordsClonedHiddenOne(view)
+      : hidden.length == created.length
+      ? l.recordsClonedHiddenAll(created.length, view)
+      : l.recordsClonedHiddenSome(created.length, hidden.length, view);
+  showOutcomeToastOn(
+    messenger,
+    l,
+    width,
+    message,
+    success: true,
+    secondaryAction: _showAll(l, controller),
+    action: SnackBarAction(
+      key: const Key('undo-clone'),
+      label: l.commonUndo,
+      onPressed: () =>
+          unawaited(controller.undoClone(created).catchError((Object _) {})),
+    ),
+  );
+  return true;
+}
+
+/// "Saved · hidden by ‹view›" with Show when the selected view hides the new record [id].
+void showSavedHidden(
+  ScaffoldMessengerState messenger,
+  AppLocalizations l,
+  double width,
+  CollectionsController controller,
+  String id,
+) {
+  if (controller.hiddenByView([id]).isEmpty) return;
+  showOutcomeToastOn(
+    messenger,
+    l,
+    width,
+    l.recordsSavedHidden(_activeViewName(l, controller)),
+    success: true,
+    secondaryAction: _showAll(l, controller),
   );
 }

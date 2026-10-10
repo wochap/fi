@@ -1,17 +1,63 @@
 //! Collection views: list, edit and execute saved views and the implicit All view.
 
-use app_core::{ALL_VIEW_ID, ViewBody, ViewId, ViewListing, ViewResult};
+use app_core::{
+    ALL_VIEW_ID, GroupKey, GroupPeriod, ViewBody, ViewGroup, ViewGrouping, ViewId, ViewListing,
+    ViewResult,
+};
 
 use crate::api::{
     lifecycle::core,
     models::{BridgeError, ExpressionDto, NullOrderDto, SortClauseDto, SortDirectionDto},
 };
 
-/// A view body: an optional Boolean filter and up to three sort clauses.
+/// A view body: an optional Boolean filter, up to three sort clauses and an optional grouping.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ViewBodyDto {
     pub filter: Option<ExpressionDto>,
     pub sorting: Vec<SortClauseDto>,
+    pub grouping: Option<ViewGroupingDto>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum GroupPeriodDto {
+    Day,
+    Week,
+    Month,
+}
+
+/// Groups by one single Choice, yes/no, Date or DateTime field; dates carry a period.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ViewGroupingDto {
+    pub field_id: String,
+    pub period: Option<GroupPeriodDto>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum GroupKeyKindDto {
+    Option,
+    Boolean,
+    Date,
+    Empty,
+}
+
+/// The value shared by a group: `option_id` for Option, `flag` for Boolean, `days` (first day of
+/// the bucket, days since 1970-01-01 in the result's zone) for Date.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GroupKeyDto {
+    pub kind: GroupKeyKindDto,
+    pub option_id: Option<String>,
+    pub flag: Option<bool>,
+    pub days: Option<i64>,
+}
+
+/// One group: its key, the option label for option groups, and its slice of the result ids.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ViewGroupDto {
+    pub key: GroupKeyDto,
+    pub label_hint: Option<String>,
+    pub count: u32,
+    pub start: u32,
+    pub len: u32,
 }
 
 /// One entry of a collection's view listing. All comes first with id `"all"`.
@@ -34,6 +80,10 @@ pub struct ViewDto {
 pub struct ViewResultDto {
     pub ids: Vec<String>,
     pub count: u32,
+    /// Empty unless the view groups; the slices cover `ids` in order.
+    pub groups: Vec<ViewGroupDto>,
+    /// The IANA zone used for date grouping; record dates are shown in it.
+    pub zone: String,
 }
 
 pub async fn list_views(
@@ -207,7 +257,21 @@ impl TryFrom<ViewBodyDto> for ViewBody {
                 .into_iter()
                 .map(sort_from_dto)
                 .collect::<Result<_, _>>()?,
-            grouping: None,
+            grouping: value
+                .grouping
+                .map(|grouping| {
+                    Ok::<_, BridgeError>(ViewGrouping {
+                        field: grouping.field_id.parse().map_err(|error| {
+                            BridgeError::validation("grouping", format!("{error}"))
+                        })?,
+                        period: grouping.period.map(|period| match period {
+                            GroupPeriodDto::Day => GroupPeriod::Day,
+                            GroupPeriodDto::Week => GroupPeriod::Week,
+                            GroupPeriodDto::Month => GroupPeriod::Month,
+                        }),
+                    })
+                })
+                .transpose()?,
         })
     }
 }
@@ -217,6 +281,14 @@ impl From<ViewBody> for ViewBodyDto {
         Self {
             filter: value.filter.map(Into::into),
             sorting: value.sorting.into_iter().map(sort_to_dto).collect(),
+            grouping: value.grouping.map(|grouping| ViewGroupingDto {
+                field_id: grouping.field.to_string(),
+                period: grouping.period.map(|period| match period {
+                    GroupPeriod::Day => GroupPeriodDto::Day,
+                    GroupPeriod::Week => GroupPeriodDto::Week,
+                    GroupPeriod::Month => GroupPeriodDto::Month,
+                }),
+            }),
         }
     }
 }
@@ -242,6 +314,44 @@ impl From<ViewResult> for ViewResultDto {
         Self {
             ids: value.ids.into_iter().map(|id| id.to_string()).collect(),
             count: value.count,
+            groups: value.groups.into_iter().map(Into::into).collect(),
+            zone: value.zone,
+        }
+    }
+}
+
+impl From<ViewGroup> for ViewGroupDto {
+    fn from(value: ViewGroup) -> Self {
+        let empty = GroupKeyDto {
+            kind: GroupKeyKindDto::Empty,
+            option_id: None,
+            flag: None,
+            days: None,
+        };
+        let key = match value.key {
+            GroupKey::Option(id) => GroupKeyDto {
+                kind: GroupKeyKindDto::Option,
+                option_id: Some(id.to_string()),
+                ..empty
+            },
+            GroupKey::Boolean(flag) => GroupKeyDto {
+                kind: GroupKeyKindDto::Boolean,
+                flag: Some(flag),
+                ..empty
+            },
+            GroupKey::Date(days) => GroupKeyDto {
+                kind: GroupKeyKindDto::Date,
+                days: Some(days),
+                ..empty
+            },
+            GroupKey::Empty => empty,
+        };
+        Self {
+            key,
+            label_hint: value.label_hint,
+            count: value.count,
+            start: value.start,
+            len: value.len,
         }
     }
 }
@@ -310,6 +420,7 @@ mod tests {
                 sort_to_dto(created(SortDirection::Ascending, NullOrder::First)),
                 sort_to_dto(created(SortDirection::Descending, NullOrder::First)),
             ],
+            grouping: None,
         };
         assert!(
             dto.sorting
@@ -333,7 +444,10 @@ mod tests {
         let body = ViewBody {
             filter: Some(Expression::RecordCreatedAt),
             sorting: vec![created(SortDirection::Ascending, NullOrder::Last); 4],
-            grouping: Some(app_core::ViewGrouping(serde_json::json!({}))),
+            grouping: Some(app_core::ViewGrouping {
+                field: app_core::FieldId::new(),
+                period: None,
+            }),
         };
         let error: BridgeError =
             AppError::Domain(validate_view("", &body, &schema, &[]).unwrap_err()).into();

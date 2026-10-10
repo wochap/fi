@@ -393,7 +393,7 @@ final class FakeCollectionBridge implements CollectionBridge {
   /// new ids (widgets follow their copied query); records are never copied. Expression bodies
   /// are copied as-is, which is enough for the UI this fake drives.
   @override
-  Future<String> cloneCollection(String sourceId, String name) async {
+  Future<CloneOutcomeDto> cloneCollection(String sourceId, String name) async {
     _fail();
     final source = schemas[sourceId]!;
     var id = 'collection-${_next++}';
@@ -471,7 +471,13 @@ final class FakeCollectionBridge implements CollectionBridge {
           ),
     ];
     changed(id);
-    return id;
+    return CloneOutcomeDto(
+      collectionId: id,
+      skippedViews: [
+        for (final view in views[sourceId] ?? const <ViewDto>[])
+          if (brokenViews.containsKey(view.id)) view.name,
+      ],
+    );
   }
 
   @override
@@ -482,17 +488,35 @@ final class FakeCollectionBridge implements CollectionBridge {
   }
 
   @override
-  Future<String> exportCollectionsJson(List<String> ids) async {
+  Future<JsonExportDto> exportCollectionsJson(List<String> ids) async {
     _fail();
     exports.add('json ${ids.join(',')}');
-    return 'json of ${ids.join(',')}';
+    return _jsonExport('json of ${ids.join(',')}', ids);
   }
 
   @override
-  Future<String> exportAllJson() async {
+  Future<JsonExportDto> exportAllJson() async {
     _fail();
     exports.add('json all');
-    return 'json of all';
+    return _jsonExport('json of all', [
+      for (final item in collections) item.id,
+    ]);
+  }
+
+  /// Saved views go into an export unless broken, which are named instead.
+  JsonExportDto _jsonExport(String text, List<String> ids) {
+    final saved = [for (final id in ids) ...?views[id]];
+    return JsonExportDto(
+      text: text,
+      recordCount: ids.fold(0, (sum, id) => sum + (records[id]?.length ?? 0)),
+      viewsWritten: saved
+          .where((view) => !brokenViews.containsKey(view.id))
+          .length,
+      viewsOmitted: [
+        for (final view in saved)
+          if (brokenViews.containsKey(view.id)) view.name,
+      ],
+    );
   }
 
   /// Adds one empty record per non-blank line after the header, unless [nextImportOutcome]
@@ -1359,6 +1383,9 @@ final class FakeCollectionBridge implements CollectionBridge {
   int viewExecutions = 0;
   final List<ViewBodyDto> executedBodies = [];
 
+  /// The zone reported with every view result.
+  String viewZone = 'UTC';
+
   void changedViews([String? id]) => dataController.add(
     DataChangedDto(
       kinds: const [DomainKindDto.views],
@@ -1416,6 +1443,7 @@ final class FakeCollectionBridge implements CollectionBridge {
     }
     return ViewBodyDto(
       filter: body.filter,
+      grouping: body.grouping,
       sorting: [
         for (final clause in body.sorting)
           SortClauseDto(
@@ -1454,10 +1482,108 @@ final class FakeCollectionBridge implements CollectionBridge {
       };
       return order != 0 ? order : a.id.compareTo(b.id);
     });
+    final (ids, groups) = _groupView(collectionId, body, matching);
     return ViewResultDto(
-      ids: [for (final record in matching) record.id],
+      ids: ids,
       count: matching.length,
+      groups: groups,
+      zone: viewZone,
     );
+  }
+
+  /// Mirrors the core's grouping: a stable partition in view order; options by stored order,
+  /// Yes before No, dates (in UTC) newest first, the no-value group last. Sort clauses on the
+  /// grouping field are not mirrored.
+  (List<String>, List<ViewGroupDto>) _groupView(
+    String collectionId,
+    ViewBodyDto body,
+    List<RecordDto> matching,
+  ) {
+    final grouping = body.grouping;
+    final field = schemas[collectionId]?.fields
+        .where((field) => field.id == grouping?.fieldId)
+        .firstOrNull;
+    if (grouping == null || field == null) {
+      return ([for (final record in matching) record.id], const []);
+    }
+    const empty = GroupKeyDto(kind: GroupKeyKindDto.empty);
+    GroupKeyDto keyOf(RecordDto record) {
+      final value = record.values
+          .where((item) => item.fieldId == field.id)
+          .firstOrNull
+          ?.value;
+      if (value == null) return empty;
+      switch (value.kind) {
+        case FieldValueKindDto.enum_:
+          return GroupKeyDto(
+            kind: GroupKeyKindDto.option,
+            optionId: value.textValue,
+          );
+        case FieldValueKindDto.boolean:
+          return GroupKeyDto(
+            kind: GroupKeyKindDto.boolean,
+            flag: value.booleanValue,
+          );
+        case FieldValueKindDto.date || FieldValueKindDto.dateTime:
+          final raw = value.integerValue ?? 0;
+          var day = value.kind == FieldValueKindDto.date
+              ? DateTime.utc(1970).add(Duration(days: raw))
+              : DateTime.fromMillisecondsSinceEpoch(raw, isUtc: true);
+          day = DateTime.utc(day.year, day.month, day.day);
+          day = switch (grouping.period) {
+            GroupPeriodDto.week => day.subtract(
+              Duration(days: day.weekday - 1),
+            ),
+            GroupPeriodDto.month => DateTime.utc(day.year, day.month),
+            _ => day,
+          };
+          return GroupKeyDto(
+            kind: GroupKeyKindDto.date,
+            days: day.difference(DateTime.utc(1970)).inDays,
+          );
+        default:
+          return empty;
+      }
+    }
+
+    final members = <GroupKeyDto, List<String>>{};
+    for (final record in matching) {
+      members.putIfAbsent(keyOf(record), () => []).add(record.id);
+    }
+    int rank(GroupKeyDto key) => switch (key.kind) {
+      GroupKeyKindDto.empty => 1 << 40,
+      GroupKeyKindDto.option =>
+        field.enumOptions
+                .where((option) => option.id == key.optionId)
+                .firstOrNull
+                ?.order ??
+            (1 << 39),
+      GroupKeyKindDto.boolean => key.flag == true ? 0 : 1,
+      GroupKeyKindDto.date => -(key.days ?? 0),
+    };
+    final keys = members.keys.toList()
+      ..sort((a, b) => rank(a).compareTo(rank(b)));
+    final ids = <String>[];
+    final groups = <ViewGroupDto>[];
+    for (final key in keys) {
+      final slice = members[key]!;
+      groups.add(
+        ViewGroupDto(
+          key: key,
+          labelHint: key.kind == GroupKeyKindDto.option
+              ? field.enumOptions
+                    .where((option) => option.id == key.optionId)
+                    .firstOrNull
+                    ?.label
+              : null,
+          count: slice.length,
+          start: ids.length,
+          len: slice.length,
+        ),
+      );
+      ids.addAll(slice);
+    }
+    return (ids, groups);
   }
 
   List<ViewDto> _savedViews(String collectionId) =>

@@ -34,7 +34,10 @@ use crate::{
     },
     hlc::{HlcNodeId, HybridLogicalClock, SystemWallTime, WallTime},
     identity::{DeviceId, DeviceIdentity, IdentityError, SecureKeyStore},
-    import_export::{Envelope, ExportedCollection, ImportAbort, ImportOutcome, prepare_import},
+    import_export::{
+        CloneOutcome, Envelope, ExportedCollection, ImportAbort, ImportOutcome, JsonExport,
+        prepare_import,
+    },
     pairing::{
         PairingCandidate, PairingEvent, PairingSessionId, PairingState, ProvisioningData,
         RootCompatibility, RootState,
@@ -1685,13 +1688,25 @@ impl AppCore {
         .await
     }
     /// Copies the active structure of `source_id` (fields, enum options, computed fields,
-    /// queries, widgets; never records) into a new collection named `name`, atomically.
+    /// queries, widgets, views; never records) into a new collection named `name`, atomically.
+    /// Broken views are skipped and named in the outcome.
     pub async fn clone_collection(
         &self,
         source_id: CollectionSchemaId,
         name: String,
-    ) -> Result<CollectionSchemaId> {
+    ) -> Result<CloneOutcome> {
         let id = CollectionSchemaId::new();
+        let skipped_views = match self.read_model.schema(source_id)? {
+            Some(schema) => {
+                crate::view::portable_views(
+                    &schema,
+                    &self.read_model.computed_fields(source_id)?,
+                    &self.read_model.views(source_id)?,
+                )
+                .1
+            }
+            None => Vec::new(),
+        };
         self.generic(
             GenericCommand::CloneCollection {
                 source_id,
@@ -1705,11 +1720,12 @@ impl AppCore {
                 DomainKind::ComputedFields,
                 DomainKind::Queries,
                 DomainKind::Widgets,
+                DomainKind::Views,
             ],
             vec![id],
         )
         .await?;
-        Ok(id)
+        Ok(CloneOutcome { id, skipped_views })
     }
     pub async fn delete_collection(&self, id: CollectionSchemaId) -> Result<()> {
         self.generic(
@@ -2292,18 +2308,28 @@ impl AppCore {
     }
 
     /// The active data of each collection as one `fi-collection` JSON document, in the given
-    /// order. Tombstones and HLC stamps are never exported.
-    pub fn export_collections_json(&self, ids: Vec<CollectionSchemaId>) -> Result<String> {
+    /// order. Tombstones and HLC stamps are never exported; broken views are left out and named.
+    pub fn export_collections_json(&self, ids: Vec<CollectionSchemaId>) -> Result<JsonExport> {
         ensure_query_ready(self.lifecycle_state())?;
+        let mut omitted = Vec::new();
         let collections = ids
             .into_iter()
-            .map(|id| self.exported_collection(id))
+            .map(|id| {
+                let (entry, left_out) = self.exported_collection(id)?;
+                omitted.extend(left_out);
+                Ok(entry)
+            })
             .collect::<Result<Vec<_>>>()?;
-        Ok(Envelope::new(collections).to_json()?)
+        Ok(JsonExport {
+            records: collections.iter().map(|entry| entry.records.len()).sum(),
+            views_written: collections.iter().map(|entry| entry.views.len()).sum(),
+            views_omitted: omitted,
+            text: Envelope::new(collections).to_json()?,
+        })
     }
 
     /// Every active collection, in list order, as one JSON document.
-    pub fn export_all_json(&self) -> Result<String> {
+    pub fn export_all_json(&self) -> Result<JsonExport> {
         let ids = self
             .collections()?
             .into_iter()
@@ -2312,7 +2338,10 @@ impl AppCore {
         self.export_collections_json(ids)
     }
 
-    fn exported_collection(&self, id: CollectionSchemaId) -> Result<ExportedCollection> {
+    fn exported_collection(
+        &self,
+        id: CollectionSchemaId,
+    ) -> Result<(ExportedCollection, Vec<String>)> {
         let schema = self.active_schema(id)?;
         let records: Vec<_> = self
             .read_model
@@ -2320,12 +2349,19 @@ impl AppCore {
             .into_iter()
             .map(|view| view.record)
             .collect();
-        Ok(ExportedCollection::from_active(
-            &schema,
-            &self.read_model.computed_fields(id)?,
-            &self.read_model.query_definitions(id)?,
-            &self.read_model.widgets(id)?,
-            &records,
+        let computed = self.read_model.computed_fields(id)?;
+        let (views, omitted) =
+            crate::view::portable_views(&schema, &computed, &self.read_model.views(id)?);
+        Ok((
+            ExportedCollection::from_active(
+                &schema,
+                &computed,
+                &self.read_model.query_definitions(id)?,
+                &self.read_model.widgets(id)?,
+                &views,
+                &records,
+            ),
+            omitted,
         ))
     }
 
@@ -2435,6 +2471,7 @@ impl AppCore {
                     DomainKind::ComputedFields,
                     DomainKind::Queries,
                     DomainKind::Widgets,
+                    DomainKind::Views,
                 ],
                 ids.clone(),
             )

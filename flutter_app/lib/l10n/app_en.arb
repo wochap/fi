@@ -5326,5 +5326,187 @@
   "viewShowAll": "Show all",
   "@viewShowAll": {
     "description": "Empty view action"
+  },
+  "viewGroupLabel": "Group:",
+  "@viewGroupLabel": {
+    "description": "View line: grouping prefix"
+  },
+  "viewEditorGroup": "Group by",
+  "@viewEditorGroup": {
+    "description": "Edit-view editor: grouping section"
+  },
+  "viewEditorGroupNone": "None",
+  "@viewEditorGroupNone": {
+    "description": "Group by picker: no grouping"
+  },
+  "viewEditorGroupField": "Field",
+  "@viewEditorGroupField": {
+    "description": "Group by picker label"
+  },
+  "viewEditorGroupPeriod": "Period",
+  "@viewEditorGroupPeriod": {
+    "description": "Group by period picker label"
+  },
+  "viewPeriodDay": "day",
+  "@viewPeriodDay": {
+    "description": "Grouping period word"
+  },
+  "viewPeriodWeek": "week",
+  "@viewPeriodWeek": {
+    "description": "Grouping period word"
+  },
+  "viewPeriodMonth": "month",
+  "@viewPeriodMonth": {
+    "description": "Grouping period word"
+  },
+  "viewGroupWeekOf": "Week of {date}",
+  "@viewGroupWeekOf": {
+    "description": "Week group header",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "viewGroupNoValue": "No {field}",
+  "@viewGroupNoValue": {
+    "description": "Header of the group of records with no value",
+    "placeholders": {
+      "field": {
+        "type": "String"
+      }
+    }
+  },
+  "viewGroupHeader": "{label} · {count}",
+  "@viewGroupHeader": {
+    "description": "Group header: label and record count",
+    "placeholders": {
+      "label": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "viewGroupSemantics": "{label}, {count, plural, =1{1 record} other{{count} records}}",
+  "@viewGroupSemantics": {
+    "description": "Group header semantics label",
+    "placeholders": {
+      "label": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "viewSortHeaderAscending": "sorted ascending",
+  "@viewSortHeaderAscending": {
+    "description": "Sortable column header semantics"
+  },
+  "viewSortHeaderDescending": "sorted descending",
+  "@viewSortHeaderDescending": {
+    "description": "Sortable column header semantics"
+  },
+  "viewSortHeaderKey": "sort key {position}",
+  "@viewSortHeaderKey": {
+    "description": "Sortable column header semantics: position of a sort key after the first",
+    "placeholders": {
+      "position": {
+        "type": "int"
+      }
+    }
+  },
+  "viewSortHeaderHint": "Sort by {field}",
+  "@viewSortHeaderHint": {
+    "description": "Sortable column header tooltip",
+    "placeholders": {
+      "field": {
+        "type": "String"
+      }
+    }
+  },
+  "recordIncompleteHidden": "{count, plural, =1{1 more in other views} other{{count} more in other views}}",
+  "@recordIncompleteHidden": {
+    "description": "Incomplete line: incomplete records the selected view hides",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "viewShowAction": "Show",
+  "@viewShowAction": {
+    "description": "Action that selects All to show hidden records"
+  },
+  "recordsClonedHiddenOne": "Cloned · hidden by {view}",
+  "@recordsClonedHiddenOne": {
+    "description": "Feedback: the one cloned record is hidden by the selected view",
+    "placeholders": {
+      "view": {
+        "type": "String"
+      }
+    }
+  },
+  "recordsClonedHiddenAll": "Cloned {count} records · hidden by {view}",
+  "@recordsClonedHiddenAll": {
+    "description": "Feedback: every cloned record is hidden by the selected view",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "view": {
+        "type": "String"
+      }
+    }
+  },
+  "recordsClonedHiddenSome": "Cloned {count} records · {hidden} hidden by {view}",
+  "@recordsClonedHiddenSome": {
+    "description": "Feedback: some cloned records are hidden by the selected view",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "hidden": {
+        "type": "int"
+      },
+      "view": {
+        "type": "String"
+      }
+    }
+  },
+  "recordsSavedHidden": "Saved · hidden by {view}",
+  "@recordsSavedHidden": {
+    "description": "Feedback: a new record is hidden by the selected view",
+    "placeholders": {
+      "view": {
+        "type": "String"
+      }
+    }
+  },
+  "collectionsExportedJson": "Exported {records, plural, =1{1 record} other{{records} records}} and {views, plural, =1{1 view} other{{views} views}}.",
+  "@collectionsExportedJson": {
+    "description": "JSON export outcome",
+    "placeholders": {
+      "records": {
+        "type": "int"
+      },
+      "views": {
+        "type": "int"
+      }
+    }
+  },
+  "collectionsExportViewsOmitted": "{count, plural, =1{1 broken view wasn't included: {names}.} other{{count} broken views weren't included: {names}.}}",
+  "@collectionsExportViewsOmitted": {
+    "description": "JSON export outcome: broken views left out",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "names": {
+        "type": "String"
+      }
+    }
   }
 }

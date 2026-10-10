@@ -86,7 +86,10 @@ void main() {
     await _choose(tester, 'Export CSV');
     await _choose(tester, 'Export JSON');
     expect(bridge.exports, ['csv $_collection', 'json $_collection']);
-    expect(find.text('Exported to Headaches.csv'), findsOneWidget);
+    expect(
+      find.textContaining(RegExp(r'^Exported \d+ records? and 0 views\.$')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('Import CSV… imports into the collection', (tester) async {

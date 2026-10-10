@@ -19,6 +19,7 @@ ed25519-dalek.workspace = true
 hex.workspace = true
 hkdf.workspace = true
 hmac.workspace = true
+iana-time-zone.workspace = true
 mdns-sd.workspace = true
 if-addrs.workspace = true
 quinn.workspace = true

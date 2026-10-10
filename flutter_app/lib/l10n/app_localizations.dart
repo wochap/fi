@@ -6217,6 +6217,150 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Show all'**
   String get viewShowAll;
+
+  /// View line: grouping prefix
+  ///
+  /// In en, this message translates to:
+  /// **'Group:'**
+  String get viewGroupLabel;
+
+  /// Edit-view editor: grouping section
+  ///
+  /// In en, this message translates to:
+  /// **'Group by'**
+  String get viewEditorGroup;
+
+  /// Group by picker: no grouping
+  ///
+  /// In en, this message translates to:
+  /// **'None'**
+  String get viewEditorGroupNone;
+
+  /// Group by picker label
+  ///
+  /// In en, this message translates to:
+  /// **'Field'**
+  String get viewEditorGroupField;
+
+  /// Group by period picker label
+  ///
+  /// In en, this message translates to:
+  /// **'Period'**
+  String get viewEditorGroupPeriod;
+
+  /// Grouping period word
+  ///
+  /// In en, this message translates to:
+  /// **'day'**
+  String get viewPeriodDay;
+
+  /// Grouping period word
+  ///
+  /// In en, this message translates to:
+  /// **'week'**
+  String get viewPeriodWeek;
+
+  /// Grouping period word
+  ///
+  /// In en, this message translates to:
+  /// **'month'**
+  String get viewPeriodMonth;
+
+  /// Week group header
+  ///
+  /// In en, this message translates to:
+  /// **'Week of {date}'**
+  String viewGroupWeekOf(String date);
+
+  /// Header of the group of records with no value
+  ///
+  /// In en, this message translates to:
+  /// **'No {field}'**
+  String viewGroupNoValue(String field);
+
+  /// Group header: label and record count
+  ///
+  /// In en, this message translates to:
+  /// **'{label} · {count}'**
+  String viewGroupHeader(String label, int count);
+
+  /// Group header semantics label
+  ///
+  /// In en, this message translates to:
+  /// **'{label}, {count, plural, =1{1 record} other{{count} records}}'**
+  String viewGroupSemantics(String label, int count);
+
+  /// Sortable column header semantics
+  ///
+  /// In en, this message translates to:
+  /// **'sorted ascending'**
+  String get viewSortHeaderAscending;
+
+  /// Sortable column header semantics
+  ///
+  /// In en, this message translates to:
+  /// **'sorted descending'**
+  String get viewSortHeaderDescending;
+
+  /// Sortable column header semantics: position of a sort key after the first
+  ///
+  /// In en, this message translates to:
+  /// **'sort key {position}'**
+  String viewSortHeaderKey(int position);
+
+  /// Sortable column header tooltip
+  ///
+  /// In en, this message translates to:
+  /// **'Sort by {field}'**
+  String viewSortHeaderHint(String field);
+
+  /// Incomplete line: incomplete records the selected view hides
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 more in other views} other{{count} more in other views}}'**
+  String recordIncompleteHidden(int count);
+
+  /// Action that selects All to show hidden records
+  ///
+  /// In en, this message translates to:
+  /// **'Show'**
+  String get viewShowAction;
+
+  /// Feedback: the one cloned record is hidden by the selected view
+  ///
+  /// In en, this message translates to:
+  /// **'Cloned · hidden by {view}'**
+  String recordsClonedHiddenOne(String view);
+
+  /// Feedback: every cloned record is hidden by the selected view
+  ///
+  /// In en, this message translates to:
+  /// **'Cloned {count} records · hidden by {view}'**
+  String recordsClonedHiddenAll(int count, String view);
+
+  /// Feedback: some cloned records are hidden by the selected view
+  ///
+  /// In en, this message translates to:
+  /// **'Cloned {count} records · {hidden} hidden by {view}'**
+  String recordsClonedHiddenSome(int count, int hidden, String view);
+
+  /// Feedback: a new record is hidden by the selected view
+  ///
+  /// In en, this message translates to:
+  /// **'Saved · hidden by {view}'**
+  String recordsSavedHidden(String view);
+
+  /// JSON export outcome
+  ///
+  /// In en, this message translates to:
+  /// **'Exported {records, plural, =1{1 record} other{{records} records}} and {views, plural, =1{1 view} other{{views} views}}.'**
+  String collectionsExportedJson(int records, int views);
+
+  /// JSON export outcome: broken views left out
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 broken view wasn\'t included: {names}.} other{{count} broken views weren\'t included: {names}.}}'**
+  String collectionsExportViewsOmitted(int count, String names);
 }
 
 class _AppLocalizationsDelegate

@@ -201,10 +201,9 @@ final class FieldRendererRegistry {
       FieldValueKindDto.date => _dateFromDays(
         value.integerValue ?? 0,
       ).toIso8601String().split('T').first,
-      FieldValueKindDto.dateTime => DateTime.fromMillisecondsSinceEpoch(
+      FieldValueKindDto.dateTime => RecordDateZone.of(
         value.integerValue ?? 0,
-        isUtc: true,
-      ).toLocal().toString(),
+      ).toString(),
       FieldValueKindDto.duration => '${value.integerValue ?? 0} ms',
       FieldValueKindDto.integer => '${value.integerValue ?? 0}',
     };

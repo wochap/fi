@@ -3965,4 +3965,132 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get viewShowAll => 'Mostrar todos';
+
+  @override
+  String get viewGroupLabel => 'Agrupar:';
+
+  @override
+  String get viewEditorGroup => 'Agrupar por';
+
+  @override
+  String get viewEditorGroupNone => 'Ninguno';
+
+  @override
+  String get viewEditorGroupField => 'Campo';
+
+  @override
+  String get viewEditorGroupPeriod => 'Periodo';
+
+  @override
+  String get viewPeriodDay => 'día';
+
+  @override
+  String get viewPeriodWeek => 'semana';
+
+  @override
+  String get viewPeriodMonth => 'mes';
+
+  @override
+  String viewGroupWeekOf(String date) {
+    return 'Semana del $date';
+  }
+
+  @override
+  String viewGroupNoValue(String field) {
+    return 'Sin $field';
+  }
+
+  @override
+  String viewGroupHeader(String label, int count) {
+    return '$label · $count';
+  }
+
+  @override
+  String viewGroupSemantics(String label, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count registros',
+      one: '1 registro',
+    );
+    return '$label, $_temp0';
+  }
+
+  @override
+  String get viewSortHeaderAscending => 'orden ascendente';
+
+  @override
+  String get viewSortHeaderDescending => 'orden descendente';
+
+  @override
+  String viewSortHeaderKey(int position) {
+    return 'clave de orden $position';
+  }
+
+  @override
+  String viewSortHeaderHint(String field) {
+    return 'Ordenar por $field';
+  }
+
+  @override
+  String recordIncompleteHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count más en otras vistas',
+      one: '1 más en otras vistas',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get viewShowAction => 'Mostrar';
+
+  @override
+  String recordsClonedHiddenOne(String view) {
+    return 'Clonado · oculto por $view';
+  }
+
+  @override
+  String recordsClonedHiddenAll(int count, String view) {
+    return '$count registros clonados · ocultos por $view';
+  }
+
+  @override
+  String recordsClonedHiddenSome(int count, int hidden, String view) {
+    return '$count registros clonados · $hidden ocultos por $view';
+  }
+
+  @override
+  String recordsSavedHidden(String view) {
+    return 'Guardado · oculto por $view';
+  }
+
+  @override
+  String collectionsExportedJson(int records, int views) {
+    String _temp0 = intl.Intl.pluralLogic(
+      records,
+      locale: localeName,
+      other: 'Se exportaron $records registros',
+      one: 'Se exportó 1 registro',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      views,
+      locale: localeName,
+      other: '$views vistas',
+      one: '1 vista',
+    );
+    return '$_temp0 y $_temp1.';
+  }
+
+  @override
+  String collectionsExportViewsOmitted(int count, String names) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'No se incluyeron $count vistas rotas: $names.',
+      one: 'No se incluyó 1 vista rota: $names.',
+    );
+    return '$_temp0';
+  }
 }

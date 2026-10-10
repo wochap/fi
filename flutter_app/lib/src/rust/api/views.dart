@@ -8,7 +8,7 @@ import 'models.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `saved_id`, `saved_ids`, `sort_from_dto`, `sort_to_dto`, `validation`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `try_from`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `try_from`
 
 Future<List<ViewDto>> listViews({
   required String collectionId,
@@ -88,15 +88,45 @@ Future<ViewResultDto> executeViewBody({
   nowUtcMs: nowUtcMs,
 );
 
-/// A view body: an optional Boolean filter and up to three sort clauses.
+/// The value shared by a group: `option_id` for Option, `flag` for Boolean, `days` (first day of
+/// the bucket, days since 1970-01-01 in the result's zone) for Date.
+class GroupKeyDto {
+  final GroupKeyKindDto kind;
+  final String? optionId;
+  final bool? flag;
+  final int? days;
+
+  const GroupKeyDto({required this.kind, this.optionId, this.flag, this.days});
+
+  @override
+  int get hashCode =>
+      kind.hashCode ^ optionId.hashCode ^ flag.hashCode ^ days.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is GroupKeyDto &&
+          runtimeType == other.runtimeType &&
+          kind == other.kind &&
+          optionId == other.optionId &&
+          flag == other.flag &&
+          days == other.days;
+}
+
+enum GroupKeyKindDto { option, boolean, date, empty }
+
+enum GroupPeriodDto { day, week, month }
+
+/// A view body: an optional Boolean filter, up to three sort clauses and an optional grouping.
 class ViewBodyDto {
   final ExpressionDto? filter;
   final List<SortClauseDto> sorting;
+  final ViewGroupingDto? grouping;
 
-  const ViewBodyDto({this.filter, required this.sorting});
+  const ViewBodyDto({this.filter, required this.sorting, this.grouping});
 
   @override
-  int get hashCode => filter.hashCode ^ sorting.hashCode;
+  int get hashCode => filter.hashCode ^ sorting.hashCode ^ grouping.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -104,7 +134,8 @@ class ViewBodyDto {
       other is ViewBodyDto &&
           runtimeType == other.runtimeType &&
           filter == other.filter &&
-          sorting == other.sorting;
+          sorting == other.sorting &&
+          grouping == other.grouping;
 }
 
 /// One entry of a collection's view listing. All comes first with id `"all"`.
@@ -159,14 +190,81 @@ class ViewDto {
           effectiveSort == other.effectiveSort;
 }
 
+/// One group: its key, the option label for option groups, and its slice of the result ids.
+class ViewGroupDto {
+  final GroupKeyDto key;
+  final String? labelHint;
+  final int count;
+  final int start;
+  final int len;
+
+  const ViewGroupDto({
+    required this.key,
+    this.labelHint,
+    required this.count,
+    required this.start,
+    required this.len,
+  });
+
+  @override
+  int get hashCode =>
+      key.hashCode ^
+      labelHint.hashCode ^
+      count.hashCode ^
+      start.hashCode ^
+      len.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ViewGroupDto &&
+          runtimeType == other.runtimeType &&
+          key == other.key &&
+          labelHint == other.labelHint &&
+          count == other.count &&
+          start == other.start &&
+          len == other.len;
+}
+
+/// Groups by one single Choice, yes/no, Date or DateTime field; dates carry a period.
+class ViewGroupingDto {
+  final String fieldId;
+  final GroupPeriodDto? period;
+
+  const ViewGroupingDto({required this.fieldId, this.period});
+
+  @override
+  int get hashCode => fieldId.hashCode ^ period.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ViewGroupingDto &&
+          runtimeType == other.runtimeType &&
+          fieldId == other.fieldId &&
+          period == other.period;
+}
+
 class ViewResultDto {
   final List<String> ids;
   final int count;
 
-  const ViewResultDto({required this.ids, required this.count});
+  /// Empty unless the view groups; the slices cover `ids` in order.
+  final List<ViewGroupDto> groups;
+
+  /// The IANA zone used for date grouping; record dates are shown in it.
+  final String zone;
+
+  const ViewResultDto({
+    required this.ids,
+    required this.count,
+    required this.groups,
+    required this.zone,
+  });
 
   @override
-  int get hashCode => ids.hashCode ^ count.hashCode;
+  int get hashCode =>
+      ids.hashCode ^ count.hashCode ^ groups.hashCode ^ zone.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -174,5 +272,7 @@ class ViewResultDto {
       other is ViewResultDto &&
           runtimeType == other.runtimeType &&
           ids == other.ids &&
-          count == other.count;
+          count == other.count &&
+          groups == other.groups &&
+          zone == other.zone;
 }

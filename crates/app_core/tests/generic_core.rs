@@ -1189,7 +1189,8 @@ async fn clone_copies_structure_without_records_and_emits_one_event() {
     let clone = app
         .clone_collection(source.collection, "  Migraine ".into())
         .await
-        .unwrap();
+        .unwrap()
+        .id;
     let event = events.recv().await.unwrap();
     assert_eq!(event.collection_ids, vec![clone]);
     assert!(
@@ -1331,7 +1332,8 @@ async fn in_memory_two_device_clone_sync() {
     let clone = a
         .clone_collection(source.collection, "Migraine".into())
         .await
-        .unwrap();
+        .unwrap()
+        .id;
     a_network.connect().await;
     drive_memory(&a_network, &b_network).await;
     b.join_existing(root).await.unwrap();

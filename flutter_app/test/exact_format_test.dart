@@ -30,4 +30,19 @@ void main() {
     expect(formatScaled(1250, 2), '12.50');
     expect(parseScaled('12,50', 2), isNull);
   });
+
+  test('record dates follow the zone a view execution reported', () {
+    Intl.defaultLocale = 'en';
+    addTearDown(() => RecordDateZone.utc = false);
+    // 2026-10-01 03:30 UTC: the group header says 1 October when Rust fell back to UTC.
+    const instant = 1790825400000;
+    RecordDateZone.follow('UTC');
+    expect(formatDateTimeHuman(instant), 'Oct 1, 2026 · 03:30');
+    RecordDateZone.follow('America/Bogota');
+    expect(RecordDateZone.utc, isFalse);
+    expect(
+      RecordDateZone.of(instant),
+      DateTime.fromMillisecondsSinceEpoch(instant, isUtc: true).toLocal(),
+    );
+  });
 }

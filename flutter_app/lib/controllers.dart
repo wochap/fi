@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:fi/bridge/collection_bridge.dart';
+import 'package:fi/exact_format.dart';
 import 'package:fi/file_dialogs.dart';
 import 'package:fi/l10n/app_localizations.dart';
 import 'package:fi/l10n/error_text.dart';
@@ -274,6 +275,10 @@ final class CollectionsController extends ChangeNotifier {
   /// The result of executing the active body; its ids are what the view shows.
   ViewResultDto? viewResult;
 
+  /// The selected view's groups in order, each with the records it shows; empty unless the
+  /// active body groups.
+  List<({ViewGroupDto group, List<RecordDto> records})> recordGroups = const [];
+
   /// Why the selected saved view is broken, or null. While set, [records] is All's order.
   String? brokenView;
 
@@ -436,6 +441,7 @@ final class CollectionsController extends ChangeNotifier {
       } else {
         schema = null;
         records = const [];
+        recordGroups = const [];
         allRecords = const [];
         views = const [];
         viewResult = null;
@@ -629,8 +635,19 @@ final class CollectionsController extends ChangeNotifier {
     }
     brokenView = broken;
     viewResult = result;
+    RecordDateZone.follow(result.zone);
     final byId = {for (final record in allRecords) record.id: record};
     records = [for (final id in result.ids) ?byId[id]];
+    recordGroups = [
+      for (final group in result.groups)
+        (
+          group: group,
+          records: [
+            for (final id in result.ids.skip(group.start).take(group.len))
+              ?byId[id],
+          ],
+        ),
+    ];
     _pruneSelection();
     if (remembered != (activeViewId, _draft)) _rememberView(collectionId);
   }
@@ -698,6 +715,7 @@ final class CollectionsController extends ChangeNotifier {
     await setDraft(
       ViewBodyDto(
         filter: body.filter,
+        grouping: body.grouping,
         sorting: [
           SortClauseDto(
             expression: first.expression,
@@ -710,6 +728,86 @@ final class CollectionsController extends ChangeNotifier {
         ],
       ),
     );
+  }
+
+  /// A table header click (D4): the primary key flips; any other column becomes the only sort
+  /// key with its type's default direction. Writes the draft like any other change.
+  Future<void> sortByColumn(FieldDefinitionDto field) async {
+    final body = activeBody;
+    final sorting = body.sorting.isNotEmpty
+        ? body.sorting
+        : (activeView?.effectiveSort ?? allViewBody.sorting);
+    final primary = sorting.firstOrNull;
+    if (primary != null && sortFieldId(primary) == field.id) {
+      await flipPrimarySort();
+      return;
+    }
+    await setDraft(
+      ViewBodyDto(
+        filter: body.filter,
+        grouping: body.grouping,
+        sorting: [
+          SortClauseDto(
+            expression: ExpressionDto(
+              root: 0,
+              nodes: [
+                ExpressionNodeDto(
+                  kind: ExpressionKindDto.field,
+                  field: FieldReferenceDto(
+                    kind: FieldReferenceKindDto.source,
+                    id: field.id,
+                  ),
+                ),
+              ],
+            ),
+            direction: defaultSortDirection(field.fieldType.kind),
+            nullOrder: NullOrderDto.last,
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// The sort the list follows: the draft's, else the selected view's effective sort.
+  List<SortClauseDto> get effectiveSorting {
+    if (isModified || activeView == null) {
+      final sorting = activeBody.sorting;
+      return sorting.isNotEmpty ? sorting : allViewBody.sorting;
+    }
+    return activeView!.effectiveSort;
+  }
+
+  /// Collapsed group keys per `collection/view`, kept in memory until the app closes.
+  final Map<String, Set<String>> _collapsedGroups = {};
+
+  Set<String> get _collapsed => _collapsedGroups.putIfAbsent(
+    '$selectedCollectionId/$activeViewId',
+    () => <String>{},
+  );
+
+  bool isGroupCollapsed(GroupKeyDto key) =>
+      _collapsed.contains(groupKeyId(key));
+
+  void toggleGroup(GroupKeyDto key) {
+    final id = groupKeyId(key);
+    if (!_collapsed.remove(id)) _collapsed.add(id);
+    notifyListeners();
+  }
+
+  /// Incomplete records the selected view shows.
+  int get visibleIncomplete => records.where((record) => !record.valid).length;
+
+  /// Incomplete records of the collection the selected view hides.
+  int get hiddenIncomplete =>
+      allRecords.where((record) => !record.valid).length - visibleIncomplete;
+
+  /// The ids of [created] the selected view doesn't show.
+  List<String> hiddenByView(Iterable<String> created) {
+    final shown = {for (final record in records) record.id};
+    return [
+      for (final id in created)
+        if (!shown.contains(id)) id,
+    ];
   }
 
   /// Discards the unsaved changes.
@@ -849,11 +947,12 @@ final class CollectionsController extends ChangeNotifier {
     await refresh();
   }
 
-  /// Duplicates [sourceId]'s structure under [name]; the selection stays where it is.
-  Future<String> cloneCollection(String sourceId, String name) async {
-    final id = await bridge.cloneCollection(sourceId, name);
+  /// Duplicates [sourceId]'s structure and views under [name]; the selection stays where it
+  /// is. Returns the new collection id and the names of the broken views that were skipped.
+  Future<CloneOutcomeDto> cloneCollection(String sourceId, String name) async {
+    final outcome = await bridge.cloneCollection(sourceId, name);
     await refresh();
-    return id;
+    return outcome;
   }
 
   /// Exports [collection]'s records as CSV to a file the user picks. Returns the written file
@@ -868,28 +967,32 @@ final class CollectionsController extends ChangeNotifier {
     );
   }
 
-  /// Exports one or several collections as one JSON document; see [exportCsv].
-  Future<String?> exportJson(List<CollectionDto> collections) async {
-    final text = await bridge.exportCollectionsJson([
+  /// Exports one or several collections as one JSON document; see [exportCsv]. Returns what
+  /// went into the document (records, views, broken views left out), or null when the dialog
+  /// was dismissed.
+  Future<JsonExportDto?> exportJson(List<CollectionDto> collections) async {
+    final export = await bridge.exportCollectionsJson([
       for (final item in collections) item.id,
     ]);
-    return fileDialogs.saveText(
+    final name = await fileDialogs.saveText(
       suggestedName: collections.length == 1
           ? '${exportFileStem(collections.single.name)}.json'
           : 'collections.json',
       kind: FileKind.json,
-      text: text,
+      text: export.text,
     );
+    return name == null ? null : export;
   }
 
-  /// Exports every collection as one JSON document; see [exportCsv].
-  Future<String?> exportAll() async {
-    final text = await bridge.exportAllJson();
-    return fileDialogs.saveText(
+  /// Exports every collection as one JSON document; see [exportJson].
+  Future<JsonExportDto?> exportAll() async {
+    final export = await bridge.exportAllJson();
+    final name = await fileDialogs.saveText(
       suggestedName: 'collections.json',
       kind: FileKind.json,
-      text: text,
+      text: export.text,
     );
+    return name == null ? null : export;
   }
 
   /// Imports a CSV file the user picks into [collectionId]. Null when the dialog was dismissed,
@@ -2090,3 +2193,34 @@ ViewNameProblem? viewNameProblem(
 /// Whether [problem] makes Save unavailable.
 bool viewNameBlocksSave(ViewNameProblem? problem) =>
     problem == ViewNameProblem.empty || problem == ViewNameProblem.reserved;
+
+/// A stable string for a group key, used to remember collapsed groups.
+String groupKeyId(GroupKeyDto key) => switch (key.kind) {
+  GroupKeyKindDto.option => 'option:${key.optionId}',
+  GroupKeyKindDto.boolean => 'boolean:${key.flag}',
+  GroupKeyKindDto.date => 'date:${key.days}',
+  GroupKeyKindDto.empty => 'empty',
+};
+
+/// The source field a sort clause orders by, or null (creation time, anything else).
+String? sortFieldId(SortClauseDto clause) {
+  final nodes = clause.expression.nodes;
+  if (nodes.length != 1) return null;
+  final node = nodes.single;
+  if (node.kind != ExpressionKindDto.field) return null;
+  return node.field?.id;
+}
+
+/// A field's default sort direction for a header click: newest first for dates, A→Z for Text,
+/// high first for numbers and Duration, option order for a Choice, yes first for yes/no.
+SortDirectionDto defaultSortDirection(FieldTypeKindDto kind) => switch (kind) {
+  FieldTypeKindDto.text ||
+  FieldTypeKindDto.enum_ ||
+  FieldTypeKindDto.enumSet => SortDirectionDto.ascending,
+  FieldTypeKindDto.date ||
+  FieldTypeKindDto.dateTime ||
+  FieldTypeKindDto.integer ||
+  FieldTypeKindDto.fixedDecimal ||
+  FieldTypeKindDto.duration ||
+  FieldTypeKindDto.boolean => SortDirectionDto.descending,
+};

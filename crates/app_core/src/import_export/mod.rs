@@ -18,6 +18,7 @@ use crate::{
     remap::{ClonePlan, IdRemap, plan_with_remap, remap_record_values},
     schema::{CollectionSchema, CollectionSchemaId, FieldDefinition, FieldId},
     values::FieldValue,
+    view::ViewDefinition,
     widgets::WidgetDefinition,
 };
 
@@ -42,6 +43,10 @@ pub struct ExportedCollection {
     pub queries: Vec<QueryDefinition>,
     #[serde(default)]
     pub widgets: Vec<WidgetDefinition>,
+    /// Saved views with their effective bodies; never All, never a broken view. Older documents
+    /// have none.
+    #[serde(default)]
+    pub views: Vec<ViewDefinition>,
     #[serde(default)]
     pub records: Vec<ExportedRecord>,
 }
@@ -107,12 +112,14 @@ impl Envelope {
 impl ExportedCollection {
     /// Keeps only active data: active fields with their active options, active definitions owned
     /// by the collection, active records with values for active fields. Stamps are dropped.
+    /// `views` are written as given; pass them through [`crate::view::portable_views`] first.
     #[must_use]
     pub fn from_active(
         schema: &CollectionSchema,
         computed_fields: &[ComputedFieldDefinition],
         queries: &[QueryDefinition],
         widgets: &[WidgetDefinition],
+        views: &[ViewDefinition],
         records: &[GenericRecord],
     ) -> Self {
         let owned = |collection_id: CollectionSchemaId, deleted: bool| {
@@ -148,6 +155,11 @@ impl ExportedCollection {
                 .cloned()
                 .collect(),
             widgets: widgets
+                .iter()
+                .filter(|item| owned(item.collection_id, item.deleted))
+                .cloned()
+                .collect(),
+            views: views
                 .iter()
                 .filter(|item| owned(item.collection_id, item.deleted))
                 .cloned()
@@ -228,6 +240,7 @@ pub fn prepare_import(envelope: &Envelope) -> Result<Vec<ImportedCollection>, Im
                 .map(|item| item.collection_id)
                 .chain(entry.queries.iter().map(|item| item.collection_id))
                 .chain(entry.widgets.iter().map(|item| item.collection_id))
+                .chain(entry.views.iter().map(|item| item.collection_id))
                 .any(|collection_id| collection_id != source);
             if foreign {
                 return Err(abort(
@@ -249,6 +262,7 @@ pub fn prepare_import(envelope: &Envelope) -> Result<Vec<ImportedCollection>, Im
                 &entry.computed_fields,
                 &entry.queries,
                 &entry.widgets,
+                &entry.views,
             )
             .map_err(|error| abort("collection", error.to_string()))?;
             let records = entry
@@ -270,6 +284,24 @@ pub fn prepare_import(envelope: &Envelope) -> Result<Vec<ImportedCollection>, Im
             Ok(ImportedCollection { plan, records })
         })
         .collect()
+}
+
+/// A `fi-collection` document and what went into it.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct JsonExport {
+    pub text: String,
+    pub records: usize,
+    pub views_written: usize,
+    /// Names of the broken views left out.
+    pub views_omitted: Vec<String>,
+}
+
+/// Result of a collection clone.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CloneOutcome {
+    pub id: CollectionSchemaId,
+    /// Names of the source's broken views, which were not copied.
+    pub skipped_views: Vec<String>,
 }
 
 /// Result of an import. An abort wrote nothing.
@@ -468,6 +500,7 @@ mod tests {
             computed_fields: vec![computed],
             queries: vec![query],
             widgets: vec![widget],
+            views: vec![],
             records: vec![ExportedRecord {
                 id: RecordId::new(),
                 values,
@@ -562,6 +595,7 @@ mod tests {
             &entry.computed_fields,
             &entry.queries,
             &entry.widgets,
+            &[],
             &[live, dead.clone()],
         );
         assert_eq!(exported.schema.fields.len(), 8);

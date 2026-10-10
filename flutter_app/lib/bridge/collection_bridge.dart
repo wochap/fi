@@ -9,8 +9,18 @@ import 'package:fi/src/rust/api/views.dart' as views;
 import 'package:fi/src/rust/api/views.dart'
     show ViewBodyDto, ViewDto, ViewResultDto;
 import 'package:fi/src/rust/api/widgets.dart' as widgets;
+export 'package:fi/src/rust/api/collections.dart'
+    show CloneOutcomeDto, JsonExportDto;
 export 'package:fi/src/rust/api/views.dart'
-    show ViewBodyDto, ViewDto, ViewResultDto;
+    show
+        GroupKeyDto,
+        GroupKeyKindDto,
+        GroupPeriodDto,
+        ViewBodyDto,
+        ViewDto,
+        ViewGroupDto,
+        ViewGroupingDto,
+        ViewResultDto;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
@@ -109,18 +119,22 @@ abstract interface class CollectionBridge {
   Future<String> createCollection(String name, String description);
   Future<void> renameCollection(String id, String name);
 
-  /// Copies [sourceId]'s fields, computed fields, queries and widgets (no records) into a new
-  /// collection named [name]. Returns the new collection id.
-  Future<String> cloneCollection(String sourceId, String name);
+  /// Copies [sourceId]'s fields, computed fields, queries, widgets and views (no records) into a
+  /// new collection named [name]. Broken views are skipped and named in the outcome.
+  Future<collections.CloneOutcomeDto> cloneCollection(
+    String sourceId,
+    String name,
+  );
 
   /// The active records of [id] as CSV text.
   Future<String> exportCollectionCsv(String id);
 
-  /// The given collections as one `fi-collection` JSON document.
-  Future<String> exportCollectionsJson(List<String> ids);
+  /// The given collections as one `fi-collection` JSON document, with the record and view
+  /// counts and the broken views left out.
+  Future<collections.JsonExportDto> exportCollectionsJson(List<String> ids);
 
-  /// Every active collection as one `fi-collection` JSON document.
-  Future<String> exportAllJson();
+  /// Every active collection as one `fi-collection` JSON document; see [exportCollectionsJson].
+  Future<collections.JsonExportDto> exportAllJson();
 
   /// Adds every CSV row as a new record of [collectionId]; a rejected file writes nothing.
   Future<ImportOutcomeDto> importCollectionCsv(
@@ -439,16 +453,19 @@ final class RustCollectionBridge implements CollectionBridge {
   Future<void> renameCollection(String id, String name) =>
       collections.renameCollection(id: id, name: name);
   @override
-  Future<String> cloneCollection(String sourceId, String name) =>
-      collections.cloneCollection(sourceId: sourceId, name: name);
+  Future<collections.CloneOutcomeDto> cloneCollection(
+    String sourceId,
+    String name,
+  ) => collections.cloneCollection(sourceId: sourceId, name: name);
   @override
   Future<String> exportCollectionCsv(String id) =>
       collections.exportCollectionCsv(id: id);
   @override
-  Future<String> exportCollectionsJson(List<String> ids) =>
+  Future<collections.JsonExportDto> exportCollectionsJson(List<String> ids) =>
       collections.exportCollectionsJson(ids: ids);
   @override
-  Future<String> exportAllJson() => collections.exportAllJson();
+  Future<collections.JsonExportDto> exportAllJson() =>
+      collections.exportAllJson();
   @override
   Future<ImportOutcomeDto> importCollectionCsv(
     String collectionId,

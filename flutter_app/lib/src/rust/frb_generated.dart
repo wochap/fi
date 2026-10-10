@@ -103,7 +103,7 @@ abstract class RustLibApi extends BaseApi {
     required String modelsDir,
   });
 
-  Future<String> crateApiCollectionsCloneCollection({
+  Future<CloneOutcomeDto> crateApiCollectionsCloneCollection({
     required String sourceId,
     required String name,
   });
@@ -226,11 +226,11 @@ abstract class RustLibApi extends BaseApi {
     required int nowUtcMs,
   });
 
-  Future<String> crateApiCollectionsExportAllJson();
+  Future<JsonExportDto> crateApiCollectionsExportAllJson();
 
   Future<String> crateApiCollectionsExportCollectionCsv({required String id});
 
-  Future<String> crateApiCollectionsExportCollectionsJson({
+  Future<JsonExportDto> crateApiCollectionsExportCollectionsJson({
     required List<String> ids,
   });
 
@@ -738,7 +738,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  Future<String> crateApiCollectionsCloneCollection({
+  Future<CloneOutcomeDto> crateApiCollectionsCloneCollection({
     required String sourceId,
     required String name,
   }) {
@@ -756,7 +756,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           );
         },
         codec: SseCodec(
-          decodeSuccessData: sse_decode_String,
+          decodeSuccessData: sse_decode_clone_outcome_dto,
           decodeErrorData: sse_decode_bridge_error,
         ),
         constMeta: kCrateApiCollectionsCloneCollectionConstMeta,
@@ -1770,7 +1770,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  Future<String> crateApiCollectionsExportAllJson() {
+  Future<JsonExportDto> crateApiCollectionsExportAllJson() {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
@@ -1783,7 +1783,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           );
         },
         codec: SseCodec(
-          decodeSuccessData: sse_decode_String,
+          decodeSuccessData: sse_decode_json_export_dto,
           decodeErrorData: sse_decode_bridge_error,
         ),
         constMeta: kCrateApiCollectionsExportAllJsonConstMeta,
@@ -1825,7 +1825,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "export_collection_csv", argNames: ["id"]);
 
   @override
-  Future<String> crateApiCollectionsExportCollectionsJson({
+  Future<JsonExportDto> crateApiCollectionsExportCollectionsJson({
     required List<String> ids,
   }) {
     return handler.executeNormal(
@@ -1841,7 +1841,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           );
         },
         codec: SseCodec(
-          decodeSuccessData: sse_decode_String,
+          decodeSuccessData: sse_decode_json_export_dto,
           decodeErrorData: sse_decode_bridge_error,
         ),
         constMeta: kCrateApiCollectionsExportCollectionsJsonConstMeta,
@@ -5123,6 +5123,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  GroupPeriodDto dco_decode_box_autoadd_group_period_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_group_period_dto(raw);
+  }
+
+  @protected
   GroupingDto dco_decode_box_autoadd_grouping_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_grouping_dto(raw);
@@ -5239,6 +5245,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ViewBodyDto dco_decode_box_autoadd_view_body_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_view_body_dto(raw);
+  }
+
+  @protected
+  ViewGroupingDto dco_decode_box_autoadd_view_grouping_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_view_grouping_dto(raw);
   }
 
   @protected
@@ -5394,6 +5406,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     return CategoryPointDto(
       category: dco_decode_typed_value_dto(arr[0]),
       value: dco_decode_typed_value_dto(arr[1]),
+    );
+  }
+
+  @protected
+  CloneOutcomeDto dco_decode_clone_outcome_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return CloneOutcomeDto(
+      collectionId: dco_decode_String(arr[0]),
+      skippedViews: dco_decode_list_String(arr[1]),
     );
   }
 
@@ -5671,6 +5695,32 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  GroupKeyDto dco_decode_group_key_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    return GroupKeyDto(
+      kind: dco_decode_group_key_kind_dto(arr[0]),
+      optionId: dco_decode_opt_String(arr[1]),
+      flag: dco_decode_opt_box_autoadd_bool(arr[2]),
+      days: dco_decode_opt_CastedPrimitive_i_64(arr[3]),
+    );
+  }
+
+  @protected
+  GroupKeyKindDto dco_decode_group_key_kind_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return GroupKeyKindDto.values[raw as int];
+  }
+
+  @protected
+  GroupPeriodDto dco_decode_group_period_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return GroupPeriodDto.values[raw as int];
+  }
+
+  @protected
   GroupingDto dco_decode_grouping_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -5735,6 +5785,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   PlatformInt64 dco_decode_isize(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dcoDecodeI64(raw);
+  }
+
+  @protected
+  JsonExportDto dco_decode_json_export_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    return JsonExportDto(
+      text: dco_decode_String(arr[0]),
+      recordCount: dco_decode_u_32(arr[1]),
+      viewsWritten: dco_decode_u_32(arr[2]),
+      viewsOmitted: dco_decode_list_String(arr[3]),
+    );
   }
 
   @protected
@@ -5954,6 +6018,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   List<ViewDto> dco_decode_list_view_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_view_dto).toList();
+  }
+
+  @protected
+  List<ViewGroupDto> dco_decode_list_view_group_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_view_group_dto).toList();
   }
 
   @protected
@@ -6308,6 +6378,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  GroupPeriodDto? dco_decode_opt_box_autoadd_group_period_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_group_period_dto(raw);
+  }
+
+  @protected
   GroupingDto? dco_decode_opt_box_autoadd_grouping_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_box_autoadd_grouping_dto(raw);
@@ -6426,6 +6502,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ViewBodyDto? dco_decode_opt_box_autoadd_view_body_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_box_autoadd_view_body_dto(raw);
+  }
+
+  @protected
+  ViewGroupingDto? dco_decode_opt_box_autoadd_view_grouping_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_view_grouping_dto(raw);
   }
 
   @protected
@@ -6983,11 +7065,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ViewBodyDto dco_decode_view_body_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 2)
-      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
     return ViewBodyDto(
       filter: dco_decode_opt_box_autoadd_expression_dto(arr[0]),
       sorting: dco_decode_list_sort_clause_dto(arr[1]),
+      grouping: dco_decode_opt_box_autoadd_view_grouping_dto(arr[2]),
     );
   }
 
@@ -7009,14 +7092,43 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  ViewResultDto dco_decode_view_result_dto(dynamic raw) {
+  ViewGroupDto dco_decode_view_group_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    return ViewGroupDto(
+      key: dco_decode_group_key_dto(arr[0]),
+      labelHint: dco_decode_opt_String(arr[1]),
+      count: dco_decode_u_32(arr[2]),
+      start: dco_decode_u_32(arr[3]),
+      len: dco_decode_u_32(arr[4]),
+    );
+  }
+
+  @protected
+  ViewGroupingDto dco_decode_view_grouping_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
     if (arr.length != 2)
       throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return ViewGroupingDto(
+      fieldId: dco_decode_String(arr[0]),
+      period: dco_decode_opt_box_autoadd_group_period_dto(arr[1]),
+    );
+  }
+
+  @protected
+  ViewResultDto dco_decode_view_result_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
     return ViewResultDto(
       ids: dco_decode_list_String(arr[0]),
       count: dco_decode_u_32(arr[1]),
+      groups: dco_decode_list_view_group_dto(arr[2]),
+      zone: dco_decode_String(arr[3]),
     );
   }
 
@@ -7546,6 +7658,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  GroupPeriodDto sse_decode_box_autoadd_group_period_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_group_period_dto(deserializer));
+  }
+
+  @protected
   GroupingDto sse_decode_box_autoadd_grouping_dto(
     SseDeserializer deserializer,
   ) {
@@ -7686,6 +7806,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_view_body_dto(deserializer));
+  }
+
+  @protected
+  ViewGroupingDto sse_decode_box_autoadd_view_grouping_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_view_grouping_dto(deserializer));
   }
 
   @protected
@@ -7856,6 +7984,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_category = sse_decode_typed_value_dto(deserializer);
     var var_value = sse_decode_typed_value_dto(deserializer);
     return CategoryPointDto(category: var_category, value: var_value);
+  }
+
+  @protected
+  CloneOutcomeDto sse_decode_clone_outcome_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_collectionId = sse_decode_String(deserializer);
+    var var_skippedViews = sse_decode_list_String(deserializer);
+    return CloneOutcomeDto(
+      collectionId: var_collectionId,
+      skippedViews: var_skippedViews,
+    );
   }
 
   @protected
@@ -8206,6 +8345,35 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  GroupKeyDto sse_decode_group_key_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_kind = sse_decode_group_key_kind_dto(deserializer);
+    var var_optionId = sse_decode_opt_String(deserializer);
+    var var_flag = sse_decode_opt_box_autoadd_bool(deserializer);
+    var var_days = sse_decode_opt_CastedPrimitive_i_64(deserializer);
+    return GroupKeyDto(
+      kind: var_kind,
+      optionId: var_optionId,
+      flag: var_flag,
+      days: var_days,
+    );
+  }
+
+  @protected
+  GroupKeyKindDto sse_decode_group_key_kind_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return GroupKeyKindDto.values[inner];
+  }
+
+  @protected
+  GroupPeriodDto sse_decode_group_period_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return GroupPeriodDto.values[inner];
+  }
+
+  @protected
   GroupingDto sse_decode_grouping_dto(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_expression = sse_decode_expression_dto(deserializer);
@@ -8268,6 +8436,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   PlatformInt64 sse_decode_isize(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return deserializer.buffer.getPlatformInt64();
+  }
+
+  @protected
+  JsonExportDto sse_decode_json_export_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_text = sse_decode_String(deserializer);
+    var var_recordCount = sse_decode_u_32(deserializer);
+    var var_viewsWritten = sse_decode_u_32(deserializer);
+    var var_viewsOmitted = sse_decode_list_String(deserializer);
+    return JsonExportDto(
+      text: var_text,
+      recordCount: var_recordCount,
+      viewsWritten: var_viewsWritten,
+      viewsOmitted: var_viewsOmitted,
+    );
   }
 
   @protected
@@ -8686,6 +8869,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var ans_ = <ViewDto>[];
     for (var idx_ = 0; idx_ < len_; ++idx_) {
       ans_.add(sse_decode_view_dto(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<ViewGroupDto> sse_decode_list_view_group_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <ViewGroupDto>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_view_group_dto(deserializer));
     }
     return ans_;
   }
@@ -9188,6 +9385,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  GroupPeriodDto? sse_decode_opt_box_autoadd_group_period_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_group_period_dto(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
   GroupingDto? sse_decode_opt_box_autoadd_grouping_dto(
     SseDeserializer deserializer,
   ) {
@@ -9411,6 +9621,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
     if (sse_decode_bool(deserializer)) {
       return (sse_decode_box_autoadd_view_body_dto(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  ViewGroupingDto? sse_decode_opt_box_autoadd_view_grouping_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_view_grouping_dto(deserializer));
     } else {
       return null;
     }
@@ -10085,7 +10308,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_filter = sse_decode_opt_box_autoadd_expression_dto(deserializer);
     var var_sorting = sse_decode_list_sort_clause_dto(deserializer);
-    return ViewBodyDto(filter: var_filter, sorting: var_sorting);
+    var var_grouping = sse_decode_opt_box_autoadd_view_grouping_dto(
+      deserializer,
+    );
+    return ViewBodyDto(
+      filter: var_filter,
+      sorting: var_sorting,
+      grouping: var_grouping,
+    );
   }
 
   @protected
@@ -10110,11 +10340,43 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  ViewGroupDto sse_decode_view_group_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_key = sse_decode_group_key_dto(deserializer);
+    var var_labelHint = sse_decode_opt_String(deserializer);
+    var var_count = sse_decode_u_32(deserializer);
+    var var_start = sse_decode_u_32(deserializer);
+    var var_len = sse_decode_u_32(deserializer);
+    return ViewGroupDto(
+      key: var_key,
+      labelHint: var_labelHint,
+      count: var_count,
+      start: var_start,
+      len: var_len,
+    );
+  }
+
+  @protected
+  ViewGroupingDto sse_decode_view_grouping_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_fieldId = sse_decode_String(deserializer);
+    var var_period = sse_decode_opt_box_autoadd_group_period_dto(deserializer);
+    return ViewGroupingDto(fieldId: var_fieldId, period: var_period);
+  }
+
+  @protected
   ViewResultDto sse_decode_view_result_dto(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_ids = sse_decode_list_String(deserializer);
     var var_count = sse_decode_u_32(deserializer);
-    return ViewResultDto(ids: var_ids, count: var_count);
+    var var_groups = sse_decode_list_view_group_dto(deserializer);
+    var var_zone = sse_decode_String(deserializer);
+    return ViewResultDto(
+      ids: var_ids,
+      count: var_count,
+      groups: var_groups,
+      zone: var_zone,
+    );
   }
 
   @protected
@@ -10802,6 +11064,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_box_autoadd_group_period_dto(
+    GroupPeriodDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_group_period_dto(self, serializer);
+  }
+
+  @protected
   void sse_encode_box_autoadd_grouping_dto(
     GroupingDto self,
     SseSerializer serializer,
@@ -10958,6 +11229,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_view_body_dto(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_view_grouping_dto(
+    ViewGroupingDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_view_grouping_dto(self, serializer);
   }
 
   @protected
@@ -11126,6 +11406,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_typed_value_dto(self.category, serializer);
     sse_encode_typed_value_dto(self.value, serializer);
+  }
+
+  @protected
+  void sse_encode_clone_outcome_dto(
+    CloneOutcomeDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.collectionId, serializer);
+    sse_encode_list_String(self.skippedViews, serializer);
   }
 
   @protected
@@ -11389,6 +11679,33 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_group_key_dto(GroupKeyDto self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_group_key_kind_dto(self.kind, serializer);
+    sse_encode_opt_String(self.optionId, serializer);
+    sse_encode_opt_box_autoadd_bool(self.flag, serializer);
+    sse_encode_opt_CastedPrimitive_i_64(self.days, serializer);
+  }
+
+  @protected
+  void sse_encode_group_key_kind_dto(
+    GroupKeyKindDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_group_period_dto(
+    GroupPeriodDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
   void sse_encode_grouping_dto(GroupingDto self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_expression_dto(self.expression, serializer);
@@ -11444,6 +11761,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   void sse_encode_isize(PlatformInt64 self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     serializer.buffer.putPlatformInt64(self);
+  }
+
+  @protected
+  void sse_encode_json_export_dto(
+    JsonExportDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.text, serializer);
+    sse_encode_u_32(self.recordCount, serializer);
+    sse_encode_u_32(self.viewsWritten, serializer);
+    sse_encode_list_String(self.viewsOmitted, serializer);
   }
 
   @protected
@@ -11827,6 +12156,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
       sse_encode_view_dto(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_view_group_dto(
+    List<ViewGroupDto> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_view_group_dto(item, serializer);
     }
   }
 
@@ -12274,6 +12615,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_opt_box_autoadd_group_period_dto(
+    GroupPeriodDto? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_group_period_dto(self, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_opt_box_autoadd_grouping_dto(
     GroupingDto? self,
     SseSerializer serializer,
@@ -12492,6 +12846,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_bool(self != null, serializer);
     if (self != null) {
       sse_encode_box_autoadd_view_body_dto(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_view_grouping_dto(
+    ViewGroupingDto? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_view_grouping_dto(self, serializer);
     }
   }
 
@@ -13078,6 +13445,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_opt_box_autoadd_expression_dto(self.filter, serializer);
     sse_encode_list_sort_clause_dto(self.sorting, serializer);
+    sse_encode_opt_box_autoadd_view_grouping_dto(self.grouping, serializer);
   }
 
   @protected
@@ -13093,6 +13461,26 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_view_group_dto(ViewGroupDto self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_group_key_dto(self.key, serializer);
+    sse_encode_opt_String(self.labelHint, serializer);
+    sse_encode_u_32(self.count, serializer);
+    sse_encode_u_32(self.start, serializer);
+    sse_encode_u_32(self.len, serializer);
+  }
+
+  @protected
+  void sse_encode_view_grouping_dto(
+    ViewGroupingDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.fieldId, serializer);
+    sse_encode_opt_box_autoadd_group_period_dto(self.period, serializer);
+  }
+
+  @protected
   void sse_encode_view_result_dto(
     ViewResultDto self,
     SseSerializer serializer,
@@ -13100,6 +13488,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_list_String(self.ids, serializer);
     sse_encode_u_32(self.count, serializer);
+    sse_encode_list_view_group_dto(self.groups, serializer);
+    sse_encode_String(self.zone, serializer);
   }
 
   @protected

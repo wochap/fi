@@ -305,7 +305,10 @@ async fn json_export_omits_tombstones_and_stamps() {
         .find(|item| item.deleted)
         .unwrap();
 
-    let json = app.export_collections_json(vec![diary.collection]).unwrap();
+    let json = app
+        .export_collections_json(vec![diary.collection])
+        .unwrap()
+        .text;
     let value: serde_json::Value = serde_json::from_str(&json).unwrap();
     assert_eq!(value["format"], "fi-collection");
     assert_eq!(value["version"], 1);
@@ -329,7 +332,8 @@ async fn json_export_omits_tombstones_and_stamps() {
         .await
         .unwrap();
     app.delete_collection(removed).await.unwrap();
-    let all: serde_json::Value = serde_json::from_str(&app.export_all_json().unwrap()).unwrap();
+    let all: serde_json::Value =
+        serde_json::from_str(&app.export_all_json().unwrap().text).unwrap();
     let names: Vec<_> = all["collections"]
         .as_array()
         .unwrap()
@@ -353,7 +357,10 @@ async fn importing_an_export_twice_creates_two_independent_working_copies() {
     let source_result = app
         .execute_query_definition(diary.collection, query, 0)
         .unwrap();
-    let json = app.export_collections_json(vec![diary.collection]).unwrap();
+    let json = app
+        .export_collections_json(vec![diary.collection])
+        .unwrap()
+        .text;
 
     let mut imported = Vec::new();
     for _ in 0..2 {
@@ -441,7 +448,10 @@ async fn rejected_json_imports_create_nothing() {
     app.create_new_dataset().await.unwrap();
     let diary = diary(&app).await;
     with_structure(&app, &diary).await;
-    let json = app.export_collections_json(vec![diary.collection]).unwrap();
+    let json = app
+        .export_collections_json(vec![diary.collection])
+        .unwrap()
+        .text;
     let mut value: serde_json::Value = serde_json::from_str(&json).unwrap();
     let before = app.collections().unwrap();
     let mut events = app.subscribe_data_changed();

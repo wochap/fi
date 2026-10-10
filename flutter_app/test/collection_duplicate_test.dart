@@ -87,7 +87,10 @@ void main() {
     final bridge = _source();
     final controller = CollectionsController(bridge);
     await controller.start();
-    final id = await controller.cloneCollection(_collection, 'Migraine');
+    final id = (await controller.cloneCollection(
+      _collection,
+      'Migraine',
+    )).collectionId;
     expect(controller.collections.map((item) => item.name), [
       'Headaches',
       'Migraine',

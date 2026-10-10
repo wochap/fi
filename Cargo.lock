@@ -97,6 +97,7 @@ dependencies = [
  "hex",
  "hkdf",
  "hmac",
+ "iana-time-zone",
  "if-addrs",
  "mdns-sd",
  "quinn",

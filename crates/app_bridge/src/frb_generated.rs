@@ -5398,6 +5398,18 @@ impl SseDecode for crate::api::models::CategoryPointDto {
     }
 }
 
+impl SseDecode for crate::api::collections::CloneOutcomeDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_collectionId = <String>::sse_decode(deserializer);
+        let mut var_skippedViews = <Vec<String>>::sse_decode(deserializer);
+        return crate::api::collections::CloneOutcomeDto {
+            collection_id: var_collectionId,
+            skipped_views: var_skippedViews,
+        };
+    }
+}
+
 impl SseDecode for crate::api::models::CollectionDto {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -5818,6 +5830,49 @@ impl SseDecode for crate::api::models::FieldValueKindDto {
     }
 }
 
+impl SseDecode for crate::api::views::GroupKeyDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_kind = <crate::api::views::GroupKeyKindDto>::sse_decode(deserializer);
+        let mut var_optionId = <Option<String>>::sse_decode(deserializer);
+        let mut var_flag = <Option<bool>>::sse_decode(deserializer);
+        let mut var_days = <Option<i64>>::sse_decode(deserializer);
+        return crate::api::views::GroupKeyDto {
+            kind: var_kind,
+            option_id: var_optionId,
+            flag: var_flag,
+            days: var_days,
+        };
+    }
+}
+
+impl SseDecode for crate::api::views::GroupKeyKindDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::api::views::GroupKeyKindDto::Option,
+            1 => crate::api::views::GroupKeyKindDto::Boolean,
+            2 => crate::api::views::GroupKeyKindDto::Date,
+            3 => crate::api::views::GroupKeyKindDto::Empty,
+            _ => unreachable!("Invalid variant for GroupKeyKindDto: {}", inner),
+        };
+    }
+}
+
+impl SseDecode for crate::api::views::GroupPeriodDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::api::views::GroupPeriodDto::Day,
+            1 => crate::api::views::GroupPeriodDto::Week,
+            2 => crate::api::views::GroupPeriodDto::Month,
+            _ => unreachable!("Invalid variant for GroupPeriodDto: {}", inner),
+        };
+    }
+}
+
 impl SseDecode for crate::api::models::GroupingDto {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -5893,6 +5948,22 @@ impl SseDecode for isize {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         deserializer.cursor.read_i64::<NativeEndian>().unwrap() as _
+    }
+}
+
+impl SseDecode for crate::api::collections::JsonExportDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_text = <String>::sse_decode(deserializer);
+        let mut var_recordCount = <u32>::sse_decode(deserializer);
+        let mut var_viewsWritten = <u32>::sse_decode(deserializer);
+        let mut var_viewsOmitted = <Vec<String>>::sse_decode(deserializer);
+        return crate::api::collections::JsonExportDto {
+            text: var_text,
+            record_count: var_recordCount,
+            views_written: var_viewsWritten,
+            views_omitted: var_viewsOmitted,
+        };
     }
 }
 
@@ -6307,6 +6378,18 @@ impl SseDecode for Vec<crate::api::views::ViewDto> {
         let mut ans_ = Vec::with_capacity(len_ as usize);
         for idx_ in 0..len_ {
             ans_.push(<crate::api::views::ViewDto>::sse_decode(deserializer));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::api::views::ViewGroupDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::views::ViewGroupDto>::sse_decode(deserializer));
         }
         return ans_;
     }
@@ -6858,6 +6941,19 @@ impl SseDecode for Option<crate::api::models::FieldValueDto> {
     }
 }
 
+impl SseDecode for Option<crate::api::views::GroupPeriodDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<crate::api::views::GroupPeriodDto>::sse_decode(
+                deserializer,
+            ));
+        } else {
+            return None;
+        }
+    }
+}
+
 impl SseDecode for Option<crate::api::models::GroupingDto> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -7068,6 +7164,19 @@ impl SseDecode for Option<crate::api::views::ViewBodyDto> {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         if (<bool>::sse_decode(deserializer)) {
             return Some(<crate::api::views::ViewBodyDto>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode for Option<crate::api::views::ViewGroupingDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<crate::api::views::ViewGroupingDto>::sse_decode(
+                deserializer,
+            ));
         } else {
             return None;
         }
@@ -7877,9 +7986,12 @@ impl SseDecode for crate::api::views::ViewBodyDto {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut var_filter = <Option<crate::api::models::ExpressionDto>>::sse_decode(deserializer);
         let mut var_sorting = <Vec<crate::api::models::SortClauseDto>>::sse_decode(deserializer);
+        let mut var_grouping =
+            <Option<crate::api::views::ViewGroupingDto>>::sse_decode(deserializer);
         return crate::api::views::ViewBodyDto {
             filter: var_filter,
             sorting: var_sorting,
+            grouping: var_grouping,
         };
     }
 }
@@ -7907,14 +8019,48 @@ impl SseDecode for crate::api::views::ViewDto {
     }
 }
 
+impl SseDecode for crate::api::views::ViewGroupDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_key = <crate::api::views::GroupKeyDto>::sse_decode(deserializer);
+        let mut var_labelHint = <Option<String>>::sse_decode(deserializer);
+        let mut var_count = <u32>::sse_decode(deserializer);
+        let mut var_start = <u32>::sse_decode(deserializer);
+        let mut var_len = <u32>::sse_decode(deserializer);
+        return crate::api::views::ViewGroupDto {
+            key: var_key,
+            label_hint: var_labelHint,
+            count: var_count,
+            start: var_start,
+            len: var_len,
+        };
+    }
+}
+
+impl SseDecode for crate::api::views::ViewGroupingDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_fieldId = <String>::sse_decode(deserializer);
+        let mut var_period = <Option<crate::api::views::GroupPeriodDto>>::sse_decode(deserializer);
+        return crate::api::views::ViewGroupingDto {
+            field_id: var_fieldId,
+            period: var_period,
+        };
+    }
+}
+
 impl SseDecode for crate::api::views::ViewResultDto {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut var_ids = <Vec<String>>::sse_decode(deserializer);
         let mut var_count = <u32>::sse_decode(deserializer);
+        let mut var_groups = <Vec<crate::api::views::ViewGroupDto>>::sse_decode(deserializer);
+        let mut var_zone = <String>::sse_decode(deserializer);
         return crate::api::views::ViewResultDto {
             ids: var_ids,
             count: var_count,
+            groups: var_groups,
+            zone: var_zone,
         };
     }
 }
@@ -8947,6 +9093,27 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::models::CategoryPointDto>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::collections::CloneOutcomeDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.collection_id.into_into_dart().into_dart(),
+            self.skipped_views.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::collections::CloneOutcomeDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::collections::CloneOutcomeDto>
+    for crate::api::collections::CloneOutcomeDto
+{
+    fn into_into_dart(self) -> crate::api::collections::CloneOutcomeDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::models::CollectionDto {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -9502,6 +9669,74 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::models::FieldValueKindDto>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::views::GroupKeyDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.kind.into_into_dart().into_dart(),
+            self.option_id.into_into_dart().into_dart(),
+            self.flag.into_into_dart().into_dart(),
+            self.days.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::views::GroupKeyDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::views::GroupKeyDto>
+    for crate::api::views::GroupKeyDto
+{
+    fn into_into_dart(self) -> crate::api::views::GroupKeyDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::views::GroupKeyKindDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Option => 0.into_dart(),
+            Self::Boolean => 1.into_dart(),
+            Self::Date => 2.into_dart(),
+            Self::Empty => 3.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::views::GroupKeyKindDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::views::GroupKeyKindDto>
+    for crate::api::views::GroupKeyKindDto
+{
+    fn into_into_dart(self) -> crate::api::views::GroupKeyKindDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::views::GroupPeriodDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Day => 0.into_dart(),
+            Self::Week => 1.into_dart(),
+            Self::Month => 2.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::views::GroupPeriodDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::views::GroupPeriodDto>
+    for crate::api::views::GroupPeriodDto
+{
+    fn into_into_dart(self) -> crate::api::views::GroupPeriodDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::models::GroupingDto {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -9568,6 +9803,29 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::models::InferredTypeDto>
     for crate::api::models::InferredTypeDto
 {
     fn into_into_dart(self) -> crate::api::models::InferredTypeDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::collections::JsonExportDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.text.into_into_dart().into_dart(),
+            self.record_count.into_into_dart().into_dart(),
+            self.views_written.into_into_dart().into_dart(),
+            self.views_omitted.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::collections::JsonExportDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::collections::JsonExportDto>
+    for crate::api::collections::JsonExportDto
+{
+    fn into_into_dart(self) -> crate::api::collections::JsonExportDto {
         self
     }
 }
@@ -10878,6 +11136,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::views::ViewBodyDto {
         [
             self.filter.into_into_dart().into_dart(),
             self.sorting.into_into_dart().into_dart(),
+            self.grouping.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -10915,11 +11174,58 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::views::ViewDto> for crate::ap
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::views::ViewGroupDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.key.into_into_dart().into_dart(),
+            self.label_hint.into_into_dart().into_dart(),
+            self.count.into_into_dart().into_dart(),
+            self.start.into_into_dart().into_dart(),
+            self.len.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::views::ViewGroupDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::views::ViewGroupDto>
+    for crate::api::views::ViewGroupDto
+{
+    fn into_into_dart(self) -> crate::api::views::ViewGroupDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::views::ViewGroupingDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.field_id.into_into_dart().into_dart(),
+            self.period.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::views::ViewGroupingDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::views::ViewGroupingDto>
+    for crate::api::views::ViewGroupingDto
+{
+    fn into_into_dart(self) -> crate::api::views::ViewGroupingDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::views::ViewResultDto {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
             self.ids.into_into_dart().into_dart(),
             self.count.into_into_dart().into_dart(),
+            self.groups.into_into_dart().into_dart(),
+            self.zone.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -11681,6 +11987,14 @@ impl SseEncode for crate::api::models::CategoryPointDto {
     }
 }
 
+impl SseEncode for crate::api::collections::CloneOutcomeDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.collection_id, serializer);
+        <Vec<String>>::sse_encode(self.skipped_views, serializer);
+    }
+}
+
 impl SseEncode for crate::api::models::CollectionDto {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -12023,6 +12337,51 @@ impl SseEncode for crate::api::models::FieldValueKindDto {
     }
 }
 
+impl SseEncode for crate::api::views::GroupKeyDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <crate::api::views::GroupKeyKindDto>::sse_encode(self.kind, serializer);
+        <Option<String>>::sse_encode(self.option_id, serializer);
+        <Option<bool>>::sse_encode(self.flag, serializer);
+        <Option<i64>>::sse_encode(self.days, serializer);
+    }
+}
+
+impl SseEncode for crate::api::views::GroupKeyKindDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::api::views::GroupKeyKindDto::Option => 0,
+                crate::api::views::GroupKeyKindDto::Boolean => 1,
+                crate::api::views::GroupKeyKindDto::Date => 2,
+                crate::api::views::GroupKeyKindDto::Empty => 3,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
+impl SseEncode for crate::api::views::GroupPeriodDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::api::views::GroupPeriodDto::Day => 0,
+                crate::api::views::GroupPeriodDto::Week => 1,
+                crate::api::views::GroupPeriodDto::Month => 2,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
 impl SseEncode for crate::api::models::GroupingDto {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -12082,6 +12441,16 @@ impl SseEncode for isize {
             .cursor
             .write_i64::<NativeEndian>(self as _)
             .unwrap();
+    }
+}
+
+impl SseEncode for crate::api::collections::JsonExportDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.text, serializer);
+        <u32>::sse_encode(self.record_count, serializer);
+        <u32>::sse_encode(self.views_written, serializer);
+        <Vec<String>>::sse_encode(self.views_omitted, serializer);
     }
 }
 
@@ -12391,6 +12760,16 @@ impl SseEncode for Vec<crate::api::views::ViewDto> {
         <i32>::sse_encode(self.len() as _, serializer);
         for item in self {
             <crate::api::views::ViewDto>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::api::views::ViewGroupDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::views::ViewGroupDto>::sse_encode(item, serializer);
         }
     }
 }
@@ -12846,6 +13225,16 @@ impl SseEncode for Option<crate::api::models::FieldValueDto> {
     }
 }
 
+impl SseEncode for Option<crate::api::views::GroupPeriodDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::api::views::GroupPeriodDto>::sse_encode(value, serializer);
+        }
+    }
+}
+
 impl SseEncode for Option<crate::api::models::GroupingDto> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -13022,6 +13411,16 @@ impl SseEncode for Option<crate::api::views::ViewBodyDto> {
         <bool>::sse_encode(self.is_some(), serializer);
         if let Some(value) = self {
             <crate::api::views::ViewBodyDto>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<crate::api::views::ViewGroupingDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::api::views::ViewGroupingDto>::sse_encode(value, serializer);
         }
     }
 }
@@ -13713,6 +14112,7 @@ impl SseEncode for crate::api::views::ViewBodyDto {
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <Option<crate::api::models::ExpressionDto>>::sse_encode(self.filter, serializer);
         <Vec<crate::api::models::SortClauseDto>>::sse_encode(self.sorting, serializer);
+        <Option<crate::api::views::ViewGroupingDto>>::sse_encode(self.grouping, serializer);
     }
 }
 
@@ -13729,11 +14129,32 @@ impl SseEncode for crate::api::views::ViewDto {
     }
 }
 
+impl SseEncode for crate::api::views::ViewGroupDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <crate::api::views::GroupKeyDto>::sse_encode(self.key, serializer);
+        <Option<String>>::sse_encode(self.label_hint, serializer);
+        <u32>::sse_encode(self.count, serializer);
+        <u32>::sse_encode(self.start, serializer);
+        <u32>::sse_encode(self.len, serializer);
+    }
+}
+
+impl SseEncode for crate::api::views::ViewGroupingDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.field_id, serializer);
+        <Option<crate::api::views::GroupPeriodDto>>::sse_encode(self.period, serializer);
+    }
+}
+
 impl SseEncode for crate::api::views::ViewResultDto {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <Vec<String>>::sse_encode(self.ids, serializer);
         <u32>::sse_encode(self.count, serializer);
+        <Vec<crate::api::views::ViewGroupDto>>::sse_encode(self.groups, serializer);
+        <String>::sse_encode(self.zone, serializer);
     }
 }
 

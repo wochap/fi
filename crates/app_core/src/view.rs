@@ -1,14 +1,20 @@
-//! Collection views: a named filter plus up to three sort keys, executed by the query engine.
+//! Collection views: a named filter, up to three sort keys and an optional grouping, executed
+//! by the query engine.
 
+use std::collections::HashMap;
+
+use chrono_tz::Tz;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    CollectionSchema, CollectionSchemaId, GenericRecord, RecordId,
+    CollectionSchema, CollectionSchemaId, EnumOptionId, FieldId, FieldType, GenericRecord,
+    RecordId,
     error::{DomainError, IssueCode, ValidationIssue},
     query::{
-        CalendarPolicy, ComputedFieldDefinition, EvaluationContext, Expression, FieldReference,
-        NullOrder, OptionPositions, SortClause, SortDirection, TypeEnvironment, TypedValue,
-        ValueType, ViewId, compare_records, evaluate_expression, infer_expression,
+        BucketPeriod, CalendarPolicy, ComputedFieldDefinition, EvaluationContext, Expression,
+        FieldReference, NullOrder, OptionPositions, SortClause, SortDirection, TypeEnvironment,
+        TypedValue, ValueType, ViewId, WeekStart, bucket_value, compare_records,
+        evaluate_expression, infer_expression,
     },
 };
 
@@ -18,10 +24,23 @@ pub const ALL_VIEW_ID: &str = "all";
 pub const MAX_VIEW_SORT_CLAUSES: usize = 3;
 pub const MAX_VIEW_NAME_LENGTH: usize = 40;
 
-/// Reserved for `views-extras`; any grouping is rejected until then.
+/// The calendar period of a Date or DateTime grouping.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GroupPeriod {
+    Day,
+    Week,
+    Month,
+}
+
+/// Sections the view's records by one single Choice, Boolean, Date or DateTime source field.
+/// Dates carry a period; any other field carries none.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct ViewGrouping(pub serde_json::Value);
+pub struct ViewGrouping {
+    pub field: FieldId,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub period: Option<GroupPeriod>,
+}
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ViewBody {
@@ -102,10 +121,38 @@ pub struct ViewHealth {
     pub effective_sort: Vec<SortClause>,
 }
 
+/// The value shared by the records of one group.
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub enum GroupKey {
+    /// A single-choice option, removed options included.
+    Option(EnumOptionId),
+    Boolean(bool),
+    /// The first calendar day of a Day, Week or Month bucket, in days since 1970-01-01, in the
+    /// zone the execution used.
+    Date(i64),
+    /// Records with no value.
+    Empty,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ViewGroup {
+    pub key: GroupKey,
+    /// The option label for an option group (its last label when removed).
+    pub label_hint: Option<String>,
+    pub count: u32,
+    /// The group's slice of `ViewResult::ids`.
+    pub start: u32,
+    pub len: u32,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ViewResult {
     pub ids: Vec<RecordId>,
     pub count: u32,
+    /// Empty unless the body groups; the groups' slices cover `ids` in order.
+    pub groups: Vec<ViewGroup>,
+    /// The IANA zone date grouping used; record dates should be shown in it.
+    pub zone: String,
 }
 
 /// One entry of a collection's view listing. `id` is `None` for All.
@@ -140,11 +187,10 @@ pub fn view_body_issues(
     computed: &[ComputedFieldDefinition],
 ) -> Vec<ValidationIssue> {
     let mut issues = Vec::new();
-    if body.grouping.is_some() {
-        issues.push(
-            ValidationIssue::new(IssueCode::ViewGrouping, "Grouping isn't available yet.")
-                .on("grouping"),
-        );
+    if let Some(grouping) = &body.grouping
+        && let Some(message) = grouping_problem(grouping, schema)
+    {
+        issues.push(ValidationIssue::new(IssueCode::ViewGrouping, message).on("grouping"));
     }
     if let Some(filter) = &body.filter
         && let Some(message) = filter_problem(filter, schema, computed)
@@ -297,6 +343,29 @@ fn collect(
     }
 }
 
+/// Why a grouping does not hold against the schema, naming the field when it still exists.
+fn grouping_problem(grouping: &ViewGrouping, schema: &CollectionSchema) -> Option<String> {
+    let Some(field) = schema
+        .fields
+        .iter()
+        .find(|field| field.id == grouping.field)
+    else {
+        return Some(format!(
+            "field \u{201c}{}\u{201d} was deleted",
+            grouping.field
+        ));
+    };
+    if field.deleted {
+        return Some(format!("field \u{201c}{}\u{201d} was deleted", field.name));
+    }
+    let fits = match field.field_type {
+        FieldType::Enum | FieldType::Boolean => grouping.period.is_none(),
+        FieldType::Date | FieldType::DateTime => grouping.period.is_some(),
+        _ => false,
+    };
+    (!fits).then(|| format!("field \u{201c}{}\u{201d} can't be grouped by", field.name))
+}
+
 /// Record creation time, or an active orderable field that is not a multi-option Choices field.
 fn sort_key_resolves(
     expression: &Expression,
@@ -338,7 +407,12 @@ pub fn body_health(
     let broken = body
         .filter
         .as_ref()
-        .and_then(|filter| filter_problem(filter, schema, computed));
+        .and_then(|filter| filter_problem(filter, schema, computed))
+        .or_else(|| {
+            body.grouping
+                .as_ref()
+                .and_then(|grouping| grouping_problem(grouping, schema))
+        });
     let mut effective_sort: Vec<SortClause> = body
         .sorting
         .iter()
@@ -359,14 +433,51 @@ pub fn body_health(
     }
 }
 
-/// The active records of the collection that the body keeps, in view order. A record whose
-/// filter can't be evaluated is left out; a sort failure falls back to record id order.
+/// The device's IANA zone, or UTC when it can't be determined or isn't known to the zone
+/// database. Weeks start on Monday.
+#[must_use]
+pub fn device_calendar() -> CalendarPolicy {
+    calendar_for(iana_time_zone::get_timezone().ok())
+}
+
+#[must_use]
+pub fn calendar_for(zone: Option<String>) -> CalendarPolicy {
+    CalendarPolicy {
+        timezone: zone
+            .filter(|zone| zone.parse::<Tz>().is_ok())
+            .unwrap_or_else(|| "UTC".into()),
+        week_start: WeekStart::Monday,
+    }
+}
+
+/// The active records of the collection that the body keeps, in view order, grouped in the
+/// device time zone. A record whose filter can't be evaluated is left out; a sort failure falls
+/// back to record id order.
 pub fn execute_view(
     schema: &CollectionSchema,
     computed: &[ComputedFieldDefinition],
     records: &[GenericRecord],
     body: &ViewBody,
     now_utc_ms: i64,
+) -> Result<ViewResult, DomainError> {
+    execute_view_in(
+        schema,
+        computed,
+        records,
+        body,
+        now_utc_ms,
+        &device_calendar(),
+    )
+}
+
+/// [`execute_view`] with date grouping in `zone`.
+pub fn execute_view_in(
+    schema: &CollectionSchema,
+    computed: &[ComputedFieldDefinition],
+    records: &[GenericRecord],
+    body: &ViewBody,
+    now_utc_ms: i64,
+    zone: &CalendarPolicy,
 ) -> Result<ViewResult, DomainError> {
     let health = body_health(body, schema, computed);
     if let Some(diagnostic) = health.broken {
@@ -390,10 +501,191 @@ pub fn execute_view(
             .unwrap_or_else(|_| a.id.cmp(&b.id))
     });
     let count = u32::try_from(selected.len()).unwrap_or(u32::MAX);
+    let Some(grouping) = &body.grouping else {
+        return Ok(ViewResult {
+            ids: selected.into_iter().map(|record| record.id).collect(),
+            count,
+            groups: Vec::new(),
+            zone: zone.timezone.clone(),
+        });
+    };
+    let (ids, groups) = partition(&selected, grouping, schema, &health.effective_sort, zone);
     Ok(ViewResult {
-        ids: selected.into_iter().map(|record| record.id).collect(),
+        ids,
         count,
+        groups,
+        zone: zone.timezone.clone(),
     })
+}
+
+/// Splits the view-ordered records into groups without reordering inside a group, then orders
+/// the groups: options by stored position, Yes before No, dates newest first, each flipped by a
+/// first sort clause on the grouping field going the other way; the no-value group last.
+fn partition(
+    selected: &[&GenericRecord],
+    grouping: &ViewGrouping,
+    schema: &CollectionSchema,
+    sorting: &[SortClause],
+    zone: &CalendarPolicy,
+) -> (Vec<RecordId>, Vec<ViewGroup>) {
+    let field = schema
+        .fields
+        .iter()
+        .find(|field| field.id == grouping.field)
+        .expect("a healthy grouping references a schema field");
+    let mut keys: Vec<GroupKey> = Vec::new();
+    let mut members: HashMap<GroupKey, Vec<RecordId>> = HashMap::new();
+    for record in selected {
+        let key = group_key(record.values.get(&field.id), grouping.period, zone);
+        if !members.contains_key(&key) {
+            keys.push(key.clone());
+        }
+        members.entry(key).or_default().push(record.id);
+    }
+    let first = sorting.first().filter(|clause| {
+        matches!(&clause.expression, Expression::Field { field: FieldReference::Source(id) } if *id == field.id)
+    });
+    let ascending = first.map(|clause| clause.direction == SortDirection::Ascending);
+    let position = |id: &EnumOptionId| {
+        field
+            .enum_options
+            .iter()
+            .find(|option| option.id == *id)
+            .map_or(i64::MAX, |option| option.order)
+    };
+    keys.sort_by(|a, b| {
+        use std::cmp::Ordering;
+        match (a, b) {
+            (GroupKey::Empty, GroupKey::Empty) => Ordering::Equal,
+            (GroupKey::Empty, _) => Ordering::Greater,
+            (_, GroupKey::Empty) => Ordering::Less,
+            (GroupKey::Option(a), GroupKey::Option(b)) => {
+                let order = position(a).cmp(&position(b)).then_with(|| a.cmp(b));
+                if ascending == Some(false) {
+                    order.reverse()
+                } else {
+                    order
+                }
+            }
+            (GroupKey::Boolean(a), GroupKey::Boolean(b)) => {
+                let order = b.cmp(a);
+                if ascending == Some(true) {
+                    order.reverse()
+                } else {
+                    order
+                }
+            }
+            (GroupKey::Date(a), GroupKey::Date(b)) => {
+                if ascending == Some(true) {
+                    a.cmp(b)
+                } else {
+                    b.cmp(a)
+                }
+            }
+            _ => Ordering::Equal,
+        }
+    });
+    let mut ids = Vec::with_capacity(selected.len());
+    let groups = keys
+        .into_iter()
+        .map(|key| {
+            let slice = members.remove(&key).unwrap_or_default();
+            let start = u32::try_from(ids.len()).unwrap_or(u32::MAX);
+            let len = u32::try_from(slice.len()).unwrap_or(u32::MAX);
+            ids.extend(slice);
+            let label_hint = match &key {
+                GroupKey::Option(id) => field
+                    .enum_options
+                    .iter()
+                    .find(|option| option.id == *id)
+                    .map(|option| option.label.clone()),
+                _ => None,
+            };
+            ViewGroup {
+                key,
+                label_hint,
+                count: len,
+                start,
+                len,
+            }
+        })
+        .collect();
+    (ids, groups)
+}
+
+/// The group of one stored value. DateTime values are first read as a calendar day in `zone`;
+/// Date values are bucketed as stored.
+fn group_key(
+    value: Option<&crate::FieldValue>,
+    period: Option<GroupPeriod>,
+    zone: &CalendarPolicy,
+) -> GroupKey {
+    use crate::FieldValue;
+    let day = match value {
+        Some(FieldValue::Enum(id)) => return GroupKey::Option(*id),
+        Some(FieldValue::Boolean(value)) => return GroupKey::Boolean(*value),
+        Some(FieldValue::Date(days)) => *days,
+        Some(FieldValue::DateTime(ms)) => match local_day(*ms, zone) {
+            Some(day) => day,
+            None => return GroupKey::Empty,
+        },
+        _ => return GroupKey::Empty,
+    };
+    let period = match period {
+        Some(GroupPeriod::Day) | None => BucketPeriod::Day,
+        Some(GroupPeriod::Week) => BucketPeriod::Week,
+        Some(GroupPeriod::Month) => BucketPeriod::Month,
+    };
+    match bucket_value(&TypedValue::Date(day), period, zone) {
+        Ok(TypedValue::Date(start)) => GroupKey::Date(start),
+        _ => GroupKey::Empty,
+    }
+}
+
+fn local_day(ms: i64, zone: &CalendarPolicy) -> Option<i64> {
+    let zone: Tz = zone.timezone.parse().ok()?;
+    let local = chrono::DateTime::from_timestamp_millis(ms)?
+        .with_timezone(&zone)
+        .date_naive();
+    let epoch = chrono::NaiveDate::from_ymd_opt(1970, 1, 1)?;
+    Some(local.signed_duration_since(epoch).num_days())
+}
+
+/// The views of `schema` that can travel to another collection or document: the active ones by
+/// `(order, id)`, each holding its effective body (sort clauses that no longer resolve removed).
+/// Broken views are left out and their names returned.
+#[must_use]
+pub fn portable_views(
+    schema: &CollectionSchema,
+    computed: &[ComputedFieldDefinition],
+    views: &[ViewDefinition],
+) -> (Vec<ViewDefinition>, Vec<String>) {
+    let computed: Vec<ComputedFieldDefinition> = computed
+        .iter()
+        .filter(|item| item.collection_id == schema.id && !item.deleted)
+        .cloned()
+        .collect();
+    let mut active: Vec<&ViewDefinition> = views
+        .iter()
+        .filter(|view| !view.deleted && view.collection_id == schema.id)
+        .collect();
+    active.sort_by_key(|view| (view.order, view.id));
+    let mut kept = Vec::new();
+    let mut omitted = Vec::new();
+    for view in active {
+        let health = view_health(&view.body, schema, &computed);
+        match (health.broken, view.body.body()) {
+            (None, Ok(body)) => kept.push(ViewDefinition {
+                body: VersionedViewBody::new(&ViewBody {
+                    sorting: health.effective_sort,
+                    ..body
+                }),
+                ..view.clone()
+            }),
+            _ => omitted.push(view.name.clone()),
+        }
+    }
+    (kept, omitted)
 }
 
 fn keeps(
@@ -780,15 +1072,366 @@ mod tests {
             codes(check("Level", &not_boolean).unwrap_err()),
             ["view_filter_type"]
         );
-        let grouped = ViewBody {
-            grouping: Some(ViewGrouping(serde_json::json!({}))),
+        let group = |field: FieldId, period| ViewBody {
+            grouping: Some(ViewGrouping { field, period }),
             ..ViewBody::all()
         };
-        assert_eq!(
-            codes(check("Grouped", &grouped).unwrap_err()),
-            ["view_grouping"]
-        );
+        assert!(check("Type", &group(fixture.kind().id, None)).is_ok());
+        for bad in [
+            group(fixture.tags().id, None),
+            group(fixture.level().id, None),
+            group(fixture.kind().id, Some(GroupPeriod::Day)),
+            group(FieldId::new(), None),
+        ] {
+            assert_eq!(
+                codes(check("Grouped", &bad).unwrap_err()),
+                ["view_grouping"]
+            );
+        }
         // Names are not checked for uniqueness or the localized All name.
         assert!(check("All", &ok).is_ok());
+    }
+
+    fn add_field(fixture: &mut Fixture, name: &str, field_type: FieldType) -> FieldId {
+        let mut item = field(name, field_type, vec![]);
+        item.order = i64::try_from(fixture.schema.fields.len()).unwrap();
+        let id = item.id;
+        fixture.schema.fields.push(item);
+        id
+    }
+
+    fn push_value(fixture: &mut Fixture, field: FieldId, value: Option<FieldValue>) -> RecordId {
+        let id = fixture.push(None, None);
+        if let Some(value) = value {
+            fixture
+                .records
+                .last_mut()
+                .unwrap()
+                .values
+                .insert(field, value);
+        }
+        id
+    }
+
+    fn utc_ms(text: &str) -> i64 {
+        chrono::DateTime::parse_from_rfc3339(text)
+            .unwrap()
+            .timestamp_millis()
+    }
+
+    fn day(y: i32, m: u32, d: u32) -> i64 {
+        chrono::NaiveDate::from_ymd_opt(y, m, d)
+            .unwrap()
+            .signed_duration_since(chrono::NaiveDate::from_ymd_opt(1970, 1, 1).unwrap())
+            .num_days()
+    }
+
+    fn grouped(field: FieldId, period: Option<GroupPeriod>, sorting: Vec<SortClause>) -> ViewBody {
+        ViewBody {
+            filter: None,
+            sorting,
+            grouping: Some(ViewGrouping { field, period }),
+        }
+    }
+
+    fn sort_on(field: FieldId, direction: SortDirection) -> SortClause {
+        SortClause {
+            expression: Expression::Field {
+                field: FieldReference::Source(field),
+            },
+            direction,
+            null_order: NullOrder::Last,
+        }
+    }
+
+    fn run_in(fixture: &Fixture, body: &ViewBody, zone: &str) -> ViewResult {
+        execute_view_in(
+            &fixture.schema,
+            &[],
+            &fixture.records,
+            body,
+            0,
+            &calendar_for(Some(zone.into())),
+        )
+        .unwrap()
+    }
+
+    fn summary(result: &ViewResult) -> Vec<(GroupKey, Vec<RecordId>)> {
+        result
+            .groups
+            .iter()
+            .map(|group| {
+                let start = group.start as usize;
+                (
+                    group.key.clone(),
+                    result.ids[start..start + group.len as usize].to_vec(),
+                )
+            })
+            .collect()
+    }
+
+    #[test]
+    fn month_grouping_orders_groups_and_keeps_view_order_inside() {
+        let mut fixture = fixture();
+        let start = add_field(&mut fixture, "start at", FieldType::DateTime);
+        let at = |text: &str| Some(FieldValue::DateTime(utc_ms(text)));
+        let sep_a = push_value(&mut fixture, start, at("2026-09-03T10:00:00Z"));
+        let oct_a = push_value(&mut fixture, start, at("2026-10-02T10:00:00Z"));
+        let sep_b = push_value(&mut fixture, start, at("2026-09-20T10:00:00Z"));
+        let oct_b = push_value(&mut fixture, start, at("2026-10-09T10:00:00Z"));
+        let none = push_value(&mut fixture, start, None);
+        let body = grouped(
+            start,
+            Some(GroupPeriod::Month),
+            vec![sort_on(start, SortDirection::Descending)],
+        );
+        let result = run_in(&fixture, &body, "UTC");
+        assert_eq!(result.count, 5);
+        assert_eq!(
+            summary(&result),
+            vec![
+                (GroupKey::Date(day(2026, 10, 1)), vec![oct_b, oct_a]),
+                (GroupKey::Date(day(2026, 9, 1)), vec![sep_b, sep_a]),
+                (GroupKey::Empty, vec![none]),
+            ]
+        );
+        // Ascending on the grouping field: oldest bucket first, empty still last.
+        let body = grouped(
+            start,
+            Some(GroupPeriod::Month),
+            vec![sort_on(start, SortDirection::Ascending)],
+        );
+        assert_eq!(
+            summary(&run_in(&fixture, &body, "UTC")),
+            vec![
+                (GroupKey::Date(day(2026, 9, 1)), vec![sep_a, sep_b]),
+                (GroupKey::Date(day(2026, 10, 1)), vec![oct_a, oct_b]),
+                (GroupKey::Empty, vec![none]),
+            ]
+        );
+    }
+
+    #[test]
+    fn choice_grouping_follows_stored_option_order_including_removed() {
+        let mut fixture = fixture();
+        fixture.schema.fields[0]
+            .enum_options
+            .push(option("migraine", 2));
+        let headache = fixture.headache();
+        let stomach = fixture.kind().enum_options[1].id;
+        let migraine = fixture.kind().enum_options[2].id;
+        let m = fixture.push(Some(migraine), None);
+        let n1 = fixture.push(None, None);
+        let s = fixture.push(Some(stomach), None);
+        let h = fixture.push(Some(headache), None);
+        let n2 = fixture.push(None, None);
+        fixture.schema.fields[0].enum_options[1].deleted = true;
+        let kind = fixture.kind().id;
+        let body = grouped(kind, None, vec![]);
+        let result = run_in(&fixture, &body, "UTC");
+        let keys: Vec<_> = summary(&result).into_iter().map(|(key, _)| key).collect();
+        assert_eq!(
+            keys,
+            vec![
+                GroupKey::Option(headache),
+                GroupKey::Option(stomach),
+                GroupKey::Option(migraine),
+                GroupKey::Empty,
+            ]
+        );
+        assert_eq!(result.groups[1].label_hint.as_deref(), Some("stomach"));
+        assert_eq!(result.groups[3].len, 2);
+        let empty = &result.ids[3..];
+        assert!(empty.contains(&n1) && empty.contains(&n2));
+        let _ = (m, s, h);
+        // The first sort clause on the field descending reverses the options.
+        let body = grouped(kind, None, vec![sort_on(kind, SortDirection::Descending)]);
+        let keys: Vec<_> = run_in(&fixture, &body, "UTC")
+            .groups
+            .into_iter()
+            .map(|group| group.key)
+            .collect();
+        assert_eq!(
+            keys,
+            vec![
+                GroupKey::Option(migraine),
+                GroupKey::Option(stomach),
+                GroupKey::Option(headache),
+                GroupKey::Empty,
+            ]
+        );
+    }
+
+    #[test]
+    fn boolean_grouping_yes_first_unless_ascending() {
+        let mut fixture = fixture();
+        let done = add_field(&mut fixture, "done", FieldType::Boolean);
+        let no = push_value(&mut fixture, done, Some(FieldValue::Boolean(false)));
+        let yes = push_value(&mut fixture, done, Some(FieldValue::Boolean(true)));
+        let empty = push_value(&mut fixture, done, None);
+        let result = run_in(&fixture, &grouped(done, None, vec![]), "UTC");
+        assert_eq!(
+            summary(&result),
+            vec![
+                (GroupKey::Boolean(true), vec![yes]),
+                (GroupKey::Boolean(false), vec![no]),
+                (GroupKey::Empty, vec![empty]),
+            ]
+        );
+        let body = grouped(done, None, vec![sort_on(done, SortDirection::Ascending)]);
+        let keys: Vec<_> = run_in(&fixture, &body, "UTC")
+            .groups
+            .into_iter()
+            .map(|group| group.key)
+            .collect();
+        assert_eq!(
+            keys,
+            vec![
+                GroupKey::Boolean(false),
+                GroupKey::Boolean(true),
+                GroupKey::Empty
+            ]
+        );
+    }
+
+    #[test]
+    fn day_grouping_uses_the_zone() {
+        let mut fixture = fixture();
+        let start = add_field(&mut fixture, "start at", FieldType::DateTime);
+        push_value(
+            &mut fixture,
+            start,
+            Some(FieldValue::DateTime(utc_ms("2026-10-01T03:30:00Z"))),
+        );
+        let body = grouped(start, Some(GroupPeriod::Day), vec![]);
+        let bogota = run_in(&fixture, &body, "America/Bogota");
+        assert_eq!(bogota.groups[0].key, GroupKey::Date(day(2026, 9, 30)));
+        assert_eq!(bogota.zone, "America/Bogota");
+        let utc = run_in(&fixture, &body, "UTC");
+        assert_eq!(utc.groups[0].key, GroupKey::Date(day(2026, 10, 1)));
+    }
+
+    #[test]
+    fn date_values_are_bucketed_as_stored() {
+        let mut fixture = fixture();
+        let on = add_field(&mut fixture, "on", FieldType::Date);
+        push_value(&mut fixture, on, Some(FieldValue::Date(day(2026, 10, 1))));
+        let body = grouped(on, Some(GroupPeriod::Day), vec![]);
+        let result = run_in(&fixture, &body, "America/Bogota");
+        assert_eq!(result.groups[0].key, GroupKey::Date(day(2026, 10, 1)));
+    }
+
+    #[test]
+    fn week_grouping_across_daylight_saving_change() {
+        let mut fixture = fixture();
+        let start = add_field(&mut fixture, "start at", FieldType::DateTime);
+        // Saturday 24 October 2026 23:30 CEST and Monday 26 October 2026 00:30 CET.
+        let saturday = push_value(
+            &mut fixture,
+            start,
+            Some(FieldValue::DateTime(utc_ms("2026-10-24T21:30:00Z"))),
+        );
+        let monday = push_value(
+            &mut fixture,
+            start,
+            Some(FieldValue::DateTime(utc_ms("2026-10-25T23:30:00Z"))),
+        );
+        let body = grouped(start, Some(GroupPeriod::Week), vec![]);
+        assert_eq!(
+            summary(&run_in(&fixture, &body, "Europe/Madrid")),
+            vec![
+                (GroupKey::Date(day(2026, 10, 26)), vec![monday]),
+                (GroupKey::Date(day(2026, 10, 19)), vec![saturday]),
+            ]
+        );
+    }
+
+    #[test]
+    fn unknown_zone_falls_back_to_utc_and_is_reported() {
+        assert_eq!(calendar_for(None).timezone, "UTC");
+        assert_eq!(calendar_for(Some("Mars/Olympus".into())).timezone, "UTC");
+        assert_eq!(calendar_for(None).week_start, WeekStart::Monday);
+        let mut fixture = fixture();
+        let start = add_field(&mut fixture, "start at", FieldType::DateTime);
+        push_value(
+            &mut fixture,
+            start,
+            Some(FieldValue::DateTime(utc_ms("2026-10-01T03:30:00Z"))),
+        );
+        let body = grouped(start, Some(GroupPeriod::Day), vec![]);
+        let result = execute_view_in(
+            &fixture.schema,
+            &[],
+            &fixture.records,
+            &body,
+            0,
+            &calendar_for(None),
+        )
+        .unwrap();
+        assert_eq!(result.zone, "UTC");
+        assert_eq!(result.groups[0].key, GroupKey::Date(day(2026, 10, 1)));
+    }
+
+    #[test]
+    fn grouping_breaks_when_the_field_is_deleted_or_becomes_multi_option() {
+        let mut fixture = fixture();
+        let body = grouped(fixture.kind().id, None, vec![]);
+        assert!(body_health(&body, &fixture.schema, &[]).broken.is_none());
+        fixture.schema.fields[0].field_type = FieldType::EnumSet;
+        let broken = body_health(&body, &fixture.schema, &[]).broken.unwrap();
+        assert!(broken.contains("type"), "{broken}");
+        assert!(matches!(
+            run(&fixture, &body),
+            Err(DomainError::BrokenView { .. })
+        ));
+        fixture.schema.fields[0].field_type = FieldType::Enum;
+        fixture.schema.fields[0].deleted = true;
+        let broken = body_health(&body, &fixture.schema, &[]).broken.unwrap();
+        assert!(broken.contains("type"), "{broken}");
+    }
+
+    #[test]
+    fn portable_views_skip_broken_and_trim_degraded_sort() {
+        let mut fixture = fixture();
+        let start = add_field(&mut fixture, "start at", FieldType::DateTime);
+        let headache = fixture.headache();
+        let view = |name: &str, body: &ViewBody, order| ViewDefinition {
+            id: ViewId::new(),
+            collection_id: fixture.schema.id,
+            name: name.into(),
+            body: VersionedViewBody::new(body),
+            order,
+            deleted: false,
+        };
+        let old = view(
+            "Old scale",
+            &ViewBody {
+                filter: Some(is_kind(&fixture, headache)),
+                sorting: vec![],
+                grouping: None,
+            },
+            0,
+        );
+        let degraded = view(
+            "Recent",
+            &ViewBody {
+                filter: None,
+                sorting: vec![
+                    by(fixture.level(), SortDirection::Descending),
+                    sort_on(start, SortDirection::Descending),
+                ],
+                grouping: None,
+            },
+            1,
+        );
+        fixture.schema.fields[0].deleted = true;
+        fixture.schema.fields[1].deleted = true;
+        let (kept, omitted) = portable_views(&fixture.schema, &[], &[degraded.clone(), old]);
+        assert_eq!(omitted, vec!["Old scale".to_string()]);
+        assert_eq!(kept.len(), 1);
+        assert_eq!(
+            kept[0].body.body().unwrap().sorting,
+            vec![sort_on(start, SortDirection::Descending)]
+        );
     }
 }

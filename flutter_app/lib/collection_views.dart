@@ -15,6 +15,7 @@ import 'package:fi/theme/nocturne.dart';
 import 'package:fi/widgets/query_builder.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
+import 'package:intl/intl.dart';
 
 /// Below this screen width the views UI is laid out for a phone: long press opens a chip's
 /// menu, and the editor and the reorder list are bottom sheets.
@@ -111,6 +112,74 @@ String sortSummary(
     for (final clause in sorting.skip(1))
       l.viewThenField(_sortKeyName(l, schema, clause.expression)),
   ].join(', ');
+}
+
+/// Fields a view may group by: single Choice, yes/no, Date and Date & time.
+List<FieldDefinitionDto> groupableFields(CollectionSchemaDto schema) => [
+  for (final field in activeFieldsOf(schema))
+    if (const {
+      FieldTypeKindDto.enum_,
+      FieldTypeKindDto.boolean,
+      FieldTypeKindDto.date,
+      FieldTypeKindDto.dateTime,
+    }.contains(field.fieldType.kind))
+      field,
+];
+
+bool _isDateKind(FieldTypeKindDto? kind) =>
+    kind == FieldTypeKindDto.date || kind == FieldTypeKindDto.dateTime;
+
+String periodWord(AppLocalizations l, GroupPeriodDto period) =>
+    switch (period) {
+      GroupPeriodDto.day => l.viewPeriodDay,
+      GroupPeriodDto.week => l.viewPeriodWeek,
+      GroupPeriodDto.month => l.viewPeriodMonth,
+    };
+
+/// `start at · month`, or the field name for a Choice or yes/no grouping.
+String groupingSummary(
+  AppLocalizations l,
+  CollectionSchemaDto schema,
+  ViewGroupingDto grouping,
+) {
+  final name = _field(schema, grouping.fieldId)?.name ?? '?';
+  return switch (grouping.period) {
+    final period? => '$name · ${periodWord(l, period)}',
+    null => name,
+  };
+}
+
+/// A group's label: the localized day, "Week of ‹Monday›", the month and year, the option label,
+/// Yes or No, or "No ‹field›".
+String groupLabel(
+  AppLocalizations l,
+  CollectionSchemaDto schema,
+  ViewGroupingDto grouping,
+  ViewGroupDto group,
+) {
+  final field = _field(schema, grouping.fieldId);
+  final key = group.key;
+  switch (key.kind) {
+    case GroupKeyKindDto.empty:
+      return l.viewGroupNoValue(field?.name ?? '?');
+    case GroupKeyKindDto.boolean:
+      return key.flag == true ? l.commonYes : l.commonNo;
+    case GroupKeyKindDto.option:
+      return group.labelHint ??
+          (field == null
+              ? '?'
+              : FieldRendererRegistry.optionLabel(field, key.optionId)) ??
+          '?';
+    case GroupKeyKindDto.date:
+      final day = DateTime.utc(1970).add(Duration(days: key.days ?? 0));
+      return switch (grouping.period) {
+        GroupPeriodDto.week => l.viewGroupWeekOf(
+          DateFormat.yMMMd().format(day),
+        ),
+        GroupPeriodDto.month => DateFormat.yMMMM().format(day),
+        GroupPeriodDto.day || null => DateFormat.yMMMd().format(day),
+      };
+  }
 }
 
 /// The AND-ed conditions of a view filter, each as its own expression.
@@ -525,6 +594,7 @@ class ViewLine extends StatelessWidget {
     final filter = controller.brokenView != null
         ? null
         : filterSummary(l, schema, body.filter, decimalSeparator: separator);
+    final grouping = controller.brokenView != null ? null : body.grouping;
     final muted = TextStyle(color: c.muted(.5));
     final summary = Text.rich(
       TextSpan(
@@ -536,6 +606,11 @@ class ViewLine extends StatelessWidget {
             TextSpan(text: '  ·  ', style: muted),
             TextSpan(text: '${l.viewFilterLabel} ', style: muted),
             TextSpan(text: filter),
+          ],
+          if (grouping != null) ...[
+            TextSpan(text: '  ·  ', style: muted),
+            TextSpan(text: '${l.viewGroupLabel} ', style: muted),
+            TextSpan(text: groupingSummary(l, schema, grouping)),
           ],
         ],
       ),
@@ -807,6 +882,7 @@ class _ViewEditorState extends State<_ViewEditor> {
   late final TextEditingController name;
   late final List<_Condition> conditions;
   late final List<SortClauseDto> sorting;
+  ViewGroupingDto? grouping;
   var _counter = 0;
   late final List<int> _conditionKeys;
   FormIssues issues = FormIssues.none;
@@ -829,6 +905,7 @@ class _ViewEditorState extends State<_ViewEditor> {
     ];
     _conditionKeys = [for (final _ in conditions) _counter++];
     sorting = [...widget.body.sorting];
+    grouping = widget.body.grouping;
   }
 
   @override
@@ -852,6 +929,7 @@ class _ViewEditorState extends State<_ViewEditor> {
           ?condition.state!.filterExpression(widget.schema, decimalSeparator),
     ]),
     sorting: sorting,
+    grouping: grouping,
   );
 
   ViewNameProblem? _nameProblem(AppLocalizations l) => editsAll
@@ -1029,8 +1107,83 @@ class _ViewEditorState extends State<_ViewEditor> {
                 ),
               ),
             ),
+          Text(l.viewEditorGroup, style: sectionStyle),
+          _groupRow(l),
+          ...[
+            for (final line in issues.fieldLines(l, 'grouping'))
+              Text(line, style: TextStyle(fontSize: 12, color: c.danger)),
+          ],
         ],
       ),
+    );
+  }
+
+  /// None, any single Choice, yes/no, Date or Date & time field; dates also pick Day, Week or
+  /// Month. Multi-option Choices fields are never offered.
+  Widget _groupRow(AppLocalizations l) {
+    final fields = groupableFields(widget.schema);
+    final current = grouping;
+    final known =
+        current != null && fields.any((field) => field.id == current.fieldId);
+    final kind = known
+        ? _field(widget.schema, current.fieldId)?.fieldType.kind
+        : null;
+    return Row(
+      key: const Key('view-group'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      spacing: 8,
+      children: [
+        Expanded(
+          flex: 3,
+          child: FiSelect<String>.compact(
+            key: const Key('view-group-field'),
+            value: known ? current.fieldId : '',
+            label: l.viewEditorGroupField,
+            items: [
+              DropdownMenuItem(value: '', child: Text(l.viewEditorGroupNone)),
+              for (final field in fields)
+                DropdownMenuItem(value: field.id, child: Text(field.name)),
+            ],
+            onChanged: (value) => setState(() {
+              if (value == null || value.isEmpty) {
+                grouping = null;
+                return;
+              }
+              final date = _isDateKind(
+                _field(widget.schema, value)?.fieldType.kind,
+              );
+              grouping = ViewGroupingDto(
+                fieldId: value,
+                period: date ? (current?.period ?? GroupPeriodDto.month) : null,
+              );
+            }),
+          ),
+        ),
+        if (_isDateKind(kind))
+          Expanded(
+            flex: 2,
+            child: FiSelect<GroupPeriodDto>.compact(
+              key: const Key('view-group-period'),
+              value: current!.period ?? GroupPeriodDto.month,
+              label: l.viewEditorGroupPeriod,
+              items: [
+                for (final period in GroupPeriodDto.values)
+                  DropdownMenuItem(
+                    value: period,
+                    child: Text(periodWord(l, period)),
+                  ),
+              ],
+              onChanged: (value) => setState(
+                () => grouping = ViewGroupingDto(
+                  fieldId: current.fieldId,
+                  period: value ?? current.period,
+                ),
+              ),
+            ),
+          )
+        else
+          const Spacer(flex: 2),
+      ],
     );
   }
 

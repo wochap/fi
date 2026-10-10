@@ -21,7 +21,8 @@ void showOutcomeToast(
   success: success,
 );
 
-/// [showOutcomeToast] for callers that captured the messenger before an `await`.
+/// [showOutcomeToast] for callers that captured the messenger before an `await`. A
+/// [secondaryAction] (Show) sits beside the message as a ghost button, before [action].
 void showOutcomeToastOn(
   ScaffoldMessengerState messenger,
   AppLocalizations l,
@@ -29,6 +30,7 @@ void showOutcomeToastOn(
   String message, {
   required bool success,
   SnackBarAction? action,
+  SnackBarAction? secondaryAction,
 }) {
   messenger
     ..hideCurrentSnackBar()
@@ -58,6 +60,23 @@ void showOutcomeToastOn(
             ),
             const SizedBox(width: 10),
             Expanded(child: Text(message)),
+            if (secondaryAction != null)
+              Builder(
+                builder: (context) => TextButton(
+                  key: secondaryAction.key,
+                  style: TextButton.styleFrom(
+                    minimumSize: const Size(0, 24),
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  onPressed: () {
+                    messenger.hideCurrentSnackBar();
+                    secondaryAction.onPressed();
+                  },
+                  child: Text(secondaryAction.label),
+                ),
+              ),
           ],
         ),
       ),

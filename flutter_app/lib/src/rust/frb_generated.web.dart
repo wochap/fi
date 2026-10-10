@@ -171,6 +171,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   FieldValueDto dco_decode_box_autoadd_field_value_dto(dynamic raw);
 
   @protected
+  GroupPeriodDto dco_decode_box_autoadd_group_period_dto(dynamic raw);
+
+  @protected
   GroupingDto dco_decode_box_autoadd_grouping_dto(dynamic raw);
 
   @protected
@@ -233,6 +236,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   ViewBodyDto dco_decode_box_autoadd_view_body_dto(dynamic raw);
 
   @protected
+  ViewGroupingDto dco_decode_box_autoadd_view_grouping_dto(dynamic raw);
+
+  @protected
   VoiceDictationDto dco_decode_box_autoadd_voice_dictation_dto(dynamic raw);
 
   @protected
@@ -289,6 +295,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   CategoryPointDto dco_decode_category_point_dto(dynamic raw);
+
+  @protected
+  CloneOutcomeDto dco_decode_clone_outcome_dto(dynamic raw);
 
   @protected
   CollectionDto dco_decode_collection_dto(dynamic raw);
@@ -359,6 +368,15 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   FieldValueKindDto dco_decode_field_value_kind_dto(dynamic raw);
 
   @protected
+  GroupKeyDto dco_decode_group_key_dto(dynamic raw);
+
+  @protected
+  GroupKeyKindDto dco_decode_group_key_kind_dto(dynamic raw);
+
+  @protected
+  GroupPeriodDto dco_decode_group_period_dto(dynamic raw);
+
+  @protected
   GroupingDto dco_decode_grouping_dto(dynamic raw);
 
   @protected
@@ -378,6 +396,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   PlatformInt64 dco_decode_isize(dynamic raw);
+
+  @protected
+  JsonExportDto dco_decode_json_export_dto(dynamic raw);
 
   @protected
   List<String> dco_decode_list_String(dynamic raw);
@@ -484,6 +505,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<ViewDto> dco_decode_list_view_dto(dynamic raw);
+
+  @protected
+  List<ViewGroupDto> dco_decode_list_view_group_dto(dynamic raw);
 
   @protected
   List<VoiceDraftValueDto> dco_decode_list_voice_draft_value_dto(dynamic raw);
@@ -617,6 +641,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   FieldValueDto? dco_decode_opt_box_autoadd_field_value_dto(dynamic raw);
 
   @protected
+  GroupPeriodDto? dco_decode_opt_box_autoadd_group_period_dto(dynamic raw);
+
+  @protected
   GroupingDto? dco_decode_opt_box_autoadd_grouping_dto(dynamic raw);
 
   @protected
@@ -676,6 +703,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ViewBodyDto? dco_decode_opt_box_autoadd_view_body_dto(dynamic raw);
+
+  @protected
+  ViewGroupingDto? dco_decode_opt_box_autoadd_view_grouping_dto(dynamic raw);
 
   @protected
   VoiceDictationDto? dco_decode_opt_box_autoadd_voice_dictation_dto(
@@ -858,6 +888,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ViewDto dco_decode_view_dto(dynamic raw);
+
+  @protected
+  ViewGroupDto dco_decode_view_group_dto(dynamic raw);
+
+  @protected
+  ViewGroupingDto dco_decode_view_grouping_dto(dynamic raw);
 
   @protected
   ViewResultDto dco_decode_view_result_dto(dynamic raw);
@@ -1082,6 +1118,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  GroupPeriodDto sse_decode_box_autoadd_group_period_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   GroupingDto sse_decode_box_autoadd_grouping_dto(SseDeserializer deserializer);
 
   @protected
@@ -1164,6 +1205,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  ViewGroupingDto sse_decode_box_autoadd_view_grouping_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   VoiceDictationDto sse_decode_box_autoadd_voice_dictation_dto(
     SseDeserializer deserializer,
   );
@@ -1240,6 +1286,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   CategoryPointDto sse_decode_category_point_dto(SseDeserializer deserializer);
+
+  @protected
+  CloneOutcomeDto sse_decode_clone_outcome_dto(SseDeserializer deserializer);
 
   @protected
   CollectionDto sse_decode_collection_dto(SseDeserializer deserializer);
@@ -1334,6 +1383,15 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  GroupKeyDto sse_decode_group_key_dto(SseDeserializer deserializer);
+
+  @protected
+  GroupKeyKindDto sse_decode_group_key_kind_dto(SseDeserializer deserializer);
+
+  @protected
+  GroupPeriodDto sse_decode_group_period_dto(SseDeserializer deserializer);
+
+  @protected
   GroupingDto sse_decode_grouping_dto(SseDeserializer deserializer);
 
   @protected
@@ -1353,6 +1411,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   PlatformInt64 sse_decode_isize(SseDeserializer deserializer);
+
+  @protected
+  JsonExportDto sse_decode_json_export_dto(SseDeserializer deserializer);
 
   @protected
   List<String> sse_decode_list_String(SseDeserializer deserializer);
@@ -1499,6 +1560,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<ViewDto> sse_decode_list_view_dto(SseDeserializer deserializer);
+
+  @protected
+  List<ViewGroupDto> sse_decode_list_view_group_dto(
+    SseDeserializer deserializer,
+  );
 
   @protected
   List<VoiceDraftValueDto> sse_decode_list_voice_draft_value_dto(
@@ -1668,6 +1734,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  GroupPeriodDto? sse_decode_opt_box_autoadd_group_period_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   GroupingDto? sse_decode_opt_box_autoadd_grouping_dto(
     SseDeserializer deserializer,
   );
@@ -1747,6 +1818,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ViewBodyDto? sse_decode_opt_box_autoadd_view_body_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ViewGroupingDto? sse_decode_opt_box_autoadd_view_grouping_dto(
     SseDeserializer deserializer,
   );
 
@@ -1973,6 +2049,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ViewDto sse_decode_view_dto(SseDeserializer deserializer);
+
+  @protected
+  ViewGroupDto sse_decode_view_group_dto(SseDeserializer deserializer);
+
+  @protected
+  ViewGroupingDto sse_decode_view_grouping_dto(SseDeserializer deserializer);
 
   @protected
   ViewResultDto sse_decode_view_result_dto(SseDeserializer deserializer);
@@ -2259,6 +2341,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_box_autoadd_group_period_dto(
+    GroupPeriodDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_box_autoadd_grouping_dto(
     GroupingDto self,
     SseSerializer serializer,
@@ -2361,6 +2449,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_box_autoadd_view_grouping_dto(
+    ViewGroupingDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_box_autoadd_voice_dictation_dto(
     VoiceDictationDto self,
     SseSerializer serializer,
@@ -2459,6 +2553,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_category_point_dto(
     CategoryPointDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_clone_outcome_dto(
+    CloneOutcomeDto self,
     SseSerializer serializer,
   );
 
@@ -2574,6 +2674,21 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_group_key_dto(GroupKeyDto self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_group_key_kind_dto(
+    GroupKeyKindDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_group_period_dto(
+    GroupPeriodDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_grouping_dto(GroupingDto self, SseSerializer serializer);
 
   @protected
@@ -2599,6 +2714,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_isize(PlatformInt64 self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_json_export_dto(JsonExportDto self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_String(List<String> self, SseSerializer serializer);
@@ -2788,6 +2906,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_list_view_dto(List<ViewDto> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_view_group_dto(
+    List<ViewGroupDto> self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_list_voice_draft_value_dto(
@@ -2991,6 +3115,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_opt_box_autoadd_group_period_dto(
+    GroupPeriodDto? self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_opt_box_autoadd_grouping_dto(
     GroupingDto? self,
     SseSerializer serializer,
@@ -3083,6 +3213,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_opt_box_autoadd_view_body_dto(
     ViewBodyDto? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_view_grouping_dto(
+    ViewGroupingDto? self,
     SseSerializer serializer,
   );
 
@@ -3373,6 +3509,15 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_view_dto(ViewDto self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_view_group_dto(ViewGroupDto self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_view_grouping_dto(
+    ViewGroupingDto self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_view_result_dto(ViewResultDto self, SseSerializer serializer);

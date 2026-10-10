@@ -8,6 +8,7 @@ import 'models.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `core_error`, `parse_collection`, `parse_draft_values`, `parse_field`, `parse_pending`, `parse_record`, `parse_records`, `parse_values`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `eq`, `eq`, `fmt`, `fmt`, `from`
 
 Future<BootstrapDto> createNewDataset() =>
     RustLib.instance.api.crateApiCollectionsCreateNewDataset();
@@ -26,8 +27,8 @@ Future<void> renameCollection({required String id, required String name}) =>
       name: name,
     );
 
-/// Copies a collection's structure (no records) and returns the new collection id.
-Future<String> cloneCollection({
+/// Copies a collection's structure and views (no records); broken views are skipped and named.
+Future<CloneOutcomeDto> cloneCollection({
   required String sourceId,
   required String name,
 }) => RustLib.instance.api.crateApiCollectionsCloneCollection(
@@ -40,11 +41,11 @@ Future<String> exportCollectionCsv({required String id}) =>
     RustLib.instance.api.crateApiCollectionsExportCollectionCsv(id: id);
 
 /// The given collections as one `fi-collection` JSON document.
-Future<String> exportCollectionsJson({required List<String> ids}) =>
+Future<JsonExportDto> exportCollectionsJson({required List<String> ids}) =>
     RustLib.instance.api.crateApiCollectionsExportCollectionsJson(ids: ids);
 
 /// Every active collection as one `fi-collection` JSON document.
-Future<String> exportAllJson() =>
+Future<JsonExportDto> exportAllJson() =>
     RustLib.instance.api.crateApiCollectionsExportAllJson();
 
 /// Adds every row of `text` as a new record; a rejected file writes nothing.
@@ -229,3 +230,59 @@ Future<List<RecordDto>> listRecords({required String collectionId}) => RustLib
 
 Future<RecordDto?> getRecord({required String id}) =>
     RustLib.instance.api.crateApiCollectionsGetRecord(id: id);
+
+/// The new collection of a structure clone and the broken views that were not copied.
+class CloneOutcomeDto {
+  final String collectionId;
+  final List<String> skippedViews;
+
+  const CloneOutcomeDto({
+    required this.collectionId,
+    required this.skippedViews,
+  });
+
+  @override
+  int get hashCode => collectionId.hashCode ^ skippedViews.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is CloneOutcomeDto &&
+          runtimeType == other.runtimeType &&
+          collectionId == other.collectionId &&
+          skippedViews == other.skippedViews;
+}
+
+/// A `fi-collection` document with what went into it; the caller writes the file.
+class JsonExportDto {
+  final String text;
+  final int recordCount;
+  final int viewsWritten;
+
+  /// Names of the broken views left out.
+  final List<String> viewsOmitted;
+
+  const JsonExportDto({
+    required this.text,
+    required this.recordCount,
+    required this.viewsWritten,
+    required this.viewsOmitted,
+  });
+
+  @override
+  int get hashCode =>
+      text.hashCode ^
+      recordCount.hashCode ^
+      viewsWritten.hashCode ^
+      viewsOmitted.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is JsonExportDto &&
+          runtimeType == other.runtimeType &&
+          text == other.text &&
+          recordCount == other.recordCount &&
+          viewsWritten == other.viewsWritten &&
+          viewsOmitted == other.viewsOmitted;
+}

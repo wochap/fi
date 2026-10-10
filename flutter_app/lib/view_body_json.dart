@@ -15,6 +15,11 @@ Map<String, Object?> viewBodyToJson(ViewBodyDto body) => {
         'direction': clause.direction.name,
       },
   ],
+  if (body.grouping case final grouping?)
+    'grouping': {
+      'field': grouping.fieldId,
+      if (grouping.period case final period?) 'period': period.name,
+    },
 };
 
 /// Reads what [viewBodyToJson] wrote; null when [json] cannot be read.
@@ -22,6 +27,7 @@ ViewBodyDto? viewBodyFromJson(Object? json) {
   try {
     if (json is! Map) return null;
     final filter = json['filter'];
+    final grouping = json['grouping'] as Map?;
     return ViewBodyDto(
       filter: filter == null ? null : _expressionFromJson(filter),
       sorting: [
@@ -34,6 +40,12 @@ ViewBodyDto? viewBodyFromJson(Object? json) {
             nullOrder: NullOrderDto.last,
           ),
       ],
+      grouping: grouping == null
+          ? null
+          : ViewGroupingDto(
+              fieldId: grouping['field'] as String,
+              period: _enum(GroupPeriodDto.values, grouping['period']),
+            ),
     );
   } catch (_) {
     return null;

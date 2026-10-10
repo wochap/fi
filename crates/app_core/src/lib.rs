@@ -86,8 +86,8 @@ pub use identity::{
     WriteThroughSecureKeyStore,
 };
 pub use import_export::{
-    ENVELOPE_FORMAT, ENVELOPE_VERSION, Envelope, ExportedCollection, ExportedRecord, ImportAbort,
-    ImportOutcome, ImportedCollection, prepare_import,
+    CloneOutcome, ENVELOPE_FORMAT, ENVELOPE_VERSION, Envelope, ExportedCollection, ExportedRecord,
+    ImportAbort, ImportOutcome, ImportedCollection, JsonExport, prepare_import,
 };
 pub use option_edits::{
     DraftTarget, DraftValue, PENDING_OPTION_PREFIX, PendingOption, ResolvedDraft, resolve_draft,

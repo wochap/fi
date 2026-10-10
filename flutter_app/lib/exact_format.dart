@@ -191,6 +191,23 @@ String formatDate(int epochDays) => DateFormat('yyyy-MM-dd').format(
   ),
 );
 
+/// The zone record timestamps are read in. Date grouping happens in Rust in the device zone it
+/// reports with each view result; Flutter's local time is the same zone, except when Rust could
+/// not determine it and fell back to UTC. Then [utc] is set so cards and rows print the same
+/// day as the group headers.
+abstract final class RecordDateZone {
+  static bool utc = false;
+
+  /// [epochMs] in the zone record dates are shown in.
+  static DateTime of(int epochMs) {
+    final time = DateTime.fromMillisecondsSinceEpoch(epochMs, isUtc: true);
+    return utc ? time : time.toLocal();
+  }
+
+  /// Follows the zone a view execution reported.
+  static void follow(String zone) => utc = zone == 'UTC';
+}
+
 /// An instant in the sortable form editors use, `2026-09-24 14:05`, in local time.
 String formatDateTime(int epochMs) => DateFormat(
   'yyyy-MM-dd HH:mm',
@@ -199,10 +216,7 @@ String formatDateTime(int epochMs) => DateFormat(
 /// A record timestamp for reading rather than editing, in the active locale: `Sep 22, 2026 · 14:05`
 /// in local time, or `Sep 22 · 14:05` when [short]. Editors keep [formatDateTime]'s sortable form.
 String formatDateTimeHuman(int epochMs, {bool short = false}) {
-  final time = DateTime.fromMillisecondsSinceEpoch(
-    epochMs,
-    isUtc: true,
-  ).toLocal();
+  final time = RecordDateZone.of(epochMs);
   final date = short ? DateFormat.MMMd() : DateFormat.yMMMd();
   return '${date.format(time)} · ${DateFormat.Hm().format(time)}';
 }

@@ -243,6 +243,7 @@ impl GenericCommand {
                     &snapshot.computed_fields,
                     &snapshot.query_definitions,
                     &snapshot.widgets,
+                    &snapshot.views,
                 )?;
                 validate_clone_plan(&cloned)?;
                 *plan = Some(cloned);
@@ -809,6 +810,12 @@ pub fn validate_import(
                 .map_err(|error| fail(format!("widget \"{}\"", definition.title), error))?;
             working.widgets.push(definition.clone());
         }
+        for definition in &plan.views {
+            GenericCommand::CreateView(definition.clone())
+                .validate_against(&working)
+                .map_err(|error| fail(format!("view \"{}\"", definition.name), error))?;
+            working.views.push(definition.clone());
+        }
         for (index, record) in item.records.iter_mut().enumerate() {
             let label = || format!("record {}", index + 1);
             if !record_ids.insert(record.id) {
@@ -1351,7 +1358,7 @@ pub fn apply_generic_command(
     Ok(())
 }
 
-/// Writes a new collection with its computed fields, queries and widgets.
+/// Writes a new collection with its computed fields, queries, widgets and views.
 fn write_plan(
     tx: &mut AutomergeTransaction<'_>,
     collections: &ObjId,
@@ -1383,6 +1390,9 @@ fn write_plan(
     }
     for definition in &plan.widgets {
         write_widget(tx, collections, definition, stamp)?;
+    }
+    for definition in &plan.views {
+        write_view(tx, collections, definition, stamp)?;
     }
     Ok(())
 }
@@ -4313,6 +4323,7 @@ mod tests {
             &snapshot.computed_fields,
             &snapshot.query_definitions,
             &snapshot.widgets,
+            &snapshot.views,
             &snapshot.records,
         )
     }
