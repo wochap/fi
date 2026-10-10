@@ -5,15 +5,15 @@ Define durable local trusted-device control records, whole-repository authorizat
 ## Requirements
 
 ### Requirement: Persistent trusted-device records
-`control.sqlite` SHALL store each known peer's DeviceId, exact permanent public key, friendly display name, paired timestamp, last-seen timestamp, last-sync timestamp, and status of `trusted` or `revoked`. The last-seen timestamp SHALL be refreshed when an authenticated session with the peer is established, and the last-sync timestamp SHALL be recorded when the peer reaches the synced state, through an update that touches only those timestamps so it cannot overwrite a concurrent rename or revocation. Timestamp writes caused by repeated convergence SHALL be throttled per peer so a burst of synchronization produces a bounded number of writes.
+`control.sqlite` SHALL store each known peer's DeviceId, exact permanent public key, announced name, optional local nickname, paired timestamp, last-seen timestamp, last-sync timestamp, and status of `trusted` or `revoked`. The last-seen timestamp SHALL be refreshed when an authenticated session with the peer is established, and the last-sync timestamp SHALL be recorded when the peer reaches the synced state, through an update that touches only those timestamps so it cannot overwrite a concurrent rename, name announcement or revocation. Timestamp writes caused by repeated convergence SHALL be throttled per peer so a burst of synchronization produces a bounded number of writes.
 
 #### Scenario: Pairing commits
 - **WHEN** bilateral pairing commit succeeds
-- **THEN** each side has a durable trusted record for the peer with matching DeviceId and public key
+- **THEN** each side has a durable trusted record for the peer with matching DeviceId and public key, the peer's hello name as its announced name, and no nickname
 
 #### Scenario: Application restarts
 - **WHEN** the application reopens after successful pairing
-- **THEN** the peer remains trusted with its friendly name and recorded timestamps
+- **THEN** the peer remains trusted with its announced name, nickname and recorded timestamps
 
 #### Scenario: Peer converges
 - **WHEN** a trusted peer transitions into the synced state
@@ -24,8 +24,12 @@ Define durable local trusted-device control records, whole-repository authorizat
 - **THEN** at most one last-sync write occurs for that peer in that window
 
 #### Scenario: Timestamp write races a rename
-- **WHEN** a last-sync write and a friendly-name change for the same device are applied concurrently
-- **THEN** both the new name and the new timestamp persist
+- **WHEN** a last-sync write and a nickname change for the same device are applied concurrently
+- **THEN** both the new nickname and the new timestamp persist
+
+#### Scenario: Name announcement races a rename
+- **WHEN** an announced-name update and a nickname change for the same device are applied concurrently
+- **THEN** both the new announced name and the new nickname persist
 
 ### Requirement: Local trust authorizes complete Repo access
 A locally trusted peer with a compatible root SHALL synchronize every Repo document, while unknown or locally revoked peers SHALL synchronize none; document-level ACLs MUST NOT be introduced.
@@ -39,11 +43,23 @@ A locally trusted peer with a compatible root SHALL synchronize every Repo docum
 - **THEN** normal authentication rejects it before Repo synchronization
 
 ### Requirement: Friendly-name management is local metadata
-A device friendly name SHALL be editable in local control state and MUST NOT participate in cryptographic identity or authorization.
+A device's nickname SHALL be editable in local control state and MUST NOT participate in cryptographic identity or authorization. A nickname SHALL be stored trimmed and accepted only when the trimmed text is non-empty and at most 64 UTF-8 bytes; setting an empty nickname SHALL clear it. Renaming SHALL change only the nickname, never the announced name. The name the devices list presents SHALL be the nickname when one is set and the announced name otherwise.
 
 #### Scenario: Peer is renamed
-- **WHEN** the user changes a trusted device's display name
-- **THEN** its DeviceId, public key, paired time, trust status, and synchronized data are unchanged
+- **WHEN** the user changes a trusted device's nickname
+- **THEN** its DeviceId, public key, announced name, paired time, trust status, and synchronized data are unchanged
+
+#### Scenario: Nickname is trimmed
+- **WHEN** the user saves the nickname " Work laptop "
+- **THEN** the stored nickname is "Work laptop"
+
+#### Scenario: Nickname cleared
+- **WHEN** the user saves an empty nickname for a device announcing "Gean's ThinkPad"
+- **THEN** the record has no nickname and the device is presented as "Gean's ThinkPad"
+
+#### Scenario: Overlong nickname refused
+- **WHEN** the user saves a nickname whose trimmed text is longer than 64 UTF-8 bytes
+- **THEN** the rename fails with a validation error and the previous nickname is kept
 
 ### Requirement: Discovery secret is securely stored
 The high-entropy discovery-group secret SHALL be stored through `SecureKeyStore`, while its non-secret current epoch and recovery metadata SHALL be stored in `control.sqlite`.
@@ -122,3 +138,33 @@ A device whose record was deleted SHALL be treated as unknown: it cannot enter t
 #### Scenario: Deleted device pairs again
 - **WHEN** a deleted device completes SAS-confirmed pairing
 - **THEN** the devices list shows it as trusted with a paired timestamp from the new pairing, not from the deleted record
+
+### Requirement: Sessions refresh the announced name
+When an authenticated session with a trusted peer receives the peer's repository Hello, the application SHALL store the device name it carries as that peer's announced name, through an update that touches only the announced name, and SHALL emit the updated record to the devices list. The nickname SHALL NOT change. A Hello name that is empty after trimming or longer than 64 UTF-8 bytes SHALL be a protocol error for that peer. An announcement equal to the stored announced name SHALL NOT write.
+
+#### Scenario: Peer renamed itself
+- **WHEN** a peer recorded with announced name "Fi 9a01c3e2" connects and its Hello carries "Gean's ThinkPad"
+- **THEN** its record's announced name becomes "Gean's ThinkPad" and the devices list shows "Gean's ThinkPad"
+
+#### Scenario: Nickname wins over announcement
+- **WHEN** a peer with nickname "Work laptop" connects announcing "Gean's ThinkPad"
+- **THEN** the record keeps nickname "Work laptop", its announced name becomes "Gean's ThinkPad", and the list still presents "Work laptop"
+
+#### Scenario: Unchanged announcement
+- **WHEN** a peer reconnects announcing the name already stored
+- **THEN** no announced-name write occurs
+
+### Requirement: Control store migrates device names in place
+Opening a `control.sqlite` created before announced names existed SHALL add the announced-name column and make the nickname optional without losing any record, and SHALL be idempotent across repeated opens and interrupted upgrades. For each existing record, a stored name of the generated form "Fi " followed by eight lowercase hex characters SHALL become its announced name with no nickname; any other stored name SHALL become its nickname, with the announced name set to the generated form for that DeviceId until the peer next announces.
+
+#### Scenario: Generated name migrates to announced
+- **WHEN** a store holding a record named "Fi 9a01c3e2" is opened by the new version
+- **THEN** that record has announced name "Fi 9a01c3e2" and no nickname
+
+#### Scenario: Typed name migrates to nickname
+- **WHEN** a store holding a record for DeviceId `f755167e…` named "Kitchen tablet" is opened by the new version
+- **THEN** that record has nickname "Kitchen tablet" and announced name "Fi f755167e"
+
+#### Scenario: Migration is idempotent
+- **WHEN** the migrated store is opened again
+- **THEN** no schema change or data change occurs and every record is unchanged

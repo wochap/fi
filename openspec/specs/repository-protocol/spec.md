@@ -16,7 +16,7 @@ Document IDs SHALL parse and display canonically and SHALL occupy exactly 16 byt
 - **THEN** the repository attributes it only to the `PeerId` on the authenticated transport event
 
 ### Requirement: Versioned length-delimited frames
-Each transport payload SHALL contain one frame with a big-endian `u32` body length followed by `FIRP`, protocol version 1, a known message kind, zero reserved flags, and the kind payload.
+Each transport payload SHALL contain one frame with a big-endian `u32` body length followed by `FIRP`, protocol version 2, a known message kind, zero reserved flags, and the kind payload. A frame carrying any other protocol version, including version 1, SHALL be rejected as an unsupported version.
 
 #### Scenario: Frame round trip
 - **WHEN** any supported protocol message is encoded and decoded
@@ -29,6 +29,10 @@ Each transport payload SHALL contain one frame with a big-endian `u32` body leng
 #### Scenario: Multiple buffered frames
 - **WHEN** multiple complete frames are present in one input buffer
 - **THEN** the decoder returns them in order and leaves no bytes unaccounted for
+
+#### Scenario: Version 1 frame
+- **WHEN** a peer sends a frame whose version byte is 1
+- **THEN** decoding fails with an unsupported-version protocol error for that peer
 
 ### Requirement: Frame limits and exact payload validation
 The codec SHALL reject bodies larger than 8 MiB, inconsistent lengths, invalid counts, trailing kind-specific bytes, and arithmetic overflow before allocating from untrusted length fields.
@@ -46,7 +50,7 @@ The codec SHALL reject bodies larger than 8 MiB, inconsistent lengths, invalid c
 - **THEN** the frame is rejected without partially applying the inventory
 
 ### Requirement: Protocol message kinds
-Protocol version 1 SHALL encode Hello, BootstrapState, Inventory, Announce, and Sync messages with their specified bootstrap modes and document ID fields.
+Protocol version 2 SHALL encode Hello, BootstrapState, Inventory, Announce, and Sync messages with their specified bootstrap modes and document ID fields. Hello SHALL additionally carry the sender's device name after its bootstrap mode, as a big-endian `u16` byte length followed by that many bytes of UTF-8, and the repository SHALL make the name received in a peer's valid Hello available to the application together with the peer's identity. A Hello whose name is not valid UTF-8, or whose length field exceeds the remaining payload, SHALL be rejected as a malformed payload.
 
 #### Scenario: Hello first
 - **WHEN** the first decoded frame on a connection is not Hello
@@ -59,6 +63,14 @@ Protocol version 1 SHALL encode Hello, BootstrapState, Inventory, Announce, and 
 #### Scenario: Bootstrap payload
 - **WHEN** Hello or BootstrapState carries uninitialized, joining, or ready mode
 - **THEN** it contains respectively no root, the selected root, or the ready root using the exact mode encoding
+
+#### Scenario: Hello carries the device name
+- **WHEN** a device named "Gean's Pixel" opens a session
+- **THEN** its Hello decodes to its bootstrap mode and the name "Gean's Pixel", and the receiving application is told that peer's announced name
+
+#### Scenario: Malformed name
+- **WHEN** a Hello's name bytes are not valid UTF-8
+- **THEN** the repository reports a protocol error and closes that peer
 
 #### Scenario: Opaque sync payload
 - **WHEN** a Sync frame is decoded
@@ -80,10 +92,10 @@ Unknown versions, unknown kinds, nonzero reserved flags, malformed bootstrap pay
 - **THEN** the document is not reported as changed and the offending peer is closed
 
 ### Requirement: Protocol compatibility is explicit
-Protocol version 1 SHALL be tested with golden frames and SHALL be treated as coupled to the pinned Automerge sync implementation.
+Protocol version 2 SHALL be tested with golden frames and SHALL be treated as coupled to the pinned Automerge sync implementation.
 
 #### Scenario: Stable fixture
-- **WHEN** protocol version 1 fixtures are decoded and re-encoded
+- **WHEN** protocol version 2 fixtures, including a Hello with a non-ASCII device name, are decoded and re-encoded
 - **THEN** their exact bytes and semantic messages remain stable
 
 #### Scenario: Future Automerge upgrade

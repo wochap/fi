@@ -60,9 +60,9 @@ The confirmation (mock devices-code-confirm) SHALL be titled "Confirm the code",
 ### Requirement: Trusted-device list
 The devices screen SHALL list locally trusted and revoked device records with friendly name, DeviceId presentation, connectivity, last seen, last sync, and status obtained through Rust queries/events. Last sync SHALL reflect the most recent time the peer reached the synced state, not only the pairing time, and SHALL be carried by the same connection-state emission that reports the synced state so the row never shows synced connectivity alongside a never-synced timestamp.
 
-The list SHALL be headed "Trusted devices" with the device count beside it. Each row SHALL show a device icon tile, the friendly name, a state tag, and one line "Seen <time> · Synced <time>", with an absent value reading "Never seen" or "Never synced". Every state tag SHALL carry an icon beside its label, so the state is never told by colour alone: the success style for Synced; the accent style for Connected and Syncing; the danger style for Revoked and for the error tag of the unreachable-peer state on a non-revoked row whose last attempt failed; the neutral style otherwise, including Offline and Paused. Status styles color the tag's icon and edge or fill; the label stays in the text color. A row whose connectivity is paused SHALL read "Paused on this device · last synced <time>" (or "Paused on this device · never synced") instead of the seen/synced line. A non-revoked row whose last attempt failed SHALL instead show the plain-language line, guidance and actions of the unreachable-peer state. Last seen and last sync SHALL be presented as status times, not exact values: a value under one minute old reads "just now"; under one hour reads a whole number of minutes ago; under twenty-four hours reads a whole number of hours ago; anything older reads as a short local date and time with weekday, day, month, and hour:minute, in that order and without commas, adding the year only when it differs from the current year. A value in the future because of clock skew SHALL read as "just now". Relative wording SHALL be refreshed at least once per minute while the devices screen is mounted, without waiting for a device event. Record field values, chart axes, and query output SHALL keep their exact formatting; this presentation applies to status metadata only.
+The list SHALL be headed "Trusted devices" with the device count beside it. Each row SHALL show a device icon tile, the device's display name (its nickname when one is set, otherwise its announced name), a state tag, the announced name as a muted line under the display name only when a nickname is set, and one line "Seen <time> · Synced <time>", with an absent value reading "Never seen" or "Never synced". Every state tag SHALL carry an icon beside its label, so the state is never told by colour alone: the success style for Synced; the accent style for Connected and Syncing; the danger style for Revoked and for the error tag of the unreachable-peer state on a non-revoked row whose last attempt failed; the neutral style otherwise, including Offline and Paused. Status styles color the tag's icon and edge or fill; the label stays in the text color. A row whose connectivity is paused SHALL read "Paused on this device · last synced <time>" (or "Paused on this device · never synced") instead of the seen/synced line. A non-revoked row whose last attempt failed SHALL instead show the plain-language line, guidance and actions of the unreachable-peer state. Last seen and last sync SHALL be presented as status times, not exact values: a value under one minute old reads "just now"; under one hour reads a whole number of minutes ago; under twenty-four hours reads a whole number of hours ago; anything older reads as a short local date and time with weekday, day, month, and hour:minute, in that order and without commas, adding the year only when it differs from the current year. A value in the future because of clock skew SHALL read as "just now". Relative wording SHALL be refreshed at least once per minute while the devices screen is mounted, without waiting for a device event. Record field values, chart axes, and query output SHALL keep their exact formatting; this presentation applies to status metadata only.
 
-At 720px and wider each trusted row SHALL offer "Details", collapsed by default, and a ⋮ menu with the row's rename, revoke and delete actions, and Details SHALL expand inline under the row. Below 720px the whole row SHALL be the Details action, marked with a chevron, and SHALL open a pushed screen titled with the friendly name, with a back action and the ⋮ menu; the row itself SHALL show no ⋮ menu.
+At 720px and wider each trusted row SHALL offer "Details", collapsed by default, and a ⋮ menu with the row's rename, revoke and delete actions, and Details SHALL expand inline under the row. Below 720px the whole row SHALL be the Details action, marked with a chevron, and SHALL open a pushed screen titled with the display name, with a back action and the ⋮ menu; the row itself SHALL show no ⋮ menu.
 
 Details SHALL show:
 - The state, the endpoint being tried or last tried, the last attempt time as a status time, and the local device's bound sync port written as "UDP <port>". The endpoint SHALL be labelled "Last endpoint" when the last attempt failed and "Endpoint" otherwise. These are a grid at 720px and wider and label/value rows below 720px.
@@ -144,14 +144,26 @@ Details SHALL contain a "Reconnect" action that invokes the manual reconnect com
 - **WHEN** a non-revoked peer's last attempt failed
 - **THEN** its error tag uses the danger style with an icon, and its label is in the text color
 
-### Requirement: Device rename and revoke actions
-Flutter SHALL expose friendly-name editing and confirmed revoke/unpair actions that delegate to Rust and refresh persisted device state.
+#### Scenario: Nickname row shows the announced name
+- **WHEN** a trusted device announces "Gean's ThinkPad" and has the nickname "Work laptop"
+- **THEN** its row shows "Work laptop" with "Gean's ThinkPad" as a muted line under it
 
-The rename dialog SHALL be titled "Rename device" with the line "Only changes the name on this device", a required "Name" field holding the current name, and "Cancel" / "Save". The revoke confirmation SHALL be titled "Revoke <name>?" with "It stops syncing with this device right away. It stays in the list as revoked, and you can pair it again later.", "Revoke" as a secondary action on the left and "Keep device" as the primary action on the right.
+#### Scenario: Row without nickname
+- **WHEN** a trusted device announces "Gean's ThinkPad" and has no nickname
+- **THEN** its row shows "Gean's ThinkPad" once, with no second name line
+
+#### Scenario: Announced name updates live
+- **WHEN** a paired device without a nickname renames itself and reconnects
+- **THEN** its row shows the new name without restarting the app
+
+### Requirement: Device rename and revoke actions
+Flutter SHALL expose nickname editing and confirmed revoke/unpair actions that delegate to Rust and refresh persisted device state.
+
+The rename dialog SHALL be titled "Rename device" with the line "Only changes the name on this device", a "Name" field holding the current nickname (empty when none is set), the hint "Announces itself as <announced name>. Clear the name to use that." under the field, and "Cancel" / "Save". Saving an empty name SHALL clear the nickname; a name longer than 64 UTF-8 bytes SHALL show an inline error and SHALL NOT be saved. The revoke confirmation SHALL be titled "Revoke <name>?" with "It stops syncing with this device right away. It stays in the list as revoked, and you can pair it again later.", "Revoke" as a secondary action on the left and "Keep device" as the primary action on the right.
 
 #### Scenario: Rename succeeds
 - **WHEN** the user saves a valid device name
-- **THEN** the devices query returns the new name while DeviceId and trust key remain unchanged
+- **THEN** the devices query returns the new nickname while DeviceId, announced name and trust key remain unchanged
 
 #### Scenario: Revoke succeeds
 - **WHEN** the user confirms revocation
@@ -160,6 +172,10 @@ The rename dialog SHALL be titled "Rename device" with the line "Only changes th
 #### Scenario: Revoke is kept
 - **WHEN** the user opens the revoke confirmation and presses "Keep device"
 - **THEN** the dialog closes and no Rust call is made
+
+#### Scenario: Clearing the nickname
+- **WHEN** the user opens Rename on "Work laptop", which announces "Gean's ThinkPad", clears the field and saves
+- **THEN** the dialog showed "Announces itself as Gean's ThinkPad. Clear the name to use that.", and the row now shows "Gean's ThinkPad" with no second name line
 
 ### Requirement: Revoked device delete action
 The devices screen SHALL offer a "Delete…" action only on rows whose record is revoked. The action SHALL require explicit confirmation that states the record will be removed and that the device can be paired again later: the confirmation SHALL be titled "Delete revoked device?" with "Removes <name> from this list. It can be paired again.", "Delete" as a secondary action on the left and "Keep" as the primary action on the right. On confirmation Flutter SHALL delegate to Rust and refresh the device list so the row disappears. A trusted row SHALL NOT offer the delete action, and a revoked row SHALL NOT offer revoke.
@@ -442,7 +458,7 @@ While Discoverable is off and pairing is idle, the devices screen SHALL state "D
 - **THEN** no discovery-off note is shown
 
 ### Requirement: This device shows its identity
-The "This device" section of the devices screen SHALL show the name this device presents to peers during pairing, with the muted line "Name other devices see when pairing" under it, and the local DeviceId, obtained from Rust, in a monospace presentation. At 720px and wider the id SHALL be shown in groups of eight hex characters, eliding the middle groups with "…"; below 720px it SHALL be shortened to its first and last eight characters. A "Copy ID" action SHALL place the full DeviceId on the clipboard and confirm the copy by showing "ID copied" in the action's place for a few seconds. The section SHALL also hold the "Reset this device's data" entry, which opens the reset confirmation. When Rust reports that no identity is available, the section SHALL read "Networking is not set up" with the line "This device has no identity for pairing yet." instead of showing an empty identifier, and SHALL still hold the reset entry.
+The "This device" section of the devices screen SHALL show the name this device presents to peers, with the muted line "Name other devices see when pairing" under it and a rename (pencil) action labelled "Rename this device", and the local DeviceId, obtained from Rust, in a monospace presentation. At 720px and wider the id SHALL be shown in groups of eight hex characters, eliding the middle groups with "…"; below 720px it SHALL be shortened to its first and last eight characters. A "Copy ID" action SHALL place the full DeviceId on the clipboard and confirm the copy by showing "ID copied" in the action's place for a few seconds. The section SHALL also hold the "Reset this device's data" entry, which opens the reset confirmation. The rename action SHALL open a dialog (a bottom sheet below 720px) titled "Name this device" with the line "Other devices see this name when pairing", a required "Name" field holding the current name, and "Cancel" / "Save". Save SHALL be unavailable while the trimmed name is empty, a name longer than 64 UTF-8 bytes SHALL show an inline error, and saving SHALL delegate to Rust and update the section with the name Rust stores. When Rust reports that no identity is available, the section SHALL read "Networking is not set up" with the line "This device has no identity for pairing yet." instead of showing an empty identifier, and SHALL still hold the reset entry.
 
 #### Scenario: Identity shown
 - **WHEN** the devices screen is opened on a networked device
@@ -454,7 +470,15 @@ The "This device" section of the devices screen SHALL show the name this device 
 
 #### Scenario: No identity
 - **WHEN** Rust reports that no identity is available
-- **THEN** the section reads "Networking is not set up" and "This device has no identity for pairing yet." with no Copy ID action
+- **THEN** the section reads "Networking is not set up" and "This device has no identity for pairing yet." with no Copy ID action and no rename action
+
+#### Scenario: Naming this device
+- **WHEN** the user presses the pencil on "Fi f755167e", enters "Gean's Pixel" and saves
+- **THEN** the section shows "Gean's Pixel", and a paired device lists it as "Gean's Pixel" after its next session
+
+#### Scenario: Empty name cannot be saved
+- **WHEN** the user clears the field in "Name this device"
+- **THEN** Save is unavailable and the stored name is unchanged
 
 ### Requirement: Devices screen pairing entry points
 When no device is trusted, the "Trusted devices" section SHALL show a dashed empty state reading "No devices paired yet" with the line "Start pairing on both devices while they're nearby. Pairing turns itself off after 2 minutes." (the last sentence may be omitted below 720px) and a primary "Start pairing" action, and the section header SHALL offer no "Pair device" action. When at least one device is trusted, the section header SHALL offer a "Pair device" action instead. Either action SHALL enter pairing mode, and while pairing is active the pairing card SHALL take the empty state's place and run the pairing, candidate and SAS flow unchanged. While Discoverable is off, the empty state SHALL add the note that discovery is off and pairing still works. After a pairing completes, the screen SHALL show a dismissible banner reading "Paired with <name>. The first sync starts automatically." with a "Pair another" action that enters pairing mode again.
