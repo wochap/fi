@@ -273,7 +273,9 @@ The new-record editor SHALL be titled "New record" with "in <collection>". At 72
 
 The edit-record editor SHALL be titled "Edit record" with "in <collection> · created <date>" when the record has a creation time, and its primary action SHALL read "Save changes". At 720px and wider a "Delete…" text button SHALL sit at the leading edge of the footer, apart from Cancel and "Save changes". Below 720px a ⋮ in the header SHALL hold Clone and "Delete record…", and the footer SHALL hold only "Save changes". Delete SHALL ask for confirmation before logically deleting the record. Clone SHALL close the editor and open the new-record editor prefilled with this record's current values, without saving anything until the user saves. Values of removed Choice options SHALL NOT be prefilled.
 
-At 720px and wider, outside selection mode, each record row SHALL end with a ⋯ button labelled "Record actions" in place of a delete icon. Its menu SHALL hold "Clone" and "Delete…". Clone SHALL open the new-record editor prefilled with the row's values, as Clone from the edit-record editor does. Delete… SHALL ask for the same confirmation as the edit-record editor's Delete before logically deleting the record. Below 720px each record card SHALL keep its immediate delete icon and SHALL have no row menu.
+At 720px and wider, outside selection mode, each record row SHALL end with a ⋯ button labelled "Record actions" in place of a delete icon. Its menu SHALL hold "Clone" and "Delete…". Clone SHALL open the new-record editor prefilled with the row's values, as Clone from the edit-record editor does. Delete… SHALL ask for the same confirmation as the edit-record editor's Delete before logically deleting the record.
+
+Below 720px each record card SHALL have no row menu. Outside selection mode, its header SHALL end with two icon buttons of the same muted style and 44px touch target: a Clone button (copy icon, tooltip and semantics label "Clone") immediately before the immediate delete icon. A long title SHALL truncate before these buttons. Clone on a complete card SHALL NOT ask for confirmation and SHALL NOT open a form: it SHALL submit one clone-records command for that record through the bridge, and after success SHALL show the feedback "Cloned 1 record" with Undo, with the same Undo behaviour as batch Clone. When the clone command is rejected, the typed error SHALL be shown and no record SHALL change. Clone on an incomplete card SHALL instead open the new-record editor prefilled with the card's values, as Clone from the edit-record editor does, because the clone command rejects incomplete sources. In selection mode neither button SHALL be shown.
 
 #### Scenario: Create Headache record
 - **WHEN** the user completes a schema-generated Headache form
@@ -298,6 +300,26 @@ At 720px and wider, outside selection mode, each record row SHALL end with a ⋯
 #### Scenario: Delete from the row menu asks first
 - **WHEN** the user chooses "Delete…" from a row's ⋯ menu on a 1240px-wide screen
 - **THEN** the delete confirmation appears, confirming deletes the record, and cancelling leaves it in place
+
+#### Scenario: Clone from a phone card
+- **WHEN** the user taps the Clone button on the complete card "Taxi home from airport" on a 390px-wide screen
+- **THEN** Flutter submits one clone-records command for that record without opening a form, the new record appears after refresh, and feedback shows "Cloned 1 record" with Undo
+
+#### Scenario: Undo a card clone
+- **WHEN** the user presses Undo on the "Cloned 1 record" feedback of a card clone
+- **THEN** Flutter submits one batch delete of the created record and the source record is unchanged
+
+#### Scenario: Clone from an incomplete phone card
+- **WHEN** the user taps the Clone button on a card marked "Incomplete" on a 390px-wide screen
+- **THEN** no clone command is sent and the new-record sheet opens prefilled with that card's values and the line "Clone of ‘<title>’"
+
+#### Scenario: Card buttons at 360px
+- **WHEN** a card whose title is longer than the card width is shown on a 360px-wide screen outside selection mode
+- **THEN** the title truncates, and the Clone and delete buttons are both visible at the end of the card header, Clone first, each with a 44px touch target
+
+#### Scenario: No card buttons while selecting
+- **WHEN** selection mode is active on a 390px-wide screen
+- **THEN** no record card shows the Clone or delete button
 
 #### Scenario: Invalid record in list
 - **WHEN** the record list on a 1240px-wide screen contains a record with `valid = false` and a missing-required diagnostic for "text multiline"
@@ -820,3 +842,50 @@ When active records hold an option that was merged into another option, the opti
 #### Scenario: Records still on a merged option
 - **WHEN** after sync 3 active records hold "groceries", which was merged into "Groceries"
 - **THEN** the options section shows "3 records still use merged options." and "Move them" moves the 3 records to "Groceries"
+
+### Requirement: Recently cloned record badge
+The collection screen SHALL mark records created by a clone in the current visit to the collection with an accent `Tag` reading "Clone", so the copies can be told apart from their sources without relying on color alone. The badge SHALL appear on the phone card next to the title and on the desktop row in its first cell, and its semantics label SHALL read "Recently cloned".
+
+The set of badged records SHALL be held in memory by the collection controller, per collection, and SHALL never be persisted or synchronized:
+
+- After a card Clone or a batch Clone succeeds, the badged set of that collection SHALL become exactly the records that clone created.
+- After a new-record editor opened by Clone (from the edit-record editor, the desktop ⋯ row menu, or an incomplete card) saves, the badged set of that collection SHALL become exactly the saved record. Cancelling that editor SHALL leave the set unchanged.
+- Undo of a clone SHALL remove the records it deletes from the set. A badged record that is deleted, or is no longer an active record of the collection, SHALL lose its badge. A record that is still active SHALL keep its badge even when the record list currently shown filters it out.
+- The badge SHALL stay after the clone feedback and its Undo action are gone.
+- Leaving the collection (opening another collection, going back to the collection list, or the collection being deleted) SHALL clear that collection's set. After an app restart no record SHALL be badged.
+
+#### Scenario: Card clone badged
+- **WHEN** the user clones "Taxi home from airport" from its card on a 390px-wide screen
+- **THEN** the new record's card shows the "Clone" tag and the source card does not
+
+#### Scenario: Batch clone badged on desktop
+- **WHEN** three records of "pains" are selected on a 1240px-wide screen and cloned
+- **THEN** the three new rows show the "Clone" tag in their first cell
+
+#### Scenario: Badge outlasts the feedback
+- **WHEN** the "Cloned 3 records" feedback times out without Undo
+- **THEN** the three new records still show the "Clone" tag
+
+#### Scenario: Next clone replaces the badges
+- **WHEN** three records are badged and the user then clones one record of the same collection
+- **THEN** only the newest clone shows the "Clone" tag
+
+#### Scenario: Clone saved from the editor badged
+- **WHEN** the user chooses Clone from a row's ⋯ menu on a 1240px-wide screen and presses "Save record"
+- **THEN** the saved record's row shows the "Clone" tag and no clone feedback is shown
+
+#### Scenario: Cancelled clone editor leaves badges
+- **WHEN** one record is badged and the user opens a clone editor and cancels it
+- **THEN** the same record keeps its "Clone" tag
+
+#### Scenario: Undo removes the badge
+- **WHEN** the user presses Undo on "Cloned 1 record"
+- **THEN** the clone is deleted and no record shows the "Clone" tag
+
+#### Scenario: Leaving the collection clears badges
+- **WHEN** a record of "expenses" is badged and the user goes back to the collection list and opens "expenses" again
+- **THEN** no record shows the "Clone" tag
+
+#### Scenario: Restart clears badges
+- **WHEN** the app is restarted after a clone
+- **THEN** no record shows the "Clone" tag
