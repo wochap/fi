@@ -1612,8 +1612,28 @@ class CollectionsPage extends StatelessWidget {
           primaryLabel: context.l10n.collectionsCloneAction,
           onPrimary: () async {
             try {
-              await controller.cloneCollection(source.id, name.text.trim());
+              final messenger = ScaffoldMessenger.of(context);
+              final l = context.l10n;
+              final width = MediaQuery.sizeOf(context).width;
+              final outcome = await controller.cloneCollection(
+                source.id,
+                name.text.trim(),
+              );
               if (route.mounted) Navigator.pop(route);
+              // Broken views are left out of the copy; say which.
+              final skipped = outcome.skippedViews;
+              if (skipped.isNotEmpty) {
+                showOutcomeToastOn(
+                  messenger,
+                  l,
+                  width,
+                  l.collectionsCloneViewsSkipped(
+                    skipped.length,
+                    skipped.join(', '),
+                  ),
+                  success: true,
+                );
+              }
             } catch (failure) {
               setState(
                 () => issues = FormIssues.from(

@@ -432,7 +432,7 @@
   "recordsEmpty": "Aún no hay registros.",
   "recordsFab": "Registro",
   "recordsMoreFields": "{count, plural, =1{+ 1 campo más} other{+ {count} campos más}}",
-  "recordsCloneBadge": "Copia",
+  "recordsCloneBadge": "Clonado",
   "recordsCloneBadgeSemantics": "Clonado recientemente",
   "recordsIncomplete": "Incompleto",
   "recordsDeleteRecord": "Eliminar registro",
@@ -1043,5 +1043,6 @@
   "recordsClonedHiddenSome": "{count} registros clonados · {hidden} ocultos por {view}",
   "recordsSavedHidden": "Guardado · oculto por {view}",
   "collectionsExportedJson": "{records, plural, =1{Se exportó 1 registro} other{Se exportaron {records} registros}} y {views, plural, =1{1 vista} other{{views} vistas}}.",
-  "collectionsExportViewsOmitted": "{count, plural, =1{No se incluyó 1 vista rota: {names}.} other{No se incluyeron {count} vistas rotas: {names}.}}"
+  "collectionsExportViewsOmitted": "{count, plural, =1{No se incluyó 1 vista rota: {names}.} other{No se incluyeron {count} vistas rotas: {names}.}}",
+  "collectionsCloneViewsSkipped": "{count, plural, =1{Colección clonada. No se copió 1 vista rota: {names}.} other{Colección clonada. No se copiaron {count} vistas rotas: {names}.}}"
 }

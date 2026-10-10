@@ -1642,7 +1642,7 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get recordsCloneBadge => 'Copia';
+  String get recordsCloneBadge => 'Clonado';
 
   @override
   String get recordsCloneBadgeSemantics => 'Clonado recientemente';
@@ -4090,6 +4090,17 @@ class AppLocalizationsEs extends AppLocalizations {
       locale: localeName,
       other: 'No se incluyeron $count vistas rotas: $names.',
       one: 'No se incluyó 1 vista rota: $names.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String collectionsCloneViewsSkipped(int count, String names) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Colección clonada. No se copiaron $count vistas rotas: $names.',
+      one: 'Colección clonada. No se copió 1 vista rota: $names.',
     );
     return '$_temp0';
   }

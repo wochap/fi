@@ -4060,4 +4060,15 @@ class AppLocalizationsEn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String collectionsCloneViewsSkipped(int count, String names) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Collection cloned. $count broken views weren\'t copied: $names.',
+      one: 'Collection cloned. 1 broken view wasn\'t copied: $names.',
+    );
+    return '$_temp0';
+  }
 }

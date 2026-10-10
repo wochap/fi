@@ -5508,5 +5508,17 @@
         "type": "String"
       }
     }
+  },
+  "collectionsCloneViewsSkipped": "{count, plural, =1{Collection cloned. 1 broken view wasn't copied: {names}.} other{Collection cloned. {count} broken views weren't copied: {names}.}}",
+  "@collectionsCloneViewsSkipped": {
+    "description": "Clone collection outcome: broken views left out of the copy",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "names": {
+        "type": "String"
+      }
+    }
   }
 }

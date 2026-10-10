@@ -433,6 +433,32 @@ void main() {
       handle.dispose();
     });
 
+    for (final (name, size, target) in [
+      ('phone', _phone, 44.0),
+      ('desktop', _desktop, 28.0),
+    ]) {
+      testWidgets('on a $name the Skip target fits inside the field', (
+        tester,
+      ) async {
+        final harness = _Harness(cleanupDelay: slow);
+        await _openNew(tester, harness, size: size);
+        await toCleaning(tester, 'description');
+        final skip = find.byKey(const Key('dictation-skip'));
+        final box = tester.getRect(
+          find.ancestor(of: skip, matching: find.byKey(const Key('input-overlay'))),
+        );
+        final rect = tester.getRect(skip);
+        expect(rect.height, greaterThanOrEqualTo(target));
+        expect(box.top, lessThanOrEqualTo(rect.top));
+        expect(box.bottom, greaterThanOrEqualTo(rect.bottom));
+        // A tap on the target's top edge still lands.
+        await tester.tapAt(Offset(rect.center.dx, rect.top + 1));
+        await tester.pumpAndSettle();
+        expect(harness.fake.skips, 1);
+        await tester.pump(slow);
+      });
+    }
+
     testWidgets('into an empty field inserts the raw transcript, no sheet', (
       tester,
     ) async {

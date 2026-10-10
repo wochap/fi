@@ -1,6 +1,7 @@
 import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/controllers.dart';
 import 'package:fi/src/rust/api/models.dart';
+import 'package:fi/src/rust/api/views.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -123,6 +124,22 @@ void main() {
     await pumpUntilFound(tester, find.text('Headaches (copy)'));
     // The list stays in view: duplicating never opens the copy.
     expect(find.text('Headaches'), findsOneWidget);
+  });
+
+  testWidgets('a broken view left out of the copy is named in a toast', (
+    tester,
+  ) async {
+    final bridge = await _chooseClone(tester);
+    bridge.views[_collection] = [
+      const ViewDto(id: 'v1', name: 'Old scale', order: 1, effectiveSort: []),
+    ];
+    bridge.brokenViews['v1'] = 'Uses a deleted field';
+    await tester.tap(find.text('Clone'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text("Collection cloned. 1 broken view wasn't copied: Old scale."),
+      findsOneWidget,
+    );
   });
 
   testWidgets('a custom name is trimmed and used', (tester) async {
