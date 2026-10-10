@@ -5,11 +5,21 @@ TBD: Define the versioned serializable expression AST, static validation, checke
 ## Requirements
 
 ### Requirement: Versioned structured expression AST
-Expressions SHALL be represented as versioned serializable structured data containing only supported nodes for stable field access, typed constants, arithmetic, comparison, boolean logic, null tests, absolute value, and temporal operations; the system MUST NOT execute arbitrary user code or SQL.
+Expressions SHALL be represented as versioned serializable structured data. They SHALL contain only supported nodes: stable field access, record creation time, typed constants, arithmetic, comparison, boolean logic, null tests, absolute value, and temporal operations. The system MUST NOT execute arbitrary user code or SQL.
+
+The record creation time node SHALL evaluate to the DateTime embedded in the record's time-ordered id. It SHALL be Null when the id carries no timestamp. It SHALL be accepted in query expressions, including filters and sort keys, and in any later expression context that is not a computed field, and SHALL be rejected in computed-field expressions.
 
 #### Scenario: Expression synchronization round trip
 - **WHEN** an expression is written to Automerge, projected, synchronized, and read on another device
 - **THEN** its node kinds, stable field IDs, constants, and numeric policies are preserved
+
+#### Scenario: Record creation time
+- **WHEN** a query sorts by the record creation time node over a record whose UUIDv7 id embeds 2026-09-22 08:30:00.000 UTC
+- **THEN** the node evaluates to that DateTime on every device and after a projection rebuild
+
+#### Scenario: Creation time rejected in a computed field
+- **WHEN** a computed field's expression uses the record creation time node
+- **THEN** validation rejects the definition before persistence
 
 ### Requirement: Typed field access and constants
 Field access SHALL identify source or supported computed fields by stable IDs, and constants SHALL retain explicit Text, Integer, FixedDecimal scale, Boolean, Date, DateTime, Duration, EnumOption, EnumOptionSet, or Null types as applicable. An EnumOptionSet constant SHALL hold option ids of exactly one EnumSet or Enum field.
@@ -45,6 +55,8 @@ Equal, NotEqual, GreaterThan, GreaterThanOrEqual, LessThan, and LessThanOrEqual 
 
 HasAnyOf, HasAllOf and HasNoneOf SHALL take an EnumSet field operand and an EnumOptionSet constant of that field, and SHALL return Boolean: HasAnyOf is true when the record's set shares at least one option with the constant, HasAllOf when it holds every option of the constant, and HasNoneOf when it shares none. A Null (empty) record set SHALL make HasAnyOf and HasAllOf false and HasNoneOf true. IsNull and IsNotNull SHALL test a Choices field for an empty or non-empty set.
 
+HasAnyOf and HasNoneOf SHALL also take a single-choice (Enum) field operand with an EnumOptionSet constant of that field, treating the record's value as a set of at most one option: HasAnyOf is true when the value is one of the constant's options, and HasNoneOf when it is not. A Null value SHALL make HasAnyOf false and HasNoneOf true. HasAllOf SHALL NOT accept an Enum operand.
+
 #### Scenario: Reject incompatible comparison
 - **WHEN** an expression compares DateTime with Text
 - **THEN** validation rejects the definition before persistence
@@ -59,6 +71,14 @@ HasAnyOf, HasAllOf and HasNoneOf SHALL take an EnumSet field operand and an Enum
 
 #### Scenario: Equality on a set rejected
 - **WHEN** an expression uses Equal with a Choices field operand
+- **THEN** validation rejects the definition before persistence
+
+#### Scenario: Single choice is any of
+- **WHEN** a filter is "type has any of {headache, migraine}" over records whose type is headache, stomach and empty
+- **THEN** only the first record matches, and "type has none of {headache, migraine}" matches the second and the third
+
+#### Scenario: Has all of rejects a single choice
+- **WHEN** an expression uses HasAllOf with a single-choice field operand
 - **THEN** validation rejects the definition before persistence
 
 ### Requirement: Explicit null semantics

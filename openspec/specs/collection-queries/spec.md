@@ -19,11 +19,49 @@ Rust SHALL validate filters, grouping, aggregation, sorting, limits, field membe
 - **THEN** Rust returns a typed validation error and does not persist the query
 
 ### Requirement: Filtering and sorting
-Queries SHALL support typed filtering expressions and deterministic ascending or descending sorting by compatible source or computed values, with record ID as the final tie-breaker.
+Queries SHALL support typed filtering expressions and deterministic ascending or descending sorting by compatible source or computed values, or by the record creation time, with record ID as the final tie-breaker.
+
+Sort order by type SHALL be:
+- Text: case- and accent-insensitive, comparing a folded key of each value: Unicode canonical decomposition (NFD) with combining marks removed, then simple Unicode lowercase. Ties SHALL be broken by the exact code-point order of the original text. It SHALL NOT be locale-aware and SHALL NOT compare digit runs numerically.
+- Boolean: false before true.
+- A single-choice (Enum) value: the position of its option in the field's option order, active and removed options keeping their stored position, with the option id breaking ties.
+- Integer, FixedDecimal of one scale, Date, DateTime and Duration: by value.
+- Record creation time: as DateTime.
+- A multi-option Choices (EnumSet) value: not orderable, so it SHALL NOT be a sort key.
+
+These sort orders SHALL NOT change the semantics of comparison operators in filters.
 
 #### Scenario: Filter severe headaches
 - **WHEN** a query filters intensity greater than or equal to seven and sorts by started_at ascending
 - **THEN** only matching records are returned in deterministic timestamp-and-ID order
+
+#### Scenario: Text ignores case
+- **WHEN** a query sorts the Text values "banana", "Apple" and "apple" ascending
+- **THEN** the order is "Apple", "apple", "banana"
+
+#### Scenario: Text ignores accents
+- **WHEN** a query sorts the Text values "zanahoria", "élite" and "edad" ascending
+- **THEN** the order is "edad", "élite", "zanahoria"
+
+#### Scenario: Digit runs compare as text
+- **WHEN** a query sorts the Text values "item 10" and "item 2" ascending
+- **THEN** the order is "item 10", "item 2"
+
+#### Scenario: Removed option keeps its position
+- **WHEN** "type" has the options headache, stomach, migraine in that order, stomach is removed, and a query sorts by "type" ascending
+- **THEN** records holding stomach still sort between headache and migraine
+
+#### Scenario: Single choice in option order
+- **WHEN** "type" has the options headache, stomach, migraine in that order and a query sorts by "type" ascending
+- **THEN** headache records come first, then stomach, then migraine, regardless of the option ids
+
+#### Scenario: Boolean sort
+- **WHEN** a query sorts a Boolean field descending
+- **THEN** true values come before false values and empty values follow the clause's null order
+
+#### Scenario: Reject multi-option sort
+- **WHEN** a query sorts by a multi-option Choices field
+- **THEN** validation rejects it as not orderable
 
 ### Requirement: Checked aggregations
 Queries SHALL support Count, Sum, Average, Min, and Max. Sum SHALL use checked compatible integer arithmetic; Average SHALL require explicit output scale and rounding policy when its result may be inexact; and no authoritative aggregation SHALL use binary floating-point.
