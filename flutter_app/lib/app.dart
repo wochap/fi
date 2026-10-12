@@ -1147,12 +1147,11 @@ class _MobileTopRow extends StatelessWidget {
     child: Row(
       children: [
         const FiLogoTile(),
-        const Spacer(),
         if (status case final live?)
-          Flexible(
+          Expanded(
             child: Row(
               key: const Key('app-bar-sync-status'),
-              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 _StatusDot(
                   status: deferred == null ? live : SyncStatusDto.offline,

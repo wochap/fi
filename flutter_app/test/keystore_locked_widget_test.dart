@@ -103,6 +103,32 @@ void main() {
     expect(find.byKey(const Key('networking-deferred-banner')), findsNothing);
   });
 
+  testWidgets('the mobile sync status hugs the right edge and ellipsizes', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(360, 800);
+    addTearDown(tester.view.reset);
+    final bridge = FakeCollectionBridge()
+      ..bootstrap = const BootstrapDto(
+        kind: BootstrapKindDto.ready,
+        rootId: 'root',
+      )
+      ..deferredNetworking = const NetworkingDeferredDto(
+        kind: NetworkingDeferredKindDto.portsExhausted,
+        message: 'Every network port fi uses is already in use.',
+      );
+    await tester.pumpWidget(testApp(bridge));
+    await pumpUntilFound(
+      tester,
+      find.byKey(const Key('networking-deferred-banner')),
+    );
+    final status = find.byKey(const Key('app-bar-sync-status'));
+    // The row's trailing padding is 18px.
+    expect(tester.getTopRight(status).dx, 360 - 18);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('a fatal locked keystore offers retry, not a dataset reset', (
     tester,
   ) async {

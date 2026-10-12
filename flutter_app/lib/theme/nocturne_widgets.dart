@@ -738,7 +738,7 @@ final class _FiMarkPainter extends CustomPainter {
   bool shouldRepaint(_FiMarkPainter oldDelegate) => c != oldDelegate.c;
 }
 
-/// The mark in its 28px tile with an inset accent ring, as in the sidebar and mobile header.
+/// The mark in its 28px tile, as in the sidebar and mobile header.
 class FiLogoTile extends StatelessWidget {
   const FiLogoTile({this.size = 28, super.key});
   final double size;
@@ -748,10 +748,6 @@ class FiLogoTile extends StatelessWidget {
     width: size,
     height: size,
     alignment: Alignment.center,
-    decoration: BoxDecoration(
-      borderRadius: BorderRadius.circular(Nocturne.radius),
-      border: Border.all(color: context.nocturne.accent),
-    ),
     child: FiLogoMark(size: size * .72),
   );
 }
