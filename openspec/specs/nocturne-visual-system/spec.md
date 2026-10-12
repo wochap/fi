@@ -201,3 +201,10 @@ On Android, the window background shown while the app starts SHALL follow the ph
 #### Scenario: Linux desktop set to dark
 - **WHEN** the app runs on a Linux desktop that reports dark and the Appearance preference is System default
 - **THEN** the app draws Mocha, and picking Light switches it to Latte
+
+### Requirement: Fi logo without ring
+The Fi logo SHALL be drawn as the mark alone, with no border or ring around it, in the phone brand row, the desktop sidebar and the setup screen. The mark's accent-colored dot SHALL remain.
+
+#### Scenario: Logo in the sidebar
+- **WHEN** the desktop sidebar is rendered
+- **THEN** the Fi logo shows the mark with its accent dot and no surrounding border

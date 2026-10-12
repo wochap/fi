@@ -606,3 +606,14 @@ While a lost or corrupt local copy is being recovered, the app SHALL show "Recov
 #### Scenario: No create fallback
 - **WHEN** "Recovery needs another device" is shown
 - **THEN** no action creates a new dataset
+
+### Requirement: Phone brand row status alignment
+Below 720px, the application shell's brand row SHALL show the Fi logo at its leading edge and, when it shows the aggregate sync status, SHALL place that status flush with the trailing edge of the row. The status text SHALL truncate with an ellipsis rather than overflow when it is too long for the remaining width.
+
+#### Scenario: Status beside the logo row
+- **WHEN** the collections list is shown on a 390px-wide screen and the aggregate status is `Synced`
+- **THEN** the "Synced" indicator's trailing edge sits at the row's trailing padding edge, not near its center
+
+#### Scenario: Long deferred status
+- **WHEN** networking is deferred and the status reads "Offline · <cause>" on a narrow screen
+- **THEN** the text is right-aligned, truncated with an ellipsis if needed, and does not overflow the row
