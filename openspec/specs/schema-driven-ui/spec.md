@@ -271,11 +271,11 @@ Opening an incomplete record SHALL open the record editor scrolled to the first 
 
 The new-record editor SHALL be titled "New record" with "in <collection>". At 720px and wider its footer SHALL show "* Required · Ctrl+Enter to save" at the leading edge and Cancel and "Save record" at the trailing edge, and Ctrl+Enter SHALL save. Below 720px it SHALL be the bottom sheet with a close ✕ in the header and a full-width "Save record" footer. When the new-record editor is opened by Clone, it SHALL show the context line "Clone of ‘<title>’" under the header, where <title> is the source record's primary display value; when that value is empty the line SHALL be omitted.
 
-The edit-record editor SHALL be titled "Edit record" with "in <collection> · created <date>" when the record has a creation time, and its primary action SHALL read "Save changes". At 720px and wider a "Delete…" text button SHALL sit at the leading edge of the footer, apart from Cancel and "Save changes". Below 720px a ⋮ in the header SHALL hold Clone and "Delete record…", and the footer SHALL hold only "Save changes". Delete SHALL ask for confirmation before logically deleting the record. Clone SHALL close the editor and open the new-record editor prefilled with this record's current values, without saving anything until the user saves. Values of removed Choice options SHALL NOT be prefilled.
+The edit-record editor SHALL be titled "Edit record" with "in <collection> · created <date>" when the record has a creation time, and its primary action SHALL read "Save changes". At 720px and wider a "Delete" text button SHALL sit at the leading edge of the footer, apart from Cancel and "Save changes". Below 720px a ⋮ in the header SHALL hold Clone and "Delete record", and the footer SHALL hold only "Save changes". Delete SHALL NOT ask for confirmation: it SHALL close the editor, discarding unsaved edits, and delete the record as an undoable record deletion. Clone SHALL close the editor and open the new-record editor prefilled with this record's current values, without saving anything until the user saves. Values of removed Choice options SHALL NOT be prefilled.
 
-At 720px and wider, outside selection mode, each record row SHALL end with a ⋯ button labelled "Record actions" in place of a delete icon. Its menu SHALL hold "Clone" and "Delete…". Clone SHALL open the new-record editor prefilled with the row's values, as Clone from the edit-record editor does. Delete… SHALL ask for the same confirmation as the edit-record editor's Delete before logically deleting the record.
+At 720px and wider, outside selection mode, each record row SHALL end with a ⋯ button labelled "Record actions" in place of a delete icon. Its menu SHALL hold "Clone" and "Delete". Clone SHALL open the new-record editor prefilled with the row's values, as Clone from the edit-record editor does. Delete SHALL NOT ask for confirmation and SHALL delete the record as an undoable record deletion.
 
-Below 720px each record card SHALL have no row menu. Outside selection mode, its header SHALL end with two icon buttons of the same muted style and 44px touch target: a Clone button (copy icon, tooltip and semantics label "Clone") immediately before the immediate delete icon. A long title SHALL truncate before these buttons. Clone on a complete card SHALL NOT ask for confirmation and SHALL NOT open a form: it SHALL submit one clone-records command for that record through the bridge, and after success SHALL show the feedback "Cloned 1 record" with Undo, with the same Undo behaviour as batch Clone. When the clone command is rejected, the typed error SHALL be shown and no record SHALL change. Clone on an incomplete card SHALL instead open the new-record editor prefilled with the card's values, as Clone from the edit-record editor does, because the clone command rejects incomplete sources. In selection mode neither button SHALL be shown.
+Below 720px each record card SHALL have no row menu. Outside selection mode, its header SHALL end with two icon buttons of the same muted style and 44px touch target: a Clone button (copy icon, tooltip and semantics label "Clone") immediately before the delete icon (tooltip and semantics label "Delete record"). The delete icon SHALL NOT ask for confirmation and SHALL delete the record as an undoable record deletion. A long title SHALL truncate before these buttons. Clone on a complete card SHALL NOT ask for confirmation and SHALL NOT open a form: it SHALL submit one clone-records command for that record through the bridge, and after success SHALL show the feedback "Cloned 1 record" with Undo, with the same Undo behaviour as batch Clone. When the clone command is rejected, the typed error SHALL be shown and no record SHALL change. Clone on an incomplete card SHALL instead open the new-record editor prefilled with the card's values, as Clone from the edit-record editor does, because the clone command rejects incomplete sources. In selection mode neither button SHALL be shown.
 
 #### Scenario: Create Headache record
 - **WHEN** the user completes a schema-generated Headache form
@@ -286,8 +286,8 @@ Below 720px each record card SHALL have no row menu. Outside selection mode, its
 - **THEN** Flutter submits field-specific updates rather than replacing the record
 
 #### Scenario: Delete from the edit dialog
-- **WHEN** the user presses "Delete…" in the edit dialog on a 1240px-wide screen and confirms
-- **THEN** the record is logically deleted and the dialog closes; cancelling the confirmation leaves the dialog open with edits intact
+- **WHEN** the user presses "Delete" in the edit dialog on a 1240px-wide screen
+- **THEN** no confirmation appears, the dialog closes, the record leaves the list, and feedback shows "Deleted 1 record" with Undo
 
 #### Scenario: Clone on a phone
 - **WHEN** the user chooses Clone from the edit sheet's ⋮ on a 390px-wide screen for the record "Lunch at Nando's"
@@ -298,8 +298,8 @@ Below 720px each record card SHALL have no row menu. Outside selection mode, its
 - **THEN** the New record dialog opens prefilled with that row's values, its date included, and shows "Clone of ‘Lunch at Nando's’"
 
 #### Scenario: Delete from the row menu asks first
-- **WHEN** the user chooses "Delete…" from a row's ⋯ menu on a 1240px-wide screen
-- **THEN** the delete confirmation appears, confirming deletes the record, and cancelling leaves it in place
+- **WHEN** the user chooses "Delete" from a row's ⋯ menu on a 1240px-wide screen
+- **THEN** nothing asks first: no confirmation appears, the row leaves the table, and feedback shows "Deleted 1 record" with Undo
 
 #### Scenario: Clone from a phone card
 - **WHEN** the user taps the Clone button on the complete card "Taxi home from airport" on a 390px-wide screen
@@ -392,15 +392,15 @@ Collection and record controllers SHALL react to typed data/projection events by
 ### Requirement: Multi-select record actions
 The generic collection screen SHALL offer a selection mode in which the user selects multiple records, sees the selected count, and applies a batch delete, a batch clone, or a batch edit that sets one active field to one typed value on every selected record. In selection mode the header SHALL become an action bar showing a close action, "N selected", "in <collection>" at 720px and wider, and Select all, "Edit field", Clone and Delete (labelled buttons at 720px and wider, icon buttons below). Selected rows and cards SHALL show the accent tint, an accent outline or leading edge, and a checked box.
 
-"Edit field" SHALL open "Edit field on N records" with a Field select and a "New value" input that uses the field's registered record-form control, with the line "Uses the same control as the record form.", and Cancel and Continue. Continue SHALL ask "Set <field> on N records?" with "Every selected record is updated in one step.", Cancel and "Set <field>". Delete SHALL ask "Delete N records?" with "Every selected record is deleted in one step.", "Delete" as a secondary action at the leading edge and "Keep records" as the primary action. Clone SHALL NOT ask for confirmation and SHALL NOT open a form: it SHALL submit one clone-records command for the selected records through the bridge. The batch actions SHALL submit a single batch command through the bridge and SHALL report the affected count after success as "Set <field> on N records", "Deleted N records", or "Cloned N records" ("Cloned 1 record" for one). The Clone feedback SHALL carry an Undo action; Undo SHALL delete exactly the records that clone created, in one batch delete, and SHALL do nothing for clones already deleted. Single-record delete from a phone card SHALL remain immediate with no confirmation. Selection SHALL be cleared after a batch completes and SHALL drop records that disappear from the projected list.
+"Edit field" SHALL open "Edit field on N records" with a Field select and a "New value" input that uses the field's registered record-form control, with the line "Uses the same control as the record form.", and Cancel and Continue. Continue SHALL ask "Set <field> on N records?" with "Every selected record is updated in one step.", Cancel and "Set <field>". Delete SHALL NOT ask for confirmation: it SHALL delete the selected records as one undoable record deletion and clear the selection. Clone SHALL NOT ask for confirmation and SHALL NOT open a form: it SHALL submit one clone-records command for the selected records through the bridge. Edit field and Clone SHALL submit a single batch command through the bridge and SHALL report the affected count after success as "Set <field> on N records" or "Cloned N records" ("Cloned 1 record" for one). The Clone feedback SHALL carry an Undo action; Undo SHALL delete exactly the records that clone created, in one batch delete, and SHALL do nothing for clones already deleted. Selection SHALL be cleared after a batch completes and SHALL drop records that disappear from the projected list.
 
 #### Scenario: Enter selection and batch delete
 - **WHEN** the user long-presses a record, selects two more, and taps Delete
-- **THEN** a dialog reads "Delete 3 records?" with "Delete" and "Keep records", confirming with "Delete" submits one batch delete, the list refreshes without those records, and feedback shows "Deleted 3 records"
+- **THEN** no dialog appears, the three records leave the list, the selection closes, and feedback shows "Deleted 3 records" with Undo
 
 #### Scenario: Keep records
-- **WHEN** the delete confirmation is open and the user presses "Keep records"
-- **THEN** no command is sent and the selection is unchanged
+- **WHEN** the user batch-deletes three records and presses Undo on "Deleted 3 records"
+- **THEN** the three records are kept: they reappear in place, no delete command is sent, and selection mode stays closed
 
 #### Scenario: Batch edit one field
 - **WHEN** the user selects 4 records, presses "Edit field", chooses the `category` field, enters a value in "New value" with that field's registered editor, presses Continue and confirms "Set category on 4 records?" with "Set category"
@@ -419,16 +419,16 @@ The generic collection screen SHALL offer a selection mode in which the user sel
 - **THEN** one copy is created and feedback shows "Cloned 1 record" with Undo
 
 #### Scenario: Cancel keeps selection
-- **WHEN** the user dismisses the confirmation dialog
+- **WHEN** the user dismisses the "Set <field> on N records?" confirmation
 - **THEN** no command is sent and the selection is unchanged
 
 #### Scenario: Rust rejects the batch
-- **WHEN** the batch is rejected because a selected record was deleted remotely, a selected record is incomplete and cannot be cloned, or the value violates the field definition
+- **WHEN** a batch edit or clone is rejected because a selected record was deleted remotely, a selected record is incomplete and cannot be cloned, or the value violates the field definition
 - **THEN** the screen shows the typed error, no record changes, and the selection is pruned to records still present
 
 #### Scenario: Single delete unchanged on a phone
 - **WHEN** the user taps the delete icon on one record card outside selection mode on a 390px-wide screen
-- **THEN** the record is deleted immediately with no confirmation dialog
+- **THEN** no confirmation appears, the card leaves the list, and feedback shows "Deleted 1 record" with Undo
 
 #### Scenario: Action bar on desktop
 - **WHEN** two records of "pains" are selected on a 1240px-wide screen
@@ -897,3 +897,78 @@ The set of badged records SHALL be held in memory by the collection controller, 
 #### Scenario: Restart clears badges
 - **WHEN** the app is restarted after a clone
 - **THEN** no record shows the "Clone" tag
+
+### Requirement: Undoable record deletion
+Every record delete in the collection screen (the phone card delete icon, the desktop row menu Delete, the record editor's Delete, and batch Delete in selection mode) SHALL be an undoable record deletion. It SHALL hide the records from this device's collection screen at once and SHALL NOT send any delete command to Rust until the delete is committed. Rust SHALL never receive a delete that the user undid.
+
+- **Hiding:** pending records SHALL leave the list, its groups, the selection, and the header's record count at once, and SHALL stay hidden when the record list refreshes for any reason, including changes synchronized from another device, until they are committed or restored. A leaving card or row SHALL collapse its height and fade out over 200ms. Numbers computed by Rust (dashboard widgets, query results, view counts) MAY keep counting pending records until the commit.
+- **Feedback:** the screen SHALL show one success outcome toast reading "Deleted N records" ("Deleted 1 record" for one) with an Undo action that shows an arrow-counter-clockwise icon. The toast SHALL sit above the floating "Record" button below 720px and SHALL be 440px wide and centered at the bottom at 720px and wider, where the Undo action SHALL also show the hint "Ctrl Z" ("⌘ Z" on macOS). The message SHALL wrap rather than clip, and the Undo action SHALL never shrink.
+- **Accumulation:** deleting more records while deletes are pending SHALL add them to the pending set, update the same toast's count, and restart the timer.
+- **Timer:** pending deletes SHALL be committed 5 seconds after the latest delete. The timer SHALL pause while the toast is hovered or holds focus and SHALL resume when it no longer does. It SHALL NOT depend on platform accessibility settings that keep snackbars open.
+- **Commit:** committing SHALL send every pending record of the collection in one batch delete. Pending deletes SHALL also be committed at once when the user leaves the collection (back to the list or opening another collection), when the collection screen is disposed, and when the app leaves the foreground. A commit SHALL show no feedback of its own and SHALL dismiss the toast. Pending records that are no longer active (for example because another device deleted them) SHALL be left out of the batch, and nothing SHALL be sent when none remain.
+- **Undo:** pressing Undo, or pressing Ctrl Z (Cmd Z on macOS) while deletes are pending and no text field has keyboard focus, SHALL cancel the timer, dismiss the toast, and show every pending record again in its place in the list's current order, with no further feedback. Restored cards and rows SHALL enter with the reverse of the exit motion and SHALL show an accent tint that fades out over 1.4 seconds. Ctrl Z SHALL do nothing when no delete is pending.
+- **Commit failure:** when the batch delete is rejected, the records SHALL reappear with the same tint, the toast SHALL be dismissed, and the error banner SHALL read "Couldn't delete N records" ("Couldn't delete 1 record" for one) with the typed error's localized message as its reason.
+- **Reduced motion:** when the platform asks for reduced motion, the exit and enter SHALL be instant, and the tint SHALL still be shown.
+- **Strings:** "Deleted N records", "Undo" and "Couldn't delete N records" SHALL exist in English and Spanish ("Se eliminó 1 registro" / "Se eliminaron N registros", "Deshacer", "No se pudo eliminar 1 registro" / "No se pudieron eliminar N registros") and SHALL fit at 360px without clipping.
+
+The Clone feedback's Undo action SHALL show the same arrow-counter-clockwise icon.
+
+#### Scenario: Delete a card, then undo
+- **WHEN** the user taps the delete icon on the card "Taxi home from airport" in "pains" (18 records) on a 390px-wide screen, then presses Undo
+- **THEN** the card collapses away, the header reads 17 records, and "Deleted 1 record" shows with Undo; after Undo the card is back in its place with a fading accent tint, the header reads 18 records, and no delete command was sent
+
+#### Scenario: Deletes accumulate
+- **WHEN** the user deletes one card and, while "Deleted 1 record" is shown, deletes another card
+- **THEN** the same toast reads "Deleted 2 records", the timer restarts at 5 seconds, and Undo restores both cards
+
+#### Scenario: Commit after the timer
+- **WHEN** the user deletes two records and does nothing for 5 seconds
+- **THEN** the toast leaves and Flutter submits one batch delete holding exactly those two records
+
+#### Scenario: Hover pauses the timer
+- **WHEN** the pointer rests on the toast on a 1240px-wide screen for 10 seconds after a delete
+- **THEN** no delete command is sent while it rests there, and the commit happens 5 seconds after the pointer leaves
+
+#### Scenario: Leaving commits at once
+- **WHEN** a delete is pending and the user goes back to the collection list
+- **THEN** Flutter submits the batch delete right away, without waiting for the timer
+
+#### Scenario: Backgrounding commits at once
+- **WHEN** a delete is pending and the app leaves the foreground
+- **THEN** Flutter submits the batch delete right away
+
+#### Scenario: Refresh keeps pending records hidden
+- **WHEN** a delete is pending and another device's change refreshes the record list
+- **THEN** the pending record stays hidden and the header count still excludes it
+
+#### Scenario: Ctrl Z undoes
+- **WHEN** a delete is pending on a 1240px-wide screen and the user presses Ctrl Z with no text field focused
+- **THEN** the deleted rows are restored and no delete command is sent
+
+#### Scenario: Ctrl Z in a text field is not taken
+- **WHEN** a delete is pending and the user presses Ctrl Z while typing in a text field
+- **THEN** the pending delete is unchanged and the text field handles the key
+
+#### Scenario: Batch delete of 12 on desktop
+- **WHEN** 12 records of 18 are selected on a 1240px-wide screen and the user presses Delete
+- **THEN** the selection bar closes, the 12 rows leave the table, the header reads 6 records, and "Deleted 12 records" shows with Undo and the "Ctrl Z" hint
+
+#### Scenario: Commit fails
+- **WHEN** the batch delete of two pending records is rejected
+- **THEN** both records reappear with the accent tint, the header count includes them again, and the banner reads "Couldn't delete 2 records" with the typed error's message
+
+#### Scenario: Record already deleted elsewhere
+- **WHEN** a pending record is deleted by another device before the commit
+- **THEN** the commit leaves it out of the batch and no error is shown
+
+#### Scenario: Reduced motion
+- **WHEN** reduced motion is on and the user deletes a card and then presses Undo
+- **THEN** the card disappears and reappears without animation, and the restored card still shows the fading tint
+
+#### Scenario: Spanish at 360px
+- **WHEN** the app is in Spanish on a 360px-wide screen and two cards are deleted
+- **THEN** the toast reads "Se eliminaron 2 registros" with "Deshacer", fully visible
+
+#### Scenario: Clone Undo shows the icon
+- **WHEN** feedback shows "Cloned 1 record"
+- **THEN** its Undo action shows the arrow-counter-clockwise icon
