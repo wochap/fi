@@ -213,7 +213,7 @@ void main() {
     });
   });
 
-  testWidgets('edit record on desktop: created date, Save changes, Delete…', (
+  testWidgets('edit record on desktop: created date, Save changes, Delete', (
     tester,
   ) async {
     final bridge = _seeded(records: const [_held]);
@@ -237,19 +237,22 @@ void main() {
       findsOneWidget,
     );
 
+    expect(
+      find.descendant(of: delete, matching: find.text('Delete')),
+      findsOneWidget,
+    );
+
+    // No confirmation: the editor closes, discarding edits, and the delete waits for Undo.
     await tester.enterText(_noteInput(), 'Buy oat milk');
     await tester.tap(delete);
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('dismiss-record-delete')));
-    await tester.pumpAndSettle();
-    expect(find.byType(Dialog), findsOneWidget);
-    expect(find.text('Buy oat milk'), findsOneWidget);
-
-    await tester.tap(delete);
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('confirm-record-delete')));
-    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsNothing);
     expect(find.byType(Dialog), findsNothing);
+    expect(find.text('Deleted 1 record'), findsOneWidget);
+    expect(find.text('Buy oat'), findsNothing);
+    expect(bridge.records[_collection], hasLength(1));
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
     expect(bridge.records[_collection], isEmpty);
   });
 
@@ -281,7 +284,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('record-clone')), findsOneWidget);
     expect(find.text('Clone'), findsOneWidget);
-    expect(find.text('Delete record…'), findsOneWidget);
+    expect(find.text('Delete record'), findsOneWidget);
     await tester.tap(find.text('Clone'));
     await tester.pumpAndSettle();
     expect(find.text('New record'), findsOneWidget);
@@ -298,19 +301,24 @@ void main() {
     );
   });
 
-  testWidgets('delete from the phone ⋮ asks first', (tester) async {
+  testWidgets('delete from the phone ⋮ closes the sheet at once', (
+    tester,
+  ) async {
     final bridge = _seeded(records: const [_held]);
     await _open(tester, bridge, _phone);
     await tester.tap(find.text('Buy oat').first);
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('More'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Delete record…'));
+    await tester.tap(find.text('Delete record'));
     await tester.pumpAndSettle();
-    expect(find.text('Delete this record?'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('confirm-record-delete')));
-    await tester.pumpAndSettle();
-    expect(bridge.records[_collection], isEmpty);
+    expect(find.byType(AlertDialog), findsNothing);
     expect(find.byType(BottomSheet), findsNothing);
+    expect(find.text('Deleted 1 record'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('undo-delete')));
+    await tester.pumpAndSettle();
+    expect(find.text('Buy oat'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 6));
+    expect(bridge.batchDeleteCalls, isEmpty);
   });
 }

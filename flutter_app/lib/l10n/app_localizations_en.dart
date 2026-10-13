@@ -1731,21 +1731,23 @@ class AppLocalizationsEn extends AppLocalizations {
   String get recordsEditField => 'Edit field';
 
   @override
-  String recordsBatchDeleteTitle(int count) {
-    return 'Delete $count records?';
-  }
-
-  @override
-  String get recordsBatchDeleteBody =>
-      'Every selected record is deleted in one step.';
-
-  @override
   String recordsDeletedSnack(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
       other: 'Deleted $count records',
       one: 'Deleted 1 record',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String recordsDeleteFailed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Couldn\'t delete $count records',
+      one: 'Couldn\'t delete 1 record',
     );
     return '$_temp0';
   }
@@ -1784,12 +1786,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get recordKeepEditing => 'Keep editing';
 
   @override
-  String get recordDeleteTitle => 'Delete this record?';
-
-  @override
-  String get recordDeleteBody => 'It is removed from the collection.';
-
-  @override
   String recordCreated(String date) {
     return 'created $date';
   }
@@ -1810,9 +1806,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get recordFooterHint => '* Required · Ctrl+Enter to save';
-
-  @override
-  String get recordDeleteRecordEllipsis => 'Delete record…';
 
   @override
   String get recordSave => 'Save record';
@@ -3046,9 +3039,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String recordsSetField(String field) {
     return 'Set $field';
   }
-
-  @override
-  String get recordsKeepRecords => 'Keep records';
 
   @override
   String recordsSetSnack(String field, int count) {

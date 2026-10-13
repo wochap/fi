@@ -39,6 +39,7 @@ import 'package:fi/voice/mic_button.dart';
 import 'package:fi/voice/panel.dart';
 import 'package:fi/voice/patch.dart';
 import 'package:fi/voice/services.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -699,246 +700,265 @@ class CollectionsPage extends StatelessWidget {
       ..sort(_fieldOrder);
     final phone = MediaQuery.sizeOf(context).width < _phoneScreen;
     final l = context.l10n;
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        // Between the phone breakpoint and a content width that fits four labelled buttons, the
-        // header's actions collapse to icons; the records stay a table.
-        final wide = !phone && constraints.maxWidth >= _wideContent;
-        final selecting = controller.selecting;
-        final horizontal = phone ? 16.0 : (wide ? 32.0 : 24.0);
-        final records = controller.records;
-        final incomplete = controller.visibleIncomplete;
-        final hiddenIncomplete = controller.hiddenIncomplete;
-        Widget incompleteLine({required bool phone}) => _IncompleteLine(
-          count: incomplete,
-          hidden: hiddenIncomplete,
-          phone: phone,
-          onShow: () => unawaited(controller.selectView(allViewId)),
-        );
-        // The table scrolls inside its own viewport so its header row can stay pinned; it is
-        // never taller than the screen leaves room for.
-        final groups = _listGroups(context, schema);
-        final rows = _tableRows(records, groups);
-        final tableHeight = math.min(
-          _RecordTable.headerHeight + rows.length * _RecordTable.rowHeight,
-          math.max(constraints.maxHeight - 160, 280.0),
-        );
-        final list = CustomScrollView(
-          slivers: [
-            SliverPadding(
-              padding: EdgeInsets.fromLTRB(
-                horizontal,
-                phone ? 8 : 22,
-                horizontal,
-                0,
-              ),
-              sliver: SliverList.list(
-                children: [
-                  if (selecting)
-                    _selectionBar(context, schema, wide: wide)
-                  else if (phone)
-                    _phoneHeader(context, schema, fields)
-                  else if (wide)
-                    _wideHeader(context, schema, fields)
-                  else
-                    _narrowHeader(context, schema, fields),
-                  if (controller.failure case final failure?)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 12),
-                      child: MaterialBanner(
-                        content: Text(bridgeMessage(context.l10n, failure)),
-                        actions: const [SizedBox.shrink()],
+    // Under reduced motion a deleted record leaves at once instead of collapsing away.
+    final motion = !MediaQuery.disableAnimationsOf(context);
+    return _PendingDeleteHost(
+      controller: controller,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // Between the phone breakpoint and a content width that fits four labelled buttons, the
+          // header's actions collapse to icons; the records stay a table.
+          final wide = !phone && constraints.maxWidth >= _wideContent;
+          final selecting = controller.selecting;
+          final horizontal = phone ? 16.0 : (wide ? 32.0 : 24.0);
+          final records = motion ? controller.shownRecords : controller.records;
+          final incomplete = controller.visibleIncomplete;
+          final hiddenIncomplete = controller.hiddenIncomplete;
+          Widget incompleteLine({required bool phone}) => _IncompleteLine(
+            count: incomplete,
+            hidden: hiddenIncomplete,
+            phone: phone,
+            onShow: () => unawaited(controller.selectView(allViewId)),
+          );
+          // The table scrolls inside its own viewport so its header row can stay pinned; it is
+          // never taller than the screen leaves room for.
+          final groups = _listGroups(context, schema, motion: motion);
+          final rows = _tableRows(records, groups);
+          final tableHeight = math.min(
+            _RecordTable.headerHeight + rows.length * _RecordTable.rowHeight,
+            math.max(constraints.maxHeight - 160, 280.0),
+          );
+          final list = CustomScrollView(
+            slivers: [
+              SliverPadding(
+                padding: EdgeInsets.fromLTRB(
+                  horizontal,
+                  phone ? 8 : 22,
+                  horizontal,
+                  0,
+                ),
+                sliver: SliverList.list(
+                  children: [
+                    if (selecting)
+                      _selectionBar(context, schema, wide: wide)
+                    else if (phone)
+                      _phoneHeader(context, schema, fields)
+                    else if (wide)
+                      _wideHeader(context, schema, fields)
+                    else
+                      _narrowHeader(context, schema, fields),
+                    if (controller.failure case final failure?)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: MaterialBanner(
+                          key: const Key('collection-failure'),
+                          content: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (controller.deleteFailedCount
+                                  case final count?)
+                                Text(
+                                  l.recordsDeleteFailed(count),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              Text(bridgeMessage(context.l10n, failure)),
+                            ],
+                          ),
+                          actions: const [SizedBox.shrink()],
+                        ),
+                      ),
+                    const SizedBox(height: 22),
+                    // The dashboard sits above the records and never replaces record CRUD. While
+                    // selecting, it recedes so the action bar reads as the one active surface.
+                    AnimatedOpacity(
+                      duration: const Duration(milliseconds: 150),
+                      opacity: selecting ? .4 : 1,
+                      child: IgnorePointer(
+                        ignoring: selecting,
+                        child: CollectionDashboard(controller: controller),
                       ),
                     ),
-                  const SizedBox(height: 22),
-                  // The dashboard sits above the records and never replaces record CRUD. While
-                  // selecting, it recedes so the action bar reads as the one active surface.
-                  AnimatedOpacity(
-                    duration: const Duration(milliseconds: 150),
-                    opacity: selecting ? .4 : 1,
-                    child: IgnorePointer(
-                      ignoring: selecting,
-                      child: CollectionDashboard(controller: controller),
+                    const SizedBox(height: 22),
+                    SectionLabel(l.recordsSection),
+                    const SizedBox(height: 8),
+                    KeyedSubtree(
+                      key: _viewAnchor,
+                      child: ViewChipRow(
+                        controller: controller,
+                        schema: schema,
+                        anchor: _viewAnchor,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 22),
-                  SectionLabel(l.recordsSection),
-                  const SizedBox(height: 8),
-                  KeyedSubtree(
-                    key: _viewAnchor,
-                    child: ViewChipRow(
+                    const SizedBox(height: 4),
+                    ViewLine(
                       controller: controller,
                       schema: schema,
                       anchor: _viewAnchor,
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  ViewLine(
-                    controller: controller,
-                    schema: schema,
-                    anchor: _viewAnchor,
-                  ),
-                  if (controller.brokenView != null) ...[
-                    const SizedBox(height: 8),
-                    ViewNotice(
-                      key: const Key('view-broken-notice'),
-                      text: l.viewBrokenNotice,
-                      action: l.viewEditView,
-                      onAction: () => unawaited(
-                        showViewEditor(
-                          context,
-                          controller: controller,
-                          schema: schema,
-                          view: controller.activeView,
-                          body: controller.activeBody,
-                          anchor: _viewAnchor,
-                        ),
-                      ),
-                    ),
-                  ],
-                  if (controller.draftDiscarded) ...[
-                    const SizedBox(height: 8),
-                    ViewNotice(
-                      key: const Key('view-discarded-notice'),
-                      text: l.viewDraftDiscarded,
-                      action: l.commonOk,
-                      onAction: controller.dismissDraftDiscarded,
-                    ),
-                  ],
-                  const SizedBox(height: 8),
-                  if (phone && (incomplete > 0 || hiddenIncomplete > 0)) ...[
-                    incompleteLine(phone: true),
-                    const SizedBox(height: 10),
-                  ],
-                ],
-              ),
-            ),
-            if (records.isEmpty)
-              SliverFillRemaining(
-                hasScrollBody: false,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 32),
-                  child: Center(
-                    child: controller.allRecords.isNotEmpty
-                        ? EmptyViewState(
+                    if (controller.brokenView != null) ...[
+                      const SizedBox(height: 8),
+                      ViewNotice(
+                        key: const Key('view-broken-notice'),
+                        text: l.viewBrokenNotice,
+                        action: l.viewEditView,
+                        onAction: () => unawaited(
+                          showViewEditor(
+                            context,
                             controller: controller,
                             schema: schema,
+                            view: controller.activeView,
+                            body: controller.activeBody,
                             anchor: _viewAnchor,
-                          )
-                        : Text(
-                            l.recordsEmpty,
-                            style: TextStyle(
-                              color: context.nocturne.muted(.55),
-                            ),
                           ),
+                        ),
+                      ),
+                    ],
+                    if (controller.draftDiscarded) ...[
+                      const SizedBox(height: 8),
+                      ViewNotice(
+                        key: const Key('view-discarded-notice'),
+                        text: l.viewDraftDiscarded,
+                        action: l.commonOk,
+                        onAction: controller.dismissDraftDiscarded,
+                      ),
+                    ],
+                    const SizedBox(height: 8),
+                    if (phone && (incomplete > 0 || hiddenIncomplete > 0)) ...[
+                      incompleteLine(phone: true),
+                      const SizedBox(height: 10),
+                    ],
+                  ],
+                ),
+              ),
+              if (records.isEmpty)
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 32),
+                    child: Center(
+                      child: controller.allRecords.isNotEmpty
+                          ? EmptyViewState(
+                              controller: controller,
+                              schema: schema,
+                              anchor: _viewAnchor,
+                            )
+                          : Text(
+                              l.recordsEmpty,
+                              style: TextStyle(
+                                color: context.nocturne.muted(.55),
+                              ),
+                            ),
+                    ),
+                  ),
+                )
+              else if (!phone) ...[
+                SliverPadding(
+                  padding: EdgeInsets.symmetric(horizontal: horizontal),
+                  sliver: SliverToBoxAdapter(
+                    child: _RecordTable(
+                      height: tableHeight,
+                      fields: fields,
+                      rows: rows,
+                      sorting: controller.effectiveSorting,
+                      onSort: (field) =>
+                          unawaited(controller.sortByColumn(field)),
+                      selecting: selecting,
+                      selectedIds: controller.selectedRecordIds,
+                      onOpen: (record) => _openRecord(context, schema, record),
+                      onToggle: controller.toggleSelected,
+                      isRecentClone: controller.isRecentClone,
+                      isExiting: controller.isExiting,
+                      isRestored: controller.isRestored,
+                      onClone: (record) => unawaited(
+                        _cloneEditor(context, schema, fields, record),
+                      ),
+                      onDelete: (record) =>
+                          controller.deleteRecords([record.id]),
+                    ),
                   ),
                 ),
-              )
-            else if (!phone) ...[
-              SliverPadding(
-                padding: EdgeInsets.symmetric(horizontal: horizontal),
-                sliver: SliverToBoxAdapter(
-                  child: _RecordTable(
-                    height: tableHeight,
-                    fields: fields,
-                    rows: rows,
-                    sorting: controller.effectiveSorting,
-                    onSort: (field) =>
-                        unawaited(controller.sortByColumn(field)),
-                    selecting: selecting,
-                    selectedIds: controller.selectedRecordIds,
-                    onOpen: (record) => _openRecord(context, schema, record),
-                    onToggle: controller.toggleSelected,
-                    isRecentClone: controller.isRecentClone,
-                    onClone: (record) => unawaited(
-                      _cloneEditor(context, schema, fields, record),
+                if (incomplete > 0 || hiddenIncomplete > 0)
+                  SliverPadding(
+                    padding: EdgeInsets.fromLTRB(horizontal, 12, horizontal, 0),
+                    sliver: SliverToBoxAdapter(
+                      child: incompleteLine(phone: false),
                     ),
-                    onDelete: (record) async {
-                      if (await _confirmRecordDelete(context)) {
-                        await controller.deleteRecord(record.id);
-                      }
+                  ),
+              ] else
+                SliverPadding(
+                  padding: EdgeInsets.symmetric(horizontal: horizontal),
+                  sliver: SliverList.separated(
+                    itemCount: rows.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 8),
+                    itemBuilder: (context, index) => switch (rows[index]) {
+                      final _GroupRow group => _GroupHeader(
+                        group: group,
+                        phone: true,
+                      ),
+                      final RecordDto record => _DeletableItem(
+                        key: ValueKey('deletable-${record.id}'),
+                        id: record.id,
+                        exiting: controller.isExiting(record.id),
+                        restored: controller.isRestored(record.id),
+                        child: _recordCard(context, schema, fields, record),
+                      ),
+                      _ => const SizedBox.shrink(),
                     },
                   ),
                 ),
-              ),
-              if (incomplete > 0 || hiddenIncomplete > 0)
-                SliverPadding(
-                  padding: EdgeInsets.fromLTRB(horizontal, 12, horizontal, 0),
-                  sliver: SliverToBoxAdapter(
-                    child: incompleteLine(phone: false),
+              SliverToBoxAdapter(child: SizedBox(height: phone ? 96 : 32)),
+            ],
+          );
+          if (!phone || selecting) return list;
+          return Stack(
+            children: [
+              Positioned.fill(child: list),
+              Positioned(
+                right: 18,
+                bottom: 18,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(Nocturne.radius),
+                    boxShadow: context.nocturne.shadowMd,
                   ),
-                ),
-            ] else
-              SliverPadding(
-                padding: EdgeInsets.symmetric(horizontal: horizontal),
-                sliver: SliverList.separated(
-                  itemCount: rows.length,
-                  separatorBuilder: (_, _) => const SizedBox(height: 8),
-                  itemBuilder: (context, index) => switch (rows[index]) {
-                    final _GroupRow group => _GroupHeader(
-                      group: group,
-                      phone: true,
+                  child: SizedBox(
+                    height: 52,
+                    child: FloatingActionButton.extended(
+                      tooltip: l.recordsNewRecord,
+                      onPressed: () => _recordEditor(context, schema),
+                      icon: const Icon(FiIcons.add, size: 18),
+                      label: Text(l.recordsFab),
                     ),
-                    final RecordDto record => _recordCard(
-                      context,
-                      schema,
-                      fields,
-                      record,
-                    ),
-                    _ => const SizedBox.shrink(),
-                  },
-                ),
-              ),
-            SliverToBoxAdapter(child: SizedBox(height: phone ? 96 : 32)),
-          ],
-        );
-        if (!phone || selecting) return list;
-        return Stack(
-          children: [
-            Positioned.fill(child: list),
-            Positioned(
-              right: 18,
-              bottom: 18,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(Nocturne.radius),
-                  boxShadow: context.nocturne.shadowMd,
-                ),
-                child: SizedBox(
-                  height: 52,
-                  child: FloatingActionButton.extended(
-                    tooltip: l.recordsNewRecord,
-                    onPressed: () => _recordEditor(context, schema),
-                    icon: const Icon(FiIcons.add, size: 18),
-                    label: Text(l.recordsFab),
                   ),
                 ),
               ),
-            ),
-          ],
-        );
-      },
+            ],
+          );
+        },
+      ),
     );
   }
 
   /// The selected view's groups with their labels, or null when it doesn't group.
   List<_GroupRow>? _listGroups(
     BuildContext context,
-    CollectionSchemaDto schema,
-  ) {
+    CollectionSchemaDto schema, {
+    required bool motion,
+  }) {
     final grouping = controller.activeBody.grouping;
-    if (grouping == null ||
-        controller.brokenView != null ||
-        controller.recordGroups.isEmpty) {
+    final groups = motion ? controller.shownGroups : controller.recordGroups;
+    if (grouping == null || controller.brokenView != null || groups.isEmpty) {
       return null;
     }
     final l = context.l10n;
     return [
-      for (final (:group, :records) in controller.recordGroups)
+      for (final (:group, :records) in groups)
         _GroupRow(
           id: groupKeyId(group.key),
           label: groupLabel(l, schema, grouping, group),
-          count: records.length,
+          count: records.where((r) => !controller.isExiting(r.id)).length,
           collapsed: controller.isGroupCollapsed(group.key),
           onToggle: () => controller.toggleGroup(group.key),
           records: records,
@@ -1479,11 +1499,11 @@ class CollectionsPage extends StatelessWidget {
                   ),
                 ),
                 FiIconButton(
+                  key: Key('card-delete-${record.id}'),
                   icon: FiIcons.delete,
                   tooltip: l.recordsDeleteRecord,
                   color: context.nocturne.muted(.45),
-                  onPressed: () =>
-                      unawaited(controller.deleteRecord(record.id)),
+                  onPressed: () => controller.deleteRecords([record.id]),
                 ),
               ],
             ],
@@ -2074,7 +2094,7 @@ class CollectionsPage extends StatelessWidget {
     void selectAll() => controller.selectAllShown();
 
     void edit() => unawaited(_batchEdit(context, schema));
-    void delete() => unawaited(_batchDelete(context));
+    void delete() => _batchDelete();
     void clone() => unawaited(_batchClone(context));
     return Container(
       padding: const EdgeInsets.fromLTRB(4, 6, 12, 6),
@@ -2182,48 +2202,10 @@ class CollectionsPage extends StatelessWidget {
     );
   }
 
-  /// Confirms, then deletes the whole selection in one batch. Dismissing the
-  /// dialog sends no command and leaves the selection intact.
-  Future<void> _batchDelete(BuildContext context) async {
-    final count = controller.selectedRecordIds.length;
-    final messenger = ScaffoldMessenger.of(context);
-    final l = context.l10n;
-    final width = MediaQuery.sizeOf(context).width;
-    // The destructive action is secondary and leading; keeping the records is the primary one.
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialog) => AlertDialog(
-        title: Text(l.recordsBatchDeleteTitle(count)),
-        content: Text(l.recordsBatchDeleteBody),
-        actionsAlignment: MainAxisAlignment.spaceBetween,
-        actions: [
-          TextButton(
-            key: const Key('confirm-batch-delete'),
-            onPressed: () => Navigator.pop(dialog, true),
-            child: Text(l.commonDelete),
-          ),
-          FilledButton(
-            key: const Key('dismiss-batch-delete'),
-            onPressed: () => Navigator.pop(dialog, false),
-            child: Text(l.recordsKeepRecords),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    try {
-      final affected = await controller.deleteSelected();
-      showOutcomeToastOn(
-        messenger,
-        l,
-        width,
-        l.recordsDeletedSnack(affected),
-        success: true,
-      );
-    } catch (_) {
-      // The typed error is already on the controller's banner and the
-      // selection has been pruned, so the user can retry from what is left.
-    }
+  /// Deletes the whole selection as one undoable delete and closes selection mode.
+  void _batchDelete() {
+    controller.deleteRecords(controller.selectedRecordIds.toList());
+    controller.clearSelection();
   }
 
   /// Clones the whole selection in one batch, without a form or confirmation, and offers Undo,
@@ -2266,6 +2248,7 @@ class CollectionsPage extends StatelessWidget {
       width,
       l.recordsClonedSnack(created.length),
       success: true,
+      actionIcon: FiIcons.undo,
       action: SnackBarAction(
         key: const Key('undo-clone'),
         label: l.commonUndo,
@@ -3276,17 +3259,11 @@ class _RecordEditorFormState extends State<_RecordEditorForm> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _focusField(first.id));
   }
 
-  /// Asks, then logically deletes the record and closes the editor. Cancelling keeps the editor
-  /// open with its edits.
-  Future<void> _delete() async {
-    final confirmed = await _confirmRecordDelete(context);
-    if (!confirmed || !mounted) return;
-    try {
-      await widget.controller.deleteRecord(widget.existing!.id);
-      if (mounted) Navigator.pop(context);
-    } catch (failure) {
-      if (mounted) setState(() => issues = FormIssues.from(failure));
-    }
+  /// Closes the editor, discarding edits, and deletes the record as an undoable delete.
+  void _delete() {
+    final id = widget.existing!.id;
+    Navigator.pop(context);
+    widget.controller.deleteRecords([id]);
   }
 
   /// Closes this editor and opens a new record holding the current values (see
@@ -3395,7 +3372,7 @@ class _RecordEditorFormState extends State<_RecordEditorForm> {
           : FormHeaderAction(
               key: const Key('record-delete'),
               icon: FiIcons.delete,
-              label: l.collectionsDeleteEllipsis,
+              label: l.commonDelete,
               onPressed: _delete,
             ),
       menuActions: existing == null
@@ -3409,7 +3386,7 @@ class _RecordEditorFormState extends State<_RecordEditorForm> {
               ),
               FormMenuAction(
                 key: const Key('record-delete-menu'),
-                label: l.recordDeleteRecordEllipsis,
+                label: l.recordsDeleteRecord,
                 icon: FiIcons.delete,
                 onPressed: _delete,
               ),
@@ -3587,31 +3564,6 @@ String? _cloneTitle(
   return text == null || text.trim().isEmpty ? null : text;
 }
 
-/// Asks before a record is logically deleted; true when the user confirms.
-Future<bool> _confirmRecordDelete(BuildContext context) async {
-  final l = context.l10n;
-  final confirmed = await showDialog<bool>(
-    context: context,
-    builder: (dialog) => AlertDialog(
-      title: Text(l.recordDeleteTitle),
-      content: Text(l.recordDeleteBody),
-      actions: [
-        TextButton(
-          key: const Key('dismiss-record-delete'),
-          onPressed: () => Navigator.pop(dialog, false),
-          child: Text(l.commonCancel),
-        ),
-        FilledButton(
-          key: const Key('confirm-record-delete'),
-          onPressed: () => Navigator.pop(dialog, true),
-          child: Text(l.commonDelete),
-        ),
-      ],
-    ),
-  );
-  return confirmed == true;
-}
-
 /// A record's projected diagnostics as form issues: those naming a field go under it.
 FormIssues _diagnosticIssues(RecordDto record) => FormIssues.fromIssues([
   for (final item in record.diagnostics)
@@ -3637,6 +3589,8 @@ class _RecordTable extends StatefulWidget {
     required this.onOpen,
     required this.onToggle,
     required this.isRecentClone,
+    required this.isExiting,
+    required this.isRestored,
     required this.onClone,
     required this.onDelete,
   });
@@ -3668,7 +3622,11 @@ class _RecordTable extends StatefulWidget {
   /// Whether a row gets the Clone badge.
   final bool Function(String id) isRecentClone;
 
-  /// Row menu actions; Delete… confirms before deleting.
+  /// Rows collapsing away while their delete is pending, and rows just restored by Undo.
+  final bool Function(String id) isExiting;
+  final bool Function(String id) isRestored;
+
+  /// Row menu actions; Delete is undoable, so it never asks first.
   final ValueChanged<RecordDto> onClone;
   final ValueChanged<RecordDto> onDelete;
 
@@ -3676,18 +3634,63 @@ class _RecordTable extends StatefulWidget {
   State<_RecordTable> createState() => _RecordTableState();
 }
 
-class _RecordTableState extends State<_RecordTable> {
+class _RecordTableState extends State<_RecordTable>
+    with SingleTickerProviderStateMixin {
   final _horizontal = ScrollController();
   var _moreColumns = false;
+
+  /// Drives every leaving and entering row together; restarted when either set grows.
+  late final _motion = AnimationController(
+    vsync: this,
+    duration: CollectionsController.exitDuration,
+    value: 1,
+  );
+  Set<String> _exiting = const {};
+  Set<String> _entering = const {};
 
   @override
   void initState() {
     super.initState();
     _horizontal.addListener(_measure);
+    _trackMotion();
+  }
+
+  @override
+  void didUpdateWidget(_RecordTable oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _trackMotion();
+  }
+
+  void _trackMotion() {
+    final ids = [
+      for (final row in widget.rows)
+        if (row is RecordDto) row.id,
+    ];
+    final exiting = ids.where(widget.isExiting).toSet();
+    final restored = ids.where(widget.isRestored).toSet();
+    final grew =
+        !_exiting.containsAll(exiting) ||
+        restored.difference(_entering).isNotEmpty;
+    _exiting = exiting;
+    if (grew) {
+      _entering = restored;
+      unawaited(_motion.forward(from: 0));
+    } else {
+      _entering = _entering.intersection(restored);
+    }
+  }
+
+  /// A row's share of its height: 1 when settled.
+  double _rowFactor(String id) {
+    final t = Curves.easeOutCubic.transform(_motion.value);
+    if (_exiting.contains(id)) return 1 - t;
+    if (_entering.contains(id)) return t;
+    return 1;
   }
 
   @override
   void dispose() {
+    _motion.dispose();
     _horizontal
       ..removeListener(_measure)
       ..dispose();
@@ -3710,69 +3713,107 @@ class _RecordTableState extends State<_RecordTable> {
   Widget build(BuildContext context) {
     // Content or width changes can reveal or hide columns without a scroll.
     WidgetsBinding.instance.addPostFrameCallback((_) => _measure());
-    final table = TableView.builder(
-      key: const Key('records-table'),
-      horizontalDetails: ScrollableDetails.horizontal(controller: _horizontal),
-      pinnedRowCount: 1,
-      pinnedColumnCount: 1,
-      rowCount: widget.rows.length + 1,
-      columnCount: _columnCount,
-      columnBuilder: (index) => TableSpan(
-        extent: FixedTableSpanExtent(
-          index == 0
-              ? _RecordTable.firstColumnWidth +
-                    (widget.selecting ? _RecordTable.checkboxWidth : 0)
-              : index >= _dataColumns
-              ? _RecordTable.actionWidth
-              : _RecordTable.columnWidth,
+    _motion.duration = MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : CollectionsController.exitDuration;
+    final table = AnimatedBuilder(
+      animation: _motion,
+      builder: (context, _) => TableView.builder(
+        key: const Key('records-table'),
+        horizontalDetails: ScrollableDetails.horizontal(
+          controller: _horizontal,
         ),
-      ),
-      rowBuilder: (index) => TableSpan(
-        extent: FixedTableSpanExtent(
-          index == 0 ? _RecordTable.headerHeight : _RecordTable.rowHeight,
-        ),
-        backgroundDecoration: TableSpanDecoration(
-          color: index == 0
-              ? context.nocturne.bg
-              : switch (widget.rows[index - 1]) {
-                  _GroupRow() => context.nocturne.neutralFill,
-                  final RecordDto record
-                      when widget.selectedIds.contains(record.id) =>
-                    context.nocturne.accentFill,
-                  _ => null,
-                },
-        ),
-        foregroundDecoration: TableSpanDecoration(
-          border: TableSpanBorder(
-            trailing: index == 0
-                ? BorderSide(color: context.nocturne.divider)
-                : BorderSide(color: context.nocturne.muted(.08)),
+        pinnedRowCount: 1,
+        pinnedColumnCount: 1,
+        rowCount: widget.rows.length + 1,
+        columnCount: _columnCount,
+        columnBuilder: (index) => TableSpan(
+          extent: FixedTableSpanExtent(
+            index == 0
+                ? _RecordTable.firstColumnWidth +
+                      (widget.selecting ? _RecordTable.checkboxWidth : 0)
+                : index >= _dataColumns
+                ? _RecordTable.actionWidth
+                : _RecordTable.columnWidth,
           ),
         ),
-      ),
-      cellBuilder: (context, vicinity) {
-        if (vicinity.row == 0) {
-          return TableViewCell(child: _header(vicinity.column));
-        }
-        final row = widget.rows[vicinity.row - 1];
-        if (row is _GroupRow) {
-          // The label sits in the pinned column; the rest of the row is one merged, empty cell,
-          // so the header reads full-width and never scrolls sideways.
-          if (vicinity.column == 0) {
-            return TableViewCell(child: _GroupHeader(group: row, phone: false));
-          }
-          return TableViewCell(
-            columnMergeStart: 1,
-            columnMergeSpan: _columnCount - 1,
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: row.onToggle,
-              child: const SizedBox.expand(),
+        rowBuilder: (index) => TableSpan(
+          extent: FixedTableSpanExtent(
+            index == 0
+                ? _RecordTable.headerHeight
+                : switch (widget.rows[index - 1]) {
+                    final RecordDto record =>
+                      _RecordTable.rowHeight * _rowFactor(record.id),
+                    _ => _RecordTable.rowHeight,
+                  },
+          ),
+          backgroundDecoration: TableSpanDecoration(
+            color: index == 0
+                ? context.nocturne.bg
+                : switch (widget.rows[index - 1]) {
+                    _GroupRow() => context.nocturne.neutralFill,
+                    final RecordDto record
+                        when widget.selectedIds.contains(record.id) =>
+                      context.nocturne.accentFill,
+                    _ => null,
+                  },
+          ),
+          foregroundDecoration: TableSpanDecoration(
+            border: TableSpanBorder(
+              trailing: index == 0
+                  ? BorderSide(color: context.nocturne.divider)
+                  : BorderSide(color: context.nocturne.muted(.08)),
             ),
+          ),
+        ),
+        cellBuilder: (context, vicinity) {
+          if (vicinity.row == 0) {
+            return TableViewCell(child: _header(vicinity.column));
+          }
+          final row = widget.rows[vicinity.row - 1];
+          if (row is _GroupRow) {
+            // The label sits in the pinned column; the rest of the row is one merged, empty cell,
+            // so the header reads full-width and never scrolls sideways.
+            if (vicinity.column == 0) {
+              return TableViewCell(
+                child: _GroupHeader(group: row, phone: false),
+              );
+            }
+            return TableViewCell(
+              columnMergeStart: 1,
+              columnMergeSpan: _columnCount - 1,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: row.onToggle,
+                child: const SizedBox.expand(),
+              ),
+            );
+          }
+          final record = row as RecordDto;
+          final factor = _rowFactor(record.id);
+          Widget cell = _RestoredTint(
+            id: record.id,
+            active: widget.isRestored(record.id),
+            radius: 0,
+            child: _cell(record, vicinity.column),
           );
-        }
-        return TableViewCell(child: _cell(row as RecordDto, vicinity.column));
-      },
+          if (factor < 1) {
+            // A leaving or entering row keeps its layout and is clipped to its current height.
+            cell = ClipRect(
+              child: OverflowBox(
+                alignment: Alignment.topCenter,
+                minHeight: _RecordTable.rowHeight,
+                maxHeight: _RecordTable.rowHeight,
+                child: Opacity(
+                  opacity: const Interval(.3, 1).transform(factor),
+                  child: cell,
+                ),
+              ),
+            );
+          }
+          return TableViewCell(child: cell);
+        },
+      ),
     );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -3932,7 +3973,7 @@ class _RecordTableState extends State<_RecordTable> {
             PopupMenuItem(
               key: const Key('record-row-delete'),
               value: 'delete',
-              child: Text(l.collectionsDeleteEllipsis),
+              child: Text(l.commonDelete),
             ),
           ],
         ),
@@ -4449,6 +4490,7 @@ bool showClonedHidden(
     message,
     success: true,
     secondaryAction: _showAll(l, controller),
+    actionIcon: FiIcons.undo,
     action: SnackBarAction(
       key: const Key('undo-clone'),
       label: l.commonUndo,
@@ -4475,5 +4517,350 @@ void showSavedHidden(
     l.recordsSavedHidden(_activeViewName(l, controller)),
     success: true,
     secondaryAction: _showAll(l, controller),
+  );
+}
+
+/// Owns the undo-delete toast, Ctrl Z / ⌘ Z, and the commit when the app leaves the
+/// foreground or the screen goes away. The controller owns the timer; the toast only shows it.
+class _PendingDeleteHost extends StatefulWidget {
+  const _PendingDeleteHost({required this.controller, required this.child});
+
+  final CollectionsController controller;
+  final Widget child;
+
+  @override
+  State<_PendingDeleteHost> createState() => _PendingDeleteHostState();
+}
+
+class _PendingDeleteHostState extends State<_PendingDeleteHost>
+    with WidgetsBindingObserver {
+  ScaffoldFeatureController<SnackBar, SnackBarClosedReason>? _toast;
+  ScaffoldMessengerState? _messenger;
+
+  /// The count the toast last showed; another outcome may replace the toast, which comes back
+  /// only when more records are deleted.
+  var _shownCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    HardwareKeyboard.instance.addHandler(_onKey);
+    widget.controller.addListener(_sync);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _messenger = ScaffoldMessenger.maybeOf(context);
+  }
+
+  @override
+  void didUpdateWidget(_PendingDeleteHost oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.removeListener(_sync);
+      widget.controller.addListener(_sync);
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    HardwareKeyboard.instance.removeHandler(_onKey);
+    widget.controller.removeListener(_sync);
+    // After the tree settles: committing notifies and closing touches the messenger, neither of
+    // which may happen while unmounting.
+    final controller = widget.controller;
+    final (toast, messenger) = (_toast, _messenger);
+    unawaited(
+      Future.microtask(() {
+        if (toast != null && (messenger?.mounted ?? false)) toast.close();
+        return controller.commitPendingDeletes();
+      }),
+    );
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Not `inactive`: desktop focus loss sends it.
+    if (state
+        case AppLifecycleState.paused ||
+            AppLifecycleState.hidden ||
+            AppLifecycleState.detached) {
+      unawaited(widget.controller.commitPendingDeletes());
+    }
+  }
+
+  bool _onKey(KeyEvent event) {
+    if (event is! KeyDownEvent || event.logicalKey != LogicalKeyboardKey.keyZ) {
+      return false;
+    }
+    final keyboard = HardwareKeyboard.instance;
+    if (keyboard.isShiftPressed ||
+        !(keyboard.isControlPressed || keyboard.isMetaPressed)) {
+      return false;
+    }
+    if (widget.controller.pendingDeleteCount == 0) return false;
+    // A focused text field keeps its own undo.
+    final focused = FocusManager.instance.primaryFocus?.context;
+    if (focused != null &&
+        (focused.widget is EditableText ||
+            focused.findAncestorWidgetOfExactType<EditableText>() != null)) {
+      return false;
+    }
+    widget.controller.undoPendingDeletes();
+    return true;
+  }
+
+  void _sync() {
+    if (!mounted) return;
+    final count = widget.controller.pendingDeleteCount;
+    if (count == 0) {
+      _shownCount = 0;
+      _toast?.close();
+      _toast = null;
+      return;
+    }
+    if (_toast == null && count > _shownCount) _show();
+    if (_toast != null) _shownCount = count;
+  }
+
+  void _show() {
+    final messenger = _messenger;
+    if (messenger == null) return;
+    final width = MediaQuery.sizeOf(context).width;
+    final wide = width >= _wideToast;
+    final mac =
+        defaultTargetPlatform == TargetPlatform.macOS ||
+        defaultTargetPlatform == TargetPlatform.iOS;
+    messenger.hideCurrentSnackBar();
+    final toast = messenger.showSnackBar(
+      SnackBar(
+        key: const Key('undo-delete-toast'),
+        behavior: SnackBarBehavior.floating,
+        width: wide ? 440 : null,
+        // Below 720px it sits above the floating Record button.
+        margin: wide ? null : const EdgeInsets.fromLTRB(16, 0, 16, 82),
+        // The controller's timer decides when it goes; this only keeps it up.
+        duration: const Duration(days: 1),
+        content: _UndoDeleteToast(
+          controller: widget.controller,
+          hint: wide ? (mac ? '⌘ Z' : 'Ctrl Z') : null,
+        ),
+      ),
+    );
+    _toast = toast;
+    unawaited(
+      toast.closed.then((_) {
+        if (identical(_toast, toast)) _toast = null;
+      }),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
+}
+
+/// At and above this screen width the undo toast is 440px wide and shows the shortcut hint.
+const double _wideToast = 720;
+
+/// "Deleted N records" with Undo; the count follows the controller without re-showing.
+/// Hovering or focusing it holds the commit.
+class _UndoDeleteToast extends StatelessWidget {
+  const _UndoDeleteToast({required this.controller, this.hint});
+
+  final CollectionsController controller;
+  final String? hint;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = context.l10n;
+    return MouseRegion(
+      onEnter: (_) => controller.pauseDeleteTimer(),
+      onExit: (_) => controller.resumeDeleteTimer(),
+      child: Focus(
+        canRequestFocus: false,
+        skipTraversal: true,
+        onFocusChange: (focused) => focused
+            ? controller.pauseDeleteTimer()
+            : controller.resumeDeleteTimer(),
+        child: ListenableBuilder(
+          listenable: controller,
+          builder: (context, _) => Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Icon(
+                FiIcons.check,
+                key: const Key('outcome-check'),
+                size: 18,
+                color: context.nocturne.success,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  l.recordsDeletedSnack(
+                    math.max(controller.pendingDeleteCount, 1),
+                  ),
+                ),
+              ),
+              ToastIconAction(
+                key: const Key('undo-delete'),
+                icon: FiIcons.undo,
+                label: l.commonUndo,
+                hint: hint,
+                onPressed: controller.undoPendingDeletes,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Collapses and fades a phone card out while its delete is pending, and back in with the
+/// restored tint after Undo. Instant under reduced motion; the tint still shows.
+class _DeletableItem extends StatefulWidget {
+  const _DeletableItem({
+    super.key,
+    required this.id,
+    required this.exiting,
+    required this.restored,
+    required this.child,
+  });
+
+  final String id;
+  final bool exiting;
+  final bool restored;
+  final Widget child;
+
+  @override
+  State<_DeletableItem> createState() => _DeletableItemState();
+}
+
+class _DeletableItemState extends State<_DeletableItem>
+    with SingleTickerProviderStateMixin {
+  late final _motion = AnimationController(
+    vsync: this,
+    duration: CollectionsController.exitDuration,
+    value: widget.exiting ? 0 : 1,
+  );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final still = MediaQuery.disableAnimationsOf(context);
+    _motion.duration = still ? Duration.zero : CollectionsController.exitDuration;
+    if (!still && widget.restored && !widget.exiting && _motion.value == 1) {
+      // A restored card mounted fresh enters from nothing.
+      unawaited(_motion.forward(from: 0));
+    }
+  }
+
+  @override
+  void didUpdateWidget(_DeletableItem oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.exiting && !oldWidget.exiting) {
+      unawaited(_motion.reverse());
+    } else if (!widget.exiting && oldWidget.exiting) {
+      unawaited(_motion.forward());
+    } else if (!widget.exiting && _motion.value != 1 && !_motion.isAnimating) {
+      _motion.value = 1;
+    }
+  }
+
+  @override
+  void dispose() {
+    _motion.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final size = CurvedAnimation(parent: _motion, curve: Curves.easeOutCubic);
+    // The fade finishes in 140 of the 200ms.
+    final fade = CurvedAnimation(parent: _motion, curve: const Interval(.3, 1));
+    return SizeTransition(
+      sizeFactor: size,
+      axisAlignment: -1,
+      child: FadeTransition(
+        opacity: fade,
+        child: _RestoredTint(
+          id: widget.id,
+          active: widget.restored,
+          child: widget.child,
+        ),
+      ),
+    );
+  }
+}
+
+/// The accent wash a restored record shows, fading out over 1.4s.
+class _RestoredTint extends StatefulWidget {
+  const _RestoredTint({
+    required this.id,
+    required this.active,
+    required this.child,
+    this.radius = Nocturne.radius,
+  });
+
+  final String id;
+  final bool active;
+  final double radius;
+  final Widget child;
+
+  @override
+  State<_RestoredTint> createState() => _RestoredTintState();
+}
+
+class _RestoredTintState extends State<_RestoredTint>
+    with SingleTickerProviderStateMixin {
+  late final _fade = AnimationController(
+    vsync: this,
+    duration: CollectionsController.restoredTintDuration,
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.active) unawaited(_fade.forward(from: 0));
+  }
+
+  @override
+  void didUpdateWidget(_RestoredTint oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.active && (!oldWidget.active || oldWidget.id != widget.id)) {
+      unawaited(_fade.forward(from: 0));
+    } else if (!widget.active && oldWidget.id != widget.id) {
+      _fade.value = 1;
+    }
+  }
+
+  @override
+  void dispose() {
+    _fade.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: _fade,
+    child: widget.child,
+    builder: (context, child) {
+      if (!_fade.isAnimating) return child!;
+      return DecoratedBox(
+        key: Key('restored-tint-${widget.id}'),
+        position: DecorationPosition.foreground,
+        decoration: BoxDecoration(
+          color: context.nocturne.accent.withValues(
+            alpha: .22 * (1 - _fade.value),
+          ),
+          borderRadius: BorderRadius.circular(widget.radius),
+        ),
+        child: child,
+      );
+    },
   );
 }

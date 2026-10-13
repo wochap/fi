@@ -37,6 +37,7 @@ Future<void> _pumpLatte(
   FakeCollectionBridge bridge,
   Size size, {
   VoiceServices? voice,
+  AppLanguage language = AppLanguage.system,
 }) async {
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = size;
@@ -47,7 +48,9 @@ Future<void> _pumpLatte(
       capabilities: size.width >= 720
           ? PlatformCapabilities.desktop
           : PlatformCapabilities.androidPhone,
-      uiPrefs: MemoryUiPrefsStore(const UiPrefs(appTheme: AppThemeMode.light)),
+      uiPrefs: MemoryUiPrefsStore(
+        UiPrefs(appTheme: AppThemeMode.light, appLanguage: language),
+      ),
       voice: voice,
     ),
   );
@@ -63,6 +66,28 @@ Future<void> _openHeadaches(WidgetTester tester, Size size) async {
   await pumpUntilFound(tester, find.text('Headaches'));
   await tester.tap(find.text('Headaches'));
   await tester.pumpAndSettle();
+}
+
+/// Deletes two records, leaving the undo toast up.
+Future<void> _undoDelete(
+  WidgetTester tester,
+  Size size, {
+  AppLanguage language = AppLanguage.system,
+}) async {
+  await _pumpLatte(tester, seeded(3), size, language: language);
+  await pumpUntilFound(tester, find.text('Headaches'));
+  await tester.tap(find.text('Headaches'));
+  await tester.pumpAndSettle();
+  for (final id in ['record-0', 'record-1']) {
+    if (size.width >= 720) {
+      await tester.tap(find.byKey(Key('record-row-menu-$id')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('record-row-delete')));
+    } else {
+      await tester.tap(find.byKey(Key('card-delete-$id')));
+    }
+    await tester.pumpAndSettle();
+  }
 }
 
 Future<void> _settingsWithVoice(
@@ -122,6 +147,7 @@ final Map<String, Future<void> Function(WidgetTester, Size)> _screens = {
     await tester.tap(find.text('row 1'));
     await tester.pumpAndSettle();
   },
+  'undo-delete': _undoDelete,
   'record-form-edit': (tester, size) async {
     await _openHeadaches(tester, size);
     await tester.tap(find.text('row 0'));
@@ -183,4 +209,18 @@ void main() {
       });
     }
   }
+
+  testWidgets('Latte undo-delete in Spanish at 360px', (tester) async {
+    await _undoDelete(
+      tester,
+      const Size(360, 780),
+      language: AppLanguage.spanish,
+    );
+    expect(find.text('Se eliminaron 2 registros'), findsOneWidget);
+    expect(find.text('Deshacer'), findsOneWidget);
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('goldens/latte/undo-delete-es-360.png'),
+    );
+  });
 }

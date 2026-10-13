@@ -16,6 +16,7 @@ abstract final class FiIcons {
   static const IconData copy = PhosphorIconsRegular.copy;
   static const IconData refresh = PhosphorIconsRegular.arrowsClockwise;
   static const IconData reset = PhosphorIconsRegular.arrowCounterClockwise;
+  static const IconData undo = reset;
   static const IconData link = PhosphorIconsRegular.link;
   static const IconData search = PhosphorIconsRegular.magnifyingGlass;
   static const IconData microphone = PhosphorIconsRegular.microphone;

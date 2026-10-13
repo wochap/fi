@@ -1,4 +1,5 @@
 import 'package:fi/src/rust/api/models.dart';
+import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/theme/nocturne.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -123,7 +124,7 @@ void main() {
     expect(find.text('1 selected'), findsOneWidget);
   });
 
-  testWidgets('batch delete confirms with the count, then reports it', (
+  testWidgets('batch delete has no dialog, hides the rows and offers Undo', (
     tester,
   ) async {
     final bridge = seeded(3);
@@ -137,32 +138,30 @@ void main() {
 
     await tester.tap(find.byKey(const Key('batch-delete')));
     await tester.pumpAndSettle();
-    expect(find.text('Delete 3 records?'), findsOneWidget);
-    // Delete is the secondary action at the leading edge; Keep records is the primary one.
-    final delete = find.byKey(const Key('confirm-batch-delete'));
-    final keep = find.byKey(const Key('dismiss-batch-delete'));
-    expect(tester.widget(delete), isA<TextButton>());
-    expect(tester.widget(keep), isA<FilledButton>());
-    expect(
-      find.descendant(of: keep, matching: find.text('Keep records')),
-      findsOneWidget,
-    );
-    expect(tester.getCenter(delete).dx, lessThan(tester.getCenter(keep).dx));
-
-    // Keep records sends nothing and leaves the selection intact.
-    await tester.tap(find.byKey(const Key('dismiss-batch-delete')));
-    await tester.pumpAndSettle();
-    expect(bridge.batchDeleteCalls, isEmpty);
-    expect(find.text('3 selected'), findsOneWidget);
-
-    await tester.tap(find.byKey(const Key('batch-delete')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('confirm-batch-delete')));
-    await tester.pumpAndSettle();
-    expect(bridge.batchDeleteCalls, hasLength(1), reason: 'one batch call');
-    expect(bridge.batchDeleteCalls.single, hasLength(3));
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(find.text('3 selected'), findsNothing, reason: 'selection closes');
     expect(find.text('Deleted 3 records'), findsOneWidget);
     expect(find.text('No records yet.'), findsOneWidget);
+    expect(bridge.batchDeleteCalls, isEmpty, reason: 'held for Undo');
+
+    // Undo keeps the records: they come back and nothing is sent.
+    await tester.tap(find.byKey(const Key('undo-delete')));
+    await tester.pumpAndSettle();
+    expect(find.text('row 0'), findsOneWidget);
+    expect(find.text('3 selected'), findsNothing);
+    await tester.pump(const Duration(seconds: 6));
+    expect(bridge.batchDeleteCalls, isEmpty);
+
+    await tester.longPress(find.text('row 0'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('batch-delete')));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+    expect(bridge.batchDeleteCalls, [
+      ['record-0'],
+    ], reason: 'one batch after the window');
+    expect(find.text('Deleted 1 record'), findsNothing);
   });
 
   testWidgets('batch edit names the field and the count, then reports it', (
@@ -224,9 +223,7 @@ void main() {
       message: 'member 0 (record record-0): record not found',
       resetResolvable: false,
     );
-    await tester.tap(find.byKey(const Key('batch-delete')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('confirm-batch-delete')));
+    await tester.tap(find.byKey(const Key('selection-clone')));
     await tester.pumpAndSettle();
 
     expect(
@@ -314,6 +311,7 @@ void main() {
     expect(bridge.batchDeleteCalls, isEmpty);
     expect(find.text('row 0'), findsNothing);
     expect(find.text('row 1'), findsOneWidget);
+    expect(find.text('Deleted 1 record'), findsOneWidget);
   });
 
   testWidgets('selection Clone sends one command and Undo deletes the copies', (
@@ -336,6 +334,13 @@ void main() {
     ]);
     expect(find.byType(AlertDialog), findsNothing);
     expect(find.text('Cloned 3 records'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('undo-clone')),
+        matching: find.byIcon(FiIcons.undo),
+      ),
+      findsOneWidget,
+    );
     expect(find.text('3 selected'), findsNothing);
     expect(bridge.records[_collection], hasLength(6));
     final created = [
@@ -377,7 +382,7 @@ void main() {
     await tester.tap(find.byKey(const Key('record-row-menu-record-0')));
     await tester.pumpAndSettle();
     expect(find.text('Clone'), findsOneWidget);
-    expect(find.text('Delete…'), findsOneWidget);
+    expect(find.text('Delete'), findsOneWidget);
     await tester.tap(find.text('Clone'));
     await tester.pumpAndSettle();
     expect(find.text('New record'), findsWidgets);
@@ -390,7 +395,9 @@ void main() {
     expect(bridge.batchCloneCalls, isEmpty);
   });
 
-  testWidgets('the wide row menu Delete… confirms first', (tester) async {
+  testWidgets('the wide row menu Delete removes the row at once', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(1240, 800);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -398,21 +405,13 @@ void main() {
     await openCollection(tester, bridge);
     await tester.tap(find.byKey(const Key('record-row-menu-record-0')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Delete…'));
+    await tester.tap(find.text('Delete'));
     await tester.pumpAndSettle();
-    expect(find.byType(AlertDialog), findsOneWidget);
-    await tester.tap(find.byKey(const Key('dismiss-record-delete')));
-    await tester.pumpAndSettle();
-    expect(find.text('row 0'), findsOneWidget);
-
-    await tester.tap(find.byKey(const Key('record-row-menu-record-0')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Delete…'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('confirm-record-delete')));
-    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsNothing);
     expect(find.text('row 0'), findsNothing);
     expect(find.text('row 1'), findsOneWidget);
+    expect(find.text('Deleted 1 record'), findsOneWidget);
+    expect(find.text('Ctrl Z'), findsOneWidget);
   });
 
   group('record clone ux', () {

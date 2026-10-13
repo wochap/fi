@@ -260,9 +260,45 @@ final class CollectionsController extends ChangeNotifier {
   /// The records the selected view shows, in its order (All's order when the view is broken).
   List<RecordDto> records = const [];
 
-  /// Every active record of the open collection, unordered; state about records the view hides
-  /// (clone badges, incomplete counts, the dashboard) reads this.
+  /// Every active record of the open collection, unordered, minus pending deletes; state about
+  /// records the view hides (clone badges, incomplete counts, the dashboard) reads this.
   List<RecordDto> allRecords = const [];
+
+  /// The bridge's active records, pending deletes included.
+  List<RecordDto> _activeRecords = const [];
+
+  /// Records deleted on this screen but not yet sent to Rust, in deletion order.
+  final Set<String> _pendingDeleteIds = <String>{};
+  String? _pendingDeleteCollectionId;
+  Timer? _deleteTimer;
+
+  /// How long a delete stays undoable.
+  static const deleteUndoWindow = Duration(seconds: 5);
+
+  /// How long a restored record keeps its tint.
+  static const restoredTintDuration = Duration(milliseconds: 1400);
+
+  /// Records that just came back from Undo or a failed commit, shown with a fading tint.
+  Set<String> _restoredIds = const {};
+  Timer? _restoredTimer;
+  bool isRestored(String id) => _restoredIds.contains(id);
+
+  /// Pending records still playing their exit motion; [shownRecords] keeps them for it.
+  Set<String> _exitingIds = const {};
+  Timer? _exitTimer;
+  static const exitDuration = Duration(milliseconds: 200);
+  bool isExiting(String id) => _exitingIds.contains(id);
+
+  /// [records] plus the records still leaving, in the view's order; what the list draws.
+  List<RecordDto> shownRecords = const [];
+
+  /// [recordGroups] plus the records still leaving.
+  List<({ViewGroupDto group, List<RecordDto> records})> shownGroups = const [];
+
+  /// How many records the last rejected commit carried; set alongside [failure].
+  int? deleteFailedCount;
+
+  int get pendingDeleteCount => _pendingDeleteIds.length;
 
   /// All first, then the saved views in order, each with its count. Kept until a new listing
   /// arrives, so counts never blank while recomputing.
@@ -432,7 +468,8 @@ final class CollectionsController extends ChangeNotifier {
       _pruneViewPrefs();
       if (selectedCollectionId case final id?) {
         schema = await bridge.getCollectionSchema(id);
-        allRecords = await bridge.listRecords(id);
+        _activeRecords = await bridge.listRecords(id);
+        _filterPending();
         computedFields = await bridge.listComputedFields(id);
         queryDefinitions = await bridge.listQueryDefinitions(id);
         widgetDefinitions = await bridge.listWidgets(id);
@@ -442,6 +479,9 @@ final class CollectionsController extends ChangeNotifier {
         schema = null;
         records = const [];
         recordGroups = const [];
+        shownRecords = const [];
+        shownGroups = const [];
+        _activeRecords = const [];
         allRecords = const [];
         views = const [];
         viewResult = null;
@@ -460,6 +500,7 @@ final class CollectionsController extends ChangeNotifier {
         _recentCloneIds = _recentCloneIds.where(active.contains).toSet();
       }
       failure = null;
+      deleteFailedCount = null;
     } catch (error) {
       failure = error;
     } finally {
@@ -525,6 +566,8 @@ final class CollectionsController extends ChangeNotifier {
   }
 
   Future<void> selectCollection(String? id) async {
+    // Leaving (or reopening) commits at once, against the collection the deletes belong to.
+    if (_pendingDeleteIds.isNotEmpty) unawaited(commitPendingDeletes());
     if (id != _recentCloneCollectionId) _clearRecentClones();
     if (id != selectedCollectionId) {
       views = const [];
@@ -636,9 +679,17 @@ final class CollectionsController extends ChangeNotifier {
     brokenView = broken;
     viewResult = result;
     RecordDateZone.follow(result.zone);
-    final byId = {for (final record in allRecords) record.id: record};
-    records = [for (final id in result.ids) ?byId[id]];
-    recordGroups = [
+    _rederive();
+    if (remembered != (activeViewId, _draft)) _rememberView(collectionId);
+  }
+
+  static (
+    List<RecordDto>,
+    List<({ViewGroupDto group, List<RecordDto> records})>,
+  )
+  _ordered(ViewResultDto result, Map<String, RecordDto> byId) => (
+    [for (final id in result.ids) ?byId[id]],
+    [
       for (final group in result.groups)
         (
           group: group,
@@ -647,9 +698,41 @@ final class CollectionsController extends ChangeNotifier {
               ?byId[id],
           ],
         ),
-    ];
+    ],
+  );
+
+  void _filterPending() {
+    allRecords = _pendingDeleteIds.isEmpty
+        ? _activeRecords
+        : [
+            for (final record in _activeRecords)
+              if (!_pendingDeleteIds.contains(record.id)) record,
+          ];
+  }
+
+  /// Rebuilds [records] and [recordGroups] from [allRecords] and the last [viewResult], so
+  /// hidden or restored records leave or come back in the view's current order.
+  void _rederive() {
+    final result = viewResult;
+    if (result == null) return;
+    final byId = {for (final record in allRecords) record.id: record};
+    final (ordered, groups) = _ordered(result, byId);
+    records = ordered;
+    recordGroups = groups;
+    if (_exitingIds.isEmpty) {
+      shownRecords = records;
+      shownGroups = recordGroups;
+    } else {
+      final shown = {
+        for (final record in _activeRecords)
+          if (byId.containsKey(record.id) || _exitingIds.contains(record.id))
+            record.id: record,
+      };
+      final (shownOrdered, shownGrouped) = _ordered(result, shown);
+      shownRecords = shownOrdered;
+      shownGroups = shownGrouped;
+    }
     _pruneSelection();
-    if (remembered != (activeViewId, _draft)) _rememberView(collectionId);
   }
 
   /// Stores the selected view and draft of [collectionId] on this device.
@@ -1260,9 +1343,107 @@ final class CollectionsController extends ChangeNotifier {
     }
   }
 
-  Future<void> deleteRecord(String id) async {
-    await bridge.deleteRecord(id, selectedCollectionId!);
-    await refresh();
+  /// Hides [ids] at once and commits them after [deleteUndoWindow]; deleting more restarts the
+  /// window and joins the same batch.
+  void deleteRecords(Iterable<String> recordIds) {
+    final ids = recordIds.toList(growable: false);
+    final collectionId = selectedCollectionId;
+    if (collectionId == null) return;
+    if (_pendingDeleteCollectionId != null &&
+        _pendingDeleteCollectionId != collectionId) {
+      unawaited(commitPendingDeletes());
+    }
+    _pendingDeleteCollectionId = collectionId;
+    final shown = {for (final record in records) record.id};
+    _exitingIds = {..._exitingIds, ...ids.where(shown.contains)};
+    _exitTimer?.cancel();
+    _exitTimer = Timer(exitDuration, () {
+      _exitTimer = null;
+      _exitingIds = const {};
+      _rederive();
+      if (!_disposed) notifyListeners();
+    });
+    _pendingDeleteIds.addAll(ids);
+    selectedRecordIds.removeAll(_pendingDeleteIds);
+    _filterPending();
+    _rederive();
+    _startDeleteTimer();
+    notifyListeners();
+  }
+
+  void _startDeleteTimer() {
+    _deleteTimer?.cancel();
+    _deleteTimer = Timer(deleteUndoWindow, () {
+      _deleteTimer = null;
+      unawaited(commitPendingDeletes());
+    });
+  }
+
+  /// Holds the commit while the undo toast is hovered or focused.
+  void pauseDeleteTimer() {
+    _deleteTimer?.cancel();
+    _deleteTimer = null;
+  }
+
+  /// Restarts the full window, so a delete is never cut off right after the pointer leaves.
+  void resumeDeleteTimer() {
+    if (_pendingDeleteIds.isEmpty) return;
+    _startDeleteTimer();
+  }
+
+  /// Sends every pending delete still active in one batch. The set is cleared first, so a second
+  /// trigger is a no-op; on rejection the records come back with the tint.
+  Future<void> commitPendingDeletes() async {
+    _deleteTimer?.cancel();
+    _deleteTimer = null;
+    final collectionId = _pendingDeleteCollectionId;
+    if (_pendingDeleteIds.isEmpty || collectionId == null) return;
+    final active = {for (final record in _activeRecords) record.id};
+    final ids = _pendingDeleteIds
+        .where(active.contains)
+        .toList(growable: false);
+    _pendingDeleteIds.clear();
+    _pendingDeleteCollectionId = null;
+    if (!_disposed) notifyListeners();
+    if (ids.isEmpty) return;
+    try {
+      await bridge.deleteRecords(ids, collectionId);
+    } catch (failure) {
+      if (_disposed) return;
+      if (selectedCollectionId == collectionId) {
+        _markRestored(ids);
+        _filterPending();
+        _rederive();
+      }
+      await _reportBatchFailure(failure);
+      deleteFailedCount = ids.length;
+      notifyListeners();
+    }
+  }
+
+  /// Cancels the window and shows every pending record again in its place.
+  void undoPendingDeletes() {
+    if (_pendingDeleteIds.isEmpty) return;
+    _deleteTimer?.cancel();
+    _deleteTimer = null;
+    final ids = _pendingDeleteIds.toList(growable: false);
+    _pendingDeleteIds.clear();
+    _pendingDeleteCollectionId = null;
+    _markRestored(ids);
+    _filterPending();
+    _rederive();
+    notifyListeners();
+  }
+
+  void _markRestored(List<String> ids) {
+    _exitingIds = _exitingIds.difference(ids.toSet());
+    _restoredIds = {..._restoredIds, ...ids};
+    _restoredTimer?.cancel();
+    _restoredTimer = Timer(restoredTintDuration, () {
+      _restoredTimer = null;
+      _restoredIds = const {};
+      if (!_disposed) notifyListeners();
+    });
   }
 
   /// True while the screen is in selection mode: either a record is selected,
@@ -1300,22 +1481,6 @@ final class CollectionsController extends ChangeNotifier {
     if (selectedRecordIds.isEmpty) return;
     final present = {for (final record in records) record.id};
     selectedRecordIds.removeWhere((id) => !present.contains(id));
-  }
-
-  /// Deletes the selection in one atomic batch and returns how many records the
-  /// batch carried. On failure the selection is pruned, not cleared, so the
-  /// user can retry from what is still there.
-  Future<int> deleteSelected() async {
-    final ids = selectedRecordIds.toList(growable: false);
-    try {
-      await bridge.deleteRecords(ids, selectedCollectionId!);
-    } catch (failure) {
-      await _reportBatchFailure(failure);
-      rethrow;
-    }
-    await refresh();
-    clearSelection();
-    return ids.length;
   }
 
   /// Clones the selection in one atomic batch and returns the created ids, in
@@ -1393,8 +1558,12 @@ final class CollectionsController extends ChangeNotifier {
 
   @override
   void dispose() {
+    // Fire and forget: the bridge call never needs this controller.
+    unawaited(commitPendingDeletes());
     _disposed = true;
     _refreshTimer?.cancel();
+    _restoredTimer?.cancel();
+    _exitTimer?.cancel();
     unawaited(_dataSubscription?.cancel());
     unawaited(_projectionSubscription?.cancel());
     unawaited(_errorSubscription?.cancel());

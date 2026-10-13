@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:fi/bridge/collection_bridge.dart';
 import 'package:fi/controllers.dart';
 import 'package:fi/src/rust/api/models.dart';
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'batch_records_test.dart' show seeded;
@@ -94,8 +95,9 @@ void main() {
         ),
       ),
     ]);
-    await controller.deleteRecord(controller.records.single.id);
+    controller.deleteRecords([controller.records.single.id]);
     expect(controller.records, isEmpty);
+    await controller.commitPendingDeletes();
     await controller.removeEnumOption(fieldId, optionId);
     expect(controller.schema!.fields.single.enumOptions, isEmpty);
     controller.dispose();
@@ -753,30 +755,216 @@ void main() {
     },
   );
 
-  test('a batch is one bridge call and clears the selection', () async {
-    final bridge = FakeCollectionBridge();
-    final controller = CollectionsController(bridge);
-    await controller.start();
-    final collection = await controller.createCollection('Inbox');
-    await controller.selectCollection(collection);
-    for (var index = 0; index < 3; index++) {
-      await controller.createRecord(const []);
-    }
-    final ids = controller.records.map((record) => record.id).toList();
-    for (final id in ids) {
-      controller.toggleSelected(id);
-    }
-    expect(controller.selecting, isTrue);
-    expect(controller.selectedRecordIds, ids.toSet());
+  group('undoable record deletion', () {
+    const collection = 'collection-1';
 
-    final affected = await controller.deleteSelected();
-    expect(affected, 3);
-    expect(bridge.batchDeleteCalls, hasLength(1), reason: 'one batch call');
-    expect(bridge.batchDeleteCalls.single.toSet(), ids.toSet());
-    expect(controller.records, isEmpty);
-    expect(controller.selectedRecordIds, isEmpty);
-    expect(controller.selecting, isFalse);
-    controller.dispose();
+    /// Starts a controller on [bridge]'s collection inside [async].
+    CollectionsController open(FakeAsync async, FakeCollectionBridge bridge) {
+      final controller = CollectionsController(bridge);
+      unawaited(
+        controller.start().then((_) => controller.selectCollection(collection)),
+      );
+      async.flushMicrotasks();
+      return controller;
+    }
+
+    List<String> ids(CollectionsController controller) =>
+        controller.records.map((record) => record.id).toList();
+
+    test('hides at once and commits one batch after 5s', () {
+      fakeAsync((async) {
+        final bridge = seeded(4);
+        final controller = open(async, bridge);
+        final before = ids(controller);
+        controller.toggleSelected(before[0]);
+        controller.deleteRecords([before[0]]);
+        expect(controller.pendingDeleteCount, 1);
+        expect(ids(controller), isNot(contains(before[0])));
+        expect(controller.allRecords, hasLength(3));
+        expect(controller.selectedRecordIds, isEmpty);
+        async.elapse(const Duration(seconds: 3));
+        controller.deleteRecords([before[1]]);
+        expect(controller.pendingDeleteCount, 2, reason: 'accumulates');
+        async.elapse(const Duration(seconds: 4));
+        expect(bridge.batchDeleteCalls, isEmpty, reason: 'the timer restarted');
+        async.elapse(const Duration(seconds: 1));
+        expect(bridge.batchDeleteCalls, [
+          [before[0], before[1]],
+        ]);
+        expect(controller.pendingDeleteCount, 0);
+        controller.dispose();
+      });
+    });
+
+    test('pause holds the commit; resume restarts the full window', () {
+      fakeAsync((async) {
+        final bridge = seeded(2);
+        final controller = open(async, bridge);
+        controller.deleteRecords([ids(controller).first]);
+        controller.pauseDeleteTimer();
+        async.elapse(const Duration(seconds: 10));
+        expect(bridge.batchDeleteCalls, isEmpty);
+        controller.resumeDeleteTimer();
+        async.elapse(const Duration(milliseconds: 4900));
+        expect(bridge.batchDeleteCalls, isEmpty);
+        async.elapse(const Duration(milliseconds: 100));
+        expect(bridge.batchDeleteCalls, hasLength(1));
+        controller.dispose();
+      });
+    });
+
+    test('undo sends nothing and restores the view order', () {
+      fakeAsync((async) {
+        final bridge = seeded(4);
+        final controller = open(async, bridge);
+        final before = ids(controller);
+        controller.deleteRecords([before[1], before[2]]);
+        controller.undoPendingDeletes();
+        expect(ids(controller), before);
+        expect(controller.isRestored(before[1]), isTrue);
+        async.elapse(const Duration(seconds: 10));
+        expect(bridge.batchDeleteCalls, isEmpty);
+        controller.dispose();
+      });
+    });
+
+    test('a pending record deleted elsewhere is left out', () {
+      fakeAsync((async) {
+        final bridge = seeded(3);
+        final controller = open(async, bridge);
+        final before = ids(controller);
+        controller.deleteRecords([before[0], before[1]]);
+        bridge.records[collection]!.removeWhere((r) => r.id == before[0]);
+        unawaited(controller.refresh());
+        async.flushMicrotasks();
+        expect(ids(controller), [before[2]], reason: 'still hidden');
+        async.elapse(const Duration(seconds: 5));
+        expect(bridge.batchDeleteCalls, [
+          [before[1]],
+        ]);
+        expect(controller.failure, isNull);
+        unawaited(controller.commitPendingDeletes());
+        async.flushMicrotasks();
+        expect(bridge.batchDeleteCalls, hasLength(1), reason: 'no-op');
+        controller.dispose();
+      });
+    });
+
+    test('nothing is sent when every pending record is gone', () {
+      fakeAsync((async) {
+        final bridge = seeded(1);
+        final controller = open(async, bridge);
+        controller.deleteRecords(['record-0']);
+        bridge.records[collection]!.clear();
+        unawaited(controller.refresh());
+        async.elapse(const Duration(seconds: 5));
+        expect(bridge.batchDeleteCalls, isEmpty);
+        controller.dispose();
+      });
+    });
+
+    test('leaving or switching commits at once to the owning collection', () {
+      fakeAsync((async) {
+        final bridge = seeded(2);
+        final controller = open(async, bridge);
+        controller.deleteRecords(['record-0']);
+        unawaited(controller.selectCollection(null));
+        async.flushMicrotasks();
+        expect(bridge.batchDeleteCalls, [
+          ['record-0'],
+        ]);
+        unawaited(controller.selectCollection(collection));
+        async.flushMicrotasks();
+        controller.deleteRecords(['record-1']);
+        bridge.collections.add(
+          const CollectionDto(
+            id: 'other',
+            name: 'Other',
+            description: '',
+            recordCount: 0,
+            fieldCount: 0,
+            incompleteCount: 0,
+          ),
+        );
+        bridge.schemas['other'] = bridge.schemas[collection]!;
+        bridge.records['other'] = [];
+        unawaited(controller.selectCollection('other'));
+        async.flushMicrotasks();
+        expect(bridge.batchDeleteCalls.last, ['record-1']);
+        expect(bridge.records[collection], isEmpty);
+        controller.dispose();
+      });
+    });
+
+    test('dispose commits', () {
+      fakeAsync((async) {
+        final bridge = seeded(1);
+        final controller = open(async, bridge);
+        controller.deleteRecords(['record-0']);
+        controller.dispose();
+        async.flushMicrotasks();
+        expect(bridge.batchDeleteCalls, hasLength(1));
+      });
+    });
+
+    test('a rejected commit brings the records back with a count', () {
+      fakeAsync((async) {
+        final bridge = seeded(3);
+        final controller = open(async, bridge);
+        final before = ids(controller);
+        controller.deleteRecords([before[0], before[1]]);
+        bridge.nextBatchError = const BridgeError(
+          kind: BridgeErrorKind.validation,
+          issues: [],
+          message: 'disk full',
+          resetResolvable: false,
+        );
+        async.elapse(const Duration(seconds: 5));
+        expect(ids(controller), before);
+        expect(controller.deleteFailedCount, 2);
+        expect(controller.failure, isA<BridgeError>());
+        expect(controller.isRestored(before[0]), isTrue);
+        unawaited(controller.refresh());
+        async.flushMicrotasks();
+        expect(controller.deleteFailedCount, isNull);
+        controller.dispose();
+      });
+    });
+
+    test('the restored mark clears after 1.4s', () {
+      fakeAsync((async) {
+        final bridge = seeded(1);
+        final controller = open(async, bridge);
+        controller
+          ..deleteRecords(['record-0'])
+          ..undoPendingDeletes();
+        expect(controller.isRestored('record-0'), isTrue);
+        async.elapse(const Duration(milliseconds: 1399));
+        expect(controller.isRestored('record-0'), isTrue);
+        async.elapse(const Duration(milliseconds: 1));
+        expect(controller.isRestored('record-0'), isFalse);
+        controller.dispose();
+      });
+    });
+
+    test('a leaving record stays drawn for its exit only', () {
+      fakeAsync((async) {
+        final bridge = seeded(2);
+        final controller = open(async, bridge);
+        controller.deleteRecords(['record-0']);
+        expect(
+          controller.records.map((r) => r.id),
+          isNot(contains('record-0')),
+        );
+        expect(controller.shownRecords.map((r) => r.id), contains('record-0'));
+        async.elapse(CollectionsController.exitDuration);
+        expect(
+          controller.shownRecords.map((r) => r.id),
+          isNot(contains('record-0')),
+        );
+        controller.dispose();
+      });
+    });
   });
 
   test('a batch field set is one bridge call', () async {
@@ -852,7 +1040,7 @@ void main() {
       message: 'member 0: record not found',
       resetResolvable: false,
     );
-    await expectLater(controller.deleteSelected(), throwsA(isA<BridgeError>()));
+    await expectLater(controller.cloneSelected(), throwsA(isA<BridgeError>()));
     expect(controller.selecting, isTrue, reason: 'selection mode survives');
     expect(
       controller.selectedRecordIds,
@@ -1152,7 +1340,9 @@ void _recentClonesTests() {
       await controller.refresh();
       expect(controller.recentCloneIds, {'record-0'});
 
-      await controller.deleteRecord('record-0');
+      controller.deleteRecords(['record-0']);
+      await controller.commitPendingDeletes();
+      await controller.refresh();
       expect(controller.recentCloneIds, isEmpty);
       controller.dispose();
     });

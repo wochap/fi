@@ -22,7 +22,8 @@ void showOutcomeToast(
 );
 
 /// [showOutcomeToast] for callers that captured the messenger before an `await`. A
-/// [secondaryAction] (Show) sits beside the message as a ghost button, before [action].
+/// [secondaryAction] (Show) sits beside the message as a ghost button, before [action]. With an
+/// [actionIcon], [action] renders as an icon button inside the toast.
 void showOutcomeToastOn(
   ScaffoldMessengerState messenger,
   AppLocalizations l,
@@ -31,7 +32,9 @@ void showOutcomeToastOn(
   required bool success,
   SnackBarAction? action,
   SnackBarAction? secondaryAction,
+  IconData? actionIcon,
 }) {
+  final iconAction = success && actionIcon != null ? action : null;
   messenger
     ..hideCurrentSnackBar()
     ..showSnackBar(
@@ -43,7 +46,7 @@ void showOutcomeToastOn(
             ? const Duration(milliseconds: 4000)
             : const Duration(days: 1),
         action: success
-            ? action
+            ? (iconAction == null ? action : null)
             : SnackBarAction(label: l.outcomeDismiss, onPressed: () {}),
         content: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -77,8 +80,67 @@ void showOutcomeToastOn(
                   child: Text(secondaryAction.label),
                 ),
               ),
+            if (iconAction != null)
+              ToastIconAction(
+                key: iconAction.key,
+                icon: actionIcon!,
+                label: iconAction.label,
+                onPressed: () {
+                  messenger.hideCurrentSnackBar();
+                  iconAction.onPressed();
+                },
+              ),
           ],
         ),
       ),
     );
+}
+
+/// A toast action with a leading icon and an optional keyboard [hint]; it never shrinks.
+class ToastIconAction extends StatelessWidget {
+  const ToastIconAction({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+    this.hint,
+  });
+
+  final IconData icon;
+  final String label;
+  final String? hint;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = Theme.of(context).snackBarTheme.actionTextColor;
+    return TextButton(
+      style: TextButton.styleFrom(
+        foregroundColor: accent,
+        minimumSize: const Size(0, 24),
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        visualDensity: VisualDensity.compact,
+      ),
+      onPressed: onPressed,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16),
+          const SizedBox(width: 6),
+          Text(label),
+          if (hint case final hint?) ...[
+            const SizedBox(width: 8),
+            Text(
+              hint,
+              style: TextStyle(
+                fontSize: 11,
+                color: accent?.withValues(alpha: .7),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 }

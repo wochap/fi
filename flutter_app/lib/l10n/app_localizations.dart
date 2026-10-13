@@ -2846,23 +2846,17 @@ abstract class AppLocalizations {
   /// **'Edit field'**
   String get recordsEditField;
 
-  /// Dialog title
-  ///
-  /// In en, this message translates to:
-  /// **'Delete {count} records?'**
-  String recordsBatchDeleteTitle(int count);
-
-  /// Dialog body
-  ///
-  /// In en, this message translates to:
-  /// **'Every selected record is deleted in one step.'**
-  String get recordsBatchDeleteBody;
-
   /// Toast after a batch delete
   ///
   /// In en, this message translates to:
   /// **'{count, plural, =1{Deleted 1 record} other{Deleted {count} records}}'**
   String recordsDeletedSnack(int count);
+
+  /// Banner title when an undoable record delete is rejected
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Couldn\'t delete 1 record} other{Couldn\'t delete {count} records}}'**
+  String recordsDeleteFailed(int count);
 
   /// Dialog title
   ///
@@ -2918,18 +2912,6 @@ abstract class AppLocalizations {
   /// **'Keep editing'**
   String get recordKeepEditing;
 
-  /// Dialog title
-  ///
-  /// In en, this message translates to:
-  /// **'Delete this record?'**
-  String get recordDeleteTitle;
-
-  /// Dialog body
-  ///
-  /// In en, this message translates to:
-  /// **'It is removed from the collection.'**
-  String get recordDeleteBody;
-
   /// Context label part
   ///
   /// In en, this message translates to:
@@ -2953,12 +2935,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'* Required · Ctrl+Enter to save'**
   String get recordFooterHint;
-
-  /// Menu item
-  ///
-  /// In en, this message translates to:
-  /// **'Delete record…'**
-  String get recordDeleteRecordEllipsis;
 
   /// Button
   ///
@@ -4843,12 +4819,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Set {field}'**
   String recordsSetField(String field);
-
-  /// Batch delete confirm primary
-  ///
-  /// In en, this message translates to:
-  /// **'Keep records'**
-  String get recordsKeepRecords;
 
   /// Toast after a batch set
   ///
