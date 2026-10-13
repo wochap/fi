@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap">
+<link rel="stylesheet" href="_ds/nocturne-53929d40-05df-499c-bc14-17884e999fc5/styles.css">
+<script src="_ds/nocturne-53929d40-05df-499c-bc14-17884e999fc5/_ds_bundle.js"></script>
+<script src="https://unpkg.com/@phosphor-icons/web@2.1.1"></script>
+</helmet>
+<sc-if value="{{ isPhone }}" hint-placeholder-val="{{ true }}">
+<div style="width:360px;height:760px;border-radius:28px;overflow:hidden;position:relative;display:flex;flex-direction:column;background:var(--color-bg);color:var(--color-text);font-family:var(--font-body);box-shadow:var(--shadow-md)">
+  <div style="display:flex;align-items:center;gap:2px;padding:14px 8px 6px 8px">
+    <button class="btn btn-ghost" aria-label="{{ t.back }}" onClick="{{ leave }}" style="width:44px;height:44px;color:var(--color-text)"><i class="ph ph-arrow-left" style="font-size:20px"></i></button>
+    <div style="flex:1;min-width:0"><div style="font-size:17px;font-weight:500">pains</div><div style="font-size:11px;color:color-mix(in srgb,var(--color-text) 55%,transparent);font-variant-numeric:tabular-nums">{{ countLabel }}</div></div>
+    <button class="btn btn-ghost" aria-label="Schema" style="width:44px;height:44px;color:var(--color-text)"><i class="ph ph-sliders-horizontal" style="font-size:20px"></i></button>
+    <button class="btn btn-ghost" aria-label="More actions" style="width:44px;height:44px;color:var(--color-text)"><i class="ph ph-dots-three-vertical" style="font-size:20px"></i></button>
+  </div>
+  <div style="flex:1;min-height:0;overflow:hidden;padding:8px 16px 16px;display:flex;flex-direction:column;gap:12px">
+    <sc-if value="{{ banner }}" hint-placeholder-val="{{ false }}">
+      <div role="alert" style="display:flex;align-items:flex-start;gap:10px;padding:12px 6px 12px 14px;border-radius:var(--radius-md);background:var(--color-surface);box-shadow:inset 0 0 0 1px var(--color-accent-edge)"><i class="ph ph-warning-circle" style="font-size:18px;color:var(--color-danger);margin-top:1px;flex:none"></i><div style="flex:1;min-width:0;font-size:13px;text-wrap:pretty"><div>{{ bannerTitle }}</div><div style="font-size:12px;color:color-mix(in srgb,var(--color-text) 55%,transparent)">{{ t.failWhy }}</div></div><button class="btn btn-ghost" onClick="{{ dismiss }}" style="min-height:44px;margin:-12px 0;color:color-mix(in srgb,var(--color-text) 75%,transparent)">{{ t.dismiss }}</button></div>
+    </sc-if>
+    <h6 style="margin:0;color:color-mix(in srgb,var(--color-text) 60%,transparent)">{{ t.records }}</h6>
+    <div style="display:flex;flex-direction:column">
+      <sc-for list="{{ rows }}" as="r" hint-placeholder-count="4">
+        <div style="display:grid;grid-template-rows:{{ r.rowsT }};opacity:{{ r.op }};max-height:{{ r.maxH }};transition:{{ tr }}">
+          <div style="overflow:hidden;min-height:0;padding:1px 1px 10px">
+            <div class="card elev-sm" style="padding:10px 14px 12px;gap:6px;background:{{ r.bg }};box-shadow:{{ r.sh }};transition:{{ hlTr }}">
+              <div style="display:flex;align-items:center;gap:8px"><span style="flex:1;min-width:0;font-size:13px;color:color-mix(in srgb,var(--color-text) 60%,transparent);font-variant-numeric:tabular-nums">{{ r.date }}</span><span style="display:flex;flex:none;margin-right:-12px"><button class="btn btn-ghost" aria-label="{{ t.clone }}" style="width:44px;height:44px;flex:none;padding:0;margin:-12px 0;color:color-mix(in srgb,var(--color-text) 60%,transparent)"><i class="ph ph-copy" style="font-size:18px"></i></button><button class="btn btn-ghost" aria-label="{{ t.del }}" onClick="{{ r.onDelete }}" style="width:44px;height:44px;flex:none;padding:0;margin:-12px 0;color:color-mix(in srgb,var(--color-text) 60%,transparent);background:{{ r.trashBg }}"><i class="ph ph-trash" style="font-size:18px"></i></button></span></div>
+              <div style="display:flex;align-items:center;gap:10px;font-size:14px"><i class="ph ph-list-bullets" style="color:var(--color-accent);font-size:16px"></i><span style="width:80px;flex:none;color:color-mix(in srgb,var(--color-text) 60%,transparent)">{{ t.type }}</span><span>{{ r.type }}</span></div>
+              <div style="display:flex;align-items:center;gap:10px;font-size:14px"><i class="ph ph-hash" style="color:var(--color-accent);font-size:16px"></i><span style="width:80px;flex:none;color:color-mix(in srgb,var(--color-text) 60%,transparent)">{{ t.level }}</span><span>{{ r.level }}</span></div>
+            </div>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+  <nav style="display:grid;grid-template-columns:repeat(3,1fr);padding:8px 12px 20px;background:var(--color-surface);box-shadow:inset 0 1px 0 var(--color-divider)"><div style="display:flex;flex-direction:column;align-items:center;gap:4px;font-size:11px;color:var(--color-accent-ink)"><span style="width:56px;height:30px;border-radius:15px;background:var(--color-accent-fill);display:grid;place-items:center;font-size:20px"><i class="ph ph-squares-four"></i></span>{{ t.coll }}</div><div style="display:flex;flex-direction:column;align-items:center;gap:4px;font-size:11px;color:color-mix(in srgb,var(--color-text) 60%,transparent)"><span style="width:56px;height:30px;display:grid;place-items:center;font-size:20px"><i class="ph ph-devices"></i></span>{{ t.dev }}</div><div style="display:flex;flex-direction:column;align-items:center;gap:4px;font-size:11px;color:color-mix(in srgb,var(--color-text) 60%,transparent)"><span style="width:56px;height:30px;display:grid;place-items:center;font-size:20px"><i class="ph ph-gear-six"></i></span>{{ t.set }}</div></nav>
+  <button class="btn btn-primary" style="position:absolute;right:18px;bottom:96px;height:52px;padding:0 18px;background:var(--color-bg);box-shadow:var(--shadow-md);font-size:15px"><i class="ph ph-plus" style="font-size:18px"></i>{{ t.fab }}</button>
+  <sc-if value="{{ showToast }}" hint-placeholder-val="{{ false }}">
+    <div role="status" onMouseEnter="{{ pause }}" onMouseLeave="{{ resume }}" onFocus="{{ pause }}" onBlur="{{ resume }}" style="position:absolute;left:16px;right:16px;bottom:160px;display:flex;align-items:center;gap:12px;padding:0 4px 0 14px;min-height:48px;overflow:hidden;border-radius:var(--radius-md);background:var(--color-neutral-fill-strong);box-shadow:var(--shadow-md);font-size:13px;line-height:1.4;opacity:{{ toastOp }};transform:translateY({{ toastY }});transition:{{ toastTr }}"><i class="ph ph-check-circle" style="font-size:18px;color:var(--color-success);flex:none"></i><span style="flex:1;min-width:0;padding:6px 0;text-wrap:pretty;font-variant-numeric:tabular-nums">{{ toastText }}</span><button class="btn btn-ghost" onClick="{{ undo }}" style="min-height:44px;flex:none;color:var(--color-accent-ink)"><i class="ph ph-arrow-counter-clockwise"></i>{{ t.undo }}</button><sc-if value="{{ countdown }}" hint-placeholder-val="{{ false }}"><span ref="{{ cdRef }}" style="position:absolute;left:0;bottom:0;height:2px;background:var(--color-accent);width:{{ cdW }};transition:{{ cdT }}"></span></sc-if></div>
+  </sc-if>
+</div>
+</sc-if>
+<sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ false }}">
+<div style="width:1240px;height:760px;display:flex;position:relative;overflow:hidden;border-radius:10px;background:var(--color-bg);color:var(--color-text);font-family:var(--font-body);box-shadow:var(--shadow-md)">
+  <aside style="width:216px;flex:none;display:flex;flex-direction:column;gap:4px;padding:18px 12px;background:linear-gradient(180deg,var(--color-surface),var(--color-bg));box-shadow:inset -1px 0 0 var(--color-divider)">
+    <div style="display:flex;align-items:center;gap:10px;padding:2px 8px 20px"><div style="width:28px;height:28px;border-radius:var(--radius-md);box-shadow:inset 0 0 0 1px var(--color-accent);display:grid;place-items:center"><svg viewBox="0 0 64 64" width="18" height="18"><rect x="12" y="12" width="7" height="40" rx="3.5" style="fill:var(--color-text)"></rect><rect x="24" y="12" width="28" height="7" rx="3.5" style="fill:var(--color-text)"></rect><rect x="24" y="28.5" width="16" height="7" rx="3.5" style="fill:var(--color-text)"></rect><circle cx="48.5" cy="32" r="4" style="fill:var(--color-accent)"></circle></svg></div><span style="font-size:16px;font-weight:500">Fi</span></div>
+    <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:var(--radius-md);background:var(--color-accent-fill);color:var(--color-accent-ink);font-size:14px"><i class="ph ph-squares-four" style="font-size:18px"></i>{{ t.coll }}</div>
+    <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;font-size:14px;color:color-mix(in srgb,var(--color-text) 70%,transparent)"><i class="ph ph-devices" style="font-size:18px"></i>{{ t.dev }}</div>
+    <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;font-size:14px;color:color-mix(in srgb,var(--color-text) 70%,transparent)"><i class="ph ph-gear-six" style="font-size:18px"></i>{{ t.set }}</div>
+    <div style="margin-top:auto;display:flex;align-items:center;gap:10px;padding:10px;border-radius:var(--radius-md);box-shadow:var(--shadow-sm);font-size:12px;line-height:1.35"><span style="width:8px;height:8px;border-radius:50%;background:var(--color-accent);box-shadow:0 0 0 4px var(--color-accent-fill),0 0 12px var(--color-accent);flex:none"></span><div><div>Synced</div><div style="color:color-mix(in srgb,var(--color-text) 55%,transparent)">2 paired · 1 connected</div></div></div>
+  </aside>
+  <main style="flex:1;min-width:0;padding:22px 32px;display:flex;flex-direction:column;gap:20px;position:relative;overflow:hidden">
+    <div style="max-width:880px;width:100%;display:flex;flex-direction:column;gap:20px;flex:1;min-height:0">
+      <sc-if value="{{ notSelecting }}" hint-placeholder-val="{{ true }}">
+        <header style="display:flex;align-items:flex-end;gap:16px;min-height:64px">
+          <div style="flex:1;min-width:0"><div style="display:flex;align-items:center;gap:6px;font-size:12px;color:color-mix(in srgb,var(--color-text) 55%,transparent);margin-bottom:6px"><i class="ph ph-arrow-left"></i>{{ t.coll }} /</div><div style="display:flex;align-items:baseline;gap:12px"><h2 style="margin:0">pains</h2><span style="font-size:13px;color:color-mix(in srgb,var(--color-text) 55%,transparent);font-variant-numeric:tabular-nums">{{ countLabel }}</span></div></div>
+          <div style="display:flex;gap:8px"><button class="btn btn-secondary"><i class="ph ph-sliders-horizontal"></i>{{ t.schema }}</button><button class="btn btn-secondary" onClick="{{ startSelect }}"><i class="ph ph-check-square"></i>{{ t.select }}</button><button class="btn btn-primary"><i class="ph ph-plus"></i>{{ t.newRec }}</button></div>
+        </header>
+      </sc-if>
+      <sc-if value="{{ selecting }}" hint-placeholder-val="{{ false }}">
+        <div role="toolbar" aria-label="Selection" style="display:flex;align-items:center;gap:10px;min-height:64px;box-sizing:border-box;padding:10px 12px;border-radius:var(--radius-md);box-shadow:inset 0 0 0 1px var(--color-accent-edge);background:var(--color-accent-fill)"><button class="btn btn-ghost" aria-label="Cancel selection" onClick="{{ cancelSelect }}" style="width:44px;height:44px;color:var(--color-accent-ink-strong)"><i class="ph ph-x" style="font-size:20px"></i></button><span style="flex:1;font-size:18px;font-weight:500;color:var(--color-accent-ink-strong);font-variant-numeric:tabular-nums">{{ selLabel }} <span style="font-size:13px;font-weight:400;color:var(--color-accent-ink)">{{ t.inPains }}</span></span><button class="btn btn-ghost" style="color:var(--color-accent-ink-strong)"><i class="ph ph-checks"></i>{{ t.selAll }}</button><button class="btn btn-secondary" style="color:var(--color-accent-ink-strong)"><i class="ph ph-pencil-simple"></i>{{ t.editField }}</button><button class="btn btn-secondary" style="color:var(--color-accent-ink-strong)"><i class="ph ph-copy"></i>{{ t.cloneM }}</button><button class="btn btn-secondary" onClick="{{ deleteSelected }}" style="color:var(--color-accent-ink-strong);background:{{ batchBg }}"><i class="ph ph-trash"></i>{{ t.delM }}</button></div>
+      </sc-if>
+      <sc-if value="{{ banner }}" hint-placeholder-val="{{ false }}">
+        <div role="alert" style="display:flex;align-items:center;gap:10px;padding:8px 8px 8px 14px;border-radius:var(--radius-md);background:var(--color-surface);box-shadow:inset 0 0 0 1px var(--color-accent-edge)"><i class="ph ph-warning-circle" style="font-size:18px;color:var(--color-danger);flex:none"></i><div style="flex:1;min-width:0;font-size:13px"><span>{{ bannerTitle }}.</span> <span style="color:color-mix(in srgb,var(--color-text) 60%,transparent)">{{ t.failWhy }}</span></div><button class="btn btn-ghost" onClick="{{ dismiss }}" style="color:color-mix(in srgb,var(--color-text) 75%,transparent);padding:2px 8px">{{ t.dismiss }}</button></div>
+      </sc-if>
+      <section style="display:flex;flex-direction:column;gap:8px;min-width:0;flex:1;min-height:0">
+        <h6 style="margin:0;color:color-mix(in srgb,var(--color-text) 60%,transparent)">{{ t.records }}</h6>
+        <div style="position:relative;flex:1;min-height:0">
+          <div style="border-radius:var(--radius-md);box-shadow:inset 0 0 0 1px var(--color-divider);font-size:13px;font-variant-numeric:tabular-nums;max-height:100%;overflow:hidden">
+            <div style="display:grid;grid-template-columns:{{ cols }};height:40px;align-items:center;background:var(--color-surface);border-radius:var(--radius-md) var(--radius-md) 0 0;box-shadow:inset 0 -1px 0 var(--color-divider)">
+              <sc-if value="{{ selecting }}" hint-placeholder-val="{{ false }}"><div style="padding:0 14px;display:flex"><span role="checkbox" aria-checked="mixed" style="width:18px;height:18px;border-radius:4px;display:inline-grid;place-items:center;font-size:12px;background:var(--color-accent-fill);border:1.5px solid var(--color-accent);color:var(--color-accent-ink-strong)"><i class="ph-bold ph-minus"></i></span></div></sc-if>
+              <div style="display:flex;align-items:center;gap:6px;padding:0 14px"><i class="ph ph-calendar-check" style="color:var(--color-accent)"></i>{{ t.start }}<span style="color:var(--color-accent-text)">*</span></div>
+              <div style="display:flex;align-items:center;gap:6px;padding:0 14px"><i class="ph ph-list-bullets" style="color:var(--color-accent)"></i>{{ t.type }}</div>
+              <div style="display:flex;align-items:center;gap:6px;padding:0 14px"><i class="ph ph-hash" style="color:var(--color-accent)"></i>{{ t.level }}</div>
+              <div style="display:flex;align-items:center;gap:6px;padding:0 14px"><i class="ph ph-text-aa" style="color:var(--color-accent)"></i>{{ t.note }}</div>
+              <div></div>
+            </div>
+            <sc-for list="{{ rows }}" as="r" hint-placeholder-count="8">
+              <div style="display:grid;grid-template-rows:{{ r.rowsT }};opacity:{{ r.op }};transition:{{ tr }}">
+                <div style="overflow:hidden;min-height:0">
+                  <div onClick="{{ r.onToggle }}" style="display:grid;grid-template-columns:{{ cols }};height:44px;align-items:center;background:{{ r.dbg }};box-shadow:{{ r.dsh }};transition:{{ hlTr }};cursor:{{ r.cursor }}">
+                    <sc-if value="{{ selecting }}" hint-placeholder-val="{{ false }}"><div style="padding:0 14px;display:flex"><span role="checkbox" aria-checked="{{ r.selAria }}" style="width:18px;height:18px;border-radius:4px;display:inline-grid;place-items:center;font-size:12px;box-sizing:border-box;background:{{ r.cbBg }};border:1.5px solid {{ r.cbBorder }};color:var(--color-accent-ink-strong)"><sc-if value="{{ r.sel }}" hint-placeholder-val="{{ false }}"><i class="ph-bold ph-check"></i></sc-if></span></div></sc-if>
+                    <div style="padding:0 14px;white-space:nowrap">{{ r.date }}</div>
+                    <div style="padding:0 14px">{{ r.type }}</div>
+                    <div style="padding:0 14px">{{ r.level }}</div>
+                    <div style="padding:0 14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:{{ r.noteColor }}">{{ r.note }}</div>
+                    <div style="display:grid;place-items:center"><button class="btn btn-ghost btn-icon" aria-label="Record actions" onClick="{{ r.onMenu }}" style="color:var(--color-text);visibility:{{ r.menuVis }};background:{{ r.menuBtnBg }}"><i class="ph ph-dots-three" style="font-size:18px"></i></button></div>
+                  </div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+          <sc-if value="{{ menuOpen }}" hint-placeholder-val="{{ false }}">
+            <div role="menu" style="position:absolute;right:8px;top:{{ menuTop }};z-index:5;width:200px;padding:6px;border-radius:var(--radius-md);background:var(--color-surface);box-shadow:var(--shadow-lg),inset 0 0 0 1px var(--color-divider);display:flex;flex-direction:column;font-size:14px">
+              <div role="menuitem" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:var(--radius-sm);cursor:pointer" style-hover="background:color-mix(in srgb,var(--color-accent) 10%,transparent)"><i class="ph ph-pencil-simple" style="font-size:16px;opacity:.7"></i>{{ t.edit }}</div>
+              <div role="menuitem" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:var(--radius-sm);cursor:pointer" style-hover="background:color-mix(in srgb,var(--color-accent) 10%,transparent)"><i class="ph ph-copy" style="font-size:16px;opacity:.7"></i>{{ t.cloneM }}</div>
+              <div style="height:1px;margin:6px 4px;background:var(--color-divider)"></div>
+              <div role="menuitem" onClick="{{ deleteMenu }}" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:var(--radius-sm);cursor:pointer;background:{{ menuDelBg }}" style-hover="background:color-mix(in srgb,var(--color-accent) 10%,transparent)"><i class="ph ph-trash" style="font-size:16px;opacity:.7"></i>{{ t.delM }}<span style="margin-left:auto;font-size:11px;opacity:.45">Del</span></div>
+            </div>
+          </sc-if>
+        </div>
+      </section>
+    </div>
+    <sc-if value="{{ showToast }}" hint-placeholder-val="{{ false }}">
+      <div role="status" onMouseEnter="{{ pause }}" onMouseLeave="{{ resume }}" onFocus="{{ pause }}" onBlur="{{ resume }}" style="position:absolute;left:50%;bottom:24px;width:440px;margin-left:-220px;display:flex;align-items:center;gap:12px;padding:0 4px 0 14px;min-height:48px;box-sizing:border-box;overflow:hidden;border-radius:var(--radius-md);background:var(--color-neutral-fill-strong);box-shadow:var(--shadow-md);font-size:13px;line-height:1.4;opacity:{{ toastOp }};transform:translateY({{ toastY }});transition:{{ toastTr }}"><i class="ph ph-check-circle" style="font-size:18px;color:var(--color-success);flex:none"></i><span style="flex:1;min-width:0;font-variant-numeric:tabular-nums">{{ toastText }}</span><button class="btn btn-ghost" onClick="{{ undo }}" style="min-height:40px;padding:0 10px;color:var(--color-accent-ink)"><i class="ph ph-arrow-counter-clockwise"></i>{{ t.undo }}<span style="font-size:11px;opacity:.5;margin-left:4px">Ctrl Z</span></button><sc-if value="{{ countdown }}" hint-placeholder-val="{{ false }}"><span ref="{{ cdRef }}" style="position:absolute;left:0;bottom:0;height:2px;background:var(--color-accent);width:{{ cdW }};transition:{{ cdT }}"></span></sc-if></div>
+    </sc-if>
+  </main>
+</div>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:360,&quot;height&quot;:760},&quot;layout&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;phone&quot;,&quot;desktop&quot;],&quot;default&quot;:&quot;phone&quot;,&quot;tsType&quot;:&quot;'phone'|'desktop'&quot;},&quot;scene&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;live&quot;,&quot;collapsing&quot;,&quot;toast1&quot;,&quot;second&quot;,&quot;toast2&quot;,&quot;restored&quot;,&quot;failed&quot;,&quot;rowmenu&quot;,&quot;rowremoved&quot;,&quot;selection&quot;,&quot;batchdone&quot;,&quot;failedDesk&quot;],&quot;default&quot;:&quot;live&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;lang&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;en&quot;,&quot;es&quot;],&quot;default&quot;:&quot;en&quot;,&quot;tsType&quot;:&quot;'en'|'es'&quot;},&quot;countdown&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;reducedMotion&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;failCommit&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;}}">
+const MON = {
+  en: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],
+  es: ['ene','feb','mar','abr','may','jun','jul','ago','sept','oct','nov','dic']
+};
+const DATA = [
+  ['10-04 07:45','headache',4,'after coffee'],['10-03 21:10','headache',6,''],['10-01 15:37','headache',7,''],
+  ['09-28 08:30','headache',5,''],['09-25 18:00','stomachache',6,'quizas fue la masa…'],['09-22 12:15','headache',3,''],
+  ['09-20 09:05','headache',4,'slept badly'],['09-18 16:40','stomachache',5,''],['09-15 07:20','headache',2,''],
+  ['09-13 22:00','headache',6,'screen all day'],['09-11 13:30','stomachache',4,''],['09-09 08:10','headache',5,''],
+  ['09-06 19:45','headache',3,''],['09-04 11:00','stomachache',7,'street food'],['09-02 07:55','headache',4,''],
+  ['08-30 17:25','headache',5,''],['08-28 10:40','stomachache',3,''],['08-25 21:15','headache',6,'']
+].map((d, i) => ({ id: i + 1, md: d[0], type: d[1], level: d[2], note: d[3] }));
+const S = {
+  en: { records:'Records', rec:n=>n===1?'1 record':n+' records', fields:'5 fields',
+    deleted:n=>n===1?'Deleted 1 record':'Deleted '+n+' records', undo:'Undo',
+    fail:n=>n===1?"Couldn't delete 1 record":"Couldn't delete "+n+' records',
+    failWhy:"They're back in the list. Fi couldn't write to this device's storage.", dismiss:'Dismiss',
+    type:'Type', level:'Level', note:'Note', start:'Start at', clone:'Clone record', del:'Delete record',
+    edit:'Edit', cloneM:'Clone', delM:'Delete', sel:n=>n+' selected', inPains:'in pains', selAll:'Select all',
+    editField:'Edit field', schema:'Schema', select:'Select', newRec:'New record', fab:'Record',
+    coll:'Collections', dev:'Devices', set:'Settings', back:'Back' },
+  es: { records:'Registros', rec:n=>n===1?'1 registro':n+' registros', fields:'5 campos',
+    deleted:n=>n===1?'Se eliminó 1 registro':'Se eliminaron '+n+' registros', undo:'Deshacer',
+    fail:n=>n===1?'No se pudo eliminar 1 registro':'No se pudieron eliminar '+n+' registros',
+    failWhy:'Volvieron a la lista. Fi no pudo escribir en el almacenamiento del dispositivo.', dismiss:'Descartar',
+    type:'Tipo', level:'Nivel', note:'Nota', start:'Inicio', clone:'Clonar registro', del:'Eliminar registro',
+    edit:'Editar', cloneM:'Clonar', delM:'Eliminar', sel:n=>n+' seleccionados', inPains:'en pains', selAll:'Seleccionar todo',
+    editField:'Editar campo', schema:'Esquema', select:'Seleccionar', newRec:'Nuevo registro', fab:'Registro',
+    coll:'Colecciones', dev:'Dispositivos', set:'Ajustes', back:'Atrás' }
+};
+const DUR = 200, TOAST_MS = 5000, HL_MS = 1400;
+
+class Component extends DCLogic {
+  state = this.initial();
+  cdRef = React.createRef();
+
+  initial() {
+    const p = this.props || {};
+    const scene = p.scene || 'live';
+    const ph = {}, hl = {};
+    let pending = [], toast = 'off', banner = 0, selecting = false, sel = {}, menuFor = 0, pressed = '';
+    const hide = (ids, last) => ids.forEach(id => { ph[id] = id === last ? 'mid' : 'hidden'; pending.push(id); });
+    const twelve = [2,3,4,5,6,7,8,9,10,11,12,13];
+    if (scene === 'collapsing') { hide([2], 2); toast = 'entering'; pressed = 2; }
+    if (scene === 'toast1') { hide([2]); toast = 'in'; }
+    if (scene === 'second') { hide([2, 4], 4); toast = 'in'; pressed = 4; }
+    if (scene === 'toast2') { hide([2, 4]); toast = 'in'; }
+    if (scene === 'restored') { hl[2] = hl[4] = true; }
+    if (scene === 'failed') { hl[2] = hl[4] = true; banner = 2; }
+    if (scene === 'rowmenu') { menuFor = 3; pressed = 'menu'; }
+    if (scene === 'rowremoved') { hide([3]); toast = 'in'; }
+    if (scene === 'selection') { selecting = true; twelve.forEach(id => sel[id] = true); pressed = 'batch'; }
+    if (scene === 'batchdone') { hide(twelve); toast = 'in'; }
+    if (scene === 'failedDesk') { twelve.forEach(id => hl[id] = true); banner = 12; }
+    return { ids: DATA.map(d => d.id), ph, hl, pending, toast, banner, selecting, sel, menuFor, pressed, cdW: '100%', cdT: 'none' };
+  }
+
+  componentDidMount() { this.live = (this.props.scene || 'live') === 'live'; }
+  componentWillUnmount() { clearTimeout(this.timer); }
+
+  get reduced() {
+    return !!this.props.reducedMotion || (typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches);
+  }
+
+  later(fn, ms) { if (ms <= 0) fn(); else setTimeout(fn, ms); }
+  nextFrame(fn) { requestAnimationFrame(() => requestAnimationFrame(fn)); }
+
+  startTimer(ms) {
+    clearTimeout(this.timer);
+    this.remaining = ms;
+    this.deadline = Date.now() + ms;
+    this.timer = setTimeout(() => this.commit(), ms);
+    if (this.props.countdown) {
+      const startW = ms === TOAST_MS ? '100%' : this.state.cdW;
+      this.setState({ cdW: startW, cdT: 'none' });
+      this.nextFrame(() => this.setState({ cdW: '0%', cdT: 'width ' + ms + 'ms linear' }));
+    }
+  }
+
+  deleteIds(ids) {
+    this.live = true;
+    const dur = this.reduced ? 0 : DUR;
+    this.setState(s => {
+      const ph = { ...s.ph }, hl = { ...s.hl };
+      ids.forEach(id => { ph[id] = dur ? 'leaving' : 'hidden'; hl[id] = false; });
+      const first = s.toast === 'off';
+      return { ph, hl, pending: [...s.pending, ...ids.filter(id => !s.pending.includes(id))], toast: first && dur ? 'entering' : 'in', selecting: false, sel: {}, menuFor: 0, pressed: '', banner: 0 };
+    });
+    this.nextFrame(() => this.setState({ toast: 'in' }));
+    this.later(() => this.setState(s => {
+      const ph = { ...s.ph };
+      ids.forEach(id => { if (ph[id] === 'leaving') ph[id] = 'hidden'; });
+      return { ph };
+    }), dur);
+    this.startTimer(TOAST_MS);
+  }
+
+  restore(withBanner) {
+    clearTimeout(this.timer);
+    const ids = this.state.pending.slice();
+    const dur = this.reduced ? 0 : DUR;
+    this.setState(s => {
+      const ph = { ...s.ph }, hl = { ...s.hl };
+      ids.forEach(id => { ph[id] = dur ? 'entering' : 'live'; hl[id] = true; });
+      return { ph, hl, pending: [], toast: 'off', banner: withBanner ? ids.length : 0, pressed: '' };
+    });
+    this.nextFrame(() => this.setState(s => {
+      const ph = { ...s.ph };
+      ids.forEach(id => { if (ph[id] === 'entering') ph[id] = 'live'; });
+      return { ph };
+    }));
+    setTimeout(() => this.setState(s => {
+      const hl = { ...s.hl };
+      ids.forEach(id => { hl[id] = false; });
+      return { hl };
+    }), HL_MS);
+  }
+
+  commit() {
+    clearTimeout(this.timer);
+    if (!this.state.pending.length) return;
+    if (this.props.failCommit) return this.restore(true);
+    this.setState(s => ({ ids: s.ids.filter(id => !s.pending.includes(id)), pending: [], toast: 'off' }));
+  }
+
+  renderVals() {
+    const p = this.props;
+    const lang = p.lang === 'es' ? 'es' : 'en';
+    const t = S[lang];
+    const s = this.state;
+    const reduced = this.reduced;
+    const desktop = p.layout === 'desktop';
+    const fmt = d => {
+      const [m, rest] = d.md.split('-'); const [day, time] = rest.split(' ');
+      const mo = MON[lang][+m - 1], dd = +day;
+      return lang === 'es' ? dd + ' ' + mo + ' 2026 · ' + time : mo + ' ' + dd + ', 2026 · ' + time;
+    };
+    const visible = s.ids.filter(id => s.ph[id] !== 'hidden');
+    const count = s.ids.length - s.pending.length;
+    const rows = visible.map((id, vi) => {
+      const d = DATA[id - 1], phase = s.ph[id] || 'live', hl = !!s.hl[id], sel = !!s.sel[id];
+      const closed = phase === 'leaving' || phase === 'entering';
+      const tint = hl || sel;
+      return {
+        id, date: fmt(d), type: d.type, level: d.level,
+        note: d.note || '—', noteColor: d.note ? 'inherit' : 'color-mix(in srgb,var(--color-text) 40%,transparent)',
+        rowsT: closed ? '0fr' : '1fr', op: closed ? 0 : phase === 'mid' ? 0.3 : 1, maxH: phase === 'mid' ? (desktop ? '22px' : '56px') : 'none',
+        bg: hl ? 'var(--color-accent-fill)' : 'var(--color-surface)',
+        sh: hl ? 'var(--shadow-sm), inset 0 0 0 1px var(--color-accent)' : 'var(--shadow-sm)',
+        trashBg: s.pressed === id ? 'color-mix(in srgb,var(--color-accent) 18%,transparent)' : 'transparent',
+        dbg: tint ? 'var(--color-accent-fill)' : 'transparent',
+        dsh: tint ? 'inset 2px 0 0 var(--color-accent), inset 0 -1px 0 var(--color-divider)' : 'inset 0 -1px 0 var(--color-divider)',
+        sel, selAria: sel ? 'true' : 'false',
+        cbBg: sel ? 'var(--color-accent-fill)' : 'transparent', cbBorder: sel ? 'var(--color-accent)' : 'var(--color-divider)',
+        cursor: s.selecting ? 'pointer' : 'default',
+        menuVis: s.selecting ? 'hidden' : 'visible',
+        menuBtnBg: s.menuFor === id ? 'var(--color-accent-fill)' : 'transparent',
+        vi,
+        onDelete: () => this.deleteIds([id]),
+        onMenu: e => { e.stopPropagation(); this.setState(st => ({ menuFor: st.menuFor === id ? 0 : id, pressed: '' })); },
+        onToggle: () => { if (this.state.selecting) this.setState(st => ({ sel: { ...st.sel, [id]: !st.sel[id] }, pressed: '' })); }
+      };
+    });
+    const menuRow = rows.find(r => r.id === s.menuFor);
+    const selCount = Object.values(s.sel).filter(Boolean).length;
+    const toastOn = s.toast !== 'off' && s.pending.length > 0;
+    return {
+      t, isPhone: !desktop, isDesktop: desktop, rows,
+      countLabel: t.rec(count) + ' · ' + t.fields,
+      tr: reduced ? 'none' : 'grid-template-rows ' + DUR + 'ms cubic-bezier(.2,0,0,1), opacity ' + (DUR - 60) + 'ms linear',
+      hlTr: reduced ? 'none' : 'background-color 600ms ease-out, box-shadow 600ms ease-out',
+      showToast: toastOn, toastText: t.deleted(s.pending.length),
+      toastOp: s.toast === 'entering' ? 0.5 : 1, toastY: s.toast === 'entering' ? '8px' : '0px',
+      toastTr: reduced ? 'none' : 'opacity 160ms linear, transform 200ms cubic-bezier(.2,0,0,1)',
+      countdown: !!p.countdown, cdRef: this.cdRef,
+      cdW: this.live ? s.cdW : '62%', cdT: s.cdT,
+      banner: s.banner > 0, bannerTitle: t.fail(s.banner),
+      dismiss: () => this.setState({ banner: 0 }),
+      undo: () => this.restore(false),
+      leave: () => this.commit(),
+      pause: () => {
+        if (!this.live || !this.timer) return;
+        clearTimeout(this.timer); this.timer = null;
+        this.remaining = Math.max(800, this.deadline - Date.now());
+        const el = this.cdRef.current;
+        if (el && el.parentNode) this.setState({ cdW: (el.offsetWidth / el.parentNode.offsetWidth * 100) + '%', cdT: 'none' });
+      },
+      resume: () => { if (this.live && !this.timer && this.state.pending.length) this.startTimer(this.remaining || TOAST_MS); },
+      selecting: s.selecting, notSelecting: !s.selecting, selLabel: t.sel(selCount),
+      cols: s.selecting ? '48px 220px 160px 90px minmax(0,1fr) 52px' : '220px 160px 90px minmax(0,1fr) 52px',
+      startSelect: () => this.setState({ selecting: true, menuFor: 0 }),
+      cancelSelect: () => this.setState({ selecting: false, sel: {} }),
+      deleteSelected: () => { const ids = Object.keys(this.state.sel).filter(k => this.state.sel[k]).map(Number); if (ids.length) this.deleteIds(ids); },
+      batchBg: s.pressed === 'batch' ? 'color-mix(in srgb,var(--color-text) 14%,transparent)' : 'transparent',
+      menuOpen: !!menuRow, menuTop: menuRow ? (40 + (menuRow.vi + 1) * 44 + 4) + 'px' : '0px',
+      menuDelBg: s.pressed === 'menu' ? 'color-mix(in srgb,var(--color-accent) 10%,transparent)' : 'transparent',
+      deleteMenu: () => this.deleteIds([this.state.menuFor])
+    };
+  }
+}
+</script>
+</body>
+</html>

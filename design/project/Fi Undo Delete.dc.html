@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap">
+<link rel="stylesheet" href="_ds/nocturne-53929d40-05df-499c-bc14-17884e999fc5/styles.css">
+<script src="_ds/nocturne-53929d40-05df-499c-bc14-17884e999fc5/_ds_bundle.js"></script>
+<script src="https://unpkg.com/@phosphor-icons/web@2.1.1"></script>
+<style>body{margin:0;background:var(--color-section)}a{color:var(--color-accent)}a:hover{color:var(--color-accent-text)}</style>
+<script>(function(){var K='fi-theme',R=document.documentElement,s=localStorage.getItem(K);if(s==='light'||s==='dark')R.setAttribute('data-theme',s);function isDark(){var t=R.getAttribute('data-theme');return t?t!=='light':!matchMedia('(prefers-color-scheme: light)').matches}function mount(){if(document.getElementById('fi-theme-toggle'))return;var b=document.createElement('button');b.id='fi-theme-toggle';b.className='btn btn-ghost btn-icon';b.setAttribute('aria-label','Switch Latte / Mocha');b.title='Latte / Mocha';b.style.cssText='position:fixed;top:12px;right:12px;z-index:2147483000;color:var(--color-text);background:var(--color-surface);box-shadow:var(--shadow-sm)';function paint(){b.innerHTML='<i class="ph ph-'+(isDark()?'sun':'moon')+'" style="font-size:18px"></i>'}b.addEventListener('click',function(){var n=isDark()?'light':'dark';R.setAttribute('data-theme',n);localStorage.setItem(K,n);paint()});paint();document.body.appendChild(b)}if(document.body)mount();else document.addEventListener('DOMContentLoaded',mount)})();</script>
+</helmet>
+<section id="undo-delete" data-screen-label="Undo delete" style="padding:40px 44px 56px;display:flex;flex-direction:column;gap:44px;font-family:var(--font-body);color:var(--color-text)">
+  <header style="display:flex;flex-direction:column;gap:8px;max-width:760px">
+    <div style="display:flex;align-items:baseline;gap:10px"><span style="font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:var(--color-accent);color:var(--color-bg);border-radius:4px">undo-delete</span><span style="font-size:13px;color:color-mix(in srgb,var(--color-text) 60%,transparent)">Collection screen · records</span></div>
+    <h2 style="margin:0">Delete is immediate and undoable</h2>
+    <p style="margin:0;font-size:14px;line-height:1.55;color:color-mix(in srgb,var(--color-text) 70%,transparent);text-wrap:pretty">No confirmation dialogs. Card trash, row menu Delete and batch Delete hide the records and show the outcome toast with Undo. Nothing is written until the toast leaves (5 s), the user leaves the collection, or the app goes to the background. Theme switch (top right) shows Latte and Mocha.</p>
+  </header>
+
+  <div id="decisions" style="display:grid;grid-template-columns:repeat(3,minmax(0,300px));gap:20px">
+    <div class="card elev-sm" style="padding:16px 18px;gap:8px"><div class="card-kicker">Motion</div><div class="card-title" style="font-size:15px">Collapse height + fade, 200 ms</div><div class="card-body" style="font-size:13px;line-height:1.5;text-wrap:pretty">The gap has to close anyway, so the height collapse is the message; a sideways slide implies a swipe that doesn't exist. Exit: fade 140 ms while height eases to 0 in 200 ms. Enter: the reverse, then a 1.4 s accent tint fades out on restored items. Reduced motion: instant, tint kept (it's color, not motion).</div></div>
+    <div class="card elev-sm" style="padding:16px 18px;gap:8px"><div class="card-kicker">Countdown</div><div class="card-title" style="font-size:15px">Plain toast, no progress line</div><div class="card-body" style="font-size:13px;line-height:1.5;text-wrap:pretty">A draining line turns a reassurance into a race. The timer pauses on hover/focus and restarts at 5 s on each new delete, so the user is never cut off. Compare with the “countdown” tweak on the live frames.</div></div>
+    <div class="card elev-sm" style="padding:16px 18px;gap:8px"><div class="card-kicker">Row menu label</div><div class="card-title" style="font-size:15px">“Delete”, no ellipsis</div><div class="card-body" style="font-size:13px;line-height:1.5;text-wrap:pretty">An ellipsis promises a further step; there isn't one now. Same for the selection bar. Spanish: “Eliminar”.</div></div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:14px">
+    <h6 style="margin:0;color:color-mix(in srgb,var(--color-text) 60%,transparent)">Live · try it</h6>
+    <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+      <div id="live-phone" style="display:flex;flex-direction:column;gap:9px"><div style="display:flex;align-items:baseline;gap:8px;font-size:12px;color:color-mix(in srgb,var(--color-text) 60%,transparent)"><a href="#live-phone" style="font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:var(--color-neutral-fill-strong);color:var(--color-text);border-radius:5px;text-decoration:none">live-phone</a>Tap trash on several cards, then Undo, or wait 5 s</div><dc-import name="Fi Records" layout="phone" scene="live" hint-size="360px,760px"></dc-import></div>
+      <div id="live-desktop" style="display:flex;flex-direction:column;gap:9px"><div style="display:flex;align-items:baseline;gap:8px;font-size:12px;color:color-mix(in srgb,var(--color-text) 60%,transparent)"><a href="#live-desktop" style="font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:var(--color-neutral-fill-strong);color:var(--color-text);border-radius:5px;text-decoration:none">live-desktop</a>Row ⋯ → Delete, or Select → pick rows → Delete. Commit failure on.</div><dc-import name="Fi Records" layout="desktop" scene="live" fail-commit="{{ true }}" hint-size="1240px,760px"></dc-import></div>
+    </div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:14px">
+    <h6 style="margin:0;color:color-mix(in srgb,var(--color-text) 60%,transparent)">Phone · 360 px</h6>
+    <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+      <div id="1a" style="display:flex;flex-direction:column;gap:9px;width:360px"><div style="display:flex;align-items:baseline;gap:8px;font-size:12px;line-height:1.4;color:color-mix(in srgb,var(--color-text) 60%,transparent)"><a href="#1a" style="font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:var(--color-neutral-fill-strong);color:var(--color-text);border-radius:5px;text-decoration:none;flex:none">1a</a>~100 ms after tapping trash. Card fading and collapsing; count already 17; toast rising.</div><dc-import name="Fi Records" layout="phone" scene="collapsing" hint-size="360px,760px"></dc-import></div>
+      <div id="1b" style="display:flex;flex-direction:column;gap:9px;width:360px"><div style="display:flex;align-items:baseline;gap:8px;font-size:12px;line-height:1.4;color:color-mix(in srgb,var(--color-text) 60%,transparent)"><a href="#1b" style="font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:var(--color-neutral-fill-strong);color:var(--color-text);border-radius:5px;text-decoration:none;flex:none">1b</a>Settled. Toast sits 12 px above the Record FAB, full width minus 16 px margins.</div><dc-import name="Fi Records" layout="phone" scene="toast1" hint-size="360px,760px"></dc-import></div>
+      <div id="2" style="display:flex;flex-direction:column;gap:9px;width:360px"><div style="display:flex;align-items:baseline;gap:8px;font-size:12px;line-height:1.4;color:color-mix(in srgb,var(--color-text) 60%,transparent)"><a href="#2" style="font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:var(--color-neutral-fill-strong);color:var(--color-text);border-radius:5px;text-decoration:none;flex:none">2</a>Second delete while the toast is up: same toast now reads 2, timer restarts at 5 s.</div><dc-import name="Fi Records" layout="phone" scene="second" hint-size="360px,760px"></dc-import></div>
+      <div id="3" style="display:flex;flex-direction:column;gap:9px;width:360px"><div style="display:flex;align-items:baseline;gap:8px;font-size:12px;line-height:1.4;color:color-mix(in srgb,var(--color-text) 60%,transparent)"><a href="#3" style="font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:var(--color-neutral-fill-strong);color:var(--color-text);border-radius:5px;text-decoration:none;flex:none">3</a>After Undo: both cards back in place, accent tint fading over 1.4 s. No extra toast.</div><dc-import name="Fi Records" layout="phone" scene="restored" hint-size="360px,760px"></dc-import></div>
+      <div id="6" style="display:flex;flex-direction:column;gap:9px;width:360px"><div style="display:flex;align-items:baseline;gap:8px;font-size:12px;line-height:1.4;color:color-mix(in srgb,var(--color-text) 60%,transparent)"><a href="#6" style="font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:var(--color-neutral-fill-strong);color:var(--color-text);border-radius:5px;text-decoration:none;flex:none">6</a>Commit failed: records re-enter with the tint; existing error banner explains. Count back to 18.</div><dc-import name="Fi Records" layout="phone" scene="failed" hint-size="360px,760px"></dc-import></div>
+    </div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:14px">
+    <h6 style="margin:0;color:color-mix(in srgb,var(--color-text) 60%,transparent)">Desktop · ≥ 720 px</h6>
+    <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+      <div id="4a" style="display:flex;flex-direction:column;gap:9px"><div style="display:flex;align-items:baseline;gap:8px;font-size:12px;color:color-mix(in srgb,var(--color-text) 60%,transparent)"><a href="#4a" style="font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:var(--color-neutral-fill-strong);color:var(--color-text);border-radius:5px;text-decoration:none">4a</a>Row menu: “Delete” acts at once</div><dc-import name="Fi Records" layout="desktop" scene="rowmenu" hint-size="1240px,760px"></dc-import></div>
+      <div id="4b" style="display:flex;flex-direction:column;gap:9px"><div style="display:flex;align-items:baseline;gap:8px;font-size:12px;color:color-mix(in srgb,var(--color-text) 60%,transparent)"><a href="#4b" style="font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:var(--color-neutral-fill-strong);color:var(--color-text);border-radius:5px;text-decoration:none">4b</a>Row gone, 440 px toast bottom-center of the content area. Ctrl Z also undoes while it shows.</div><dc-import name="Fi Records" layout="desktop" scene="rowremoved" hint-size="1240px,760px"></dc-import></div>
+      <div id="5a" style="display:flex;flex-direction:column;gap:9px"><div style="display:flex;align-items:baseline;gap:8px;font-size:12px;color:color-mix(in srgb,var(--color-text) 60%,transparent)"><a href="#5a" style="font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:var(--color-neutral-fill-strong);color:var(--color-text);border-radius:5px;text-decoration:none">5a</a>Selection: 12 selected, Delete pressed</div><dc-import name="Fi Records" layout="desktop" scene="selection" hint-size="1240px,760px"></dc-import></div>
+      <div id="5b" style="display:flex;flex-direction:column;gap:9px"><div style="display:flex;align-items:baseline;gap:8px;font-size:12px;color:color-mix(in srgb,var(--color-text) 60%,transparent)"><a href="#5b" style="font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:var(--color-neutral-fill-strong);color:var(--color-text);border-radius:5px;text-decoration:none">5b</a>Straight back to the list: selection bar closed, 12 rows gone, header 6 records</div><dc-import name="Fi Records" layout="desktop" scene="batchdone" hint-size="1240px,760px"></dc-import></div>
+    </div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:14px">
+    <h6 style="margin:0;color:color-mix(in srgb,var(--color-text) 60%,transparent)">Spanish · 360 px</h6>
+    <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+      <div id="7a" style="display:flex;flex-direction:column;gap:9px;width:360px"><div style="display:flex;align-items:baseline;gap:8px;font-size:12px;line-height:1.4;color:color-mix(in srgb,var(--color-text) 60%,transparent)"><a href="#7a" style="font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:var(--color-neutral-fill-strong);color:var(--color-text);border-radius:5px;text-decoration:none;flex:none">7a</a>Se eliminó 1 registro</div><dc-import name="Fi Records" layout="phone" scene="toast1" lang="es" hint-size="360px,760px"></dc-import></div>
+      <div id="7b" style="display:flex;flex-direction:column;gap:9px;width:360px"><div style="display:flex;align-items:baseline;gap:8px;font-size:12px;line-height:1.4;color:color-mix(in srgb,var(--color-text) 60%,transparent)"><a href="#7b" style="font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:var(--color-neutral-fill-strong);color:var(--color-text);border-radius:5px;text-decoration:none;flex:none">7b</a>Se eliminaron 2 registros</div><dc-import name="Fi Records" layout="phone" scene="toast2" lang="es" hint-size="360px,760px"></dc-import></div>
+      <div id="7c" style="display:flex;flex-direction:column;gap:9px;width:360px"><div style="display:flex;align-items:baseline;gap:8px;font-size:12px;line-height:1.4;color:color-mix(in srgb,var(--color-text) 60%,transparent)"><a href="#7c" style="font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:var(--color-neutral-fill-strong);color:var(--color-text);border-radius:5px;text-decoration:none;flex:none">7c</a>Fallo al confirmar</div><dc-import name="Fi Records" layout="phone" scene="failed" lang="es" hint-size="360px,760px"></dc-import></div>
+      <div id="7d" style="display:flex;flex-direction:column;gap:9px;width:360px"><div style="display:flex;align-items:baseline;gap:8px;font-size:12px;line-height:1.4;color:color-mix(in srgb,var(--color-text) 60%,transparent)"><a href="#7d" style="font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:var(--color-neutral-fill-strong);color:var(--color-text);border-radius:5px;text-decoration:none;flex:none">7d</a>Worst case at 328 px (360 minus margins)</div>
+        <div style="display:flex;flex-direction:column;gap:10px;padding:16px;border-radius:10px;background:var(--color-bg)">
+          <div role="status" style="display:flex;align-items:center;gap:12px;padding:0 4px 0 14px;min-height:48px;border-radius:var(--radius-md);background:var(--color-neutral-fill-strong);box-shadow:var(--shadow-md);font-size:13px;line-height:1.4"><i class="ph ph-check-circle" style="font-size:18px;color:var(--color-success);flex:none"></i><span style="flex:1;min-width:0;padding:6px 0;text-wrap:pretty">Se eliminaron 12 registros</span><button class="btn btn-ghost" style="min-height:44px;flex:none;color:var(--color-accent-ink)"><i class="ph ph-arrow-counter-clockwise"></i>Deshacer</button></div>
+          <div role="status" style="display:flex;align-items:center;gap:12px;padding:0 4px 0 14px;min-height:48px;border-radius:var(--radius-md);background:var(--color-neutral-fill-strong);box-shadow:var(--shadow-md);font-size:13px;line-height:1.4"><i class="ph ph-check-circle" style="font-size:18px;color:var(--color-success);flex:none"></i><span style="flex:1;min-width:0;padding:6px 0;text-wrap:pretty">Se eliminaron 1.240 registros</span><button class="btn btn-ghost" style="min-height:44px;flex:none;color:var(--color-accent-ink)"><i class="ph ph-arrow-counter-clockwise"></i>Deshacer</button></div>
+          <div style="font-size:12px;line-height:1.5;color:color-mix(in srgb,var(--color-text) 60%,transparent);text-wrap:pretty">Undo never shrinks (flex: none); the message wraps to a second line before anything clips.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:8px;max-width:760px;font-size:13px;line-height:1.55;color:color-mix(in srgb,var(--color-text) 70%,transparent)">
+    <h6 style="margin:0;color:color-mix(in srgb,var(--color-text) 60%,transparent)">Behavior notes</h6>
+    <div>Pending deletes add up in one toast; Undo restores all of them to their original positions (they're hidden in place, never moved).</div>
+    <div>Commit happens on toast timeout, Back / leaving the collection, or app backgrounded. Commit is silent; on failure the records re-enter and the banner replaces the toast.</div>
+    <div>The toast is role="status"; the count change is announced. Timer pauses while hovered or focused. Focus moves to the next card after a delete, and to the first restored card after Undo.</div>
+  </div>
+</section>
+</x-dc>
+</body>
+</html>
