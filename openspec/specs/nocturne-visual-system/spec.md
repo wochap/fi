@@ -202,9 +202,32 @@ On Android, the window background shown while the app starts SHALL follow the ph
 - **WHEN** the app runs on a Linux desktop that reports dark and the Appearance preference is System default
 - **THEN** the app draws Mocha, and picking Light switches it to Latte
 
-### Requirement: Fi logo without ring
-The Fi logo SHALL be drawn as the mark alone, with no border or ring around it, in the phone brand row, the desktop sidebar and the setup screen. The mark's accent-colored dot SHALL remain.
+### Requirement: Fi logo tile mark
+The Fi logo SHALL be drawn as a self-contained tile mark in the phone brand row, the desktop sidebar and the setup and startup screens: a rounded-square tile filled with the surface color and outlined by a hairline of the text color at low opacity, holding a 2×2 grid of rounded square cells. The top-left, top-right and bottom-left cells SHALL be outlined in the text color at reduced opacity with no fill; the bottom-right cell SHALL be filled with the accent fill color and outlined in the accent color. The mark SHALL take its colors from the active theme so it follows Mocha and Latte. The logo SHALL be 28px square in the phone brand row and the desktop sidebar, and 40px square on the setup and startup screens. No other ring or border SHALL be drawn around the tile.
 
 #### Scenario: Logo in the sidebar
 - **WHEN** the desktop sidebar is rendered
-- **THEN** the Fi logo shows the mark with its accent dot and no surrounding border
+- **THEN** the Fi logo is a 28px tile mark whose bottom-right cell is accent-filled and the other three cells are outlined only
+
+#### Scenario: Logo on a setup screen
+- **WHEN** a first-run, joining, dataset-mismatch or startup-error screen is rendered
+- **THEN** the Fi logo beside the "Fi" wordmark is the tile mark at 40px
+
+#### Scenario: Logo follows the theme
+- **WHEN** the Appearance preference switches from Mocha to Latte
+- **THEN** the tile, cell outlines and accent cell redraw with Latte's surface, text and accent colors
+
+### Requirement: App icon uses the Fi tile mark
+The Android launcher icon (legacy and adaptive), the Android 13+ themed icon, the Linux desktop entry icon and the Linux window icon SHALL show the same 2×2 tile mark as the in-app logo, in fixed Mocha colors. The Android adaptive foreground SHALL keep the grid inside the 66dp safe zone over a flat surface-colored background, and the themed icon SHALL be a single-color version of the grid in which the accent cell remains distinguishable from the outlined cells. Debug builds SHALL keep their DEBUG ribbon over the new icon.
+
+#### Scenario: Android home screen
+- **WHEN** a release build is installed on Android
+- **THEN** the launcher shows the 2×2 tile mark with the accent bottom-right cell, and no part of the previous F-shaped glyph
+
+#### Scenario: Themed icon
+- **WHEN** the Android 13+ launcher has themed icons enabled
+- **THEN** the launcher tints a single-color 2×2 grid in which the bottom-right cell is visually distinct
+
+#### Scenario: Debug build
+- **WHEN** a debug build is installed on Android or Linux
+- **THEN** its icon is the tile mark with the DEBUG ribbon
