@@ -699,17 +699,6 @@ final class _DashedRRectPainter extends CustomPainter {
 }
 
 /// The Fi mark, option 3b: an F built from three schema rows, the dot is the i.
-class FiLogoMark extends StatelessWidget {
-  const FiLogoMark({this.size = 20, super.key});
-  final double size;
-
-  @override
-  Widget build(BuildContext context) => CustomPaint(
-    size: Size.square(size),
-    painter: _FiMarkPainter(context.nocturne),
-  );
-}
-
 final class _FiMarkPainter extends CustomPainter {
   const _FiMarkPainter(this.c);
 
@@ -717,37 +706,59 @@ final class _FiMarkPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Drawn in the mark's own 64-unit box.
-    canvas.scale(size.width / 64, size.height / 64);
-    void bar(double x, double y, double w, double h, Color color) =>
-        canvas.drawRRect(
-          RRect.fromRectAndRadius(
-            Rect.fromLTWH(x, y, w, h),
-            const Radius.circular(3.5),
-          ),
-          Paint()..color = color,
-        );
-    bar(12, 12, 7, 40, c.text);
-    bar(24, 12, 28, 7, c.text);
-    bar(24, 28.5, 16, 7, c.text);
-    bar(24, 45, 10, 7, c.neutralGhost);
-    canvas.drawCircle(const Offset(48.5, 32), 4, Paint()..color = c.accent);
+    // Drawn in the mark's own 100-unit box; strokes are centered on the edge.
+    canvas.scale(size.width / 100, size.height / 100);
+    void rrect(
+      double x,
+      double y,
+      double side,
+      double radius, {
+      Color? fill,
+      required Color stroke,
+      required double width,
+    }) {
+      final r = RRect.fromRectAndRadius(
+        Rect.fromLTWH(x, y, side, side),
+        Radius.circular(radius),
+      );
+      if (fill != null) canvas.drawRRect(r, Paint()..color = fill);
+      canvas.drawRRect(
+        r,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = width
+          ..color = stroke,
+      );
+    }
+
+    rrect(
+      1,
+      1,
+      98,
+      23,
+      fill: c.surface,
+      stroke: c.text.withValues(alpha: .18),
+      width: 2,
+    );
+    final cell = c.text.withValues(alpha: .75);
+    rrect(24, 24, 23, 6, stroke: cell, width: 5);
+    rrect(53, 24, 23, 6, stroke: cell, width: 5);
+    rrect(24, 53, 23, 6, stroke: cell, width: 5);
+    rrect(53, 53, 23, 6, fill: c.accentFill, stroke: c.accent, width: 5);
   }
 
   @override
   bool shouldRepaint(_FiMarkPainter oldDelegate) => c != oldDelegate.c;
 }
 
-/// The mark in its 28px tile, as in the sidebar and mobile header.
+/// The Fi tile mark: 28px in the sidebar and mobile header, 40px on setup screens.
 class FiLogoTile extends StatelessWidget {
   const FiLogoTile({this.size = 28, super.key});
   final double size;
 
   @override
-  Widget build(BuildContext context) => Container(
-    width: size,
-    height: size,
-    alignment: Alignment.center,
-    child: FiLogoMark(size: size * .72),
+  Widget build(BuildContext context) => CustomPaint(
+    size: Size.square(size),
+    painter: _FiMarkPainter(context.nocturne),
   );
 }

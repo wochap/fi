@@ -1,37 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- fi app icon, master source. 1024x1024. Render with scripts/generate-icons.sh.
-     Mark 3b "Fields": an F built from schema rows, the dot is the i (see FiLogoMark).
-     Tile is the design's 128px tile scaled x8; glyph is its 64-unit box at 84/128. -->
+     The Fi tile mark (see FiLogoTile): a surface tile holding a 2x2 grid of rounded cells,
+     the bottom-right one accent. The design's 100-unit box scaled x10.24, Mocha colors. -->
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
-  <defs>
-    <!-- radial-gradient(120% 120% at 20% 0%, accent-800, surface 65%) -->
-    <radialGradient id="bg" gradientUnits="userSpaceOnUse" cx="204.8" cy="0" r="1228.8">
-      <stop offset="0" stop-color="#423a6a"/>
-      <stop offset="0.65" stop-color="#232532"/>
-    </radialGradient>
-    <!-- drop-shadow(0 0 10px accent-700) at 84px, in glyph units -->
-    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
-      <feGaussianBlur in="SourceAlpha" stdDeviation="3.8" result="blur"/>
-      <feFlood flood-color="#5d5294"/>
-      <feComposite operator="in" in2="blur" result="shadow"/>
-      <feMerge>
-        <feMergeNode in="shadow"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
-    </filter>
-  </defs>
-
-  <!-- tile -->
-  <rect width="1024" height="1024" rx="240" fill="url(#bg)"/>
-
-  <!-- glyph, 64-unit box -->
-  <g transform="translate(176 176) scale(10.5)">
-    <g filter="url(#glow)">
-      <rect x="12" y="12" width="7" height="40" rx="3.5" fill="#e9e9ed"/>
-      <rect x="24" y="12" width="28" height="7" rx="3.5" fill="#e9e9ed"/>
-      <rect x="24" y="28.5" width="16" height="7" rx="3.5" fill="#e9e9ed"/>
-      <rect x="24" y="45" width="10" height="7" rx="3.5" fill="#75798c"/>
-      <circle cx="48.5" cy="32" r="4" fill="#9184d9"/>
+  <g transform="scale(10.24)">
+    <rect x="1" y="1" width="98" height="98" rx="23" fill="#313244" stroke="#CDD6F4" stroke-opacity="0.18" stroke-width="2"/>
+    <g fill="none" stroke="#CDD6F4" stroke-opacity="0.75" stroke-width="5">
+      <rect x="24" y="24" width="23" height="23" rx="6"/>
+      <rect x="53" y="24" width="23" height="23" rx="6"/>
+      <rect x="24" y="53" width="23" height="23" rx="6"/>
     </g>
+    <rect x="53" y="53" width="23" height="23" rx="6" fill="#251E2D" stroke="#CBA6F7" stroke-width="5"/>
   </g>
 </svg>

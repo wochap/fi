@@ -5,6 +5,7 @@ import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/ui_prefs.dart';
 import 'package:fi/theme/form_errors.dart';
 import 'package:fi/voice/services.dart';
+import 'package:fi/theme/nocturne_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -199,5 +200,29 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('sidebar')), findsOneWidget);
     expect(find.byType(NavigationBar), findsNothing);
+  });
+
+  testWidgets('sidebar and phone brand row show the 28px Fi logo', (
+    tester,
+  ) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final bridge = FakeCollectionBridge()
+      ..bootstrap = const BootstrapDto(
+        kind: BootstrapKindDto.ready,
+        rootId: 'root',
+      );
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    await tester.pumpWidget(app(bridge));
+    await pumpUntilFound(tester, find.byType(FiLogoTile));
+    expect(tester.getSize(find.byType(FiLogoTile)), const Size(28, 28));
+    tester.view.physicalSize = const Size(1000, 800);
+    await tester.pumpAndSettle();
+    final sidebarLogo = find.descendant(
+      of: find.byKey(const Key('sidebar')),
+      matching: find.byType(FiLogoTile),
+    );
+    expect(tester.getSize(sidebarLogo), const Size(28, 28));
   });
 }

@@ -63,7 +63,7 @@ class SetupScaffold extends StatelessWidget {
                   children: [
                     const Row(
                       children: [
-                        FiLogoTile(),
+                        FiLogoTile(size: 40),
                         SizedBox(width: 10),
                         Text(
                           'Fi',

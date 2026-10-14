@@ -1,12 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Android 13+ themed icon layer: single colour, launcher tints it. Same geometry as the
-     foreground; the dimmed last row keeps its contrast through alpha. -->
+     foreground; the accent cell is solid so it stays distinct from the outlined cells. -->
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
-  <g transform="translate(313 313) scale(6.22)" fill="#ffffff">
-    <rect x="12" y="12" width="7" height="40" rx="3.5"/>
-    <rect x="24" y="12" width="28" height="7" rx="3.5"/>
-    <rect x="24" y="28.5" width="16" height="7" rx="3.5"/>
-    <rect x="24" y="45" width="10" height="7" rx="3.5" fill-opacity="0.5"/>
-    <circle cx="48.5" cy="32" r="4"/>
+  <g transform="translate(237 237) scale(5.5)">
+    <g fill="none" stroke="#ffffff" stroke-width="5">
+      <rect x="24" y="24" width="23" height="23" rx="6"/>
+      <rect x="53" y="24" width="23" height="23" rx="6"/>
+      <rect x="24" y="53" width="23" height="23" rx="6"/>
+    </g>
+    <rect x="53" y="53" width="23" height="23" rx="6" fill="#ffffff" stroke="#ffffff" stroke-width="5"/>
   </g>
 </svg>

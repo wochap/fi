@@ -3,6 +3,7 @@ import 'package:fi/setup_screens.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/theme/nocturne.dart';
+import 'package:fi/theme/nocturne_widgets.dart';
 import 'package:fi/ui_prefs.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -28,6 +29,14 @@ Widget _host(Widget child, {Locale locale = const Locale('en')}) => MaterialApp(
 );
 
 void main() {
+  testWidgets('setup scaffold shows the 40px Fi logo', (tester) async {
+    _size(tester, _desktop);
+    await tester.pumpWidget(
+      _host(const SetupScaffold(title: 'Set up', lead: 'Lead', children: [])),
+    );
+    expect(tester.getSize(find.byType(FiLogoTile)), const Size(40, 40));
+  });
+
   for (final size in [_desktop, _phone]) {
     testWidgets('SetupScaffold and ChoiceCard fit at ${size.width}', (
       tester,

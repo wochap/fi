@@ -25,6 +25,29 @@ BoxDecoration decorationOf(WidgetTester tester, Finder finder) =>
         as BoxDecoration;
 
 void main() {
+  testWidgets('Fi logo repaints when the theme switches to Latte', (
+    tester,
+  ) async {
+    CustomPainter painter() => tester
+        .widget<CustomPaint>(
+          find.descendant(
+            of: find.byType(FiLogoTile),
+            matching: find.byType(CustomPaint),
+          ),
+        )
+        .painter!;
+    await pumpAt(tester, 800, const FiLogoTile());
+    final mocha = painter();
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: nocturneTheme(NocturneColors.latte),
+        home: const Scaffold(body: Center(child: FiLogoTile())),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(painter().shouldRepaint(mocha), isTrue);
+  });
+
   group('ClearMark', () {
     testWidgets('draws 22px, hits 44px on a phone and clears', (tester) async {
       var taps = 0;

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Android adaptive icon background layer (full bleed, the launcher masks it).
-     Flat surface, as in the design's round Android icon for mark 3b. -->
+     Flat Mocha surface; the launcher mask is the tile. -->
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
-  <rect width="1024" height="1024" fill="#232532"/>
+  <rect width="1024" height="1024" fill="#313244"/>
 </svg>
