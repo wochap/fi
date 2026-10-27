@@ -26,7 +26,7 @@ use crate::{
     device_name::{DeviceNameError, generated_device_name, normalize_device_name},
     discovery::{AddressPolicy, DiscoveryGroupSecret},
     endpoint_memory::{ManualConnectOutcome, REMEMBERED_ENDPOINT_TTL_MS, parse_manual_address},
-    error::{AppError, BootstrapError, Result},
+    error::{AppError, BootstrapError, ProjectionError, Result},
     events::{ApplicationState, DataChanged, DomainKind, ErrorEvent, ProjectionState},
     generic::{
         CollectionView, GenericCommand, GenericSnapshot, RecordView, apply_generic_command,
@@ -43,7 +43,7 @@ use crate::{
         RootCompatibility, RootState,
     },
     pairing_manager::{PairingBind, PairingManager, PairingPorts},
-    projection::{ReadModel, project, reconcile},
+    projection::{ReadModel, project, reconcile, remove_database_files},
     query::{
         CollectionQuery, ComputedFieldDefinition, ComputedFieldId, Expression, InferredType,
         QueryDefinition, QueryId, QueryResult, QueryValidationError, TypeEnvironment, ViewId,
@@ -639,7 +639,7 @@ impl AppCore {
         let document_store = Arc::new(
             FileDocumentStore::open(documents_dir(&data_dir), quarantine_dir(&data_dir)).await?,
         );
-        let read_model = ReadModel::open_disposable(data_dir.join("read-model.sqlite"))?;
+        let mut read_model = ReadModel::open_disposable(data_dir.join("read-model.sqlite"))?;
         let mut repo_config = config.repo.clone();
         if let Some(identity) = network_components.identity.as_deref() {
             repo_config.local_name = stored_or_generated_name(&control_store, identity.id());
@@ -736,6 +736,31 @@ impl AppCore {
                 Ok(checkpoint) => {
                     projection_tx.send_replace(ProjectionState::Ready { checkpoint });
                     root = Some(handle);
+                }
+                Err(error)
+                    if matches!(error, AppError::Projection(ProjectionError::Database { .. })) =>
+                {
+                    tracing::warn!(
+                        error = %error,
+                        "projection reconciliation failed with database error during bootstrap, retrying after recreating read model"
+                    );
+                    let read_model_path = read_model.path().to_path_buf();
+                    drop(read_model);
+                    remove_database_files(&read_model_path)?;
+                    let fresh_read_model = ReadModel::open_disposable(read_model_path)?;
+                    match reconcile(&repo, &handle, &fresh_read_model).await {
+                        Ok(checkpoint) => {
+                            projection_tx.send_replace(ProjectionState::Ready { checkpoint });
+                            read_model = fresh_read_model;
+                            root = Some(handle);
+                        }
+                        Err(retry_error) => {
+                            projection_tx.send_replace(ProjectionState::Failed {
+                                message: retry_error.to_string(),
+                            });
+                            return Err(retry_error);
+                        }
+                    }
                 }
                 Err(error) => {
                     projection_tx.send_replace(ProjectionState::Failed {

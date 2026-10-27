@@ -87,11 +87,20 @@ impl ReadModel {
     pub fn open_disposable(path: PathBuf) -> Result<Self> {
         match Self::open(path.clone()) {
             Ok(model) if model.integrity_ok() && model.schema_compatible() => Ok(model),
-            Ok(_) | Err(_) => {
+            Ok(model) => {
+                drop(model);
+                remove_database_files(&path)?;
+                Self::open(path)
+            }
+            Err(_) => {
                 remove_database_files(&path)?;
                 Self::open(path)
             }
         }
+    }
+
+    pub(crate) fn path(&self) -> &Path {
+        &self.path
     }
 
     fn open(path: PathBuf) -> Result<Self> {
@@ -105,82 +114,110 @@ impl ReadModel {
         connection
             .pragma_update(None, "synchronous", "FULL")
             .map_err(|error| projection_db(&path, error))?;
-        connection.execute_batch(
-            "CREATE TABLE IF NOT EXISTS collections (
-                id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, description TEXT NOT NULL,
-                deleted INTEGER NOT NULL CHECK(deleted IN (0,1))
-             ) STRICT;
-             CREATE TABLE IF NOT EXISTS fields (
-                id TEXT PRIMARY KEY NOT NULL, collection_id TEXT NOT NULL, name TEXT NOT NULL,
-                value_kind TEXT NOT NULL, decimal_scale INTEGER, required INTEGER NOT NULL CHECK(required IN (0,1)),
-                order_value INTEGER NOT NULL, deleted INTEGER NOT NULL CHECK(deleted IN (0,1)), definition_json TEXT NOT NULL,
-                FOREIGN KEY(collection_id) REFERENCES collections(id)
-             ) STRICT;
-             CREATE TABLE IF NOT EXISTS enum_options (
-                id TEXT PRIMARY KEY NOT NULL, field_id TEXT NOT NULL, label TEXT NOT NULL,
-                order_value INTEGER NOT NULL, deleted INTEGER NOT NULL CHECK(deleted IN (0,1)),
-                FOREIGN KEY(field_id) REFERENCES fields(id)
-             ) STRICT;
-             CREATE TABLE IF NOT EXISTS records (
-                id TEXT PRIMARY KEY NOT NULL, collection_id TEXT NOT NULL,
-                deleted INTEGER NOT NULL CHECK(deleted IN (0,1)), FOREIGN KEY(collection_id) REFERENCES collections(id)
-             ) STRICT;
-             CREATE TABLE IF NOT EXISTS computed_fields (
-                id TEXT PRIMARY KEY NOT NULL, collection_id TEXT NOT NULL, name TEXT NOT NULL,
-                order_value INTEGER NOT NULL, deleted INTEGER NOT NULL CHECK(deleted IN (0,1)),
-                definition_json TEXT NOT NULL, FOREIGN KEY(collection_id) REFERENCES collections(id)
-             ) STRICT;
-             CREATE TABLE IF NOT EXISTS query_definitions (
-                id TEXT PRIMARY KEY NOT NULL, collection_id TEXT NOT NULL, name TEXT NOT NULL,
-                order_value INTEGER NOT NULL, deleted INTEGER NOT NULL CHECK(deleted IN (0,1)),
-                definition_json TEXT NOT NULL, FOREIGN KEY(collection_id) REFERENCES collections(id)
-             ) STRICT;
-             CREATE TABLE IF NOT EXISTS widgets (
-                id TEXT PRIMARY KEY NOT NULL, collection_id TEXT NOT NULL, widget_type TEXT NOT NULL,
-                query_id TEXT NOT NULL, title TEXT NOT NULL,
-                order_value INTEGER NOT NULL, deleted INTEGER NOT NULL CHECK(deleted IN (0,1)),
-                definition_json TEXT NOT NULL, FOREIGN KEY(collection_id) REFERENCES collections(id)
-             ) STRICT;
-             CREATE TABLE IF NOT EXISTS view_definitions (
-                id TEXT PRIMARY KEY NOT NULL, collection_id TEXT NOT NULL, name TEXT NOT NULL,
-                order_value INTEGER NOT NULL, deleted INTEGER NOT NULL CHECK(deleted IN (0,1)),
-                broken INTEGER NOT NULL CHECK(broken IN (0,1)),
-                definition_json TEXT NOT NULL, FOREIGN KEY(collection_id) REFERENCES collections(id)
-             ) STRICT;
-             CREATE TABLE IF NOT EXISTS record_values (
-                record_id TEXT NOT NULL, collection_id TEXT NOT NULL, field_id TEXT NOT NULL,
-                value_kind TEXT NOT NULL, integer_value INTEGER, text_value TEXT, boolean_value INTEGER,
-                physical_time_ms INTEGER NOT NULL, logical_counter INTEGER NOT NULL, node_id TEXT NOT NULL,
-                PRIMARY KEY(record_id,field_id), FOREIGN KEY(record_id) REFERENCES records(id), FOREIGN KEY(field_id) REFERENCES fields(id),
-                CHECK(boolean_value IS NULL OR boolean_value IN (0,1)),
-                CHECK((value_kind='null' AND integer_value IS NULL AND text_value IS NULL AND boolean_value IS NULL)
-                   OR (value_kind IN ('integer','fixed_decimal','date','date_time','duration') AND integer_value IS NOT NULL AND text_value IS NULL AND boolean_value IS NULL)
-                   OR (value_kind IN ('text','enum','enum_set') AND integer_value IS NULL AND text_value IS NOT NULL AND boolean_value IS NULL)
-                   OR (value_kind='boolean' AND integer_value IS NULL AND text_value IS NULL AND boolean_value IS NOT NULL))
-             ) STRICT;
-             CREATE TABLE IF NOT EXISTS projection_diagnostics (
-                kind TEXT NOT NULL, entity_id TEXT NOT NULL, field_id TEXT NOT NULL, message TEXT NOT NULL,
-                PRIMARY KEY(kind,entity_id,field_id,message)
-             ) STRICT;
-             CREATE TABLE IF NOT EXISTS collection_summaries (
-                collection_id TEXT PRIMARY KEY NOT NULL, record_count INTEGER NOT NULL,
-                field_count INTEGER NOT NULL, incomplete_count INTEGER NOT NULL, last_edited_ms INTEGER,
-                FOREIGN KEY(collection_id) REFERENCES collections(id)
-             ) STRICT;
-             CREATE TABLE IF NOT EXISTS projection_metadata (
-                singleton INTEGER PRIMARY KEY CHECK(singleton=1), root_id TEXT NOT NULL,
-                schema_version INTEGER NOT NULL, heads TEXT NOT NULL
-             ) STRICT;
-             CREATE INDEX IF NOT EXISTS fields_collection_order ON fields(collection_id,deleted,order_value,id);
-             CREATE INDEX IF NOT EXISTS enum_options_field_order ON enum_options(field_id,deleted,order_value,id);
-             CREATE INDEX IF NOT EXISTS records_collection_id ON records(collection_id,deleted,id);
-             CREATE INDEX IF NOT EXISTS computed_fields_collection_order ON computed_fields(collection_id,deleted,order_value,id);
-             CREATE INDEX IF NOT EXISTS query_definitions_collection_order ON query_definitions(collection_id,deleted,order_value,id);
-             CREATE INDEX IF NOT EXISTS widgets_collection_order ON widgets(collection_id,deleted,order_value,id);
-             CREATE INDEX IF NOT EXISTS view_definitions_collection_order ON view_definitions(collection_id,deleted,order_value,id);
-             CREATE INDEX IF NOT EXISTS record_values_integer ON record_values(collection_id,field_id,integer_value,record_id);
-             CREATE INDEX IF NOT EXISTS record_values_text ON record_values(collection_id,field_id,text_value,record_id);"
-        ).map_err(|error| projection_db(&path, error))?;
+
+        let has_tables: bool = connection
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%')",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(|error| projection_db(&path, error))?;
+        let existing_user_version: i64 = connection
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .map_err(|error| projection_db(&path, error))?;
+
+        if !has_tables || existing_user_version == PROJECTION_SCHEMA_VERSION {
+            connection.execute_batch(
+                "CREATE TABLE IF NOT EXISTS collections (
+                    id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, description TEXT NOT NULL,
+                    deleted INTEGER NOT NULL CHECK(deleted IN (0,1))
+                 ) STRICT;
+                 CREATE TABLE IF NOT EXISTS fields (
+                    id TEXT PRIMARY KEY NOT NULL, collection_id TEXT NOT NULL, name TEXT NOT NULL,
+                    value_kind TEXT NOT NULL, decimal_scale INTEGER, required INTEGER NOT NULL CHECK(required IN (0,1)),
+                    order_value INTEGER NOT NULL, deleted INTEGER NOT NULL CHECK(deleted IN (0,1)), definition_json TEXT NOT NULL,
+                    FOREIGN KEY(collection_id) REFERENCES collections(id)
+                 ) STRICT;
+                 CREATE TABLE IF NOT EXISTS enum_options (
+                    id TEXT PRIMARY KEY NOT NULL, field_id TEXT NOT NULL, label TEXT NOT NULL,
+                    order_value INTEGER NOT NULL, deleted INTEGER NOT NULL CHECK(deleted IN (0,1)),
+                    FOREIGN KEY(field_id) REFERENCES fields(id)
+                 ) STRICT;
+                 CREATE TABLE IF NOT EXISTS records (
+                    id TEXT PRIMARY KEY NOT NULL, collection_id TEXT NOT NULL,
+                    deleted INTEGER NOT NULL CHECK(deleted IN (0,1)), FOREIGN KEY(collection_id) REFERENCES collections(id)
+                 ) STRICT;
+                 CREATE TABLE IF NOT EXISTS computed_fields (
+                    id TEXT PRIMARY KEY NOT NULL, collection_id TEXT NOT NULL, name TEXT NOT NULL,
+                    order_value INTEGER NOT NULL, deleted INTEGER NOT NULL CHECK(deleted IN (0,1)),
+                    definition_json TEXT NOT NULL, FOREIGN KEY(collection_id) REFERENCES collections(id)
+                 ) STRICT;
+                 CREATE TABLE IF NOT EXISTS query_definitions (
+                    id TEXT PRIMARY KEY NOT NULL, collection_id TEXT NOT NULL, name TEXT NOT NULL,
+                    order_value INTEGER NOT NULL, deleted INTEGER NOT NULL CHECK(deleted IN (0,1)),
+                    definition_json TEXT NOT NULL, FOREIGN KEY(collection_id) REFERENCES collections(id)
+                 ) STRICT;
+                 CREATE TABLE IF NOT EXISTS widgets (
+                    id TEXT PRIMARY KEY NOT NULL, collection_id TEXT NOT NULL, widget_type TEXT NOT NULL,
+                    query_id TEXT NOT NULL, title TEXT NOT NULL,
+                    order_value INTEGER NOT NULL, deleted INTEGER NOT NULL CHECK(deleted IN (0,1)),
+                    definition_json TEXT NOT NULL, FOREIGN KEY(collection_id) REFERENCES collections(id)
+                 ) STRICT;
+                 CREATE TABLE IF NOT EXISTS view_definitions (
+                    id TEXT PRIMARY KEY NOT NULL, collection_id TEXT NOT NULL, name TEXT NOT NULL,
+                    order_value INTEGER NOT NULL, deleted INTEGER NOT NULL CHECK(deleted IN (0,1)),
+                    broken INTEGER NOT NULL CHECK(broken IN (0,1)),
+                    definition_json TEXT NOT NULL, FOREIGN KEY(collection_id) REFERENCES collections(id)
+                 ) STRICT;
+                 CREATE TABLE IF NOT EXISTS record_values (
+                    record_id TEXT NOT NULL, collection_id TEXT NOT NULL, field_id TEXT NOT NULL,
+                    value_kind TEXT NOT NULL, integer_value INTEGER, text_value TEXT, boolean_value INTEGER,
+                    physical_time_ms INTEGER NOT NULL, logical_counter INTEGER NOT NULL, node_id TEXT NOT NULL,
+                    PRIMARY KEY(record_id,field_id), FOREIGN KEY(record_id) REFERENCES records(id), FOREIGN KEY(field_id) REFERENCES fields(id),
+                    CHECK(boolean_value IS NULL OR boolean_value IN (0,1)),
+                    CHECK((value_kind='null' AND integer_value IS NULL AND text_value IS NULL AND boolean_value IS NULL)
+                       OR (value_kind IN ('integer','fixed_decimal','date','date_time','duration') AND integer_value IS NOT NULL AND text_value IS NULL AND boolean_value IS NULL)
+                       OR (value_kind IN ('text','enum','enum_set') AND integer_value IS NULL AND text_value IS NOT NULL AND boolean_value IS NULL)
+                       OR (value_kind='boolean' AND integer_value IS NULL AND text_value IS NULL AND boolean_value IS NOT NULL))
+                 ) STRICT;
+                 CREATE TABLE IF NOT EXISTS projection_diagnostics (
+                    kind TEXT NOT NULL, entity_id TEXT NOT NULL, field_id TEXT NOT NULL, message TEXT NOT NULL,
+                    PRIMARY KEY(kind,entity_id,field_id,message)
+                 ) STRICT;
+                 CREATE TABLE IF NOT EXISTS collection_summaries (
+                    collection_id TEXT PRIMARY KEY NOT NULL, record_count INTEGER NOT NULL,
+                    field_count INTEGER NOT NULL, incomplete_count INTEGER NOT NULL, last_edited_ms INTEGER,
+                    FOREIGN KEY(collection_id) REFERENCES collections(id)
+                 ) STRICT;
+                 CREATE TABLE IF NOT EXISTS projection_metadata (
+                    singleton INTEGER PRIMARY KEY CHECK(singleton=1), root_id TEXT NOT NULL,
+                    schema_version INTEGER NOT NULL, heads TEXT NOT NULL
+                 ) STRICT;
+                 CREATE INDEX IF NOT EXISTS fields_collection_order ON fields(collection_id,deleted,order_value,id);
+                 CREATE INDEX IF NOT EXISTS enum_options_field_order ON enum_options(field_id,deleted,order_value,id);
+                 CREATE INDEX IF NOT EXISTS records_collection_id ON records(collection_id,deleted,id);
+                 CREATE INDEX IF NOT EXISTS computed_fields_collection_order ON computed_fields(collection_id,deleted,order_value,id);
+                 CREATE INDEX IF NOT EXISTS query_definitions_collection_order ON query_definitions(collection_id,deleted,order_value,id);
+                 CREATE INDEX IF NOT EXISTS widgets_collection_order ON widgets(collection_id,deleted,order_value,id);
+                 CREATE INDEX IF NOT EXISTS view_definitions_collection_order ON view_definitions(collection_id,deleted,order_value,id);
+                 CREATE INDEX IF NOT EXISTS record_values_integer ON record_values(collection_id,field_id,integer_value,record_id);
+                 CREATE INDEX IF NOT EXISTS record_values_text ON record_values(collection_id,field_id,text_value,record_id);"
+            ).map_err(|error| projection_db(&path, error))?;
+            connection
+                .pragma_update(None, "user_version", &PROJECTION_SCHEMA_VERSION)
+                .map_err(|error| projection_db(&path, error))?;
+            let verified_user_version: i64 = connection
+                .query_row("PRAGMA user_version", [], |row| row.get(0))
+                .map_err(|error| projection_db(&path, error))?;
+            if verified_user_version != PROJECTION_SCHEMA_VERSION {
+                return Err(projection_db(
+                    &path,
+                    format!(
+                        "expected user_version {PROJECTION_SCHEMA_VERSION}, found {verified_user_version}"
+                    ),
+                ));
+            }
+        }
         Ok(Self {
             path: Arc::new(path),
             connection: Arc::new(Mutex::new(connection)),
@@ -202,6 +239,11 @@ impl ReadModel {
         let Ok(connection) = self.connection.lock() else {
             return false;
         };
+        let user_version: std::result::Result<i64, _> =
+            connection.query_row("PRAGMA user_version", [], |row| row.get(0));
+        if user_version.as_ref() != Ok(&PROJECTION_SCHEMA_VERSION) {
+            return false;
+        }
         for (table, expected) in [
             ("collections", &["id", "name", "description", "deleted"][..]),
             (
@@ -987,7 +1029,7 @@ pub(crate) async fn reconcile(
         _ => project(repo, handle, read_model).await,
     }
 }
-fn remove_database_files(path: &Path) -> Result<()> {
+pub(crate) fn remove_database_files(path: &Path) -> Result<()> {
     for candidate in [
         path.to_path_buf(),
         PathBuf::from(format!("{}-wal", path.display())),
@@ -1231,5 +1273,70 @@ mod tests {
         model.replace(&empty, &next).unwrap();
         assert!(model.collections().unwrap().is_empty());
         assert_eq!(model.checkpoint().unwrap(), Some(next));
+    }
+
+    #[test]
+    fn outdated_or_unversioned_read_model_is_recreated_by_open_disposable() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("read-model.sqlite");
+
+        // 1. Create an unversioned database (user_version = 0) with a canary row
+        {
+            let conn = Connection::open(&db_path).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE collections (
+                    id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, description TEXT NOT NULL,
+                    deleted INTEGER NOT NULL CHECK(deleted IN (0,1))
+                 ) STRICT;
+                 INSERT INTO collections (id, name, description, deleted) VALUES ('canary-1', 'Old', 'Old', 0);",
+            )
+            .unwrap();
+            let version: i64 = conn
+                .query_row("PRAGMA user_version", [], |row| row.get(0))
+                .unwrap();
+            assert_eq!(version, 0);
+        }
+
+        // Opening via open_disposable should detect user_version == 0 != PROJECTION_SCHEMA_VERSION,
+        // discard the database files, and recreate a clean database.
+        let model = ReadModel::open_disposable(db_path.clone()).unwrap();
+        assert!(
+            model.collections().unwrap().is_empty(),
+            "canary row must have been wiped on unversioned database"
+        );
+        let version: i64 = model
+            .connection
+            .lock()
+            .unwrap()
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, PROJECTION_SCHEMA_VERSION);
+
+        // 2. Now simulate an outdated version (e.g. PROJECTION_SCHEMA_VERSION - 1)
+        drop(model);
+        {
+            let conn = Connection::open(&db_path).unwrap();
+            conn.execute(
+                "INSERT INTO collections (id, name, description, deleted) VALUES ('canary-2', 'Outdated', 'Outdated', 0);",
+                [],
+            )
+            .unwrap();
+            let outdated_version = PROJECTION_SCHEMA_VERSION - 1;
+            conn.pragma_update(None, "user_version", &outdated_version)
+                .unwrap();
+        }
+
+        let model = ReadModel::open_disposable(db_path).unwrap();
+        assert!(
+            model.collections().unwrap().is_empty(),
+            "canary row must have been wiped on outdated version"
+        );
+        let version: i64 = model
+            .connection
+            .lock()
+            .unwrap()
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, PROJECTION_SCHEMA_VERSION);
     }
 }

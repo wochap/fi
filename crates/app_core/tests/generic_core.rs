@@ -478,6 +478,44 @@ async fn stale_and_corrupt_projections_rebuild_without_touching_authority() {
 }
 
 #[tokio::test]
+async fn constraint_violating_projection_database_self_heals_during_bootstrap() {
+    let directory = tempfile::tempdir().unwrap();
+    let first = AppCore::open(directory.path()).await.unwrap();
+    let root = first.create_new_dataset().await.unwrap();
+    first
+        .create_collection("SelfHealed".into(), String::new())
+        .await
+        .unwrap();
+    first.shutdown().await.unwrap();
+
+    let path = directory.path().join("read-model.sqlite");
+    let database = Connection::open(&path).unwrap();
+    database
+        .execute_batch(
+            "CREATE TRIGGER test_fail_reconcile BEFORE INSERT ON collections
+             BEGIN
+                 SELECT RAISE(ABORT, 'injected constraint failure');
+             END;",
+        )
+        .unwrap();
+    database
+        .execute("UPDATE projection_metadata SET heads='v1:invalid'", [])
+        .unwrap();
+    drop(database);
+
+    let reopened = AppCore::open(directory.path()).await.unwrap();
+    assert_eq!(
+        reopened.lifecycle_state(),
+        app_core::ApplicationState::Ready { root }
+    );
+    let ProjectionState::Ready { checkpoint: _ } = reopened.projection_state() else {
+        panic!("projection did not self-heal into Ready state");
+    };
+    assert_eq!(reopened.collections().unwrap()[0].name, "SelfHealed");
+    reopened.shutdown().await.unwrap();
+}
+
+#[tokio::test]
 async fn invalid_command_has_no_write_projection_or_event() {
     let directory = tempfile::tempdir().unwrap();
     let app = AppCore::open(directory.path()).await.unwrap();
