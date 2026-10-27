@@ -31,25 +31,26 @@ The app SHALL decide which Settings sections appear from the running platform's 
 - Appearance: shown on every platform. Its content is defined by the Appearance section requirement.
 - Voice input: shown only when the platform supports on-device voice (Android) and a voice engine is available to the build. Its content is defined by the voice-record-fill capability.
 - Microphone: shown only on Android and only when Voice input is shown. It holds "Microphone access" with the permission state ("Allowed", "Not allowed yet" with "Fi asks the first time you use voice.", "Off" with "Turn it on in Android settings to fill by voice."), and an "Android settings" secondary button with a settings icon that opens this app's Android settings page (mock settings-microphone). The permission state SHALL be shown as an icon beside its text, never by colour alone: a check for "Allowed" (in the accent colour), a dashed circle for "Not allowed yet", and a prohibit sign for "Off". The permission state SHALL be read again when the app returns to the foreground.
+- Diagnostics: shown on every platform. Its content is defined by the Diagnostics section requirement.
 - About: shown on every platform.
 
 No text mentioning Android, and no control that opens Android settings, SHALL appear on a platform other than Android. On a platform other than Android the page header SHALL read "Settings" with the line "Preferences for this computer." under it; on Android the header SHALL read "Settings" alone.
 
 #### Scenario: Desktop shows Language, Appearance and About
 - **WHEN** the app runs with desktop capabilities, even with a voice engine available, and the user opens Settings on a 1240px-wide screen
-- **THEN** Settings shows "Preferences for this computer.", the Language section, the Appearance section and then the About section, and shows no Voice input section, no Microphone section and no "Android settings" button
+- **THEN** Settings shows "Preferences for this computer.", the Language section, the Appearance section, the Diagnostics section, and then the About section, and shows no Voice input section, no Microphone section and no "Android settings" button
 
 #### Scenario: Desktop capabilities at phone width
 - **WHEN** the app runs with desktop capabilities and a voice engine available, and the window is 390px wide
-- **THEN** Settings still shows no Voice input and no Microphone section
+- **THEN** Settings still shows no Voice input and no Microphone section, and shows the Diagnostics section
 
 #### Scenario: Android with voice available
 - **WHEN** the app runs with Android capabilities and a voice engine is available
-- **THEN** Settings shows Language, Appearance, Voice input, Microphone and About in that order
+- **THEN** Settings shows Language, Appearance, Voice input, Microphone, Diagnostics and About in that order
 
 #### Scenario: Android without a voice engine
 - **WHEN** the app runs with Android capabilities and no voice engine is available to the build
-- **THEN** Settings shows only Language, Appearance and About
+- **THEN** Settings shows Language, Appearance, Diagnostics and About in that order
 
 #### Scenario: Permission changed in Android settings
 - **WHEN** the Microphone section shows "Off", the user taps "Android settings", allows the microphone there and returns to the app
@@ -125,6 +126,21 @@ The section label SHALL read "Appearance". In Spanish the copy SHALL read: secti
 #### Scenario: Spanish copy
 - **WHEN** the interface is Spanish, the app runs with Android capabilities, the phone is dark, and the user opens Settings
 - **THEN** the section label reads "Apariencia" and the rows read "Predeterminado del sistema" with "Oscuro — igual que tu teléfono", "Claro" and "Oscuro"
+
+### Requirement: Diagnostics section
+The Diagnostics section SHALL be shown on every platform as a card allowing the user to view crash reporting status and manage error reporting preferences:
+- A toggle to enable or disable automated error reporting.
+- A status indicator indicating whether error tracking is active, disabled, or using a placeholder endpoint.
+- An optional input field allowing override of the default Bugsink/Sentry DSN.
+Changes made in the Diagnostics section SHALL take effect immediately and be persisted device-locally in `UiPrefs`.
+
+#### Scenario: Diagnostics section shows default state
+- **WHEN** the user navigates to Settings on any platform without having customized crash reporting preferences
+- **THEN** the Diagnostics section displays an enabled crash reporting toggle, the current DSN status (Active or Placeholder), and the server configuration
+
+#### Scenario: Disabling crash reporting in settings
+- **WHEN** the user toggles automated error reporting off
+- **THEN** error reporting is immediately disabled, no crash reports are sent or buffered for upload, and the status displays "Disabled"
 
 ### Requirement: About section
 The About section SHALL be shown on every platform as one card with these rows in order:
