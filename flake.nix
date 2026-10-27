@@ -25,6 +25,7 @@
 
         androidComposition = pkgs.androidenv.composeAndroidPackages {
           platformVersions = [
+            "34"
             "35"
             "36"
           ];
