@@ -57,7 +57,7 @@ Projection metadata SHALL include the root document ID, generic projection schem
 - **THEN** startup performs a complete generic projection rebuild before reporting queries ready
 
 ### Requirement: Missing or inconsistent projection recovery
-Startup SHALL rebuild `read-model.sqlite` from Automerge when the database, generic schema, checkpoint, expected root, or integrity state is missing or inconsistent, and MUST NOT infer authoritative changes from surviving SQLite rows.
+Startup SHALL rebuild `read-model.sqlite` from Automerge when the database, generic schema, schema version pragma (`PRAGMA user_version`), checkpoint, expected root, or integrity state is missing or inconsistent, and MUST NOT infer authoritative changes from surviving SQLite rows.
 
 #### Scenario: SQLite deletion
 - **WHEN** `read-model.sqlite` is deleted while Automerge snapshots remain
@@ -66,6 +66,14 @@ Startup SHALL rebuild `read-model.sqlite` from Automerge when the database, gene
 #### Scenario: Corrupt read model
 - **WHEN** SQLite cannot be opened or fails integrity validation
 - **THEN** the application replaces only the disposable read-model database and rebuilds it from Automerge
+
+#### Scenario: Incompatible or outdated schema version
+- **WHEN** `read-model.sqlite` exists but its `PRAGMA user_version` does not match the active `PROJECTION_SCHEMA_VERSION`
+- **THEN** the application discards the existing database files and recreates the projection database with current table definitions and user version
+
+#### Scenario: Projection failure during bootstrap
+- **WHEN** refreshing the projection from Automerge fails due to a database constraint or write error during application bootstrap
+- **THEN** the application clears the disposable read-model files and attempts a fresh projection rebuild before declaring startup failed
 
 ### Requirement: Projection event recovery
 The projector SHALL consume root change notifications with bounded memory and SHALL recover from notification lag by projecting a fresh complete root snapshot.
