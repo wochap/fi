@@ -3614,6 +3614,78 @@ abstract class AppLocalizations {
   /// **'Microphone'**
   String get settingsMicrophone;
 
+  /// Diagnostics section label in settings
+  ///
+  /// In en, this message translates to:
+  /// **'Diagnostics'**
+  String get settingsDiagnostics;
+
+  /// Toggle title for automated crash and error reporting
+  ///
+  /// In en, this message translates to:
+  /// **'Automated error reporting'**
+  String get settingsDiagnosticsCrashReporting;
+
+  /// Description of the automated crash reporting feature
+  ///
+  /// In en, this message translates to:
+  /// **'Sends crash and error diagnostics to Bugsink/Sentry with zero personal data or secrets.'**
+  String get settingsDiagnosticsCrashReportingDescription;
+
+  /// Diagnostics status label
+  ///
+  /// In en, this message translates to:
+  /// **'Status'**
+  String get settingsDiagnosticsStatus;
+
+  /// Status when crash reporting is connected to a live server
+  ///
+  /// In en, this message translates to:
+  /// **'Connected'**
+  String get settingsDiagnosticsStatusActive;
+
+  /// Status when crash reporting is pointing to the placeholder endpoint
+  ///
+  /// In en, this message translates to:
+  /// **'Placeholder / Standby'**
+  String get settingsDiagnosticsStatusPlaceholder;
+
+  /// Status when crash reporting is disabled
+  ///
+  /// In en, this message translates to:
+  /// **'Disabled'**
+  String get settingsDiagnosticsStatusDisabled;
+
+  /// Custom Sentry/Bugsink DSN input label
+  ///
+  /// In en, this message translates to:
+  /// **'Server DSN'**
+  String get settingsDiagnosticsDsn;
+
+  /// Placeholder hint for custom DSN
+  ///
+  /// In en, this message translates to:
+  /// **'https://token@bugsink.example.com/1'**
+  String get settingsDiagnosticsDsnHint;
+
+  /// Save custom DSN button
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get settingsDiagnosticsDsnSave;
+
+  /// Reset custom DSN button
+  ///
+  /// In en, this message translates to:
+  /// **'Reset to default'**
+  String get settingsDiagnosticsDsnReset;
+
+  /// Current endpoint label
+  ///
+  /// In en, this message translates to:
+  /// **'Endpoint'**
+  String get settingsDiagnosticsEndpoint;
+
   /// Section label
   ///
   /// In en, this message translates to:

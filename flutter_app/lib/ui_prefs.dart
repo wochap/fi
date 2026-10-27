@@ -66,6 +66,8 @@ final class ViewPrefs {
   }
 }
 
+const Object _unspecified = Object();
+
 /// Device-local presentation choices. They never enter Rust or sync.
 final class UiPrefs {
   const UiPrefs({
@@ -75,6 +77,8 @@ final class UiPrefs {
     this.appLanguage = AppLanguage.system,
     this.appTheme = AppThemeMode.system,
     this.views = const {},
+    this.crashReportingEnabled = true,
+    this.customSentryDsn,
   });
 
   final CollectionSort collectionSort;
@@ -94,6 +98,12 @@ final class UiPrefs {
   /// Per-collection view state, keyed by collection id.
   final Map<String, ViewPrefs> views;
 
+  /// Whether automated error and crash reporting is enabled.
+  final bool crashReportingEnabled;
+
+  /// Optional custom Sentry/Bugsink DSN endpoint.
+  final String? customSentryDsn;
+
   UiPrefs copyWith({
     CollectionSort? collectionSort,
     bool? voiceTipDismissed,
@@ -101,6 +111,8 @@ final class UiPrefs {
     AppLanguage? appLanguage,
     AppThemeMode? appTheme,
     Map<String, ViewPrefs>? views,
+    bool? crashReportingEnabled,
+    Object? customSentryDsn = _unspecified,
   }) => UiPrefs(
     collectionSort: collectionSort ?? this.collectionSort,
     voiceTipDismissed: voiceTipDismissed ?? this.voiceTipDismissed,
@@ -108,6 +120,10 @@ final class UiPrefs {
     appLanguage: appLanguage ?? this.appLanguage,
     appTheme: appTheme ?? this.appTheme,
     views: views ?? this.views,
+    crashReportingEnabled: crashReportingEnabled ?? this.crashReportingEnabled,
+    customSentryDsn: identical(customSentryDsn, _unspecified)
+        ? this.customSentryDsn
+        : (customSentryDsn as String?),
   );
 
   /// A copy with [collectionId]'s view state replaced, or removed when [entry] is null.
@@ -133,6 +149,8 @@ final class UiPrefs {
     'hands_free': handsFree,
     'app_language': appLanguage.code,
     'app_theme': appTheme.code,
+    'crash_reporting_enabled': crashReportingEnabled,
+    if (customSentryDsn != null) 'custom_sentry_dsn': customSentryDsn,
     'views': {
       for (final MapEntry(:key, :value) in views.entries) key: value.toJson(),
     },
@@ -144,12 +162,18 @@ final class UiPrefs {
     final sort = CollectionSort.values
         .where((value) => value.name == json['collection_sort'])
         .firstOrNull;
+    final crashReporting = json['crash_reporting_enabled'];
+    final customDsn = json['custom_sentry_dsn'];
     return UiPrefs(
       collectionSort: sort ?? CollectionSort.lastEdited,
       voiceTipDismissed: json['voice_tip_dismissed'] == true,
       handsFree: json['hands_free'] == true,
       appLanguage: AppLanguage.fromCode(json['app_language']),
       appTheme: AppThemeMode.fromCode(json['app_theme']),
+      crashReportingEnabled: crashReporting is bool ? crashReporting : true,
+      customSentryDsn: customDsn is String && customDsn.isNotEmpty
+          ? customDsn
+          : null,
       views: _readViews(json['views']),
     );
   }

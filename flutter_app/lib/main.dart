@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:fi/app.dart';
 import 'package:fi/bridge/collection_bridge.dart';
 import 'package:fi/bridge/rust_bridge_loader.dart';
+import 'package:fi/crash_reporting.dart';
+import 'package:fi/ui_prefs.dart';
 import 'package:fi/voice/services.dart';
 import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter/material.dart';
@@ -14,15 +16,22 @@ import 'package:path_provider/path_provider.dart';
 /// multi-device discovery untestable locally.
 const dataDirOverrideVariable = 'FI_DATA_DIR';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(
-    CollectionApp(
-      bridge: RustCollectionBridge(),
-      initializeRust: initializeRustBridge,
-      dataDirProvider: resolveDataDir,
-      voiceServices: (dataDir, prefs) =>
-          VoiceServices.platform(dataDir: dataDir, prefs: prefs),
+  final dataDir = await resolveDataDir();
+  final prefsStore = FileUiPrefsStore(() async => dataDir);
+  final prefs = await prefsStore.load();
+
+  await CrashReportingService.initialize(
+    prefs: prefs,
+    appRunner: () => runApp(
+      CollectionApp(
+        bridge: RustCollectionBridge(),
+        initializeRust: initializeRustBridge,
+        dataDirProvider: () async => dataDir,
+        voiceServices: (dataDir, prefs) =>
+            VoiceServices.platform(dataDir: dataDir, prefs: prefs),
+      ),
     ),
   );
 }

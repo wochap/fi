@@ -41,4 +41,34 @@ void main() {
       AppThemeMode.system,
     );
   });
+
+  test('crash reporting fields default to enabled and null custom dsn', () {
+    const prefs = UiPrefs();
+    expect(prefs.crashReportingEnabled, isTrue);
+    expect(prefs.customSentryDsn, isNull);
+
+    final read = UiPrefs.fromJson({});
+    expect(read.crashReportingEnabled, isTrue);
+    expect(read.customSentryDsn, isNull);
+  });
+
+  test('crash reporting fields survive a JSON round trip', () {
+    final prefs = const UiPrefs(
+      crashReportingEnabled: false,
+      customSentryDsn: 'https://test@sentry.local/1',
+    );
+    final read = UiPrefs.fromJson(prefs.toJson());
+    expect(read.crashReportingEnabled, isFalse);
+    expect(read.customSentryDsn, 'https://test@sentry.local/1');
+  });
+
+  test('customSentryDsn can be updated and cleared via copyWith', () {
+    final prefs = const UiPrefs().copyWith(
+      customSentryDsn: 'https://test@sentry.local/1',
+    );
+    expect(prefs.customSentryDsn, 'https://test@sentry.local/1');
+
+    final cleared = prefs.copyWith(customSentryDsn: null);
+    expect(cleared.customSentryDsn, isNull);
+  });
 }

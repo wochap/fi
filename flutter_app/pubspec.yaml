@@ -54,6 +54,8 @@ dependencies:
   flutter_tts: ^4.2.5
   record: ^6.2.1
   audio_session: ^0.2.4
+  # 9.x pulls jni 0.14.x, whose CMake script needs JNI/JVM on Linux desktop.
+  sentry_flutter: 8.14.2
 
 dev_dependencies:
   flutter_test:

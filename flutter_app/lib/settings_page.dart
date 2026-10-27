@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:fi/build_label.dart';
+import 'package:fi/crash_reporting.dart';
 import 'package:fi/l10n/l10n.dart';
 import 'package:fi/l10n/language.dart';
 import 'package:fi/platform_capabilities.dart';
@@ -28,6 +29,7 @@ class SettingsPage extends StatefulWidget {
   const SettingsPage({
     required this.buildInfo,
     this.localAddresses = const [],
+    this.uiPrefs,
     super.key,
   });
 
@@ -36,6 +38,9 @@ class SettingsPage extends StatefulWidget {
 
   /// This device's sync addresses as `ip:port`, for About › This device.
   final List<String> localAddresses;
+
+  /// The device-local UI preferences store.
+  final UiPrefsStore? uiPrefs;
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -117,6 +122,10 @@ class _SettingsPageState extends State<SettingsPage>
         ),
       if (micShown && services != null)
         (label: context.l10n.settingsMicrophone, child: _microphone(services)),
+      (
+        label: context.l10n.settingsDiagnostics,
+        child: _DiagnosticsSection(store: widget.uiPrefs),
+      ),
       (label: context.l10n.settingsAbout, child: _about()),
     ];
     return ListView(
@@ -859,4 +868,229 @@ class _VoiceInputSection extends StatelessWidget {
       );
     },
   );
+}
+
+/// The crash reporting and diagnostics section in Settings.
+class _DiagnosticsSection extends StatefulWidget {
+  const _DiagnosticsSection({this.store});
+
+  final UiPrefsStore? store;
+
+  @override
+  State<_DiagnosticsSection> createState() => _DiagnosticsSectionState();
+}
+
+class _DiagnosticsSectionState extends State<_DiagnosticsSection> {
+  late final UiPrefsStore _store;
+  late final TextEditingController _dsnController;
+  UiPrefs _prefs = const UiPrefs();
+  bool _loaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _store = widget.store ?? MemoryUiPrefsStore();
+    _dsnController = TextEditingController();
+    unawaited(_load());
+  }
+
+  @override
+  void didUpdateWidget(_DiagnosticsSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.store != oldWidget.store && widget.store != null) {
+      _store = widget.store!;
+      unawaited(_load());
+    }
+  }
+
+  Future<void> _load() async {
+    final prefs = await _store.load();
+    if (!mounted) return;
+    setState(() {
+      _prefs = prefs;
+      _dsnController.text = prefs.customSentryDsn ?? '';
+      _loaded = true;
+    });
+  }
+
+  @override
+  void dispose() {
+    _dsnController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _toggleReporting(bool enabled) async {
+    final updated = _prefs.copyWith(crashReportingEnabled: enabled);
+    setState(() => _prefs = updated);
+    await _store.update((p) => p.copyWith(crashReportingEnabled: enabled));
+    await CrashReportingService.reconfigure(updated);
+  }
+
+  Future<void> _saveDsn() async {
+    final text = _dsnController.text.trim();
+    final customDsn = text.isEmpty ? null : text;
+    final updated = _prefs.copyWith(customSentryDsn: customDsn);
+    setState(() => _prefs = updated);
+    await _store.update((p) => p.copyWith(customSentryDsn: customDsn));
+    await CrashReportingService.reconfigure(updated);
+  }
+
+  Future<void> _resetDsn() async {
+    _dsnController.clear();
+    final updated = _prefs.copyWith(customSentryDsn: null);
+    setState(() => _prefs = updated);
+    await _store.update((p) => p.copyWith(customSentryDsn: null));
+    await CrashReportingService.reconfigure(updated);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = context.l10n;
+    final nocturne = context.nocturne;
+    final status = CrashReportingConfig.resolveStatus(
+      enabled: _prefs.crashReportingEnabled,
+      customDsn: _prefs.customSentryDsn,
+    );
+
+    final (statusText, statusColor) = switch (status) {
+      CrashReportingStatus.active => (
+        l.settingsDiagnosticsStatusActive,
+        nocturne.accentInk,
+      ),
+      CrashReportingStatus.placeholder => (
+        l.settingsDiagnosticsStatusPlaceholder,
+        nocturne.muted(.7),
+      ),
+      CrashReportingStatus.disabled => (
+        l.settingsDiagnosticsStatusDisabled,
+        nocturne.muted(.5),
+      ),
+    };
+
+    final resolvedDsn = CrashReportingConfig.resolveDsn(
+      customDsn: _prefs.customSentryDsn,
+    );
+
+    return NocturneCard(
+      key: const Key('settings-diagnostics'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: 12,
+        children: [
+          Row(
+            key: const Key('settings-diagnostics-toggle'),
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  spacing: 4,
+                  children: [
+                    Text(l.settingsDiagnosticsCrashReporting),
+                    Text(
+                      l.settingsDiagnosticsCrashReportingDescription,
+                      style: TextStyle(fontSize: 12, color: nocturne.muted(.6)),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Semantics(
+                label: l.settingsDiagnosticsCrashReporting,
+                child: FiSwitch(
+                  key: const Key('settings-diagnostics-switch'),
+                  value: _prefs.crashReportingEnabled,
+                  onChanged: _loaded
+                      ? (on) => unawaited(_toggleReporting(on))
+                      : null,
+                ),
+              ),
+            ],
+          ),
+          const FadedRule(),
+          Row(
+            key: const Key('settings-diagnostics-status'),
+            children: [
+              Text(
+                l.settingsDiagnosticsStatus,
+                style: TextStyle(fontSize: 13, color: nocturne.muted(.8)),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  statusText,
+                  key: const Key('settings-diagnostics-status-text'),
+                  textAlign: TextAlign.end,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: statusColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          Row(
+            key: const Key('settings-diagnostics-endpoint'),
+            children: [
+              Text(
+                l.settingsDiagnosticsEndpoint,
+                style: TextStyle(fontSize: 13, color: nocturne.muted(.8)),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  resolvedDsn,
+                  key: const Key('settings-diagnostics-endpoint-text'),
+                  textAlign: TextAlign.end,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontFamily: Nocturne.monoFamily,
+                    color: nocturne.muted(.6),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            spacing: 8,
+            children: [
+              FiTextInput(
+                key: const Key('settings-diagnostics-dsn-input'),
+                controller: _dsnController,
+                label: l.settingsDiagnosticsDsn,
+                hint: l.settingsDiagnosticsDsnHint,
+                enabled: _prefs.crashReportingEnabled,
+              ),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                alignment: WrapAlignment.end,
+                children: [
+                  if (_prefs.customSentryDsn != null &&
+                      _prefs.customSentryDsn!.isNotEmpty)
+                    OutlinedButton(
+                      key: const Key('settings-diagnostics-dsn-reset'),
+                      onPressed: _prefs.crashReportingEnabled
+                          ? () => unawaited(_resetDsn())
+                          : null,
+                      child: Text(l.settingsDiagnosticsDsnReset),
+                    ),
+                  FilledButton(
+                    key: const Key('settings-diagnostics-dsn-save'),
+                    onPressed: _prefs.crashReportingEnabled
+                        ? () => unawaited(_saveDsn())
+                        : null,
+                    child: Text(l.settingsDiagnosticsDsnSave),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 }

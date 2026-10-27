@@ -2226,6 +2226,44 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsMicrophone => 'Microphone';
 
   @override
+  String get settingsDiagnostics => 'Diagnostics';
+
+  @override
+  String get settingsDiagnosticsCrashReporting => 'Automated error reporting';
+
+  @override
+  String get settingsDiagnosticsCrashReportingDescription =>
+      'Sends crash and error diagnostics to Bugsink/Sentry with zero personal data or secrets.';
+
+  @override
+  String get settingsDiagnosticsStatus => 'Status';
+
+  @override
+  String get settingsDiagnosticsStatusActive => 'Connected';
+
+  @override
+  String get settingsDiagnosticsStatusPlaceholder => 'Placeholder / Standby';
+
+  @override
+  String get settingsDiagnosticsStatusDisabled => 'Disabled';
+
+  @override
+  String get settingsDiagnosticsDsn => 'Server DSN';
+
+  @override
+  String get settingsDiagnosticsDsnHint =>
+      'https://token@bugsink.example.com/1';
+
+  @override
+  String get settingsDiagnosticsDsnSave => 'Save';
+
+  @override
+  String get settingsDiagnosticsDsnReset => 'Reset to default';
+
+  @override
+  String get settingsDiagnosticsEndpoint => 'Endpoint';
+
+  @override
   String get settingsAbout => 'About';
 
   @override

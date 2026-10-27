@@ -848,6 +848,7 @@ class _CollectionShellState extends State<CollectionShell> {
         SettingsPage(
           buildInfo: devices.buildInfo,
           localAddresses: devices.localAddresses,
+          uiPrefs: widget.uiPrefs,
         ),
       ],
     );

@@ -2958,6 +2958,54 @@
   "@settingsMicrophone": {
     "description": "Section label"
   },
+  "settingsDiagnostics": "Diagnostics",
+  "@settingsDiagnostics": {
+    "description": "Diagnostics section label in settings"
+  },
+  "settingsDiagnosticsCrashReporting": "Automated error reporting",
+  "@settingsDiagnosticsCrashReporting": {
+    "description": "Toggle title for automated crash and error reporting"
+  },
+  "settingsDiagnosticsCrashReportingDescription": "Sends crash and error diagnostics to Bugsink/Sentry with zero personal data or secrets.",
+  "@settingsDiagnosticsCrashReportingDescription": {
+    "description": "Description of the automated crash reporting feature"
+  },
+  "settingsDiagnosticsStatus": "Status",
+  "@settingsDiagnosticsStatus": {
+    "description": "Diagnostics status label"
+  },
+  "settingsDiagnosticsStatusActive": "Connected",
+  "@settingsDiagnosticsStatusActive": {
+    "description": "Status when crash reporting is connected to a live server"
+  },
+  "settingsDiagnosticsStatusPlaceholder": "Placeholder / Standby",
+  "@settingsDiagnosticsStatusPlaceholder": {
+    "description": "Status when crash reporting is pointing to the placeholder endpoint"
+  },
+  "settingsDiagnosticsStatusDisabled": "Disabled",
+  "@settingsDiagnosticsStatusDisabled": {
+    "description": "Status when crash reporting is disabled"
+  },
+  "settingsDiagnosticsDsn": "Server DSN",
+  "@settingsDiagnosticsDsn": {
+    "description": "Custom Sentry/Bugsink DSN input label"
+  },
+  "settingsDiagnosticsDsnHint": "https://token@bugsink.example.com/1",
+  "@settingsDiagnosticsDsnHint": {
+    "description": "Placeholder hint for custom DSN"
+  },
+  "settingsDiagnosticsDsnSave": "Save",
+  "@settingsDiagnosticsDsnSave": {
+    "description": "Save custom DSN button"
+  },
+  "settingsDiagnosticsDsnReset": "Reset to default",
+  "@settingsDiagnosticsDsnReset": {
+    "description": "Reset custom DSN button"
+  },
+  "settingsDiagnosticsEndpoint": "Endpoint",
+  "@settingsDiagnosticsEndpoint": {
+    "description": "Current endpoint label"
+  },
   "settingsAbout": "About",
   "@settingsAbout": {
     "description": "Section label"
