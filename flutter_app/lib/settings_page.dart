@@ -4,6 +4,7 @@ import 'package:fi/build_label.dart';
 import 'package:fi/crash_reporting.dart';
 import 'package:fi/l10n/l10n.dart';
 import 'package:fi/l10n/language.dart';
+import 'package:fi/location/tile_cache.dart';
 import 'package:fi/platform_capabilities.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/theme/fi_icons.dart';
@@ -127,6 +128,10 @@ class _SettingsPageState extends State<SettingsPage>
         child: _DiagnosticsSection(store: widget.uiPrefs),
       ),
       (label: context.l10n.settingsAbout, child: _about()),
+      (
+        label: context.l10n.settingsMaps,
+        child: _MapsSection(store: widget.uiPrefs),
+      ),
     ];
     return ListView(
       key: const Key('settings-page'),
@@ -1084,6 +1089,145 @@ class _DiagnosticsSectionState extends State<_DiagnosticsSection> {
                         ? () => unawaited(_saveDsn())
                         : null,
                     child: Text(l.settingsDiagnosticsDsnSave),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MapsSection extends StatefulWidget {
+  const _MapsSection({this.store});
+
+  final UiPrefsStore? store;
+
+  @override
+  State<_MapsSection> createState() => _MapsSectionState();
+}
+
+class _MapsSectionState extends State<_MapsSection> {
+  late UiPrefsStore _store;
+  late final TextEditingController _keyController;
+  UiPrefs _prefs = const UiPrefs();
+
+  @override
+  void initState() {
+    super.initState();
+    _store = widget.store ?? MemoryUiPrefsStore();
+    _keyController = TextEditingController();
+    unawaited(_load());
+  }
+
+  @override
+  void didUpdateWidget(_MapsSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.store != oldWidget.store && widget.store != null) {
+      _store = widget.store!;
+      unawaited(_load());
+    }
+  }
+
+  Future<void> _load() async {
+    final prefs = await _store.load();
+    if (!mounted) return;
+    MapTileCache.setCartoApiKey(prefs.cartoApiKey);
+    setState(() {
+      _prefs = prefs;
+      _keyController.text = prefs.cartoApiKey ?? '';
+    });
+  }
+
+  @override
+  void dispose() {
+    _keyController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _saveKey() async {
+    final normalized = MapTileCache.normalizeCartoKey(_keyController.text);
+    _keyController.text = normalized ?? '';
+    final updated = _prefs.copyWith(cartoApiKey: normalized);
+    setState(() => _prefs = updated);
+    MapTileCache.setCartoApiKey(normalized);
+    await _store.update((p) => p.copyWith(cartoApiKey: normalized));
+  }
+
+  Future<void> _resetKey() async {
+    _keyController.clear();
+    final updated = _prefs.copyWith(cartoApiKey: null);
+    setState(() => _prefs = updated);
+    MapTileCache.setCartoApiKey(null);
+    await _store.update((p) => p.copyWith(cartoApiKey: null));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = context.l10n;
+    final nocturne = context.nocturne;
+    final hasKey =
+        _prefs.cartoApiKey != null && _prefs.cartoApiKey!.trim().isNotEmpty;
+
+    return NocturneCard(
+      key: const Key('settings-maps'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: 12,
+        children: [
+          Row(
+            key: const Key('settings-maps-source'),
+            children: [
+              Text(
+                l.settingsMapsTileSource,
+                style: TextStyle(fontSize: 13, color: nocturne.muted(.8)),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  hasKey ? l.settingsMapsSourceCarto : l.settingsMapsSourceOsm,
+                  key: const Key('settings-maps-source-text'),
+                  textAlign: TextAlign.end,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: hasKey ? nocturne.accentInk : nocturne.muted(.7),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          Text(
+            l.settingsMapsCartoApiKeyDescription,
+            style: TextStyle(fontSize: 12, color: nocturne.muted(.6)),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            spacing: 8,
+            children: [
+              FiTextInput(
+                key: const Key('settings-maps-carto-key-input'),
+                controller: _keyController,
+                label: l.settingsMapsCartoApiKey,
+                hint: l.settingsMapsCartoApiKeyHint,
+              ),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                alignment: WrapAlignment.end,
+                children: [
+                  if (hasKey)
+                    OutlinedButton(
+                      key: const Key('settings-maps-carto-key-reset'),
+                      onPressed: () => unawaited(_resetKey()),
+                      child: Text(l.settingsMapsCartoApiKeyReset),
+                    ),
+                  FilledButton(
+                    key: const Key('settings-maps-carto-key-save'),
+                    onPressed: () => unawaited(_saveKey()),
+                    child: Text(l.settingsMapsCartoApiKeySave),
                   ),
                 ],
               ),

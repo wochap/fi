@@ -11,6 +11,7 @@ import 'package:fi/help_button.dart';
 import 'package:fi/help_copy.dart';
 import 'package:fi/l10n/l10n.dart';
 import 'package:fi/l10n/language.dart';
+import 'package:fi/location/tile_cache.dart';
 import 'package:intl/intl.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/collections_page.dart';
@@ -92,6 +93,11 @@ class _CollectionAppState extends State<CollectionApp>
     super.initState();
     unawaited(_language.load(_uiPrefs));
     unawaited(_theme.load(_uiPrefs));
+    unawaited(
+      _uiPrefs.load().then((prefs) {
+        MapTileCache.setCartoApiKey(prefs.cartoApiKey);
+      }),
+    );
     WidgetsBinding.instance.addObserver(this);
     controller = BootstrapController(
       bridge: widget.bridge,

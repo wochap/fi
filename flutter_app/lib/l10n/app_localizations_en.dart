@@ -4209,7 +4209,39 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get locationOsmAttribution => '© OpenStreetMap · © CARTO';
+  String get locationOsmAttribution => '© OpenStreetMap';
+
+  @override
+  String get locationCartoAttribution => '© OpenStreetMap · © CARTO';
+
+  @override
+  String get settingsMaps => 'Maps';
+
+  @override
+  String get settingsMapsTileSource => 'Tile provider';
+
+  @override
+  String get settingsMapsSourceOsm => 'OpenStreetMap (standard 1x)';
+
+  @override
+  String get settingsMapsSourceCarto => 'CARTO Retina (@2x)';
+
+  @override
+  String get settingsMapsCartoApiKey => 'CARTO Basemaps API key';
+
+  @override
+  String get settingsMapsCartoApiKeyHint =>
+      'Leave empty for standard OpenStreetMap tiles';
+
+  @override
+  String get settingsMapsCartoApiKeyDescription =>
+      'Add a free key from carto.com/basemaps/apikey to load sharp @2x retina map tiles (and dark-mode tiles). When empty, Fi uses standard OpenStreetMap tiles.';
+
+  @override
+  String get settingsMapsCartoApiKeySave => 'Save key';
+
+  @override
+  String get settingsMapsCartoApiKeyReset => 'Use OpenStreetMap';
 
   @override
   String get locationTypeCoordinatesInstead => 'Type coordinates instead';

@@ -313,7 +313,31 @@ void main() {
           .where((e) => e is File && e.path.endsWith('.png'))
           .toList();
       expect(files.length, 1);
-      expect(files.single.path, endsWith('voyager_2x_15_2_2.png'));
+      expect(files.single.path, endsWith('osm_15_2_2.png'));
+    });
+
+    test('TileCoord switches between OpenStreetMap and CARTO @2x with API key',
+        () {
+      const osmCoord = TileCoord(15, 100, 200);
+      expect(osmCoord.cacheKey, 'osm_15_100_200');
+      expect(
+        osmCoord.uriFor().toString(),
+        'https://tile.openstreetmap.org/15/100/200.png',
+      );
+
+      const cartoLight = TileCoord(15, 100, 200, useCarto: true, dark: false);
+      expect(cartoLight.cacheKey, 'carto_voyager_2x_15_100_200');
+      expect(
+        cartoLight.uriFor(cartoApiKey: '?key=my_secret_key').toString(),
+        'https://basemaps.cartocdn.com/rastertiles/voyager/15/100/200@2x.png?key=my_secret_key',
+      );
+
+      const cartoDark = TileCoord(15, 100, 200, useCarto: true, dark: true);
+      expect(cartoDark.cacheKey, 'carto_dark_2x_15_100_200');
+      expect(
+        cartoDark.uriFor(cartoApiKey: 'my_secret_key').toString(),
+        'https://basemaps.cartocdn.com/dark_all/15/100/200@2x.png?key=my_secret_key',
+      );
     });
   });
 }

@@ -79,6 +79,7 @@ final class UiPrefs {
     this.views = const {},
     this.crashReportingEnabled = true,
     this.customSentryDsn,
+    this.cartoApiKey,
   });
 
   final CollectionSort collectionSort;
@@ -104,6 +105,9 @@ final class UiPrefs {
   /// Optional custom Sentry/Bugsink DSN endpoint.
   final String? customSentryDsn;
 
+  /// Optional CARTO Basemaps API key for @2x retina tiles; falls back to standard OSM tiles when null.
+  final String? cartoApiKey;
+
   UiPrefs copyWith({
     CollectionSort? collectionSort,
     bool? voiceTipDismissed,
@@ -113,6 +117,7 @@ final class UiPrefs {
     Map<String, ViewPrefs>? views,
     bool? crashReportingEnabled,
     Object? customSentryDsn = _unspecified,
+    Object? cartoApiKey = _unspecified,
   }) => UiPrefs(
     collectionSort: collectionSort ?? this.collectionSort,
     voiceTipDismissed: voiceTipDismissed ?? this.voiceTipDismissed,
@@ -124,6 +129,9 @@ final class UiPrefs {
     customSentryDsn: identical(customSentryDsn, _unspecified)
         ? this.customSentryDsn
         : (customSentryDsn as String?),
+    cartoApiKey: identical(cartoApiKey, _unspecified)
+        ? this.cartoApiKey
+        : (cartoApiKey as String?),
   );
 
   /// A copy with [collectionId]'s view state replaced, or removed when [entry] is null.
@@ -151,6 +159,7 @@ final class UiPrefs {
     'app_theme': appTheme.code,
     'crash_reporting_enabled': crashReportingEnabled,
     if (customSentryDsn != null) 'custom_sentry_dsn': customSentryDsn,
+    if (cartoApiKey != null) 'carto_api_key': cartoApiKey,
     'views': {
       for (final MapEntry(:key, :value) in views.entries) key: value.toJson(),
     },
@@ -164,6 +173,7 @@ final class UiPrefs {
         .firstOrNull;
     final crashReporting = json['crash_reporting_enabled'];
     final customDsn = json['custom_sentry_dsn'];
+    final cartoKey = json['carto_api_key'];
     return UiPrefs(
       collectionSort: sort ?? CollectionSort.lastEdited,
       voiceTipDismissed: json['voice_tip_dismissed'] == true,
@@ -173,6 +183,9 @@ final class UiPrefs {
       crashReportingEnabled: crashReporting is bool ? crashReporting : true,
       customSentryDsn: customDsn is String && customDsn.isNotEmpty
           ? customDsn
+          : null,
+      cartoApiKey: cartoKey is String && cartoKey.trim().isNotEmpty
+          ? cartoKey.trim()
           : null,
       views: _readViews(json['views']),
     );

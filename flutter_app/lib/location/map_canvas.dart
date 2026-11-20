@@ -181,203 +181,226 @@ class _OsmMapCanvasState extends State<OsmMapCanvas> {
     final colors = context.nocturne;
     final l10n = AppLocalizations.of(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cache = _cache(context);
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final width = constraints.maxWidth.isFinite ? constraints.maxWidth : 300.0;
-        final height = constraints.maxHeight.isFinite ? constraints.maxHeight : 132.0;
-        final intZoom = _zoom.floor().clamp(0, 19);
-        final scaleFactor = math.pow(2.0, _zoom - intZoom).toDouble();
-        final tileRenderSize = _tileSize * scaleFactor;
-        final centerPx = latLngToWorldPixel(_lat, _lng, _zoom);
-        final topLeftPx = Offset(centerPx.dx - width / 2, centerPx.dy - height / 2);
+    return ValueListenableBuilder<String?>(
+      valueListenable: MapTileCache.configuredCartoApiKey,
+      builder: (context, _, _) {
+        final useCarto = cache.hasCartoApiKey;
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final width =
+                constraints.maxWidth.isFinite ? constraints.maxWidth : 300.0;
+            final height =
+                constraints.maxHeight.isFinite ? constraints.maxHeight : 132.0;
+            final intZoom = _zoom.floor().clamp(0, 19);
+            final scaleFactor = math.pow(2.0, _zoom - intZoom).toDouble();
+            final tileRenderSize = _tileSize * scaleFactor;
+            final centerPx = latLngToWorldPixel(_lat, _lng, _zoom);
+            final topLeftPx =
+                Offset(centerPx.dx - width / 2, centerPx.dy - height / 2);
 
-        final maxTileIndex = (1 << intZoom);
-        final minTx = (topLeftPx.dx / tileRenderSize).floor();
-        final maxTx = ((topLeftPx.dx + width) / tileRenderSize).floor();
-        final minTy = (topLeftPx.dy / tileRenderSize).floor();
-        final maxTy = ((topLeftPx.dy + height) / tileRenderSize).floor();
+            final maxTileIndex = (1 << intZoom);
+            final minTx = (topLeftPx.dx / tileRenderSize).floor();
+            final maxTx = ((topLeftPx.dx + width) / tileRenderSize).floor();
+            final minTy = (topLeftPx.dy / tileRenderSize).floor();
+            final maxTy = ((topLeftPx.dy + height) / tileRenderSize).floor();
 
-        final visible = <TileCoord>[];
-        final tileWidgets = <Widget>[];
+            final visible = <TileCoord>[];
+            final tileWidgets = <Widget>[];
 
-        for (var ty = minTy; ty <= maxTy; ty++) {
-          if (ty < 0 || ty >= maxTileIndex) continue;
-          for (var tx = minTx; tx <= maxTx; tx++) {
-            final wrappedTx = ((tx % maxTileIndex) + maxTileIndex) % maxTileIndex;
-            final coord = TileCoord(intZoom, wrappedTx, ty, dark: isDark);
-            visible.add(coord);
-            final left = tx * tileRenderSize - topLeftPx.dx;
-            final top = ty * tileRenderSize - topLeftPx.dy;
-            final bytes = _loadedTiles[coord] ?? _cache(context).peekMemory(coord);
-            if (bytes != null) {
-              _loadedTiles[coord] = bytes;
-              _anyTileLoaded = true;
-              tileWidgets.add(
-                Positioned(
-                  left: left,
-                  top: top,
-                  width: tileRenderSize + 0.5,
-                  height: tileRenderSize + 0.5,
-                  child: Image.memory(
-                    bytes,
-                    fit: BoxFit.fill,
-                    gaplessPlayback: true,
-                    filterQuality: FilterQuality.medium,
-                  ),
-                ),
-              );
+            for (var ty = minTy; ty <= maxTy; ty++) {
+              if (ty < 0 || ty >= maxTileIndex) continue;
+              for (var tx = minTx; tx <= maxTx; tx++) {
+                final wrappedTx =
+                    ((tx % maxTileIndex) + maxTileIndex) % maxTileIndex;
+                final coord = TileCoord(
+                  intZoom,
+                  wrappedTx,
+                  ty,
+                  useCarto: useCarto,
+                  dark: useCarto && isDark,
+                );
+                visible.add(coord);
+                final left = tx * tileRenderSize - topLeftPx.dx;
+                final top = ty * tileRenderSize - topLeftPx.dy;
+                final bytes = _loadedTiles[coord] ?? cache.peekMemory(coord);
+                if (bytes != null) {
+                  _loadedTiles[coord] = bytes;
+                  _anyTileLoaded = true;
+                  tileWidgets.add(
+                    Positioned(
+                      left: left,
+                      top: top,
+                      width: tileRenderSize,
+                      height: tileRenderSize,
+                      child: Image.memory(
+                        bytes,
+                        fit: BoxFit.fill,
+                        gaplessPlayback: true,
+                        filterQuality: FilterQuality.medium,
+                      ),
+                    ),
+                  );
+                }
+              }
             }
-          }
-        }
 
-        _ensureTiles(context, visible);
+            _ensureTiles(context, visible);
 
-        if (!_anyTileLoaded && _anyOfflineOrBlocked && widget.offlinePlaceholder != null) {
-          return widget.offlinePlaceholder!;
-        }
+            if (!_anyTileLoaded &&
+                _anyOfflineOrBlocked &&
+                widget.offlinePlaceholder != null) {
+              return widget.offlinePlaceholder!;
+            }
 
-        Offset? userDotOffset;
-        if (widget.userLatitude != null && widget.userLongitude != null) {
-          final userPx = latLngToWorldPixel(
-            widget.userLatitude!,
-            widget.userLongitude!,
-            _zoom,
-          );
-          final pos = userPx - topLeftPx;
-          if (pos.dx >= -16 &&
-              pos.dx <= width + 16 &&
-              pos.dy >= -16 &&
-              pos.dy <= height + 16) {
-            userDotOffset = pos;
-          }
-        }
+            Offset? userDotOffset;
+            if (widget.userLatitude != null && widget.userLongitude != null) {
+              final userPx = latLngToWorldPixel(
+                widget.userLatitude!,
+                widget.userLongitude!,
+                _zoom,
+              );
+              final pos = userPx - topLeftPx;
+              if (pos.dx >= -16 &&
+                  pos.dx <= width + 16 &&
+                  pos.dy >= -16 &&
+                  pos.dy <= height + 16) {
+                userDotOffset = pos;
+              }
+            }
 
-        Widget mapStack = ClipRect(
-          child: ColoredBox(
-            color: colors.neutralFill,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                ...tileWidgets,
-                if (userDotOffset != null)
-                  Positioned(
-                    left: userDotOffset.dx - 10,
-                    top: userDotOffset.dy - 10,
-                    child: Semantics(
-                      label: 'You are here',
-                      child: Container(
-                        width: 20,
-                        height: 20,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: colors.accent.withValues(alpha: 0.24),
-                        ),
-                        alignment: Alignment.center,
-                        child: Container(
-                          width: 10,
-                          height: 10,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: colors.accent,
-                            border: Border.all(
-                              color: Colors.white,
-                              width: 2,
+            final attributionText = useCarto
+                ? (l10n?.locationCartoAttribution ??
+                    '© OpenStreetMap · © CARTO')
+                : (l10n?.locationOsmAttribution ?? '© OpenStreetMap');
+
+            Widget mapStack = ClipRect(
+              child: ColoredBox(
+                color: colors.neutralFill,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    ...tileWidgets,
+                    if (userDotOffset != null)
+                      Positioned(
+                        left: userDotOffset.dx - 10,
+                        top: userDotOffset.dy - 10,
+                        child: Semantics(
+                          label: 'You are here',
+                          child: Container(
+                            width: 20,
+                            height: 20,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: colors.accent.withValues(alpha: 0.24),
+                            ),
+                            alignment: Alignment.center,
+                            child: Container(
+                              width: 10,
+                              height: 10,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: colors.accent,
+                                border: Border.all(
+                                  color: Colors.white,
+                                  width: 2,
+                                ),
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                  ),
-                if (widget.showCenterPin)
-                  Center(
-                    child: Transform.translate(
-                      offset: Offset(0, widget.compactPin ? -7 : -12),
-                      child: Icon(
-                        PhosphorIconsFill.mapPin,
-                        size: widget.compactPin ? 20 : 30,
-                        color: colors.accent,
-                        shadows: const [
-                          Shadow(
-                            color: Color(0x55000000),
-                            blurRadius: 4,
-                            offset: Offset(0, 2),
+                    if (widget.showCenterPin)
+                      Center(
+                        child: Transform.translate(
+                          offset: Offset(0, widget.compactPin ? -7 : -12),
+                          child: Icon(
+                            PhosphorIconsFill.mapPin,
+                            size: widget.compactPin ? 20 : 30,
+                            color: colors.accent,
+                            shadows: const [
+                              Shadow(
+                                color: Color(0x55000000),
+                                blurRadius: 4,
+                                offset: Offset(0, 2),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                    ),
-                  ),
-                if (widget.showAttribution)
-                  Positioned(
-                    left: 6,
-                    bottom: 6,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: colors.surface.withValues(alpha: 0.85),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        l10n?.locationOsmAttribution ??
-                            '© OpenStreetMap · © CARTO',
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: colors.muted(.6),
                         ),
                       ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        );
+                    if (widget.showAttribution)
+                      Positioned(
+                        left: 6,
+                        bottom: 6,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: colors.surface.withValues(alpha: 0.85),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            attributionText,
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: colors.muted(.6),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            );
 
-        if (widget.interactive) {
-          mapStack = Listener(
-            onPointerSignal: (event) {
-              if (event is PointerScrollEvent) {
-                final step = event.scrollDelta.dy < 0 ? 0.8 : -0.8;
-                _zoomBy(step);
-              }
-            },
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onDoubleTap: () => _zoomBy(1.0),
-              onScaleStart: (details) {
-                _lastFocalPoint = details.localFocalPoint;
-                _startZoom = _zoom;
-              },
-              onScaleUpdate: (details) {
-                final prev = _lastFocalPoint;
-                _lastFocalPoint = details.localFocalPoint;
-                if (prev != null) {
-                  _panBy(details.localFocalPoint - prev);
-                }
-                if (_startZoom != null && details.scale != 1.0) {
-                  final nextZoom =
-                      (_startZoom! + math.log(details.scale) / math.ln2)
-                          .clamp(widget.minZoom, widget.maxZoom);
-                  if ((nextZoom - _zoom).abs() > 0.01) {
-                    setState(() {
-                      _zoom = nextZoom;
-                    });
+            if (widget.interactive) {
+              mapStack = Listener(
+                onPointerSignal: (event) {
+                  if (event is PointerScrollEvent) {
+                    final step = event.scrollDelta.dy < 0 ? 0.8 : -0.8;
+                    _zoomBy(step);
                   }
-                }
-              },
-              onScaleEnd: (_) {
-                _lastFocalPoint = null;
-                _startZoom = null;
-                widget.onMoveEnd?.call(_lat, _lng);
-              },
-              child: mapStack,
-            ),
-          );
-        }
+                },
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onDoubleTap: () => _zoomBy(1.0),
+                  onScaleStart: (details) {
+                    _lastFocalPoint = details.localFocalPoint;
+                    _startZoom = _zoom;
+                  },
+                  onScaleUpdate: (details) {
+                    final prev = _lastFocalPoint;
+                    _lastFocalPoint = details.localFocalPoint;
+                    if (prev != null) {
+                      _panBy(details.localFocalPoint - prev);
+                    }
+                    if (_startZoom != null && details.scale != 1.0) {
+                      final nextZoom =
+                          (_startZoom! + math.log(details.scale) / math.ln2)
+                              .clamp(widget.minZoom, widget.maxZoom);
+                      if ((nextZoom - _zoom).abs() > 0.01) {
+                        setState(() {
+                          _zoom = nextZoom;
+                        });
+                      }
+                    }
+                  },
+                  onScaleEnd: (_) {
+                    _lastFocalPoint = null;
+                    _startZoom = null;
+                    widget.onMoveEnd?.call(_lat, _lng);
+                  },
+                  child: mapStack,
+                ),
+              );
+            }
 
-        return mapStack;
+            return mapStack;
+          },
+        );
       },
     );
   }

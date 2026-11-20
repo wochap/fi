@@ -5700,9 +5700,49 @@
       }
     }
   },
-  "locationOsmAttribution": "© OpenStreetMap · © CARTO",
+  "locationOsmAttribution": "© OpenStreetMap",
   "@locationOsmAttribution": {
     "description": "Map tile attribution badge."
+  },
+  "locationCartoAttribution": "© OpenStreetMap · © CARTO",
+  "@locationCartoAttribution": {
+    "description": "Map tile attribution badge when using CARTO retina tiles."
+  },
+  "settingsMaps": "Maps",
+  "@settingsMaps": {
+    "description": "Settings section heading for map tile configuration."
+  },
+  "settingsMapsTileSource": "Tile provider",
+  "@settingsMapsTileSource": {
+    "description": "Row label for active map tile provider."
+  },
+  "settingsMapsSourceOsm": "OpenStreetMap (standard 1x)",
+  "@settingsMapsSourceOsm": {
+    "description": "Status text when using default OpenStreetMap tiles."
+  },
+  "settingsMapsSourceCarto": "CARTO Retina (@2x)",
+  "@settingsMapsSourceCarto": {
+    "description": "Status text when a CARTO API key is configured."
+  },
+  "settingsMapsCartoApiKey": "CARTO Basemaps API key",
+  "@settingsMapsCartoApiKey": {
+    "description": "Input label for optional CARTO Basemaps API key."
+  },
+  "settingsMapsCartoApiKeyHint": "Leave empty for standard OpenStreetMap tiles",
+  "@settingsMapsCartoApiKeyHint": {
+    "description": "Input hint for CARTO Basemaps API key."
+  },
+  "settingsMapsCartoApiKeyDescription": "Add a free key from carto.com/basemaps/apikey to load sharp @2x retina map tiles (and dark-mode tiles). When empty, Fi uses standard OpenStreetMap tiles.",
+  "@settingsMapsCartoApiKeyDescription": {
+    "description": "Helper description in Settings Maps card."
+  },
+  "settingsMapsCartoApiKeySave": "Save key",
+  "@settingsMapsCartoApiKeySave": {
+    "description": "Button to save CARTO API key."
+  },
+  "settingsMapsCartoApiKeyReset": "Use OpenStreetMap",
+  "@settingsMapsCartoApiKeyReset": {
+    "description": "Button to clear CARTO API key and revert to OpenStreetMap."
   },
   "locationTypeCoordinatesInstead": "Type coordinates instead",
   "@locationTypeCoordinatesInstead": {

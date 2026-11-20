@@ -4,28 +4,47 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:fi/voice/services.dart' show NetworkInfo, NetworkKind, PlatformNetworkInfo;
+import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
 const String fiMapUserAgent = 'Fi/0.1.0 (https://github.com/wochap/fi)';
 
-/// Key identifying one 512×512 (`@2x` retina) Web Mercator raster tile.
+/// Key identifying one Web Mercator raster tile.
+/// When [useCarto] is `true`, fetches 512×512 (`@2x` retina) CARTO tiles (Voyager for light mode,
+/// Dark Matter for dark mode); otherwise fetches standard 256×256 OpenStreetMap tiles.
 class TileCoord {
-  const TileCoord(this.z, this.x, this.y, {this.dark = false});
+  const TileCoord(
+    this.z,
+    this.x,
+    this.y, {
+    this.useCarto = false,
+    this.dark = false,
+  });
 
   final int z;
   final int x;
   final int y;
+  final bool useCarto;
   final bool dark;
 
-  String get _styleSlug => dark ? 'dark_2x' : 'voyager_2x';
+  String get cacheKey {
+    if (!useCarto) return 'osm_${z}_${x}_$y';
+    final style = dark ? 'carto_dark_2x' : 'carto_voyager_2x';
+    return '${style}_${z}_${x}_$y';
+  }
 
-  String get cacheKey => '${_styleSlug}_${z}_${x}_$y';
+  Uri get osmUri => uriFor();
 
-  Uri get osmUri => dark
-      ? Uri.parse('https://basemaps.cartocdn.com/dark_all/$z/$x/$y@2x.png')
-      : Uri.parse(
-          'https://basemaps.cartocdn.com/rastertiles/voyager/$z/$x/$y@2x.png',
-        );
+  Uri uriFor({String? cartoApiKey}) {
+    final key = MapTileCache.normalizeCartoKey(cartoApiKey);
+    if (useCarto && key != null) {
+      final path = dark
+          ? '/dark_all/$z/$x/$y@2x.png'
+          : '/rastertiles/voyager/$z/$x/$y@2x.png';
+      return Uri.https('basemaps.cartocdn.com', path, {'key': key});
+    }
+    return Uri.parse('https://tile.openstreetmap.org/$z/$x/$y.png');
+  }
 
   @override
   bool operator ==(Object other) =>
@@ -33,10 +52,11 @@ class TileCoord {
       z == other.z &&
       x == other.x &&
       y == other.y &&
+      useCarto == other.useCarto &&
       dark == other.dark;
 
   @override
-  int get hashCode => Object.hash(z, x, y, dark);
+  int get hashCode => Object.hash(z, x, y, useCarto, dark);
 }
 
 enum TileFetchOutcomeKind {
@@ -69,19 +89,47 @@ class MapTileCache {
     NetworkInfo? networkInfo,
     Future<Directory?> Function()? cacheDirectoryProvider,
     TileDownloader? downloader,
+    String? cartoApiKey,
     this.maxDiskBytes = 50 * 1024 * 1024, // 50 MB
     this.maxMemoryEntries = 128,
     this.maxConcurrentDownloads = 4,
   })  : _networkInfo = networkInfo ?? const PlatformNetworkInfo(),
         _cacheDirectoryProvider = cacheDirectoryProvider ?? _defaultCacheDir,
-        _downloader = downloader ?? _defaultDownload;
+        _downloader = downloader ?? _defaultDownload,
+        _cartoApiKeyOverride = normalizeCartoKey(cartoApiKey);
+
+  /// Device-wide CARTO Basemaps API key loaded from `UiPrefs`. When non-null, map canvases
+  /// fetch `@2x` CARTO tiles; when null, they fall back to standard OpenStreetMap tiles.
+  static final ValueNotifier<String?> configuredCartoApiKey =
+      ValueNotifier<String?>(null);
+
+  static String? normalizeCartoKey(String? raw) {
+    if (raw == null) return null;
+    var trimmed = raw.trim();
+    if (trimmed.toLowerCase().startsWith('?key=')) {
+      trimmed = trimmed.substring(5).trim();
+    } else if (trimmed.toLowerCase().startsWith('key=')) {
+      trimmed = trimmed.substring(4).trim();
+    }
+    return trimmed.isEmpty ? null : trimmed;
+  }
+
+  static void setCartoApiKey(String? raw) {
+    configuredCartoApiKey.value = normalizeCartoKey(raw);
+  }
 
   final NetworkInfo _networkInfo;
   final Future<Directory?> Function() _cacheDirectoryProvider;
   final TileDownloader _downloader;
+  final String? _cartoApiKeyOverride;
   final int maxDiskBytes;
   final int maxMemoryEntries;
   final int maxConcurrentDownloads;
+
+  String? get cartoApiKey =>
+      _cartoApiKeyOverride ?? configuredCartoApiKey.value;
+
+  bool get hasCartoApiKey => cartoApiKey != null;
 
   final LinkedHashMap<String, Uint8List> _memory = LinkedHashMap();
   final Map<String, Future<TileFetchResult>> _inflight = {};
@@ -224,7 +272,7 @@ class MapTileCache {
 
     await _acquireSlot();
     try {
-      final bytes = await _downloader(coord.osmUri);
+      final bytes = await _downloader(coord.uriFor(cartoApiKey: cartoApiKey));
       if (bytes == null || bytes.isEmpty) {
         return const TileFetchResult(kind: TileFetchOutcomeKind.failed);
       }

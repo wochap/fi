@@ -6605,8 +6605,68 @@ abstract class AppLocalizations {
   /// Map tile attribution badge.
   ///
   /// In en, this message translates to:
-  /// **'© OpenStreetMap · © CARTO'**
+  /// **'© OpenStreetMap'**
   String get locationOsmAttribution;
+
+  /// Map tile attribution badge when using CARTO retina tiles.
+  ///
+  /// In en, this message translates to:
+  /// **'© OpenStreetMap · © CARTO'**
+  String get locationCartoAttribution;
+
+  /// Settings section heading for map tile configuration.
+  ///
+  /// In en, this message translates to:
+  /// **'Maps'**
+  String get settingsMaps;
+
+  /// Row label for active map tile provider.
+  ///
+  /// In en, this message translates to:
+  /// **'Tile provider'**
+  String get settingsMapsTileSource;
+
+  /// Status text when using default OpenStreetMap tiles.
+  ///
+  /// In en, this message translates to:
+  /// **'OpenStreetMap (standard 1x)'**
+  String get settingsMapsSourceOsm;
+
+  /// Status text when a CARTO API key is configured.
+  ///
+  /// In en, this message translates to:
+  /// **'CARTO Retina (@2x)'**
+  String get settingsMapsSourceCarto;
+
+  /// Input label for optional CARTO Basemaps API key.
+  ///
+  /// In en, this message translates to:
+  /// **'CARTO Basemaps API key'**
+  String get settingsMapsCartoApiKey;
+
+  /// Input hint for CARTO Basemaps API key.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave empty for standard OpenStreetMap tiles'**
+  String get settingsMapsCartoApiKeyHint;
+
+  /// Helper description in Settings Maps card.
+  ///
+  /// In en, this message translates to:
+  /// **'Add a free key from carto.com/basemaps/apikey to load sharp @2x retina map tiles (and dark-mode tiles). When empty, Fi uses standard OpenStreetMap tiles.'**
+  String get settingsMapsCartoApiKeyDescription;
+
+  /// Button to save CARTO API key.
+  ///
+  /// In en, this message translates to:
+  /// **'Save key'**
+  String get settingsMapsCartoApiKeySave;
+
+  /// Button to clear CARTO API key and revert to OpenStreetMap.
+  ///
+  /// In en, this message translates to:
+  /// **'Use OpenStreetMap'**
+  String get settingsMapsCartoApiKeyReset;
 
   /// Row in place search to switch to manual coordinate entry.
   ///

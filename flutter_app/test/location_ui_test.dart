@@ -4,13 +4,17 @@ import 'dart:convert';
 import 'package:fi/collections_page.dart';
 import 'package:fi/controllers.dart';
 import 'package:fi/l10n/l10n.dart';
+import 'package:fi/l10n/language.dart';
 import 'package:fi/location/format.dart';
 import 'package:fi/location/location_field.dart';
 import 'package:fi/location/map_picker.dart';
 import 'package:fi/location/services.dart';
 import 'package:fi/location/tile_cache.dart';
 import 'package:fi/location/type_coordinates_sheet.dart';
+import 'package:fi/settings_page.dart';
 import 'package:fi/src/rust/api/models.dart';
+import 'package:fi/theme/app_theme.dart';
+import 'package:fi/ui_prefs.dart';
 import 'package:fi/voice/services.dart' show NetworkInfo, NetworkKind;
 import 'package:fi/widgets/query_builder.dart';
 import 'package:flutter/gestures.dart';
@@ -753,6 +757,51 @@ void main() {
       final expr = state.filterExpression(schema, '.');
       expect(expr, isNotNull);
       expect(expr!.nodes.last.kind, ExpressionKindDto.isNotNull);
+    });
+
+    testWidgets('Settings Maps section saves and resets CARTO Basemaps API key',
+        (tester) async {
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(1200, 1400);
+      addTearDown(() => MapTileCache.setCartoApiKey(null));
+
+      final store = MemoryUiPrefsStore();
+      await tester.pumpWidget(
+        _wrapApp(
+          LanguageScope(
+            notifier: LanguageController(),
+            child: ThemeScope(
+              notifier: AppThemeController(),
+              child: SettingsPage(buildInfo: null, uiPrefs: store),
+            ),
+          ),
+          services: _FakeLocationServices(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('OpenStreetMap (standard 1x)'), findsOneWidget);
+      expect(MapTileCache.configuredCartoApiKey.value, isNull);
+
+      await tester.enterText(
+        find.byKey(const Key('settings-maps-carto-key-input')),
+        '?key=my_carto_key',
+      );
+      await tester.tap(find.byKey(const Key('settings-maps-carto-key-save')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('CARTO Retina (@2x)'), findsOneWidget);
+      expect(MapTileCache.configuredCartoApiKey.value, 'my_carto_key');
+      expect((await store.load()).cartoApiKey, 'my_carto_key');
+
+      await tester.tap(find.byKey(const Key('settings-maps-carto-key-reset')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('OpenStreetMap (standard 1x)'), findsOneWidget);
+      expect(MapTileCache.configuredCartoApiKey.value, isNull);
+      expect((await store.load()).cartoApiKey, isNull);
     });
   });
 }

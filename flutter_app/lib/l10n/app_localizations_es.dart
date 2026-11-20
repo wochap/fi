@@ -4246,7 +4246,39 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get locationOsmAttribution => '© OpenStreetMap · © CARTO';
+  String get locationOsmAttribution => '© OpenStreetMap';
+
+  @override
+  String get locationCartoAttribution => '© OpenStreetMap · © CARTO';
+
+  @override
+  String get settingsMaps => 'Mapas';
+
+  @override
+  String get settingsMapsTileSource => 'Proveedor de mapas';
+
+  @override
+  String get settingsMapsSourceOsm => 'OpenStreetMap (estándar 1x)';
+
+  @override
+  String get settingsMapsSourceCarto => 'CARTO Retina (@2x)';
+
+  @override
+  String get settingsMapsCartoApiKey => 'Clave API de CARTO Basemaps';
+
+  @override
+  String get settingsMapsCartoApiKeyHint =>
+      'Déjalo vacío para usar OpenStreetMap estándar';
+
+  @override
+  String get settingsMapsCartoApiKeyDescription =>
+      'Añade una clave gratuita de carto.com/basemaps/apikey para cargar mapas retina @2x de alta resolución (y modo oscuro). Si está vacío, Fi usa OpenStreetMap estándar.';
+
+  @override
+  String get settingsMapsCartoApiKeySave => 'Guardar clave';
+
+  @override
+  String get settingsMapsCartoApiKeyReset => 'Usar OpenStreetMap';
 
   @override
   String get locationTypeCoordinatesInstead =>
