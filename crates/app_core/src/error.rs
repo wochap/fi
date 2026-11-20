@@ -27,6 +27,12 @@ pub enum DomainError {
         field: crate::schema::FieldId,
         records: u32,
     },
+    /// Images `allow_multiple` true → false refused: `records` active records hold two or more images of `field`.
+    #[error("{records} records hold more than one image. Edit them first.")]
+    ImagesSingleConversionBlocked {
+        field: crate::schema::FieldId,
+        records: u32,
+    },
     /// A view whose filter no longer validates, or whose body version is unsupported.
     #[error("view is broken: {diagnostic}")]
     BrokenView { diagnostic: String },

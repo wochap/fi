@@ -6787,6 +6787,342 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Open in another app…'**
   String get locationOpenInAnotherApp;
+
+  /// Human label for the Images field type.
+  ///
+  /// In en, this message translates to:
+  /// **'Images'**
+  String get fieldTypeImages;
+
+  /// Schema editor chip for multi-image mode.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow multiple'**
+  String get fieldEditorAllowMultiple;
+
+  /// Schema editor chip for thumbnail previews on Images fields.
+  ///
+  /// In en, this message translates to:
+  /// **'Show thumbnails'**
+  String get fieldEditorShowThumbnails;
+
+  /// Schema row summary for a multi-image field.
+  ///
+  /// In en, this message translates to:
+  /// **'Images · multiple'**
+  String get fieldEditorImagesMultipleSummary;
+
+  /// Helper note under option chips for an Images field.
+  ///
+  /// In en, this message translates to:
+  /// **'Required means at least 1 image is attached. Allow multiple holds an ordered list of images instead of a single image. Show thumbnails is on by default (when off, shows compact filename + size rows).'**
+  String get fieldEditorImagesHelper;
+
+  /// Inline error when turning Allow multiple off is blocked by records with multiple images.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 record holds more than one image. Edit it first.} other{{count} records hold more than one image. Edit them first.}}'**
+  String fieldEditorImagesSingleConversionBlocked(int count);
+
+  /// Help popover title for Allow multiple chip.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow multiple'**
+  String get helpFieldAllowMultipleTitle;
+
+  /// Help popover body for Allow multiple chip.
+  ///
+  /// In en, this message translates to:
+  /// **'Holds an ordered list of images instead of a single image. You can drag to reorder them on each record.'**
+  String get helpFieldAllowMultipleBody;
+
+  /// Help popover title for Show thumbnails chip.
+  ///
+  /// In en, this message translates to:
+  /// **'Show thumbnails'**
+  String get helpFieldShowThumbnailsTitle;
+
+  /// Help popover body for Show thumbnails chip.
+  ///
+  /// In en, this message translates to:
+  /// **'On by default. Shows image thumbnails on the record form and mobile cards. When off, renders compact filename and size rows instead.'**
+  String get helpFieldShowThumbnailsBody;
+
+  /// Settings section heading for device-local media folder.
+  ///
+  /// In en, this message translates to:
+  /// **'Media storage'**
+  String get settingsMediaStorage;
+
+  /// Label for the Media folder row in Settings.
+  ///
+  /// In en, this message translates to:
+  /// **'Media folder'**
+  String get settingsMediaFolder;
+
+  /// Badge when no Media folder is configured.
+  ///
+  /// In en, this message translates to:
+  /// **'Not set'**
+  String get settingsMediaNotSet;
+
+  /// Explanation in Settings Media storage when unset.
+  ///
+  /// In en, this message translates to:
+  /// **'Attached images live in a folder you choose so you can sync it with Syncthing or back it up.'**
+  String get settingsMediaUnsetBody;
+
+  /// Button to choose a media folder.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose folder…'**
+  String get settingsMediaChooseFolder;
+
+  /// Button to change the configured media folder.
+  ///
+  /// In en, this message translates to:
+  /// **'Change folder…'**
+  String get settingsMediaChangeFolder;
+
+  /// Button to unset the configured media folder without deleting files.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear'**
+  String get settingsMediaClear;
+
+  /// File count and total size in the configured media folder.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 file} other{{count} files}} · {size}'**
+  String settingsMediaFolderStats(int count, String size);
+
+  /// Warning banner when active records reference files not yet in the local media folder.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 file referenced by records is not in this folder yet.} other{{count} files referenced by records are not in this folder yet.}}'**
+  String settingsMediaMissingReferenced(int count);
+
+  /// Action to rescan the local media folder.
+  ///
+  /// In en, this message translates to:
+  /// **'Rescan'**
+  String get settingsMediaRescan;
+
+  /// Android MANAGE_EXTERNAL_STORAGE permission row title.
+  ///
+  /// In en, this message translates to:
+  /// **'All files access'**
+  String get settingsMediaAllFilesAccess;
+
+  /// Short status when Android All files access is needed.
+  ///
+  /// In en, this message translates to:
+  /// **'Needed'**
+  String get settingsMediaAllFilesNeeded;
+
+  /// Explanation when Android All files access is off.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn it on in Android settings so Fi can read and write your chosen folder.'**
+  String get settingsMediaAllFilesOffBody;
+
+  /// Error card title when the saved media folder is missing or unreadable.
+  ///
+  /// In en, this message translates to:
+  /// **'Media folder not found'**
+  String get settingsMediaFolderNotFound;
+
+  /// Error card body when the saved media folder is missing or unreadable.
+  ///
+  /// In en, this message translates to:
+  /// **'This folder doesn\'t exist or can\'t be read on this device.'**
+  String get settingsMediaFolderNotFoundBody;
+
+  /// Desktop empty state button for choosing an image.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose image…'**
+  String get imagesChooseImageEllipsis;
+
+  /// Desktop drop zone hint above Choose image button.
+  ///
+  /// In en, this message translates to:
+  /// **'Drop an image here or'**
+  String get imagesDropHint;
+
+  /// Phone button to capture a photo with the camera.
+  ///
+  /// In en, this message translates to:
+  /// **'Take photo'**
+  String get imagesTakePhoto;
+
+  /// Phone button to choose an image from the gallery.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose image'**
+  String get imagesChooseImage;
+
+  /// Inline onboarding card title when no media folder is configured.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a media folder first'**
+  String get imagesFolderNotSetTitle;
+
+  /// Inline onboarding card body when no media folder is configured.
+  ///
+  /// In en, this message translates to:
+  /// **'Attached images are saved in a folder on this device so you can sync or back them up.'**
+  String get imagesFolderNotSetBody;
+
+  /// Badge over single-image thumbnail preview.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap to view'**
+  String get imagesTapToView;
+
+  /// Action to replace an attached single image.
+  ///
+  /// In en, this message translates to:
+  /// **'Replace'**
+  String get imagesReplace;
+
+  /// Tile or button label to attach another image.
+  ///
+  /// In en, this message translates to:
+  /// **'Add image'**
+  String get imagesAddImage;
+
+  /// Placeholder message when a referenced file is not in the media folder yet.
+  ///
+  /// In en, this message translates to:
+  /// **'File not in folder yet · waiting for external sync'**
+  String get imagesMissingWaitingTitle;
+
+  /// Reassurance line under missing-on-disk image placeholder.
+  ///
+  /// In en, this message translates to:
+  /// **'Reference is kept when saving'**
+  String get imagesMissingReferenceKept;
+
+  /// Action button to re-check if a missing file has arrived on disk.
+  ///
+  /// In en, this message translates to:
+  /// **'Check again'**
+  String get imagesCheckAgain;
+
+  /// Placeholder message when a record has an image but no media folder is set on this device.
+  ///
+  /// In en, this message translates to:
+  /// **'Set a media folder in Settings to view this file on this device.'**
+  String get imagesMissingNoFolderBody;
+
+  /// Action button to pick a media folder from a missing-image placeholder.
+  ///
+  /// In en, this message translates to:
+  /// **'Set folder…'**
+  String get imagesSetFolder;
+
+  /// Header status when a multi-image field has a mix of local and missing files.
+  ///
+  /// In en, this message translates to:
+  /// **'{present} of {total} on this device'**
+  String imagesOnThisDeviceCount(int present, int total);
+
+  /// Summary count of image files in a table cell.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 file} other{{count} files}}'**
+  String imagesFileCount(int count);
+
+  /// Desktop table cell text when a referenced image file is missing on disk.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} · missing'**
+  String imagesMissingBadge(String name);
+
+  /// Mobile card subtitle when an image file is not yet synced.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for external sync'**
+  String get imagesWaitingForSync;
+
+  /// View filter operator for Images IsNotNull.
+  ///
+  /// In en, this message translates to:
+  /// **'has file'**
+  String get viewFilterHasFile;
+
+  /// View filter operator for Images IsNull.
+  ///
+  /// In en, this message translates to:
+  /// **'is empty'**
+  String get viewFilterIsEmpty;
+
+  /// Image index label in the in-app lightbox.
+  ///
+  /// In en, this message translates to:
+  /// **'{current} of {total}'**
+  String imagesLightboxIndex(int current, int total);
+
+  /// Label above the relative filename in the lightbox footer.
+  ///
+  /// In en, this message translates to:
+  /// **'File in media folder'**
+  String get imagesLightboxFileInFolder;
+
+  /// Lightbox button to open the image in the OS viewer.
+  ///
+  /// In en, this message translates to:
+  /// **'Open externally'**
+  String get imagesLightboxOpenExternally;
+
+  /// Tooltip for previous image arrow in lightbox.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous image'**
+  String get imagesLightboxPrevious;
+
+  /// Tooltip for next image arrow in lightbox.
+  ///
+  /// In en, this message translates to:
+  /// **'Next image'**
+  String get imagesLightboxNext;
+
+  /// Toggle in Export collections dialog to bundle referenced media into a .zip.
+  ///
+  /// In en, this message translates to:
+  /// **'Include media files (.zip)'**
+  String get exportIncludeMediaZip;
+
+  /// Subtitle under Include media files toggle.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 referenced file} other{{count} referenced files}} · {size}'**
+  String exportIncludeMediaZipSubtitle(int count, String size);
+
+  /// Warning banner in Export collections dialog when some media files are missing locally.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 referenced file is not in this device\'s media folder yet and will be skipped from the archive. Its path stays in collections.json.} other{{count} referenced files are not in this device\'s media folder yet and will be skipped from the archive. Their paths stay in collections.json.}}'**
+  String exportZipMissingWarning(int count);
+
+  /// Primary button in Export collections dialog when .zip mode is enabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Export .zip'**
+  String get exportZipAction;
+
+  /// Toast after exporting a .zip bundle with all media present.
+  ///
+  /// In en, this message translates to:
+  /// **'Exported to {filename}'**
+  String exportZipDone(String filename);
+
+  /// Toast after exporting a .zip bundle when some media files were missing locally.
+  ///
+  /// In en, this message translates to:
+  /// **'Exported to {filename} · {count, plural, =1{1 missing media file wasn\'t included.} other{{count} missing media files weren\'t included.}}'**
+  String exportZipDoneWithMissing(String filename, int count);
 }
 
 class _AppLocalizationsDelegate

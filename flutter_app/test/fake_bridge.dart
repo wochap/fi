@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:fi/bridge/collection_bridge.dart';
 import 'package:fi/file_dialogs.dart';
@@ -2062,6 +2063,70 @@ final class FakeCollectionBridge implements CollectionBridge {
   @override
   Stream<List<TrustedDeviceDto>> connectionStateEvents() =>
       devicesController.stream;
+  /// Override for [summarizeCollectionsMedia] in tests.
+  ReferencedMediaSummaryDto? mediaSummaryOverride;
+
+  /// Override for [exportCollectionsZip] in tests.
+  ZipExportDto? zipExportOverride;
+
+  /// Zip bytes received by [importCollectionsZip].
+  final List<Uint8List> importedZipBytes = [];
+
+  @override
+  Future<ReferencedMediaSummaryDto> summarizeCollectionsMedia(
+    List<String> ids, {
+    String? mediaFolder,
+  }) async {
+    if (mediaSummaryOverride case final override?) return override;
+    return const ReferencedMediaSummaryDto(
+      totalReferenced: 0,
+      presentCount: 0,
+      presentBytes: 0,
+      missingCount: 0,
+    );
+  }
+
+  @override
+  Future<ZipExportDto> exportCollectionsZip(
+    List<String> ids, {
+    String? mediaFolder,
+  }) async {
+    if (zipExportOverride case final override?) return override;
+    return ZipExportDto(
+      bytes: Uint8List.fromList([0x50, 0x4B, 0x03, 0x04]),
+      records: 0,
+      viewsWritten: 0,
+      viewsOmitted: const [],
+      mediaIncluded: 0,
+      mediaMissing: 0,
+    );
+  }
+
+  @override
+  Future<ImportOutcomeDto> importCollectionsZip(
+    Uint8List zipBytes, {
+    String? mediaFolder,
+  }) async {
+    importedZipBytes.add(zipBytes);
+    if (nextImportOutcome case final outcome?) {
+      nextImportOutcome = null;
+      return outcome;
+    }
+    return const ImportOutcomeDto(
+      imported: true,
+      collectionIds: ['imported-zip'],
+      recordCount: 1,
+      message: '',
+    );
+  }
+
+  @override
+  Future<ImportOutcomeDto> importCollectionCsvWithMedia(
+    String collectionId,
+    String text, {
+    String? mediaFolder,
+  }) => importCollectionCsv(collectionId, text);
+
   @override
   Stream<SyncStatusDto> syncStatusEvents() => statusController.stream;
 }
@@ -2084,6 +2149,7 @@ FieldDefinitionDto _copyField(
   deleted: field.deleted,
   enumOptions: enumOptions ?? field.enumOptions,
   allowOptionsFromRecords: field.allowOptionsFromRecords,
+  allowMultiple: field.allowMultiple,
 );
 
 /// A test-only mirror of the core computed-field typing rules, covering the
@@ -2206,6 +2272,10 @@ final class FakeFileDialogs implements FileDialogs {
   /// Text the next open dialogs return, or null to simulate dismissal.
   String? openResult;
 
+  /// Optional raw `.zip` bytes returned by [openJsonOrZip].
+  Uint8List? openZipBytes;
+  String openZipName = 'collections.zip';
+
   /// Name the save dialog reports, or null to simulate dismissal.
   String? saveResult = 'export.csv';
 
@@ -2214,6 +2284,9 @@ final class FakeFileDialogs implements FileDialogs {
 
   /// `(suggested name, text)` for every save the user confirmed, in call order.
   final List<(String, String)> written = [];
+
+  /// `(suggested name, bytes)` for every binary save the user confirmed, in call order.
+  final List<(String, Uint8List)> writtenBytes = [];
 
   @override
   Future<String?> openText({required FileKind kind}) async {
@@ -2230,6 +2303,30 @@ final class FakeFileDialogs implements FileDialogs {
     final name = saveResult;
     if (name != null) written.add((suggestedName, text));
     return name;
+  }
+
+  @override
+  Future<String?> saveBytes({
+    required String suggestedName,
+    required FileKind kind,
+    required Uint8List bytes,
+  }) async {
+    final name = saveResult;
+    if (name != null) writtenBytes.add((suggestedName, bytes));
+    return name;
+  }
+
+  @override
+  Future<({String name, Uint8List bytes})?> openJsonOrZip() async {
+    if (openZipBytes case final zip?) {
+      opened.add(FileKind.zip);
+      return (name: openZipName, bytes: zip);
+    }
+    opened.add(FileKind.json);
+    if (openResult case final text?) {
+      return (name: 'collections.json', bytes: Uint8List.fromList(utf8.encode(text)));
+    }
+    return null;
   }
 }
 

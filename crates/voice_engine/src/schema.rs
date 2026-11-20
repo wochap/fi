@@ -90,11 +90,11 @@ fn schema_hash(fields: &[VoiceField]) -> u64 {
 }
 
 /// The engine's fields for a schema: active fields in form order, with live options only.
-/// Location fields are excluded from the voice LLM grammar and prompt.
+/// Location and Images fields are excluded from the voice LLM grammar and prompt.
 pub fn voice_fields(definitions: &[FieldDefinition]) -> Vec<VoiceField> {
     let mut active: Vec<&FieldDefinition> = definitions
         .iter()
-        .filter(|f| !f.deleted && !matches!(f.field_type, FieldType::Location))
+        .filter(|f| !f.deleted && !matches!(f.field_type, FieldType::Location | FieldType::Images))
         .collect();
     active.sort_by_key(|field| field.order);
     active
@@ -110,7 +110,7 @@ pub fn voice_fields(definitions: &[FieldDefinition]) -> Vec<VoiceField> {
                 FieldType::Duration => FieldKind::Duration,
                 FieldType::Enum => FieldKind::Choice,
                 FieldType::EnumSet => FieldKind::Choices,
-                FieldType::Location => return None,
+                FieldType::Location | FieldType::Images => return None,
             };
             let mut options: Vec<_> = field.enum_options.iter().filter(|o| !o.deleted).collect();
             options.sort_by_key(|option| option.order);

@@ -4345,4 +4345,249 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get locationOpenInAnotherApp => 'Abrir en otra aplicación…';
+
+  @override
+  String get fieldTypeImages => 'Imágenes';
+
+  @override
+  String get fieldEditorAllowMultiple => 'Permitir varias';
+
+  @override
+  String get fieldEditorShowThumbnails => 'Mostrar miniaturas';
+
+  @override
+  String get fieldEditorImagesMultipleSummary => 'Imágenes · varias';
+
+  @override
+  String get fieldEditorImagesHelper =>
+      'Obligatorio requiere al menos 1 imagen adjunta. Permitir varias guarda una lista ordenada de imágenes en lugar de una sola. Mostrar miniaturas está activado por defecto (al desactivarlo se muestran filas compactas con nombre y tamaño).';
+
+  @override
+  String fieldEditorImagesSingleConversionBlocked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count registros tienen más de una imagen. Edítalos primero.',
+      one: '1 registro tiene más de una imagen. Edítalo primero.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get helpFieldAllowMultipleTitle => 'Permitir varias';
+
+  @override
+  String get helpFieldAllowMultipleBody =>
+      'Guarda una lista ordenada de imágenes en lugar de una sola. Puedes arrastrarlas para reordenarlas en cada registro.';
+
+  @override
+  String get helpFieldShowThumbnailsTitle => 'Mostrar miniaturas';
+
+  @override
+  String get helpFieldShowThumbnailsBody =>
+      'Activado por defecto. Muestra miniaturas en el formulario y en las tarjetas móviles. Al desactivarlo, muestra filas compactas con el nombre y tamaño.';
+
+  @override
+  String get settingsMediaStorage => 'Almacenamiento multimedia';
+
+  @override
+  String get settingsMediaFolder => 'Carpeta multimedia';
+
+  @override
+  String get settingsMediaNotSet => 'Sin configurar';
+
+  @override
+  String get settingsMediaUnsetBody =>
+      'Las imágenes adjuntas se guardan en una carpeta que eliges para que puedas sincronizarla con Syncthing o respaldarla.';
+
+  @override
+  String get settingsMediaChooseFolder => 'Elegir carpeta…';
+
+  @override
+  String get settingsMediaChangeFolder => 'Cambiar carpeta…';
+
+  @override
+  String get settingsMediaClear => 'Quitar';
+
+  @override
+  String settingsMediaFolderStats(int count, String size) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count archivos',
+      one: '1 archivo',
+    );
+    return '$_temp0 · $size';
+  }
+
+  @override
+  String settingsMediaMissingReferenced(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          '$count archivos referenciados por registros aún no están en esta carpeta.',
+      one: '1 archivo referenciado por registros aún no está en esta carpeta.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingsMediaRescan => 'Volver a escanear';
+
+  @override
+  String get settingsMediaAllFilesAccess => 'Acceso a todos los archivos';
+
+  @override
+  String get settingsMediaAllFilesNeeded => 'Necesario';
+
+  @override
+  String get settingsMediaAllFilesOffBody =>
+      'Actívalo en los ajustes de Android para que Fi pueda leer y escribir en tu carpeta elegida.';
+
+  @override
+  String get settingsMediaFolderNotFound => 'Carpeta multimedia no encontrada';
+
+  @override
+  String get settingsMediaFolderNotFoundBody =>
+      'Esta carpeta no existe o no se puede leer en este dispositivo.';
+
+  @override
+  String get imagesChooseImageEllipsis => 'Elegir imagen…';
+
+  @override
+  String get imagesDropHint => 'Suelta una imagen aquí o';
+
+  @override
+  String get imagesTakePhoto => 'Tomar foto';
+
+  @override
+  String get imagesChooseImage => 'Elegir imagen';
+
+  @override
+  String get imagesFolderNotSetTitle => 'Elige primero una carpeta multimedia';
+
+  @override
+  String get imagesFolderNotSetBody =>
+      'Las imágenes adjuntas se guardan en una carpeta de este dispositivo para que puedas sincronizarlas o respaldarlas.';
+
+  @override
+  String get imagesTapToView => 'Tocar para ver';
+
+  @override
+  String get imagesReplace => 'Reemplazar';
+
+  @override
+  String get imagesAddImage => 'Añadir imagen';
+
+  @override
+  String get imagesMissingWaitingTitle =>
+      'Archivo aún no está en la carpeta · esperando sincronización externa';
+
+  @override
+  String get imagesMissingReferenceKept =>
+      'La referencia se conserva al guardar';
+
+  @override
+  String get imagesCheckAgain => 'Comprobar de nuevo';
+
+  @override
+  String get imagesMissingNoFolderBody =>
+      'Configura una carpeta multimedia en Ajustes para ver este archivo en este dispositivo.';
+
+  @override
+  String get imagesSetFolder => 'Elegir carpeta…';
+
+  @override
+  String imagesOnThisDeviceCount(int present, int total) {
+    return '$present de $total en este dispositivo';
+  }
+
+  @override
+  String imagesFileCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count archivos',
+      one: '1 archivo',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String imagesMissingBadge(String name) {
+    return '$name · falta';
+  }
+
+  @override
+  String get imagesWaitingForSync => 'Esperando sincronización externa';
+
+  @override
+  String get viewFilterHasFile => 'tiene archivo';
+
+  @override
+  String get viewFilterIsEmpty => 'está vacío';
+
+  @override
+  String imagesLightboxIndex(int current, int total) {
+    return '$current de $total';
+  }
+
+  @override
+  String get imagesLightboxFileInFolder => 'Archivo en carpeta multimedia';
+
+  @override
+  String get imagesLightboxOpenExternally => 'Abrir externamente';
+
+  @override
+  String get imagesLightboxPrevious => 'Imagen anterior';
+
+  @override
+  String get imagesLightboxNext => 'Imagen siguiente';
+
+  @override
+  String get exportIncludeMediaZip => 'Incluir archivos multimedia (.zip)';
+
+  @override
+  String exportIncludeMediaZipSubtitle(int count, String size) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count archivos referenciados',
+      one: '1 archivo referenciado',
+    );
+    return '$_temp0 · $size';
+  }
+
+  @override
+  String exportZipMissingWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          '$count archivos referenciados aún no están en la carpeta multimedia de este dispositivo y se omitirán del archivo. Sus rutas se conservan en collections.json.',
+      one:
+          '1 archivo referenciado aún no está en la carpeta multimedia de este dispositivo y se omitirá del archivo. Su ruta se conserva en collections.json.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get exportZipAction => 'Exportar .zip';
+
+  @override
+  String exportZipDone(String filename) {
+    return 'Exportado a $filename';
+  }
+
+  @override
+  String exportZipDoneWithMissing(String filename, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count archivos multimedia faltantes no se incluyeron.',
+      one: '1 archivo multimedia faltante no se incluyó.',
+    );
+    return 'Exportado a $filename · $_temp0';
+  }
 }

@@ -3,6 +3,7 @@ import 'package:fi/l10n/l10n.dart';
 import 'package:fi/theme/nocturne_widgets.dart';
 import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/exact_format.dart';
+import 'package:fi/images/image_field.dart';
 import 'package:fi/location/format.dart';
 import 'package:fi/location/location_field.dart';
 import 'package:fi/src/rust/api/models.dart';
@@ -29,6 +30,7 @@ String fieldKindLabel(AppLocalizations l, FieldTypeKindDto kind) =>
       FieldTypeKindDto.enum_ => l.fieldTypeChoice,
       FieldTypeKindDto.enumSet => l.fieldTypeChoices,
       FieldTypeKindDto.location => l.fieldKindLocation,
+      FieldTypeKindDto.images => l.fieldTypeImages,
     };
 
 typedef FieldValueChanged = void Function(FieldValueDto value);
@@ -212,6 +214,11 @@ final class FieldRendererRegistry {
       FieldValueKindDto.location => value.locationValue == null
           ? '—'
           : formatLocation4dp(value.locationValue!),
+      FieldValueKindDto.images => value.imagesValue.isEmpty
+          ? '—'
+          : value.imagesValue.length == 1
+          ? value.imagesValue.first.originalName
+          : l.imagesFileCount(value.imagesValue.length),
     };
   }
 }
@@ -262,6 +269,7 @@ final class _FieldEditorState extends State<_FieldEditor> {
   String? choice;
   List<String> choices = const [];
   FieldValueDto? locationValue;
+  FieldValueDto? imagesValue;
   @override
   void initState() {
     super.initState();
@@ -281,6 +289,7 @@ final class _FieldEditorState extends State<_FieldEditor> {
         ? value!.listValue
         : const [];
     locationValue = value?.kind == FieldValueKindDto.location ? value : null;
+    imagesValue = value?.kind == FieldValueKindDto.images ? value : null;
   }
 
   /// The initial text needs the locale's decimal separator, so it is set once dependencies exist.
@@ -664,6 +673,40 @@ final class _FieldEditorState extends State<_FieldEditor> {
         onChanged: (next) {
           setState(() => locationValue = next);
           widget.onChanged(next ?? _null);
+        },
+      );
+      if (!widget.showLabel) return input;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Text(
+              _required ? '$_label *' : _label,
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w500,
+                color: context.nocturne.text,
+              ),
+            ),
+          ),
+          input,
+        ],
+      );
+    }
+    if (field.fieldType.kind == FieldTypeKindDto.images) {
+      final input = ImageFieldInput(
+        field: field,
+        value: imagesValue ?? _null,
+        errorText: widget.errors.isEmpty ? null : widget.errors.join(' · '),
+        onChanged: (next) {
+          setState(
+            () => imagesValue = next.kind == FieldValueKindDto.images
+                ? next
+                : null,
+          );
+          widget.onChanged(next);
         },
       );
       if (!widget.showLabel) return input;

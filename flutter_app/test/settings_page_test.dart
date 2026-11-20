@@ -1,3 +1,4 @@
+import 'package:fi/images/media_storage.dart';
 import 'package:fi/platform_capabilities.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/theme/fi_icons.dart';
@@ -249,11 +250,15 @@ void main() {
       tester,
       voice: fakeVoiceServices(permission: permission),
     );
-    expect(find.text('Off'), findsOneWidget);
+    final mic = find.byKey(const Key('settings-microphone'));
+    expect(find.descendant(of: mic, matching: find.text('Off')), findsOneWidget);
     permission.state = MicPermission.granted;
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await tester.pumpAndSettle();
-    expect(find.text('Allowed'), findsOneWidget);
+    expect(
+      find.descendant(of: mic, matching: find.text('Allowed')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('About shows Version and Network', (tester) async {
@@ -299,7 +304,7 @@ void main() {
       await _openSettings(
         tester,
         capabilities: PlatformCapabilities.desktop,
-        size: const Size(1240, 900),
+        size: const Size(1240, 1200),
         bridge: bridge,
       );
       await pumpUntilFound(tester, find.byKey(const Key('build-version')));
@@ -778,7 +783,13 @@ void main() {
       voice: fakeVoiceServices(permission: permission),
     );
     expect(find.text('Microphone access'), findsOneWidget);
-    expect(find.text('Off'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('settings-microphone')),
+        matching: find.text('Off'),
+      ),
+      findsOneWidget,
+    );
     await tester.dragUntilVisible(
       find.byKey(const Key('settings-android-settings')),
       find.byKey(const Key('settings-page')),
@@ -882,4 +893,184 @@ void main() {
     );
     expect(find.textContaining('English only'), findsNothing);
   });
+
+  group('Media storage', () {
+    testWidgets('desktop states A, B (with missing files & rescan), Clear, and D', (
+      tester,
+    ) async {
+      final mediaService = _FakeMediaStorageService(
+        pickedFolder: '/home/gean/Sync/fi-media',
+        scanResult: const MediaFolderStatusDto(
+          accessible: true,
+          fileCount: 142,
+          totalBytes: 88709529, // ~84.6 MB
+          missingReferencedCount: 3,
+        ),
+      );
+      final prefs = MemoryUiPrefsStore();
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(1240, 1400);
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        app(
+          _ready(),
+          capabilities: PlatformCapabilities.desktop,
+          uiPrefs: prefs,
+          mediaStorageService: mediaService,
+        ),
+      );
+      await pumpUntilFound(tester, find.text('Collections'));
+      await tester.tap(find.byKey(const Key('nav-settings')));
+      await tester.pumpAndSettle();
+
+      // State A: Not configured; no Android All files access row on desktop.
+      expect(find.byKey(const Key('settings-media-not-set')), findsOneWidget);
+      expect(find.byKey(const Key('settings-media-all-files')), findsNothing);
+
+      // Pick folder -> State B with stats and missing files banner.
+      await tester.tap(find.byKey(const Key('settings-media-choose-folder')));
+      await tester.pumpAndSettle();
+      expect(find.text('/home/gean/Sync/fi-media'), findsOneWidget);
+      expect(find.text('142 files · 84.6 MB'), findsOneWidget);
+      expect(
+        find.text('3 files referenced by records are not in this folder yet.'),
+        findsOneWidget,
+      );
+      expect(prefs.prefs.mediaFolderPath, '/home/gean/Sync/fi-media');
+
+      // Rescan after files arrive removes the warning banner.
+      mediaService.scanResult = const MediaFolderStatusDto(
+        accessible: true,
+        fileCount: 145,
+        totalBytes: 90000000,
+        missingReferencedCount: 0,
+      );
+      await tester.tap(find.byKey(const Key('settings-media-rescan')));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('settings-media-missing-banner')),
+        findsNothing,
+      );
+
+      // State D: folder deleted/unmounted externally -> Media folder not found.
+      mediaService.scanResult = const MediaFolderStatusDto(
+        accessible: false,
+        fileCount: 0,
+        totalBytes: 0,
+        missingReferencedCount: 3,
+      );
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('settings-media-folder-not-found')),
+        findsOneWidget,
+      );
+
+      // Clear returns to Not set.
+      await tester.tap(find.byKey(const Key('settings-media-clear')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('settings-media-not-set')), findsOneWidget);
+      expect(prefs.prefs.mediaFolderPath, isNull);
+    });
+
+    testWidgets('Android shows All files access and refreshes on resume', (
+      tester,
+    ) async {
+      final mediaService = _FakeMediaStorageService(allFilesGranted: false);
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(390, 1400);
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        app(
+          _ready(),
+          capabilities: PlatformCapabilities.androidPhone,
+          mediaStorageService: mediaService,
+        ),
+      );
+      await pumpUntilFound(tester, find.text('Collections'));
+      await tester.tap(find.text('Settings'));
+      await tester.pumpAndSettle();
+
+      final row = find.byKey(const Key('settings-media-all-files'));
+      expect(row, findsOneWidget);
+      expect(find.descendant(of: row, matching: find.text('Off')), findsOneWidget);
+      expect(
+        find.byKey(const Key('settings-media-android-settings')),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.byKey(const Key('settings-media-android-settings')));
+      await tester.pumpAndSettle();
+      expect(mediaService.androidSettingsOpened, 1);
+
+      mediaService.allFilesGranted = true;
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      expect(
+        find.descendant(of: row, matching: find.text('Allowed')),
+        findsOneWidget,
+      );
+    });
+  });
+}
+
+final class _FakeMediaStorageService implements MediaStorageService {
+  _FakeMediaStorageService({
+    this.pickedFolder,
+    this.allFilesGranted = true,
+    this.scanResult = const MediaFolderStatusDto(
+      accessible: true,
+      fileCount: 0,
+      totalBytes: 0,
+      missingReferencedCount: 0,
+    ),
+  });
+
+  String? pickedFolder;
+  bool allFilesGranted;
+  MediaFolderStatusDto scanResult;
+  int androidSettingsOpened = 0;
+
+  @override
+  Future<String?> pickFolder() async => pickedFolder;
+
+  @override
+  Future<List<PickedImageSource>> pickImages({
+    required bool allowMultiple,
+  }) async => const [];
+
+  @override
+  Future<PickedImageSource?> takePhoto() async => null;
+
+  @override
+  Future<bool> hasAllFilesAccess() async => allFilesGranted;
+
+  @override
+  Future<bool> openAndroidAllFilesSettings() async {
+    androidSettingsOpened++;
+    return true;
+  }
+
+  @override
+  Future<MediaFolderStatusDto> scanFolder(String folderPath) async =>
+      scanResult;
+
+  @override
+  Future<ImageAttachmentDto> ingestFile(String sourcePath, String folderPath) =>
+      throw UnimplementedError();
+
+  @override
+  Future<ImageAttachmentDto> ingestBytes(
+    Uint8List bytes,
+    String originalName,
+    String folderPath,
+  ) => throw UnimplementedError();
+
+  @override
+  bool fileExists(String folderPath, String relativePath) => false;
+
+  @override
+  Future<void> openExternally(String fullPath) async {}
 }

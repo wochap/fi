@@ -73,7 +73,8 @@ FieldDefinitionDto? _field(CollectionSchemaDto schema, String? id) =>
   FieldTypeKindDto.duration => (l.viewDirLow, l.viewDirHigh),
   FieldTypeKindDto.enum_ ||
   FieldTypeKindDto.enumSet ||
-  FieldTypeKindDto.location => (l.viewDirOptionOrder, l.viewDirReverse),
+  FieldTypeKindDto.location ||
+  FieldTypeKindDto.images => (l.viewDirOptionOrder, l.viewDirReverse),
   FieldTypeKindDto.boolean => (l.viewDirNoFirst, l.viewDirYesFirst),
 };
 
@@ -915,11 +916,12 @@ class _ViewEditorState extends State<_ViewEditor> {
     super.dispose();
   }
 
-  /// Fields a view may sort by: every active field except multi-option Choices and Location.
+  /// Fields a view may sort by: every active field except multi-option Choices, Location, and Images.
   List<FieldDefinitionDto> get _sortFields => [
     for (final field in activeFieldsOf(widget.schema))
       if (field.fieldType.kind != FieldTypeKindDto.enumSet &&
-          field.fieldType.kind != FieldTypeKindDto.location)
+          field.fieldType.kind != FieldTypeKindDto.location &&
+          field.fieldType.kind != FieldTypeKindDto.images)
         field,
   ];
 

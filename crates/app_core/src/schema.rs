@@ -79,6 +79,8 @@ pub enum FieldType {
     EnumSet,
     /// Geographic WGS 84 point (latitude, longitude, optional capture accuracy).
     Location,
+    /// One or more image attachments stored in the device-local Media Folder.
+    Images,
 }
 
 impl FieldType {
@@ -114,6 +116,9 @@ pub struct DisplayMetadata {
     /// Location-only presentation hint; defaults to `true` when omitted.
     #[serde(default = "default_true", skip_serializing_if = "is_true")]
     pub show_map_preview: bool,
+    /// Images-only presentation hint; defaults to `true` when omitted.
+    #[serde(default = "default_true", skip_serializing_if = "is_true")]
+    pub show_thumbnails: bool,
 }
 
 impl Default for DisplayMetadata {
@@ -123,6 +128,7 @@ impl Default for DisplayMetadata {
             slider: false,
             slider_step: None,
             show_map_preview: true,
+            show_thumbnails: true,
         }
     }
 }
@@ -168,6 +174,10 @@ pub struct FieldDefinition {
     /// Additive: a definition without the key reads as off.
     #[serde(default, skip_serializing_if = "is_false")]
     pub allow_options_from_records: bool,
+    /// Images only: holds an ordered list of images instead of a single image.
+    /// Additive: a definition without the key reads as off (single image).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub allow_multiple: bool,
 }
 
 #[allow(clippy::trivially_copy_pass_by_ref)]
@@ -253,20 +263,37 @@ impl FieldDefinition {
                 "is valid only for Location fields",
             ));
         }
-        if matches!(self.field_type, FieldType::Location) {
+        if self.allow_multiple && !matches!(self.field_type, FieldType::Images) {
+            return Err(invalid("allow_multiple", "is valid only for Images fields"));
+        }
+        if !self.display.show_thumbnails && !matches!(self.field_type, FieldType::Images) {
+            return Err(invalid(
+                "show_thumbnails",
+                "is valid only for Images fields",
+            ));
+        }
+        if matches!(self.field_type, FieldType::Location | FieldType::Images) {
+            let label = match self.field_type {
+                FieldType::Location => "Location",
+                FieldType::Images => "Images",
+                _ => unreachable!(),
+            };
             if self.default.is_some() {
-                return Err(invalid("default", "is not supported for Location fields"));
+                return Err(invalid(
+                    "default",
+                    format!("is not supported for {label} fields"),
+                ));
             }
             if self.validation.min_integer.is_some() || self.validation.max_integer.is_some() {
                 return Err(invalid(
                     "numeric_range",
-                    "is not supported for Location fields",
+                    format!("is not supported for {label} fields"),
                 ));
             }
             if self.validation.min_length.is_some() || self.validation.max_length.is_some() {
                 return Err(invalid(
                     "length_range",
-                    "is not supported for Location fields",
+                    format!("is not supported for {label} fields"),
                 ));
             }
         }
@@ -374,6 +401,7 @@ impl FieldDefinition {
                 | (FieldType::Enum, FieldValue::Enum(_))
                 | (FieldType::EnumSet, FieldValue::EnumSet(_))
                 | (FieldType::Location, FieldValue::Location(_))
+                | (FieldType::Images, FieldValue::Images(_))
         );
         if !type_matches {
             return Err(ValidationIssue::new(
@@ -468,6 +496,45 @@ impl FieldDefinition {
                         IssueCode::OutOfRange,
                         "Longitude goes from -180 to 180",
                     ));
+                }
+            }
+            FieldValue::Images(attachments) => {
+                if attachments.is_empty() {
+                    return if self.required {
+                        Err(ValidationIssue::new(IssueCode::Required, "Required"))
+                    } else {
+                        Ok(())
+                    };
+                }
+                if !self.allow_multiple && attachments.len() > 1 {
+                    return Err(ValidationIssue::new(
+                        IssueCode::Invalid,
+                        "This field allows only one image",
+                    ));
+                }
+                for attachment in attachments {
+                    if !crate::values::ImageAttachment::is_valid_relative_path(
+                        &attachment.relative_path,
+                    ) {
+                        return Err(ValidationIssue::new(
+                            IssueCode::Invalid,
+                            "Image path must be a single relative image filename",
+                        ));
+                    }
+                    if attachment.original_name.trim().is_empty() {
+                        return Err(ValidationIssue::new(
+                            IssueCode::Invalid,
+                            "Image filename must not be empty",
+                        ));
+                    }
+                    if !crate::values::ImageAttachment::is_supported_mime_type(
+                        &attachment.mime_type,
+                    ) {
+                        return Err(ValidationIssue::new(
+                            IssueCode::Invalid,
+                            "Image type must be JPEG, PNG, WebP, or GIF",
+                        ));
+                    }
                 }
             }
             FieldValue::Null | FieldValue::Boolean(_) => {}
@@ -990,6 +1057,7 @@ mod tests {
     fn text_field(name: &str, order: i64) -> FieldDefinition {
         FieldDefinition {
             allow_options_from_records: false,
+            allow_multiple: false,
             id: FieldId::new(),
             name: name.into(),
             field_type: FieldType::Text,
@@ -1149,5 +1217,69 @@ mod tests {
             )))
             .unwrap_err();
         assert_eq!(lng_err.code, IssueCode::OutOfRange);
+    }
+
+    #[test]
+    fn images_field_metadata_round_trip_and_validation() {
+        use crate::values::ImageAttachment;
+
+        let mut field = text_field("Photos", 0);
+        field.field_type = FieldType::Images;
+        field.allow_multiple = true;
+        field.display.show_thumbnails = false;
+        field.validate().unwrap();
+
+        let encoded = serde_json::to_string(&field).unwrap();
+        assert!(encoded.contains(r#""kind":"images""#));
+        assert!(encoded.contains(r#""allow_multiple":true"#));
+        assert!(encoded.contains(r#""show_thumbnails":false"#));
+        let decoded: FieldDefinition = serde_json::from_str(&encoded).unwrap();
+        assert_eq!(decoded, field);
+
+        // Omitting allow_multiple and show_thumbnails reads as false and true respectively.
+        let legacy_json = format!(
+            r#"{{"id":"{}","name":"Photos","field_type":{{"kind":"images"}},"required":false,"default":null,"validation":{{}},"display":{{}},"order":0,"deleted":false,"enum_options":[]}}"#,
+            FieldId::new()
+        );
+        let legacy: FieldDefinition = serde_json::from_str(&legacy_json).unwrap();
+        assert!(!legacy.allow_multiple);
+        assert!(legacy.display.show_thumbnails);
+        legacy.validate().unwrap();
+
+        // Non-Images field rejects allow_multiple = true and show_thumbnails = false.
+        let mut text_multi = text_field("Title", 0);
+        text_multi.allow_multiple = true;
+        assert!(matches!(
+            text_multi.validate(),
+            Err(DomainError::Invalid {
+                field: "allow_multiple",
+                ..
+            })
+        ));
+        let mut text_no_thumbs = text_field("Title", 0);
+        text_no_thumbs.display.show_thumbnails = false;
+        assert!(matches!(
+            text_no_thumbs.validate(),
+            Err(DomainError::Invalid {
+                field: "show_thumbnails",
+                ..
+            })
+        ));
+
+        // Images field rejects default values and bounds.
+        let mut with_default = legacy.clone();
+        with_default.default = Some(FieldValue::Images(vec![ImageAttachment {
+            relative_path: "0195f3a0-7c4b-7d20-8a1e-4b92c8103f1a_a.jpg".into(),
+            original_name: "a.jpg".into(),
+            mime_type: "image/jpeg".into(),
+            size_bytes: 123,
+        }]));
+        assert!(matches!(
+            with_default.validate(),
+            Err(DomainError::Invalid {
+                field: "default",
+                ..
+            })
+        ));
     }
 }

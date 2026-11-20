@@ -17,12 +17,25 @@ abstract interface class FileDialogs {
 
   /// Asks for a file of [kind] and returns its text, or null when the dialog was dismissed.
   Future<String?> openText({required FileKind kind});
+
+  /// Asks where to save raw [bytes], suggesting [suggestedName]. Returns the written filename or
+  /// null when dismissed.
+  Future<String?> saveBytes({
+    required String suggestedName,
+    required FileKind kind,
+    required Uint8List bytes,
+  });
+
+  /// Asks for a `.json` or `.zip` import file and returns its filename and raw bytes, or null when
+  /// dismissed.
+  Future<({String name, Uint8List bytes})?> openJsonOrZip();
 }
 
-/// The two portable formats, with what each platform dialog filters on.
+/// The portable formats, with what each platform dialog filters on.
 enum FileKind {
   csv('CSV', 'csv', ['text/csv', 'text/comma-separated-values']),
-  json('JSON', 'json', ['application/json']);
+  json('JSON', 'json', ['application/json']),
+  zip('ZIP', 'zip', ['application/zip']);
 
   const FileKind(this.label, this.extension, this.mimeTypes);
   final String label;
@@ -45,8 +58,18 @@ final class PlatformFileDialogs implements FileDialogs {
     required String suggestedName,
     required FileKind kind,
     required String text,
+  }) => saveBytes(
+    suggestedName: suggestedName,
+    kind: kind,
+    bytes: Uint8List.fromList(utf8.encode(text)),
+  );
+
+  @override
+  Future<String?> saveBytes({
+    required String suggestedName,
+    required FileKind kind,
+    required Uint8List bytes,
   }) async {
-    final bytes = utf8.encode(text);
     if (defaultTargetPlatform == TargetPlatform.android) {
       return _platform.invokeMethod<String>('saveDocument', {
         'name': suggestedName,
@@ -70,5 +93,17 @@ final class PlatformFileDialogs implements FileDialogs {
   Future<String?> openText({required FileKind kind}) async {
     final file = await openFile(acceptedTypeGroups: [kind._group]);
     return file?.readAsString();
+  }
+
+  @override
+  Future<({String name, Uint8List bytes})?> openJsonOrZip() async {
+    const group = XTypeGroup(
+      label: 'Fi collections (JSON or ZIP)',
+      extensions: ['json', 'zip'],
+      mimeTypes: ['application/json', 'application/zip'],
+    );
+    final file = await openFile(acceptedTypeGroups: const [group]);
+    if (file == null) return null;
+    return (name: file.name, bytes: await file.readAsBytes());
   }
 }

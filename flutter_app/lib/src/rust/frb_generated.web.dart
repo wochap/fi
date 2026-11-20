@@ -392,6 +392,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   PlatformInt64 dco_decode_i_64(dynamic raw);
 
   @protected
+  ImageAttachmentDto dco_decode_image_attachment_dto(dynamic raw);
+
+  @protected
   ImportOutcomeDto dco_decode_import_outcome_dto(dynamic raw);
 
   @protected
@@ -446,6 +449,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<FieldReferenceDto> dco_decode_list_field_reference_dto(dynamic raw);
+
+  @protected
+  List<ImageAttachmentDto> dco_decode_list_image_attachment_dto(dynamic raw);
 
   @protected
   List<LogEventDto> dco_decode_list_log_event_dto(dynamic raw);
@@ -550,6 +556,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ManualConnectOutcomeDto dco_decode_manual_connect_outcome_dto(dynamic raw);
+
+  @protected
+  MediaFolderStatusDto dco_decode_media_folder_status_dto(dynamic raw);
 
   @protected
   ModelErrorDto dco_decode_model_error_dto(dynamic raw);
@@ -830,6 +839,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   RecoveryReasonDto dco_decode_recovery_reason_dto(dynamic raw);
 
   @protected
+  ReferencedMediaSummaryDto dco_decode_referenced_media_summary_dto(
+    dynamic raw,
+  );
+
+  @protected
   ResultRecordDto dco_decode_result_record_dto(dynamic raw);
 
   @protected
@@ -963,6 +977,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   WidgetUpdateDto dco_decode_widget_update_dto(dynamic raw);
+
+  @protected
+  ZipExportDto dco_decode_zip_export_dto(dynamic raw);
 
   @protected
   AnyhowException sse_decode_AnyhowException(SseDeserializer deserializer);
@@ -1424,6 +1441,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   PlatformInt64 sse_decode_i_64(SseDeserializer deserializer);
 
   @protected
+  ImageAttachmentDto sse_decode_image_attachment_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   ImportOutcomeDto sse_decode_import_outcome_dto(SseDeserializer deserializer);
 
   @protected
@@ -1494,6 +1516,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<FieldReferenceDto> sse_decode_list_field_reference_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<ImageAttachmentDto> sse_decode_list_image_attachment_dto(
     SseDeserializer deserializer,
   );
 
@@ -1642,6 +1669,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ManualConnectOutcomeDto sse_decode_manual_connect_outcome_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  MediaFolderStatusDto sse_decode_media_folder_status_dto(
     SseDeserializer deserializer,
   );
 
@@ -2000,6 +2032,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  ReferencedMediaSummaryDto sse_decode_referenced_media_summary_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   ResultRecordDto sse_decode_result_record_dto(SseDeserializer deserializer);
 
   @protected
@@ -2169,6 +2206,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   WidgetUpdateDto sse_decode_widget_update_dto(SseDeserializer deserializer);
+
+  @protected
+  ZipExportDto sse_decode_zip_export_dto(SseDeserializer deserializer);
 
   @protected
   void sse_encode_AnyhowException(
@@ -2745,6 +2785,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer);
 
   @protected
+  void sse_encode_image_attachment_dto(
+    ImageAttachmentDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_import_outcome_dto(
     ImportOutcomeDto self,
     SseSerializer serializer,
@@ -2834,6 +2880,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_list_field_reference_dto(
     List<FieldReferenceDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_image_attachment_dto(
+    List<ImageAttachmentDto> self,
     SseSerializer serializer,
   );
 
@@ -3029,6 +3081,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_manual_connect_outcome_dto(
     ManualConnectOutcomeDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_media_folder_status_dto(
+    MediaFolderStatusDto self,
     SseSerializer serializer,
   );
 
@@ -3465,6 +3523,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_referenced_media_summary_dto(
+    ReferencedMediaSummaryDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_result_record_dto(
     ResultRecordDto self,
     SseSerializer serializer,
@@ -3682,6 +3746,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
     WidgetUpdateDto self,
     SseSerializer serializer,
   );
+
+  @protected
+  void sse_encode_zip_export_dto(ZipExportDto self, SseSerializer serializer);
 }
 
 // Section: wire_class

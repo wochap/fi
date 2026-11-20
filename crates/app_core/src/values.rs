@@ -11,6 +11,53 @@ pub const MAX_LATITUDE_MICRODEG: i64 = 90_000_000;
 pub const MIN_LONGITUDE_MICRODEG: i64 = -180_000_000;
 pub const MAX_LONGITUDE_MICRODEG: i64 = 180_000_000;
 
+pub const SUPPORTED_IMAGE_MIME_TYPES: &[&str] =
+    &["image/jpeg", "image/png", "image/webp", "image/gif"];
+
+pub const SUPPORTED_IMAGE_EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "webp", "gif"];
+
+/// Metadata for a single image stored in the user's device-local Media Folder.
+/// Only portable relative filenames (`<uuidv7>_<sanitized_name>.<ext>`) are stored in Automerge;
+/// device-local absolute directory paths are never persisted here.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ImageAttachment {
+    pub relative_path: String,
+    pub original_name: String,
+    pub mime_type: String,
+    pub size_bytes: u64,
+}
+
+impl ImageAttachment {
+    /// Returns `true` when `path` is a safe single-segment relative image filename with no path
+    /// separators (`/` or `\`), no NUL bytes, not `.` or `..`, and a supported image extension.
+    #[must_use]
+    pub fn is_valid_relative_path(path: &str) -> bool {
+        if path.is_empty()
+            || path == "."
+            || path == ".."
+            || path.contains('/')
+            || path.contains('\\')
+            || path.contains('\0')
+            || path.contains("..")
+        {
+            return false;
+        }
+        let Some((stem, ext)) = path.rsplit_once('.') else {
+            return false;
+        };
+        if stem.is_empty() {
+            return false;
+        }
+        let ext_lower = ext.to_ascii_lowercase();
+        SUPPORTED_IMAGE_EXTENSIONS.contains(&ext_lower.as_str())
+    }
+
+    #[must_use]
+    pub fn is_supported_mime_type(mime: &str) -> bool {
+        SUPPORTED_IMAGE_MIME_TYPES.contains(&mime)
+    }
+}
+
 #[allow(clippy::trivially_copy_pass_by_ref)]
 fn is_false(value: &bool) -> bool {
     !*value
@@ -235,6 +282,9 @@ pub enum FieldValue {
     EnumSet(Vec<EnumOptionId>),
     /// A geographic WGS 84 point in fixed-point microdegrees.
     Location(LocationValue),
+    /// Ordered list of image attachments in the device-local Media Folder. Never empty when stored
+    /// or read; an empty list reads as [`FieldValue::Null`] (see [`FieldValue::images`]).
+    Images(Vec<ImageAttachment>),
 }
 
 impl FieldValue {
@@ -249,6 +299,17 @@ impl FieldValue {
             Self::Null
         } else {
             Self::EnumSet(ids)
+        }
+    }
+
+    /// An Images value from attachments: an empty list reads as Null.
+    #[must_use]
+    pub fn images(attachments: impl IntoIterator<Item = ImageAttachment>) -> Self {
+        let attachments: Vec<_> = attachments.into_iter().collect();
+        if attachments.is_empty() {
+            Self::Null
+        } else {
+            Self::Images(attachments)
         }
     }
 }
@@ -332,7 +393,12 @@ mod tests {
             FieldValue::Enum(EnumOptionId::new()),
             FieldValue::EnumSet(vec![EnumOptionId::new(), EnumOptionId::new()]),
             FieldValue::Location(LocationValue::new(38_710_841, -9_137_265, Some(12), false)),
-            FieldValue::Location(LocationValue::new(38_710_200, -9_138_000, Some(1_900), true)),
+            FieldValue::Location(LocationValue::new(
+                38_710_200,
+                -9_138_000,
+                Some(1_900),
+                true,
+            )),
         ];
         for value in values {
             let encoded = serde_json::to_string(&value).unwrap();

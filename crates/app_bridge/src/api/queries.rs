@@ -203,6 +203,7 @@ impl TryFrom<ValueTypeDto> for app_core::ValueType {
             ValueTypeKindDto::Enum => Self::Enum,
             ValueTypeKindDto::EnumSet => Self::EnumSet,
             ValueTypeKindDto::Location => Self::Location,
+            ValueTypeKindDto::Images => Self::Images,
             ValueTypeKindDto::Null => Self::Null,
         })
     }
@@ -231,6 +232,7 @@ impl From<app_core::ValueType> for ValueTypeDto {
             app_core::ValueType::Enum => (ValueTypeKindDto::Enum, None),
             app_core::ValueType::EnumSet => (ValueTypeKindDto::EnumSet, None),
             app_core::ValueType::Location => (ValueTypeKindDto::Location, None),
+            app_core::ValueType::Images => (ValueTypeKindDto::Images, None),
             app_core::ValueType::Null => (ValueTypeKindDto::Null, None),
         };
         Self { kind, scale }
@@ -300,6 +302,9 @@ impl TryFrom<TypedValueDto> for app_core::TypedValue {
                     .ok_or_else(|| missing("location_value"))?
                     .into(),
             ),
+            ValueTypeKindDto::Images => {
+                Self::Images(value.images_value.into_iter().map(Into::into).collect())
+            }
         })
     }
 }
@@ -327,6 +332,7 @@ impl From<app_core::TypedValue> for TypedValueDto {
                     list_value: options.iter().map(ToString::to_string).collect(),
                     field_id: Some(field.to_string()),
                     location_value: None,
+                    images_value: Vec::new(),
                 };
             }
             app_core::TypedValue::Location(location) => {
@@ -338,6 +344,19 @@ impl From<app_core::TypedValue> for TypedValueDto {
                     list_value: Vec::new(),
                     field_id: None,
                     location_value: Some(location.into()),
+                    images_value: Vec::new(),
+                };
+            }
+            app_core::TypedValue::Images(attachments) => {
+                return Self {
+                    value_type,
+                    integer_value: None,
+                    text_value: None,
+                    boolean_value: None,
+                    list_value: Vec::new(),
+                    field_id: None,
+                    location_value: None,
+                    images_value: attachments.into_iter().map(Into::into).collect(),
                 };
             }
         };
@@ -349,6 +368,7 @@ impl From<app_core::TypedValue> for TypedValueDto {
             list_value: Vec::new(),
             field_id: None,
             location_value: None,
+            images_value: Vec::new(),
         }
     }
 }
@@ -1110,6 +1130,7 @@ mod tests {
         };
         let field = |name: &str, scale: u8| FieldDefinition {
             allow_options_from_records: false,
+            allow_multiple: false,
             id: FieldId::new(),
             name: name.into(),
             field_type: FieldType::FixedDecimal { scale },

@@ -46,26 +46,43 @@ enum ChoicesFilterOperator {
     if (kind == FieldTypeKindDto.location) {
       return const [isEmpty, isNotEmpty];
     }
+    if (kind == FieldTypeKindDto.images) {
+      return const [isNotEmpty, isEmpty];
+    }
     return [
       for (final operator in values)
         if (operator != hasAllOf || kind != FieldTypeKindDto.enum_) operator,
     ];
   }
 
-  String label(AppLocalizations l) => switch (this) {
-    hasAnyOf => l.queryOpHasAnyOf,
-    hasAllOf => l.queryOpHasAllOf,
-    hasNoneOf => l.queryOpHasNoneOf,
-    isEmpty => l.queryOpIsEmpty,
-    isNotEmpty => l.queryOpIsNotEmpty,
-  };
+  String label(AppLocalizations l, {FieldTypeKindDto? kind}) {
+    if (kind == FieldTypeKindDto.images) {
+      return switch (this) {
+        isNotEmpty => l.viewFilterHasFile,
+        isEmpty => l.viewFilterIsEmpty,
+        _ => l.queryOpIsNotEmpty,
+      };
+    }
+    return switch (this) {
+      hasAnyOf => l.queryOpHasAnyOf,
+      hasAllOf => l.queryOpHasAllOf,
+      hasNoneOf => l.queryOpHasNoneOf,
+      isEmpty => l.queryOpIsEmpty,
+      isNotEmpty => l.queryOpIsNotEmpty,
+    };
+  }
 
-  /// The edit-view editor's words: "is any of" / "is none of".
-  String viewLabel(AppLocalizations l) => switch (this) {
-    hasAnyOf => l.viewOpIsAnyOf,
-    hasNoneOf => l.viewOpIsNoneOf,
-    _ => label(l),
-  };
+  /// The edit-view editor's words: "is any of" / "is none of", or "has file" / "is empty" for Images.
+  String viewLabel(AppLocalizations l, {FieldTypeKindDto? kind}) {
+    if (kind == FieldTypeKindDto.images) {
+      return label(l, kind: kind);
+    }
+    return switch (this) {
+      hasAnyOf => l.viewOpIsAnyOf,
+      hasNoneOf => l.viewOpIsNoneOf,
+      _ => label(l),
+    };
+  }
 }
 
 /// Everything the guided query builder can express, as plain data.
@@ -891,11 +908,12 @@ _ParsedChoicesFilter? _parseChoicesFilter(
 }
 
 /// Whether a field of [kind] is filtered with the Choices/presence operators: multi-option
-/// Choices, single choice, and Location (presence only).
+/// Choices, single choice, Location, and Images (presence only).
 bool isChoicesFilterKind(FieldTypeKindDto? kind) =>
     kind == FieldTypeKindDto.enumSet ||
     kind == FieldTypeKindDto.enum_ ||
-    kind == FieldTypeKindDto.location;
+    kind == FieldTypeKindDto.location ||
+    kind == FieldTypeKindDto.images;
 
 final class _ParsedFilter {
   const _ParsedFilter(this.fieldId, this.operator, this.value);
@@ -963,6 +981,7 @@ ValueTypeKindDto valueKindFor(FieldTypeKindDto kind) => switch (kind) {
   FieldTypeKindDto.enum_ => ValueTypeKindDto.enum_,
   FieldTypeKindDto.enumSet => ValueTypeKindDto.enumSet,
   FieldTypeKindDto.location => ValueTypeKindDto.location,
+  FieldTypeKindDto.images => ValueTypeKindDto.images,
 };
 
 List<FieldDefinitionDto> activeFieldsOf(CollectionSchemaDto schema) =>
@@ -1373,8 +1392,8 @@ String queryConditionText(
         .queryFilterChip(
           field?.name ?? '?',
           viewWords
-              ? state.choicesOperator.viewLabel(l)
-              : state.choicesOperator.label(l),
+              ? state.choicesOperator.viewLabel(l, kind: field?.fieldType.kind)
+              : state.choicesOperator.label(l, kind: field?.fieldType.kind),
           labels.join(', '),
         )
         .trim();
@@ -1514,8 +1533,14 @@ class _QueryConditionRowState extends State<QueryConditionRow> {
                     value: operator,
                     child: Text(
                       widget.viewWords
-                          ? operator.viewLabel(l)
-                          : operator.label(l),
+                          ? operator.viewLabel(
+                              l,
+                              kind: choicesField.fieldType.kind,
+                            )
+                          : operator.label(
+                              l,
+                              kind: choicesField.fieldType.kind,
+                            ),
                     ),
                   ),
               ],

@@ -553,6 +553,7 @@ mod tests {
             deleted: false,
             enum_options: vec![],
             allow_options_from_records: false,
+            allow_multiple: false,
         }
     }
 

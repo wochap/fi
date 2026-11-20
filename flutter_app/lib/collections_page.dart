@@ -14,6 +14,8 @@ import 'package:fi/ui_prefs.dart';
 import 'package:fi/controllers.dart';
 import 'package:fi/field_editor.dart';
 import 'package:fi/field_registry.dart';
+import 'package:fi/images/image_view_cells.dart';
+import 'package:fi/images/media_storage.dart';
 import 'package:fi/location/location_field.dart';
 import 'package:fi/platform_capabilities.dart';
 import 'package:fi/help_button.dart';
@@ -541,86 +543,218 @@ class CollectionsPage extends StatelessWidget {
   }
 
   /// Picks several collections (mock collections-import-export), then exports them as one JSON
-  /// document: a dialog on wide screens, a bottom sheet on a phone. Dismissing the picker exports
-  /// nothing, and the primary action is unavailable while nothing is checked.
+  /// document (or `.zip` bundle with referenced media files): a dialog on wide screens, a bottom
+  /// sheet on a phone. Dismissing the picker exports nothing, and the primary action is
+  /// unavailable while nothing is checked.
   Future<void> _exportSelected(BuildContext context) async {
     final chosen = <String>{};
     final l = context.l10n;
     final phone = MediaQuery.sizeOf(context).width < _phoneScreen;
+    final mediaFolder = MediaStorageScope.maybeOf(context)?.mediaFolderPath;
     List<CollectionDto>? picked;
+    var includeMediaZip = false;
+    ReferencedMediaSummaryDto? mediaSummary;
+    var summaryToken = 0;
+
     await showFormSurface<void>(
       context,
       builder: (route) => StatefulBuilder(
-        builder: (context, setState) => FormSurface(
-          title: l.collectionsExportTitle,
-          width: 440,
-          body: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                l.collectionsExportLine,
-                style: TextStyle(
-                  fontSize: 13,
-                  color: context.nocturne.muted(.6),
+        builder: (context, setState) {
+          Future<void> refreshSummary() async {
+            final token = ++summaryToken;
+            if (chosen.isEmpty) {
+              setState(() {
+                mediaSummary = null;
+                includeMediaZip = false;
+              });
+              return;
+            }
+            try {
+              final next = await controller.summarizeMedia(
+                chosen.toList(),
+                mediaFolder: mediaFolder,
+              );
+              if (token == summaryToken && route.mounted) {
+                setState(() {
+                  mediaSummary = next;
+                  if (next.totalReferenced == 0) includeMediaZip = false;
+                });
+              }
+            } catch (_) {
+              if (token == summaryToken && route.mounted) {
+                setState(() => mediaSummary = null);
+              }
+            }
+          }
+
+          final hasMedia = (mediaSummary?.totalReferenced ?? 0) > 0;
+          final missingCount = mediaSummary?.missingCount ?? 0;
+
+          return FormSurface(
+            title: l.collectionsExportTitle,
+            width: 440,
+            body: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  l.collectionsExportLine,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: context.nocturne.muted(.6),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 8),
-              for (final item in controller.collections)
-                CheckboxListTile(
-                  key: Key('export-pick-${item.id}'),
-                  contentPadding: EdgeInsets.zero,
-                  controlAffinity: ListTileControlAffinity.leading,
-                  value: chosen.contains(item.id),
-                  title: Text(item.name),
-                  subtitle: Text(
-                    _counts(l, item.recordCount, item.fieldCount),
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontFeatures: Nocturne.tabular,
-                      color: context.nocturne.muted(.55),
+                const SizedBox(height: 8),
+                for (final item in controller.collections)
+                  CheckboxListTile(
+                    key: Key('export-pick-${item.id}'),
+                    contentPadding: EdgeInsets.zero,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    value: chosen.contains(item.id),
+                    title: Text(item.name),
+                    subtitle: Text(
+                      _counts(l, item.recordCount, item.fieldCount),
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontFeatures: Nocturne.tabular,
+                        color: context.nocturne.muted(.55),
+                      ),
+                    ),
+                    onChanged: (value) {
+                      setState(
+                        () => value == true
+                            ? chosen.add(item.id)
+                            : chosen.remove(item.id),
+                      );
+                      unawaited(refreshSummary());
+                    },
+                  ),
+                if (hasMedia) ...[
+                  const SizedBox(height: 8),
+                  Divider(height: 1, color: context.nocturne.divider),
+                  const SizedBox(height: 8),
+                  SwitchListTile(
+                    key: const Key('export-include-media-zip'),
+                    contentPadding: EdgeInsets.zero,
+                    value: includeMediaZip,
+                    onChanged: (value) =>
+                        setState(() => includeMediaZip = value),
+                    title: Text(
+                      l.exportIncludeMediaZip,
+                      style: const TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    subtitle: Text(
+                      l.exportIncludeMediaZipSubtitle(
+                        mediaSummary!.totalReferenced,
+                        formatByteSize(mediaSummary!.presentBytes),
+                      ),
+                      key: const Key('export-media-summary'),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: context.nocturne.muted(.65),
+                      ),
                     ),
                   ),
-                  onChanged: (value) => setState(
-                    () => value == true
-                        ? chosen.add(item.id)
-                        : chosen.remove(item.id),
-                  ),
-                ),
-            ],
-          ),
-          primaryKey: const Key('confirm-export-selected'),
-          primaryLabel: phone
-              ? l.collectionsExportCountShort(chosen.length)
-              : l.collectionsExportCount(chosen.length),
-          onPrimary: chosen.isEmpty
-              ? null
-              : () {
-                  picked = [
-                    for (final item in controller.collections)
-                      if (chosen.contains(item.id)) item,
-                  ];
-                  Navigator.pop(route);
-                },
-        ),
+                  if (includeMediaZip && missingCount > 0)
+                    Container(
+                      key: const Key('export-zip-missing-warning'),
+                      margin: const EdgeInsets.only(top: 6),
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: context.nocturne.warning.withValues(alpha: .10),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: context.nocturne.warning.withValues(
+                            alpha: .35,
+                          ),
+                        ),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        spacing: 8,
+                        children: [
+                          Icon(
+                            FiIcons.warning,
+                            size: 16,
+                            color: context.nocturne.warning,
+                          ),
+                          Expanded(
+                            child: Text(
+                              l.exportZipMissingWarning(missingCount),
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: context.nocturne.muted(.85),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ],
+            ),
+            primaryKey: const Key('confirm-export-selected'),
+            primaryLabel: includeMediaZip
+                ? l.exportZipAction
+                : (phone
+                      ? l.collectionsExportCountShort(chosen.length)
+                      : l.collectionsExportCount(chosen.length)),
+            onPrimary: chosen.isEmpty
+                ? null
+                : () {
+                    picked = [
+                      for (final item in controller.collections)
+                        if (chosen.contains(item.id)) item,
+                    ];
+                    Navigator.pop(route);
+                  },
+          );
+        },
       ),
     );
     final selection = picked;
     if (selection == null || selection.isEmpty || !context.mounted) return;
-    await _exportJson(context, () => controller.exportJson(selection));
+    if (includeMediaZip) {
+      await _export(context, () async {
+        final done = await controller.exportZip(
+          selection,
+          mediaFolder: mediaFolder,
+        );
+        if (done == null) return null;
+        return done.export.mediaMissing > 0
+            ? l.exportZipDoneWithMissing(
+                done.filename,
+                done.export.mediaMissing,
+              )
+            : l.exportZipDone(done.filename);
+      });
+    } else {
+      await _exportJson(context, () => controller.exportJson(selection));
+    }
   }
 
   /// Imports a CSV file into [item] and reports the count, or the row, column and reason that
   /// stopped it. A dismissed open dialog reports nothing.
   Future<void> _importCsv(BuildContext context, CollectionDto item) => _import(
     context,
-    () => controller.importCsv(item.id),
+    () => controller.importCsv(
+      item.id,
+      mediaFolder: MediaStorageScope.maybeOf(context)?.mediaFolderPath,
+    ),
     csv: true,
     collection: item.name,
   );
 
-  Future<void> _importJson(BuildContext context) =>
-      _import(context, controller.importJson, csv: false);
+  Future<void> _importJson(BuildContext context) => _import(
+    context,
+    () => controller.importJson(
+      mediaFolder: MediaStorageScope.maybeOf(context)?.mediaFolderPath,
+    ),
+    csv: false,
+  );
 
   Future<void> _import(
     BuildContext context,
@@ -1442,6 +1576,22 @@ class CollectionsPage extends StatelessWidget {
                             location:
                                 _recordValue(record, field.id)!.locationValue!,
                             showMapPreview: field.display.showMapPreview,
+                          ),
+                        )
+                      else if (field.fieldType.kind ==
+                              FieldTypeKindDto.images &&
+                          !missing.contains(field.id) &&
+                          (_recordValue(
+                                record,
+                                field.id,
+                              )?.imagesValue.isNotEmpty ??
+                              false))
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          child: ImagesMobileCardPreview(
+                            attachments:
+                                _recordValue(record, field.id)!.imagesValue,
+                            showThumbnails: field.display.showThumbnails,
                           ),
                         )
                       else
@@ -3880,8 +4030,10 @@ class _RecordTableState extends State<_RecordTable>
     final l = context.l10n;
     final c = context.nocturne;
     final field = widget.fields[column];
-    final sortable = field.fieldType.kind != FieldTypeKindDto.enumSet &&
-        field.fieldType.kind != FieldTypeKindDto.location;
+    final sortable =
+        field.fieldType.kind != FieldTypeKindDto.enumSet &&
+        field.fieldType.kind != FieldTypeKindDto.location &&
+        field.fieldType.kind != FieldTypeKindDto.images;
     final position = widget.sorting.indexWhere(
       (clause) => sortFieldId(clause) == field.id,
     );
@@ -4017,6 +4169,11 @@ class _RecordTableState extends State<_RecordTable>
                   _recordValue(record, field.id)?.locationValue != null)
               ? LocationTableCell(
                   location: _recordValue(record, field.id)!.locationValue!,
+                )
+              : field.fieldType.kind == FieldTypeKindDto.images
+              ? ImagesTableCell(
+                  attachments:
+                      _recordValue(record, field.id)?.imagesValue ?? const [],
                 )
               : _choicesTags(field, _recordValue(record, field.id)) ??
                     CollectionsPage._cell(

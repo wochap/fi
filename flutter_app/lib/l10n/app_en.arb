@@ -5828,5 +5828,299 @@
   "locationOpenInAnotherApp": "Open in another app…",
   "@locationOpenInAnotherApp": {
     "description": "Android menu item to open coordinates via geo: chooser."
+  },
+  "fieldTypeImages": "Images",
+  "@fieldTypeImages": {
+    "description": "Human label for the Images field type."
+  },
+  "fieldEditorAllowMultiple": "Allow multiple",
+  "@fieldEditorAllowMultiple": {
+    "description": "Schema editor chip for multi-image mode."
+  },
+  "fieldEditorShowThumbnails": "Show thumbnails",
+  "@fieldEditorShowThumbnails": {
+    "description": "Schema editor chip for thumbnail previews on Images fields."
+  },
+  "fieldEditorImagesMultipleSummary": "Images · multiple",
+  "@fieldEditorImagesMultipleSummary": {
+    "description": "Schema row summary for a multi-image field."
+  },
+  "fieldEditorImagesHelper": "Required means at least 1 image is attached. Allow multiple holds an ordered list of images instead of a single image. Show thumbnails is on by default (when off, shows compact filename + size rows).",
+  "@fieldEditorImagesHelper": {
+    "description": "Helper note under option chips for an Images field."
+  },
+  "fieldEditorImagesSingleConversionBlocked": "{count, plural, =1{1 record holds more than one image. Edit it first.} other{{count} records hold more than one image. Edit them first.}}",
+  "@fieldEditorImagesSingleConversionBlocked": {
+    "description": "Inline error when turning Allow multiple off is blocked by records with multiple images.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "helpFieldAllowMultipleTitle": "Allow multiple",
+  "@helpFieldAllowMultipleTitle": {
+    "description": "Help popover title for Allow multiple chip."
+  },
+  "helpFieldAllowMultipleBody": "Holds an ordered list of images instead of a single image. You can drag to reorder them on each record.",
+  "@helpFieldAllowMultipleBody": {
+    "description": "Help popover body for Allow multiple chip."
+  },
+  "helpFieldShowThumbnailsTitle": "Show thumbnails",
+  "@helpFieldShowThumbnailsTitle": {
+    "description": "Help popover title for Show thumbnails chip."
+  },
+  "helpFieldShowThumbnailsBody": "On by default. Shows image thumbnails on the record form and mobile cards. When off, renders compact filename and size rows instead.",
+  "@helpFieldShowThumbnailsBody": {
+    "description": "Help popover body for Show thumbnails chip."
+  },
+  "settingsMediaStorage": "Media storage",
+  "@settingsMediaStorage": {
+    "description": "Settings section heading for device-local media folder."
+  },
+  "settingsMediaFolder": "Media folder",
+  "@settingsMediaFolder": {
+    "description": "Label for the Media folder row in Settings."
+  },
+  "settingsMediaNotSet": "Not set",
+  "@settingsMediaNotSet": {
+    "description": "Badge when no Media folder is configured."
+  },
+  "settingsMediaUnsetBody": "Attached images live in a folder you choose so you can sync it with Syncthing or back it up.",
+  "@settingsMediaUnsetBody": {
+    "description": "Explanation in Settings Media storage when unset."
+  },
+  "settingsMediaChooseFolder": "Choose folder…",
+  "@settingsMediaChooseFolder": {
+    "description": "Button to choose a media folder."
+  },
+  "settingsMediaChangeFolder": "Change folder…",
+  "@settingsMediaChangeFolder": {
+    "description": "Button to change the configured media folder."
+  },
+  "settingsMediaClear": "Clear",
+  "@settingsMediaClear": {
+    "description": "Button to unset the configured media folder without deleting files."
+  },
+  "settingsMediaFolderStats": "{count, plural, =1{1 file} other{{count} files}} · {size}",
+  "@settingsMediaFolderStats": {
+    "description": "File count and total size in the configured media folder.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsMediaMissingReferenced": "{count, plural, =1{1 file referenced by records is not in this folder yet.} other{{count} files referenced by records are not in this folder yet.}}",
+  "@settingsMediaMissingReferenced": {
+    "description": "Warning banner when active records reference files not yet in the local media folder.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "settingsMediaRescan": "Rescan",
+  "@settingsMediaRescan": {
+    "description": "Action to rescan the local media folder."
+  },
+  "settingsMediaAllFilesAccess": "All files access",
+  "@settingsMediaAllFilesAccess": {
+    "description": "Android MANAGE_EXTERNAL_STORAGE permission row title."
+  },
+  "settingsMediaAllFilesNeeded": "Needed",
+  "@settingsMediaAllFilesNeeded": {
+    "description": "Short status when Android All files access is needed."
+  },
+  "settingsMediaAllFilesOffBody": "Turn it on in Android settings so Fi can read and write your chosen folder.",
+  "@settingsMediaAllFilesOffBody": {
+    "description": "Explanation when Android All files access is off."
+  },
+  "settingsMediaFolderNotFound": "Media folder not found",
+  "@settingsMediaFolderNotFound": {
+    "description": "Error card title when the saved media folder is missing or unreadable."
+  },
+  "settingsMediaFolderNotFoundBody": "This folder doesn't exist or can't be read on this device.",
+  "@settingsMediaFolderNotFoundBody": {
+    "description": "Error card body when the saved media folder is missing or unreadable."
+  },
+  "imagesChooseImageEllipsis": "Choose image…",
+  "@imagesChooseImageEllipsis": {
+    "description": "Desktop empty state button for choosing an image."
+  },
+  "imagesDropHint": "Drop an image here or",
+  "@imagesDropHint": {
+    "description": "Desktop drop zone hint above Choose image button."
+  },
+  "imagesTakePhoto": "Take photo",
+  "@imagesTakePhoto": {
+    "description": "Phone button to capture a photo with the camera."
+  },
+  "imagesChooseImage": "Choose image",
+  "@imagesChooseImage": {
+    "description": "Phone button to choose an image from the gallery."
+  },
+  "imagesFolderNotSetTitle": "Choose a media folder first",
+  "@imagesFolderNotSetTitle": {
+    "description": "Inline onboarding card title when no media folder is configured."
+  },
+  "imagesFolderNotSetBody": "Attached images are saved in a folder on this device so you can sync or back them up.",
+  "@imagesFolderNotSetBody": {
+    "description": "Inline onboarding card body when no media folder is configured."
+  },
+  "imagesTapToView": "Tap to view",
+  "@imagesTapToView": {
+    "description": "Badge over single-image thumbnail preview."
+  },
+  "imagesReplace": "Replace",
+  "@imagesReplace": {
+    "description": "Action to replace an attached single image."
+  },
+  "imagesAddImage": "Add image",
+  "@imagesAddImage": {
+    "description": "Tile or button label to attach another image."
+  },
+  "imagesMissingWaitingTitle": "File not in folder yet · waiting for external sync",
+  "@imagesMissingWaitingTitle": {
+    "description": "Placeholder message when a referenced file is not in the media folder yet."
+  },
+  "imagesMissingReferenceKept": "Reference is kept when saving",
+  "@imagesMissingReferenceKept": {
+    "description": "Reassurance line under missing-on-disk image placeholder."
+  },
+  "imagesCheckAgain": "Check again",
+  "@imagesCheckAgain": {
+    "description": "Action button to re-check if a missing file has arrived on disk."
+  },
+  "imagesMissingNoFolderBody": "Set a media folder in Settings to view this file on this device.",
+  "@imagesMissingNoFolderBody": {
+    "description": "Placeholder message when a record has an image but no media folder is set on this device."
+  },
+  "imagesSetFolder": "Set folder…",
+  "@imagesSetFolder": {
+    "description": "Action button to pick a media folder from a missing-image placeholder."
+  },
+  "imagesOnThisDeviceCount": "{present} of {total} on this device",
+  "@imagesOnThisDeviceCount": {
+    "description": "Header status when a multi-image field has a mix of local and missing files.",
+    "placeholders": {
+      "present": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "imagesFileCount": "{count, plural, =1{1 file} other{{count} files}}",
+  "@imagesFileCount": {
+    "description": "Summary count of image files in a table cell.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "imagesMissingBadge": "{name} · missing",
+  "@imagesMissingBadge": {
+    "description": "Desktop table cell text when a referenced image file is missing on disk.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "imagesWaitingForSync": "Waiting for external sync",
+  "@imagesWaitingForSync": {
+    "description": "Mobile card subtitle when an image file is not yet synced."
+  },
+  "viewFilterHasFile": "has file",
+  "@viewFilterHasFile": {
+    "description": "View filter operator for Images IsNotNull."
+  },
+  "viewFilterIsEmpty": "is empty",
+  "@viewFilterIsEmpty": {
+    "description": "View filter operator for Images IsNull."
+  },
+  "imagesLightboxIndex": "{current} of {total}",
+  "@imagesLightboxIndex": {
+    "description": "Image index label in the in-app lightbox.",
+    "placeholders": {
+      "current": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "imagesLightboxFileInFolder": "File in media folder",
+  "@imagesLightboxFileInFolder": {
+    "description": "Label above the relative filename in the lightbox footer."
+  },
+  "imagesLightboxOpenExternally": "Open externally",
+  "@imagesLightboxOpenExternally": {
+    "description": "Lightbox button to open the image in the OS viewer."
+  },
+  "imagesLightboxPrevious": "Previous image",
+  "@imagesLightboxPrevious": {
+    "description": "Tooltip for previous image arrow in lightbox."
+  },
+  "imagesLightboxNext": "Next image",
+  "@imagesLightboxNext": {
+    "description": "Tooltip for next image arrow in lightbox."
+  },
+  "exportIncludeMediaZip": "Include media files (.zip)",
+  "@exportIncludeMediaZip": {
+    "description": "Toggle in Export collections dialog to bundle referenced media into a .zip."
+  },
+  "exportIncludeMediaZipSubtitle": "{count, plural, =1{1 referenced file} other{{count} referenced files}} · {size}",
+  "@exportIncludeMediaZipSubtitle": {
+    "description": "Subtitle under Include media files toggle.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "exportZipMissingWarning": "{count, plural, =1{1 referenced file is not in this device's media folder yet and will be skipped from the archive. Its path stays in collections.json.} other{{count} referenced files are not in this device's media folder yet and will be skipped from the archive. Their paths stay in collections.json.}}",
+  "@exportZipMissingWarning": {
+    "description": "Warning banner in Export collections dialog when some media files are missing locally.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "exportZipAction": "Export .zip",
+  "@exportZipAction": {
+    "description": "Primary button in Export collections dialog when .zip mode is enabled."
+  },
+  "exportZipDone": "Exported to {filename}",
+  "@exportZipDone": {
+    "description": "Toast after exporting a .zip bundle with all media present.",
+    "placeholders": {
+      "filename": {
+        "type": "String"
+      }
+    }
+  },
+  "exportZipDoneWithMissing": "Exported to {filename} · {count, plural, =1{1 missing media file wasn't included.} other{{count} missing media files weren't included.}}",
+  "@exportZipDoneWithMissing": {
+    "description": "Toast after exporting a .zip bundle when some media files were missing locally.",
+    "placeholders": {
+      "filename": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
   }
 }

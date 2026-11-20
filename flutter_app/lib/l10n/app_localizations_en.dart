@@ -4306,4 +4306,247 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get locationOpenInAnotherApp => 'Open in another app…';
+
+  @override
+  String get fieldTypeImages => 'Images';
+
+  @override
+  String get fieldEditorAllowMultiple => 'Allow multiple';
+
+  @override
+  String get fieldEditorShowThumbnails => 'Show thumbnails';
+
+  @override
+  String get fieldEditorImagesMultipleSummary => 'Images · multiple';
+
+  @override
+  String get fieldEditorImagesHelper =>
+      'Required means at least 1 image is attached. Allow multiple holds an ordered list of images instead of a single image. Show thumbnails is on by default (when off, shows compact filename + size rows).';
+
+  @override
+  String fieldEditorImagesSingleConversionBlocked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count records hold more than one image. Edit them first.',
+      one: '1 record holds more than one image. Edit it first.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get helpFieldAllowMultipleTitle => 'Allow multiple';
+
+  @override
+  String get helpFieldAllowMultipleBody =>
+      'Holds an ordered list of images instead of a single image. You can drag to reorder them on each record.';
+
+  @override
+  String get helpFieldShowThumbnailsTitle => 'Show thumbnails';
+
+  @override
+  String get helpFieldShowThumbnailsBody =>
+      'On by default. Shows image thumbnails on the record form and mobile cards. When off, renders compact filename and size rows instead.';
+
+  @override
+  String get settingsMediaStorage => 'Media storage';
+
+  @override
+  String get settingsMediaFolder => 'Media folder';
+
+  @override
+  String get settingsMediaNotSet => 'Not set';
+
+  @override
+  String get settingsMediaUnsetBody =>
+      'Attached images live in a folder you choose so you can sync it with Syncthing or back it up.';
+
+  @override
+  String get settingsMediaChooseFolder => 'Choose folder…';
+
+  @override
+  String get settingsMediaChangeFolder => 'Change folder…';
+
+  @override
+  String get settingsMediaClear => 'Clear';
+
+  @override
+  String settingsMediaFolderStats(int count, String size) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count files',
+      one: '1 file',
+    );
+    return '$_temp0 · $size';
+  }
+
+  @override
+  String settingsMediaMissingReferenced(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count files referenced by records are not in this folder yet.',
+      one: '1 file referenced by records is not in this folder yet.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingsMediaRescan => 'Rescan';
+
+  @override
+  String get settingsMediaAllFilesAccess => 'All files access';
+
+  @override
+  String get settingsMediaAllFilesNeeded => 'Needed';
+
+  @override
+  String get settingsMediaAllFilesOffBody =>
+      'Turn it on in Android settings so Fi can read and write your chosen folder.';
+
+  @override
+  String get settingsMediaFolderNotFound => 'Media folder not found';
+
+  @override
+  String get settingsMediaFolderNotFoundBody =>
+      'This folder doesn\'t exist or can\'t be read on this device.';
+
+  @override
+  String get imagesChooseImageEllipsis => 'Choose image…';
+
+  @override
+  String get imagesDropHint => 'Drop an image here or';
+
+  @override
+  String get imagesTakePhoto => 'Take photo';
+
+  @override
+  String get imagesChooseImage => 'Choose image';
+
+  @override
+  String get imagesFolderNotSetTitle => 'Choose a media folder first';
+
+  @override
+  String get imagesFolderNotSetBody =>
+      'Attached images are saved in a folder on this device so you can sync or back them up.';
+
+  @override
+  String get imagesTapToView => 'Tap to view';
+
+  @override
+  String get imagesReplace => 'Replace';
+
+  @override
+  String get imagesAddImage => 'Add image';
+
+  @override
+  String get imagesMissingWaitingTitle =>
+      'File not in folder yet · waiting for external sync';
+
+  @override
+  String get imagesMissingReferenceKept => 'Reference is kept when saving';
+
+  @override
+  String get imagesCheckAgain => 'Check again';
+
+  @override
+  String get imagesMissingNoFolderBody =>
+      'Set a media folder in Settings to view this file on this device.';
+
+  @override
+  String get imagesSetFolder => 'Set folder…';
+
+  @override
+  String imagesOnThisDeviceCount(int present, int total) {
+    return '$present of $total on this device';
+  }
+
+  @override
+  String imagesFileCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count files',
+      one: '1 file',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String imagesMissingBadge(String name) {
+    return '$name · missing';
+  }
+
+  @override
+  String get imagesWaitingForSync => 'Waiting for external sync';
+
+  @override
+  String get viewFilterHasFile => 'has file';
+
+  @override
+  String get viewFilterIsEmpty => 'is empty';
+
+  @override
+  String imagesLightboxIndex(int current, int total) {
+    return '$current of $total';
+  }
+
+  @override
+  String get imagesLightboxFileInFolder => 'File in media folder';
+
+  @override
+  String get imagesLightboxOpenExternally => 'Open externally';
+
+  @override
+  String get imagesLightboxPrevious => 'Previous image';
+
+  @override
+  String get imagesLightboxNext => 'Next image';
+
+  @override
+  String get exportIncludeMediaZip => 'Include media files (.zip)';
+
+  @override
+  String exportIncludeMediaZipSubtitle(int count, String size) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count referenced files',
+      one: '1 referenced file',
+    );
+    return '$_temp0 · $size';
+  }
+
+  @override
+  String exportZipMissingWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          '$count referenced files are not in this device\'s media folder yet and will be skipped from the archive. Their paths stay in collections.json.',
+      one:
+          '1 referenced file is not in this device\'s media folder yet and will be skipped from the archive. Its path stays in collections.json.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get exportZipAction => 'Export .zip';
+
+  @override
+  String exportZipDone(String filename) {
+    return 'Exported to $filename';
+  }
+
+  @override
+  String exportZipDoneWithMissing(String filename, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count missing media files weren\'t included.',
+      one: '1 missing media file wasn\'t included.',
+    );
+    return 'Exported to $filename · $_temp0';
+  }
 }

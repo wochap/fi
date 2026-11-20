@@ -228,6 +228,7 @@ pub enum FieldTypeKindDto {
     Enum,
     EnumSet,
     Location,
+    Images,
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FieldTypeDto {
@@ -283,6 +284,97 @@ pub struct ParsedLocationDto {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ImageAttachmentDto {
+    pub relative_path: String,
+    pub original_name: String,
+    pub mime_type: String,
+    pub size_bytes: u64,
+}
+
+impl From<app_core::ImageAttachment> for ImageAttachmentDto {
+    fn from(value: app_core::ImageAttachment) -> Self {
+        Self {
+            relative_path: value.relative_path,
+            original_name: value.original_name,
+            mime_type: value.mime_type,
+            size_bytes: value.size_bytes,
+        }
+    }
+}
+
+impl From<ImageAttachmentDto> for app_core::ImageAttachment {
+    fn from(value: ImageAttachmentDto) -> Self {
+        Self {
+            relative_path: value.relative_path,
+            original_name: value.original_name,
+            mime_type: value.mime_type,
+            size_bytes: value.size_bytes,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MediaFolderStatusDto {
+    pub accessible: bool,
+    pub file_count: u64,
+    pub total_bytes: u64,
+    pub missing_referenced_count: u64,
+}
+
+impl From<app_core::MediaFolderStatus> for MediaFolderStatusDto {
+    fn from(value: app_core::MediaFolderStatus) -> Self {
+        Self {
+            accessible: value.accessible,
+            file_count: value.file_count,
+            total_bytes: value.total_bytes,
+            missing_referenced_count: value.missing_referenced_count,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ReferencedMediaSummaryDto {
+    pub total_referenced: u64,
+    pub present_count: u64,
+    pub present_bytes: u64,
+    pub missing_count: u64,
+}
+
+impl From<app_core::ReferencedMediaSummary> for ReferencedMediaSummaryDto {
+    fn from(value: app_core::ReferencedMediaSummary) -> Self {
+        Self {
+            total_referenced: u64::try_from(value.total_referenced).unwrap_or(u64::MAX),
+            present_count: u64::try_from(value.present_count).unwrap_or(u64::MAX),
+            present_bytes: value.present_bytes,
+            missing_count: u64::try_from(value.missing_count).unwrap_or(u64::MAX),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ZipExportDto {
+    pub bytes: Vec<u8>,
+    pub records: u64,
+    pub views_written: u64,
+    pub views_omitted: Vec<String>,
+    pub media_included: u64,
+    pub media_missing: u64,
+}
+
+impl From<app_core::ZipExport> for ZipExportDto {
+    fn from(value: app_core::ZipExport) -> Self {
+        Self {
+            bytes: value.bytes,
+            records: u64::try_from(value.records).unwrap_or(u64::MAX),
+            views_written: u64::try_from(value.views_written).unwrap_or(u64::MAX),
+            views_omitted: value.views_omitted,
+            media_included: u64::try_from(value.media_included).unwrap_or(u64::MAX),
+            media_missing: u64::try_from(value.media_missing).unwrap_or(u64::MAX),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum FieldValueKindDto {
     Null,
     Text,
@@ -295,6 +387,7 @@ pub enum FieldValueKindDto {
     Enum,
     EnumSet,
     Location,
+    Images,
 }
 #[frb]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -309,6 +402,9 @@ pub struct FieldValueDto {
     /// WGS 84 location payload when `kind == FieldValueKindDto::Location`.
     #[frb(default = "null")]
     pub location_value: Option<LocationValueDto>,
+    /// Ordered image attachments when `kind == FieldValueKindDto::Images`.
+    #[frb(default = "const []")]
+    pub images_value: Vec<ImageAttachmentDto>,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -326,6 +422,8 @@ pub struct DisplayMetadataDto {
     pub slider_step: Option<u32>,
     #[frb(default = "true")]
     pub show_map_preview: bool,
+    #[frb(default = "true")]
+    pub show_thumbnails: bool,
 }
 
 impl Default for DisplayMetadataDto {
@@ -335,6 +433,7 @@ impl Default for DisplayMetadataDto {
             slider: false,
             slider_step: None,
             show_map_preview: true,
+            show_thumbnails: true,
         }
     }
 }
@@ -367,6 +466,9 @@ pub struct FieldDefinitionDto {
     /// Choice/Choices only: the record form may add options to this field.
     #[frb(default = "false")]
     pub allow_options_from_records: bool,
+    /// Images only: holds an ordered list of images instead of a single image.
+    #[frb(default = "false")]
+    pub allow_multiple: bool,
 }
 /// An option the record form added, created only when the record is saved. Values pick it by
 /// `key` (`pending:<n>`) in place of an option id.
@@ -412,6 +514,7 @@ pub enum ValueTypeKindDto {
     Enum,
     EnumSet,
     Location,
+    Images,
     Null,
 }
 
@@ -443,6 +546,9 @@ pub struct TypedValueDto {
     /// WGS 84 location payload for a `Location` value.
     #[frb(default = "null")]
     pub location_value: Option<LocationValueDto>,
+    /// Ordered image attachments for an `Images` value.
+    #[frb(default = "const []")]
+    pub images_value: Vec<ImageAttachmentDto>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1518,6 +1624,7 @@ impl From<app_core::FieldType> for FieldTypeDto {
             app_core::FieldType::Enum => (FieldTypeKindDto::Enum, None),
             app_core::FieldType::EnumSet => (FieldTypeKindDto::EnumSet, None),
             app_core::FieldType::Location => (FieldTypeKindDto::Location, None),
+            app_core::FieldType::Images => (FieldTypeKindDto::Images, None),
         };
         Self { kind, scale }
     }
@@ -1537,6 +1644,7 @@ impl From<FieldTypeDto> for app_core::FieldType {
             FieldTypeKindDto::Enum => Self::Enum,
             FieldTypeKindDto::EnumSet => Self::EnumSet,
             FieldTypeKindDto::Location => Self::Location,
+            FieldTypeKindDto::Images => Self::Images,
         }
     }
 }
@@ -1572,6 +1680,7 @@ impl From<app_core::FieldValue> for FieldValueDto {
                     boolean_value: None,
                     list_value: ids.iter().map(ToString::to_string).collect(),
                     location_value: None,
+                    images_value: Vec::new(),
                 };
             }
             app_core::FieldValue::Location(location) => {
@@ -1582,6 +1691,18 @@ impl From<app_core::FieldValue> for FieldValueDto {
                     boolean_value: None,
                     list_value: Vec::new(),
                     location_value: Some(location.into()),
+                    images_value: Vec::new(),
+                };
+            }
+            app_core::FieldValue::Images(attachments) => {
+                return Self {
+                    kind: FieldValueKindDto::Images,
+                    integer_value: None,
+                    text_value: None,
+                    boolean_value: None,
+                    list_value: Vec::new(),
+                    location_value: None,
+                    images_value: attachments.into_iter().map(Into::into).collect(),
                 };
             }
         };
@@ -1592,6 +1713,7 @@ impl From<app_core::FieldValue> for FieldValueDto {
             boolean_value,
             list_value: Vec::new(),
             location_value: None,
+            images_value: Vec::new(),
         }
     }
 }
@@ -1636,6 +1758,9 @@ impl FieldValueDto {
             FieldValueKindDto::Location => {
                 app_core::FieldValue::Location(self.location_value.ok_or_else(missing)?.into())
             }
+            FieldValueKindDto::Images => {
+                app_core::FieldValue::images(self.images_value.into_iter().map(Into::into))
+            }
         })
     }
 }
@@ -1659,11 +1784,13 @@ impl From<app_core::FieldDefinition> for FieldDefinitionDto {
                 slider: value.display.slider,
                 slider_step: value.display.slider_step,
                 show_map_preview: value.display.show_map_preview,
+                show_thumbnails: value.display.show_thumbnails,
             },
             order: value.order,
             deleted: value.deleted,
             enum_options: value.enum_options.into_iter().map(Into::into).collect(),
             allow_options_from_records: value.allow_options_from_records,
+            allow_multiple: value.allow_multiple,
         }
     }
 }
@@ -1672,6 +1799,7 @@ impl TryFrom<FieldDefinitionDto> for app_core::FieldDefinition {
     fn try_from(value: FieldDefinitionDto) -> Result<Self, Self::Error> {
         Ok(Self {
             allow_options_from_records: value.allow_options_from_records,
+            allow_multiple: value.allow_multiple,
             id: value
                 .id
                 .parse()
@@ -1695,6 +1823,7 @@ impl TryFrom<FieldDefinitionDto> for app_core::FieldDefinition {
                 slider: value.display.slider,
                 slider_step: value.display.slider_step,
                 show_map_preview: value.display.show_map_preview,
+                show_thumbnails: value.display.show_thumbnails,
             },
             order: value.order,
             deleted: value.deleted,
@@ -1829,6 +1958,21 @@ impl From<AppError> for BridgeError {
                         issues: vec![BridgeIssueDto {
                             fields: vec![field.to_string()],
                             code: "choices_conversion_blocked".into(),
+                            message: message.clone(),
+                            count: Some(records),
+                        }],
+                        message,
+                        reset_resolvable: false,
+                    }
+                }
+                AppError::Domain(DomainError::ImagesSingleConversionBlocked { field, records }) => {
+                    let message =
+                        format!("{records} records hold more than one image. Edit them first.");
+                    Self {
+                        kind: BridgeErrorKind::Validation,
+                        issues: vec![BridgeIssueDto {
+                            fields: vec![field.to_string()],
+                            code: "images_single_conversion_blocked".into(),
                             message: message.clone(),
                             count: Some(records),
                         }],
@@ -2000,6 +2144,7 @@ mod tests {
         };
         let choice = app_core::FieldDefinition {
             allow_options_from_records: false,
+            allow_multiple: false,
             id: app_core::FieldId::new(),
             name: "Kind".into(),
             field_type: app_core::FieldType::Enum,

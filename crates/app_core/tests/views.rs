@@ -14,6 +14,7 @@ const NOW: i64 = 1_800_000_000_000;
 fn field(name: &str, field_type: FieldType, order: i64) -> FieldDefinition {
     FieldDefinition {
         allow_options_from_records: false,
+        allow_multiple: false,
         id: FieldId::new(),
         name: name.into(),
         field_type,

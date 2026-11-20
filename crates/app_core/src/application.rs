@@ -738,7 +738,10 @@ impl AppCore {
                     root = Some(handle);
                 }
                 Err(error)
-                    if matches!(error, AppError::Projection(ProjectionError::Database { .. })) =>
+                    if matches!(
+                        error,
+                        AppError::Projection(ProjectionError::Database { .. })
+                    ) =>
                 {
                     tracing::warn!(
                         error = %error,
@@ -2363,6 +2366,107 @@ impl AppCore {
         self.export_collections_json(ids)
     }
 
+    /// Collects every unique image `relative_path` referenced by active records across all active
+    /// collections.
+    pub fn referenced_image_paths(&self) -> Result<std::collections::HashSet<String>> {
+        ensure_query_ready(self.lifecycle_state())?;
+        let mut paths = std::collections::HashSet::new();
+        for collection in self.collections()? {
+            for view in self.read_model.records(collection.id)? {
+                for value in view.record.values.values() {
+                    if let crate::FieldValue::Images(attachments) = value {
+                        for item in attachments {
+                            paths.insert(item.relative_path.clone());
+                        }
+                    }
+                }
+            }
+        }
+        Ok(paths)
+    }
+
+    /// Scans `media_folder` for local file count/size and missing active record references.
+    pub fn scan_media_folder(
+        &self,
+        media_folder: &std::path::Path,
+    ) -> Result<crate::MediaFolderStatus> {
+        let referenced = self.referenced_image_paths()?;
+        Ok(crate::images::scan_media_folder(media_folder, &referenced))
+    }
+
+    /// Summarizes referenced media files for the given collections compared against `media_folder`.
+    pub fn summarize_collections_media(
+        &self,
+        ids: Vec<CollectionSchemaId>,
+        media_folder: Option<&std::path::Path>,
+    ) -> Result<crate::ReferencedMediaSummary> {
+        ensure_query_ready(self.lifecycle_state())?;
+        let collections = ids
+            .into_iter()
+            .map(|id| Ok(self.exported_collection(id)?.0))
+            .collect::<Result<Vec<_>>>()?;
+        Ok(crate::import_export::summarize_envelope_media(
+            &Envelope::new(collections),
+            media_folder,
+        ))
+    }
+
+    /// Packages `collections.json` and locally present referenced media files into a `.zip` bundle.
+    pub fn export_collections_zip(
+        &self,
+        ids: Vec<CollectionSchemaId>,
+        media_folder: Option<&std::path::Path>,
+    ) -> Result<crate::ZipExport> {
+        ensure_query_ready(self.lifecycle_state())?;
+        let mut omitted = Vec::new();
+        let collections = ids
+            .into_iter()
+            .map(|id| {
+                let (entry, left_out) = self.exported_collection(id)?;
+                omitted.extend(left_out);
+                Ok(entry)
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let records = collections.iter().map(|entry| entry.records.len()).sum();
+        let views_written = collections.iter().map(|entry| entry.views.len()).sum();
+        let envelope = Envelope::new(collections);
+        let (bytes, media_included, media_missing) =
+            crate::import_export::build_zip_bundle(&envelope, media_folder)?;
+        Ok(crate::ZipExport {
+            bytes,
+            records,
+            views_written,
+            views_omitted: omitted,
+            media_included,
+            media_missing,
+        })
+    }
+
+    /// Imports a `.zip` media bundle: validates `collections.json` and entries first, commits the
+    /// collections atomically, and extracts any bundled media files into `media_folder` (when
+    /// configured) without overwriting existing files.
+    pub async fn import_collections_zip(
+        &self,
+        zip_bytes: Vec<u8>,
+        media_folder: Option<&std::path::Path>,
+    ) -> Result<ImportOutcome> {
+        ensure_query_ready(self.lifecycle_state())?;
+        let bundle = match crate::import_export::parse_zip_bundle(&zip_bytes) {
+            Ok(bundle) => bundle,
+            Err(abort) => return Ok(ImportOutcome::Aborted(abort)),
+        };
+        let json = bundle.envelope.to_json()?;
+        let outcome = self.import_collections_json(json).await?;
+        if matches!(outcome, ImportOutcome::Imported { .. })
+            && let Some(dir) = media_folder
+            && dir.is_dir()
+        {
+            crate::import_export::extract_bundle_media(&bundle.media_entries, dir)
+                .map_err(|error| AppError::Storage(format!("extracting bundle media: {error}")))?;
+        }
+        Ok(outcome)
+    }
+
     fn exported_collection(
         &self,
         id: CollectionSchemaId,
@@ -2428,10 +2532,25 @@ impl AppCore {
         collection_id: CollectionSchemaId,
         text: String,
     ) -> Result<ImportOutcome> {
+        self.import_collection_csv_with_media(collection_id, text, None)
+            .await
+    }
+
+    pub async fn import_collection_csv_with_media(
+        &self,
+        collection_id: CollectionSchemaId,
+        text: String,
+        media_folder: Option<&std::path::Path>,
+    ) -> Result<ImportOutcome> {
         ensure_query_ready(self.lifecycle_state())?;
         let schema = self.active_schema(collection_id)?;
         let computed = self.read_model.computed_fields(collection_id)?;
-        let records = match crate::import_export::csv::parse_csv(&text, &schema, &computed) {
+        let records = match crate::import_export::csv::parse_csv_with_media_folder(
+            &text,
+            &schema,
+            &computed,
+            media_folder,
+        ) {
             Ok(records) => records,
             Err(abort) => return Ok(ImportOutcome::Aborted(abort)),
         };

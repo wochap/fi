@@ -227,10 +227,7 @@ fn parse_map_url(input: &str) -> Result<LocationValue, LocationParseError> {
     for marker in ["/search/", "/place/"] {
         if let Some(idx) = input.find(marker) {
             let after = &input[idx + marker.len()..];
-            let segment = after
-                .split(['/', '?', '#'])
-                .next()
-                .unwrap_or_default();
+            let segment = after.split(['/', '?', '#']).next().unwrap_or_default();
             let decoded = percent_decode(segment);
             if let Ok(loc) = parse_decimal_pair(decoded.trim()) {
                 return Ok(loc);
@@ -259,7 +256,9 @@ fn parse_google_3d_4d(input: &str) -> Option<Result<LocationValue, LocationParse
     let mut search = input;
     while let Some(idx) = search.find("!3d") {
         let after_3d = &search[idx + 3..];
-        let lat_end = after_3d.find(['!', '?', '#', '&', '/']).unwrap_or(after_3d.len());
+        let lat_end = after_3d
+            .find(['!', '?', '#', '&', '/'])
+            .unwrap_or(after_3d.len());
         let lat_str = &after_3d[..lat_end];
         let rest = &after_3d[lat_end..];
         if let Some(after_4d) = rest.strip_prefix("!4d") {
@@ -277,9 +276,7 @@ fn parse_google_3d_4d(input: &str) -> Option<Result<LocationValue, LocationParse
 }
 
 fn parse_osm_hash(fragment: &str) -> Option<Result<LocationValue, LocationParseError>> {
-    let map_part = fragment
-        .split('&')
-        .find_map(|kv| kv.strip_prefix("map="))?;
+    let map_part = fragment.split('&').find_map(|kv| kv.strip_prefix("map="))?;
     let mut parts = map_part.split('/');
     let _zoom = parts.next()?;
     let lat = parts.next()?;
@@ -408,7 +405,11 @@ pub fn parse_decimal_to_microdeg(raw: &str) -> Result<i64, LocationParseError> {
     };
     if whole > 1_000_000 {
         // Clearly out of range; let caller classify lat vs lng.
-        let clamped = if negative { -1_000_000_000_000 } else { 1_000_000_000_000 };
+        let clamped = if negative {
+            -1_000_000_000_000
+        } else {
+            1_000_000_000_000
+        };
         return Ok(clamped);
     }
     let mut frac_micro: i128 = 0;
@@ -505,9 +506,7 @@ fn parse_single_dms(part: &str) -> Option<(f64, Option<char>)> {
         let sec_val = if after_min.is_empty() {
             0.0
         } else {
-            let sec_str = after_min
-                .trim_end_matches(['"', '″'])
-                .trim();
+            let sec_str = after_min.trim_end_matches(['"', '″']).trim();
             if sec_str.is_empty() {
                 0.0
             } else {
@@ -597,7 +596,10 @@ mod tests {
     #[test]
     fn parses_geo_uris_and_full_map_links() {
         let expected = LocationValue::new(38_713_900, -9_133_400, None, false);
-        assert_eq!(parse_location_input("geo:38.7139,-9.1334").unwrap(), expected);
+        assert_eq!(
+            parse_location_input("geo:38.7139,-9.1334").unwrap(),
+            expected
+        );
         assert_eq!(
             parse_location_input("geo:0,0?q=38.7139,-9.1334(Lisbon)").unwrap(),
             expected

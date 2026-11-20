@@ -812,7 +812,10 @@ fn sql_typed_value(value: &TypedValue) -> Option<(&'static str, Value)> {
         }
         TypedValue::Boolean(value) => Some(("boolean_value", Value::Integer(i64::from(*value)))),
         TypedValue::Enum(value) => Some(("text_value", Value::Text(value.to_string()))),
-        TypedValue::Null | TypedValue::EnumOptionSet { .. } | TypedValue::Location(_) => None,
+        TypedValue::Null
+        | TypedValue::EnumOptionSet { .. }
+        | TypedValue::Location(_)
+        | TypedValue::Images(_) => None,
     }
 }
 
@@ -920,6 +923,7 @@ fn field_kind(field: &crate::schema::FieldType) -> (&'static str, Option<i64>) {
         Enum => ("enum", None),
         EnumSet => ("enum_set", None),
         Location => ("location", None),
+        Images => ("images", None),
     }
 }
 fn sql_value(value: &FieldValue) -> (&'static str, Option<i64>, Option<String>, Option<bool>) {
@@ -951,6 +955,18 @@ fn sql_value(value: &FieldValue) -> (&'static str, Option<i64>, Option<String>, 
             Some(serde_json::to_string(location).unwrap_or_default()),
             None,
         ),
+        FieldValue::Images(attachments) => {
+            if attachments.is_empty() {
+                ("null", None, None, None)
+            } else {
+                (
+                    "images",
+                    None,
+                    Some(serde_json::to_string(attachments).unwrap_or_default()),
+                    None,
+                )
+            }
+        }
     }
 }
 fn decode_sql_value(
@@ -998,6 +1014,12 @@ fn decode_sql_value(
             let location = serde_json::from_str(&raw)
                 .map_err(|error| AppError::Storage(format!("invalid location payload: {error}")))?;
             FieldValue::Location(location)
+        }
+        "images" => {
+            let raw = text.ok_or_else(|| AppError::Storage("missing images payload".into()))?;
+            let attachments: Vec<crate::values::ImageAttachment> = serde_json::from_str(&raw)
+                .map_err(|error| AppError::Storage(format!("invalid images payload: {error}")))?;
+            FieldValue::images(attachments)
         }
         _ => return Err(AppError::Storage("unsupported projected value kind".into())),
     })
@@ -1147,6 +1169,7 @@ mod tests {
         let record_id = RecordId::new();
         let field = FieldDefinition {
             allow_options_from_records: false,
+            allow_multiple: false,
             id: field_id,
             name: "Value".into(),
             field_type: FieldType::Integer,

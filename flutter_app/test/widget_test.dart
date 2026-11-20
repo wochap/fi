@@ -1,5 +1,6 @@
 import 'package:fi/app.dart';
 import 'package:fi/file_dialogs.dart';
+import 'package:fi/images/media_storage.dart';
 import 'package:fi/platform_capabilities.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/ui_prefs.dart';
@@ -17,6 +18,7 @@ Widget app(
   UiPrefsStore? uiPrefs,
   VoiceServices? voice,
   PlatformCapabilities? capabilities,
+  MediaStorageService? mediaStorageService,
 }) => CollectionApp(
   bridge: bridge,
   initializeRust: () async {},
@@ -26,6 +28,7 @@ Widget app(
   uiPrefs: uiPrefs ?? MemoryUiPrefsStore(),
   voiceServices: voice == null ? null : (_, _) => voice,
   capabilities: capabilities,
+  mediaStorageService: mediaStorageService,
 );
 
 /// Presents the platform as set to dark mode, so the app draws Mocha under

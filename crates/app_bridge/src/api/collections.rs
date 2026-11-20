@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, str::FromStr};
+use std::{collections::BTreeMap, path::Path, str::FromStr};
 
 use app_core::{
     CollectionSchemaId, DraftValue, FieldId, LocationParseError, PENDING_OPTION_PREFIX,
@@ -10,8 +10,9 @@ use crate::api::{
     lifecycle::core,
     models::{
         BootstrapDto, BridgeError, BridgeIssueDto, CollectionDto, CollectionSchemaDto,
-        FieldDefinitionDto, FieldValueDto, FieldValueKindDto, ImportOutcomeDto,
-        LocationParseStatusDto, ParsedLocationDto, PendingOptionDto, RecordDto,
+        FieldDefinitionDto, FieldValueDto, FieldValueKindDto, ImageAttachmentDto, ImportOutcomeDto,
+        LocationParseStatusDto, MediaFolderStatusDto, ParsedLocationDto, PendingOptionDto,
+        RecordDto, ReferencedMediaSummaryDto, ZipExportDto,
     },
 };
 
@@ -117,12 +118,114 @@ pub async fn import_collection_csv(
         .map(Into::into)
         .map_err(Into::into)
 }
+/// Adds every row of `text` as a new record, reading image sizes from `media_folder` when set.
+pub async fn import_collection_csv_with_media(
+    collection_id: String,
+    text: String,
+    media_folder: Option<String>,
+) -> Result<ImportOutcomeDto, BridgeError> {
+    let folder = media_folder
+        .as_deref()
+        .map(str::trim)
+        .filter(|p| !p.is_empty())
+        .map(Path::new);
+    core()
+        .await?
+        .import_collection_csv_with_media(parse_collection(&collection_id)?, text, folder)
+        .await
+        .map(Into::into)
+        .map_err(Into::into)
+}
 /// Creates new collections from a `fi-collection` document; a rejected document writes nothing.
 pub async fn import_collections_json(text: String) -> Result<ImportOutcomeDto, BridgeError> {
     core()
         .await?
         .import_collections_json(text)
         .await
+        .map(Into::into)
+        .map_err(Into::into)
+}
+/// Summarizes referenced media files for the given collections compared against `media_folder`.
+pub async fn summarize_collections_media(
+    ids: Vec<String>,
+    media_folder: Option<String>,
+) -> Result<ReferencedMediaSummaryDto, BridgeError> {
+    let ids = ids
+        .iter()
+        .map(|id| parse_collection(id))
+        .collect::<Result<Vec<_>, _>>()?;
+    let folder = media_folder
+        .as_deref()
+        .map(str::trim)
+        .filter(|p| !p.is_empty())
+        .map(Path::new);
+    core()
+        .await?
+        .summarize_collections_media(ids, folder)
+        .map(Into::into)
+        .map_err(Into::into)
+}
+/// Packages `collections.json` and locally present referenced media files into a `.zip` archive.
+pub async fn export_collections_zip(
+    ids: Vec<String>,
+    media_folder: Option<String>,
+) -> Result<ZipExportDto, BridgeError> {
+    let ids = ids
+        .iter()
+        .map(|id| parse_collection(id))
+        .collect::<Result<Vec<_>, _>>()?;
+    let folder = media_folder
+        .as_deref()
+        .map(str::trim)
+        .filter(|p| !p.is_empty())
+        .map(Path::new);
+    core()
+        .await?
+        .export_collections_zip(ids, folder)
+        .map(Into::into)
+        .map_err(Into::into)
+}
+/// Imports a `.zip` media bundle, extracting bundled media files into `media_folder` when set.
+pub async fn import_collections_zip(
+    zip_bytes: Vec<u8>,
+    media_folder: Option<String>,
+) -> Result<ImportOutcomeDto, BridgeError> {
+    let folder = media_folder
+        .as_deref()
+        .map(str::trim)
+        .filter(|p| !p.is_empty())
+        .map(Path::new);
+    core()
+        .await?
+        .import_collections_zip(zip_bytes, folder)
+        .await
+        .map(Into::into)
+        .map_err(Into::into)
+}
+/// Copies an image file into `media_folder` under `<uuidv7>_<sanitized_name>.<ext>`.
+pub async fn ingest_image_file(
+    source_path: String,
+    media_folder: String,
+) -> Result<ImageAttachmentDto, BridgeError> {
+    app_core::ingest_image_file(Path::new(&source_path), Path::new(&media_folder))
+        .map(Into::into)
+        .map_err(|error| BridgeError::validation("image", error.to_string()))
+}
+/// Writes image bytes into `media_folder` under `<uuidv7>_<sanitized_name>.<ext>`.
+pub async fn ingest_image_bytes(
+    bytes: Vec<u8>,
+    original_name: String,
+    media_folder: String,
+) -> Result<ImageAttachmentDto, BridgeError> {
+    app_core::ingest_image_bytes(&bytes, &original_name, Path::new(&media_folder))
+        .map(Into::into)
+        .map_err(|error| BridgeError::validation("image", error.to_string()))
+}
+/// Scans `media_folder` for accessibility, local file count/bytes, and missing referenced files.
+pub async fn scan_media_folder(media_folder: String) -> Result<MediaFolderStatusDto, BridgeError> {
+    core()
+        .await?
+        .scan_media_folder(Path::new(&media_folder))
         .map(Into::into)
         .map_err(Into::into)
 }
@@ -483,7 +586,9 @@ pub fn parse_location_text(input: String) -> ParsedLocationDto {
             status: LocationParseStatusDto::ShortLinkNeedsResolution,
             value: None,
             short_link_url: Some(url),
-            error_message: Some(LocationParseError::ShortLinkNeedsResolution(String::new()).to_string()),
+            error_message: Some(
+                LocationParseError::ShortLinkNeedsResolution(String::new()).to_string(),
+            ),
         },
         Err(err @ LocationParseError::LatitudeOutOfRange) => ParsedLocationDto {
             status: LocationParseStatusDto::LatitudeOutOfRange,
@@ -519,6 +624,7 @@ mod tests {
             boolean_value: None,
             list_value: list.iter().map(|item| (*item).to_owned()).collect(),
             location_value: None,
+            images_value: Vec::new(),
         }
     }
 

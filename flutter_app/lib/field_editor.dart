@@ -39,6 +39,8 @@ enum _Chip {
   slider('field-slider', HelpId.fieldSlider),
   dateRange('chip-date-range', HelpId.fieldMinMax),
   showMapPreview('chip-show-map-preview', HelpId.fieldShowMapPreview),
+  allowMultiple('chip-allow-multiple', HelpId.fieldAllowMultiple),
+  showThumbnails('chip-show-thumbnails', HelpId.fieldShowThumbnails),
   defaultValue('chip-default', HelpId.fieldDefault);
 
   const _Chip(this.key, this.help);
@@ -54,6 +56,8 @@ enum _Chip {
     slider => l.fieldEditorChipSlider,
     dateRange => l.fieldEditorChipDateRange,
     showMapPreview => l.fieldShowMapPreview,
+    allowMultiple => l.fieldEditorAllowMultiple,
+    showThumbnails => l.fieldEditorShowThumbnails,
     defaultValue => l.fieldEditorChipDefaultValue,
   };
 }
@@ -69,11 +73,16 @@ List<_Chip> _chipsFor(FieldTypeKindDto kind) => [
   if (kind == FieldTypeKindDto.date || kind == FieldTypeKindDto.dateTime)
     _Chip.dateRange,
   if (kind == FieldTypeKindDto.location) _Chip.showMapPreview,
-  if (kind != FieldTypeKindDto.location) _Chip.defaultValue,
+  if (kind == FieldTypeKindDto.images) ...[
+    _Chip.allowMultiple,
+    _Chip.showThumbnails,
+  ],
+  if (kind != FieldTypeKindDto.location && kind != FieldTypeKindDto.images)
+    _Chip.defaultValue,
 ];
 
 /// The field types in grid order: 3-column grid (3×4), Choices directly after Choice,
-/// Location after Choices.
+/// Location after Choices, Images after Location.
 const _typeGrid = [
   FieldTypeKindDto.text,
   FieldTypeKindDto.integer,
@@ -85,6 +94,7 @@ const _typeGrid = [
   FieldTypeKindDto.enum_,
   FieldTypeKindDto.enumSet,
   FieldTypeKindDto.location,
+  FieldTypeKindDto.images,
 ];
 
 bool _isChoiceKind(FieldTypeKindDto kind) =>
@@ -95,6 +105,9 @@ bool _isChoiceKind(FieldTypeKindDto kind) =>
 /// Choices field its option labels in order.
 String fieldSummary(AppLocalizations l, FieldDefinitionDto field) {
   final kind = field.fieldType.kind;
+  if (kind == FieldTypeKindDto.images && field.allowMultiple) {
+    return l.fieldEditorImagesMultipleSummary;
+  }
   final label = fieldKindLabel(l, kind);
   final min = field.validation.minInteger;
   final max = field.validation.maxInteger;
@@ -334,6 +347,8 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
   late var multiline = existing?.display.multiline ?? false;
   late var slider = existing?.display.slider ?? false;
   late var showMapPreview = existing?.display.showMapPreview ?? true;
+  late var allowMultiple = existing?.allowMultiple ?? false;
+  late var showThumbnails = existing?.display.showThumbnails ?? true;
 
   /// "Allow adding options from records", held until Save like every other setting.
   late var allowAdding = existing?.allowOptionsFromRecords ?? false;
@@ -519,6 +534,10 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
     if (kind != FieldTypeKindDto.location) {
       showMapPreview = true;
     }
+    if (kind != FieldTypeKindDto.images) {
+      allowMultiple = false;
+      showThumbnails = true;
+    }
     open.removeWhere((chip) => !_chipsFor(kind).contains(chip));
     open.removeAll([_Chip.range, _Chip.dateRange]);
   }
@@ -528,6 +547,8 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
     _Chip.multiline => multiline,
     _Chip.slider => slider && _sliderAvailable,
     _Chip.showMapPreview => showMapPreview,
+    _Chip.allowMultiple => allowMultiple,
+    _Chip.showThumbnails => showThumbnails,
     _ => open.contains(chip),
   };
 
@@ -546,6 +567,10 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
         open.add(chip);
       case _Chip.showMapPreview:
         showMapPreview = true;
+      case _Chip.allowMultiple:
+        allowMultiple = true;
+      case _Chip.showThumbnails:
+        showThumbnails = true;
       default:
         open.add(chip);
     }
@@ -560,6 +585,10 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
         multiline = false;
       case _Chip.showMapPreview:
         showMapPreview = false;
+      case _Chip.allowMultiple:
+        allowMultiple = false;
+      case _Chip.showThumbnails:
+        showThumbnails = false;
       case _Chip.lengthLimits:
         minLength.clear();
         maxLength.clear();
@@ -698,12 +727,15 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
           sliderStep: _submittedStep,
           showMapPreview:
               kind == FieldTypeKindDto.location ? showMapPreview : true,
+          showThumbnails:
+              kind == FieldTypeKindDto.images ? showThumbnails : true,
         ),
         order: order,
         deleted: false,
         // Options travel separately; the controller keeps the stored ones here.
         enumOptions: const [],
         allowOptionsFromRecords: _isChoiceKind(kind) && allowAdding,
+        allowMultiple: kind == FieldTypeKindDto.images && allowMultiple,
       );
       await controller.saveFieldWithOptions(
         dto,
@@ -876,6 +908,15 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
             child: Text(
               context.l10n.fieldShowMapPreviewHelper,
               key: const Key('location-map-preview-help'),
+              style: TextStyle(fontSize: 12, color: context.nocturne.muted(.5)),
+            ),
+          ),
+        if (kind == FieldTypeKindDto.images)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+              context.l10n.fieldEditorImagesHelper,
+              key: const Key('images-options-help'),
               style: TextStyle(fontSize: 12, color: context.nocturne.muted(.5)),
             ),
           ),
@@ -1106,7 +1147,11 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
       child: child,
     );
     switch (chip) {
-      case _Chip.required || _Chip.multiline || _Chip.showMapPreview:
+      case _Chip.required ||
+          _Chip.multiline ||
+          _Chip.showMapPreview ||
+          _Chip.allowMultiple ||
+          _Chip.showThumbnails:
         return null;
       case _Chip.lengthLimits:
         return block(

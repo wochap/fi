@@ -16,7 +16,7 @@ use crate::{
     error::{DomainError, IssueCode, ValidationIssue, summarize_issues},
     hlc::{HlcNodeId, HlcStamp},
     schema::{CollectionSchema, CollectionSchemaId, EnumOptionId, FieldId},
-    values::{FieldValue, LocationValue},
+    values::{FieldValue, ImageAttachment, LocationValue},
 };
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
@@ -162,10 +162,14 @@ pub fn validate_record(
         .collect();
     let creation_day = record.creation_day();
     if apply_defaults {
-        // A new set drops repeats and reads as Null when empty.
+        // A new set drops repeats and reads as Null when empty; an empty images list also reads as Null.
         for value in record.values.values_mut() {
             if let FieldValue::EnumSet(ids) = value {
                 *value = FieldValue::enum_set(ids.iter().copied());
+            } else if let FieldValue::Images(attachments) = value
+                && attachments.is_empty()
+            {
+                *value = FieldValue::Null;
             }
         }
     }
@@ -276,6 +280,13 @@ pub fn write_lww_register(
                     .map_err(repo_change)?;
             }
         }
+        FieldValue::Images(attachments) => {
+            if !attachments.is_empty() {
+                let encoded = serde_json::to_string(attachments).map_err(repo_change)?;
+                tx.put(&register, "images_json", encoded)
+                    .map_err(repo_change)?;
+            }
+        }
     }
     tx.put(&register, "physical_time_ms", stamp.physical_time_ms)
         .map_err(repo_change)?;
@@ -315,16 +326,17 @@ pub fn read_lww_candidates(
             "location" => {
                 let latitude_microdeg = integer(doc, &object, "latitude_microdeg")?;
                 let longitude_microdeg = integer(doc, &object, "longitude_microdeg")?;
-                let accuracy_meters = match doc.get(&object, "accuracy_meters").map_err(malformed)? {
-                    Some((raw, _)) => {
-                        let meters = raw
-                            .to_i64()
-                            .and_then(|v| u32::try_from(v).ok())
-                            .ok_or_else(|| malformed("invalid accuracy_meters"))?;
-                        Some(meters)
-                    }
-                    None => None,
-                };
+                let accuracy_meters =
+                    match doc.get(&object, "accuracy_meters").map_err(malformed)? {
+                        Some((raw, _)) => {
+                            let meters = raw
+                                .to_i64()
+                                .and_then(|v| u32::try_from(v).ok())
+                                .ok_or_else(|| malformed("invalid accuracy_meters"))?;
+                            Some(meters)
+                        }
+                        None => None,
+                    };
                 let approximate = match doc.get(&object, "approximate").map_err(malformed)? {
                     Some((raw, _)) => raw
                         .to_bool()
@@ -337,6 +349,12 @@ pub fn read_lww_candidates(
                     accuracy_meters,
                     approximate,
                 })
+            }
+            "images" => {
+                let encoded = string(doc, &object, "images_json")?;
+                let attachments: Vec<ImageAttachment> =
+                    serde_json::from_str(&encoded).map_err(malformed)?;
+                FieldValue::images(attachments)
             }
             _ => return Err(malformed(format!("unsupported register kind {kind}"))),
         };
@@ -386,6 +404,13 @@ fn value_kind(value: &FieldValue) -> &'static str {
         FieldValue::Enum(_) => "enum",
         FieldValue::EnumSet(_) => "enum_set",
         FieldValue::Location(_) => "location",
+        FieldValue::Images(attachments) => {
+            if attachments.is_empty() {
+                "null"
+            } else {
+                "images"
+            }
+        }
     }
 }
 
@@ -578,6 +603,7 @@ mod tests {
             deleted: false,
             fields: vec![FieldDefinition {
                 allow_options_from_records: false,
+                allow_multiple: false,
                 id: field_id,
                 name: "Intensity".into(),
                 field_type: FieldType::Integer,
@@ -621,6 +647,7 @@ mod tests {
             deleted: false,
             fields: vec![FieldDefinition {
                 allow_options_from_records: false,
+                allow_multiple: false,
                 id: field_id,
                 name: "When".into(),
                 field_type: FieldType::DateTime,
@@ -656,6 +683,7 @@ mod tests {
     fn field(name: &str, field_type: FieldType, required: bool) -> FieldDefinition {
         FieldDefinition {
             allow_options_from_records: false,
+            allow_multiple: false,
             id: FieldId::new(),
             name: name.into(),
             field_type,
@@ -908,6 +936,7 @@ mod tests {
             deleted: false,
             fields: vec![FieldDefinition {
                 allow_options_from_records: false,
+                allow_multiple: false,
                 id: field_id,
                 name: "Spot".into(),
                 field_type: FieldType::Location,
@@ -922,12 +951,8 @@ mod tests {
             }],
         };
 
-        let exact = FieldValue::Location(LocationValue::new(
-            38_710_841,
-            -9_137_265,
-            Some(12),
-            false,
-        ));
+        let exact =
+            FieldValue::Location(LocationValue::new(38_710_841, -9_137_265, Some(12), false));
         let approx = FieldValue::Location(LocationValue::new(
             38_710_200,
             -9_138_000,
@@ -998,5 +1023,152 @@ mod tests {
         };
         let err = validate_record(&mut bad_record, &schema, true).unwrap_err();
         assert_eq!(err.issues()[0].code, IssueCode::OutOfRange);
+    }
+
+    #[test]
+    fn images_record_validation_normalization_and_lww_round_trip() {
+        let collection_id = CollectionSchemaId::new();
+        let single_id = FieldId::new();
+        let multi_id = FieldId::new();
+        let schema = CollectionSchema {
+            id: collection_id,
+            name: "Expenses".into(),
+            description: String::new(),
+            fields: vec![
+                FieldDefinition {
+                    id: single_id,
+                    name: "Receipt".into(),
+                    field_type: FieldType::Images,
+                    required: false,
+                    default: None,
+                    default_relative_days: None,
+                    validation: ValidationMetadata::default(),
+                    display: DisplayMetadata::default(),
+                    order: 0,
+                    deleted: false,
+                    enum_options: vec![],
+                    allow_options_from_records: false,
+                    allow_multiple: false,
+                },
+                FieldDefinition {
+                    id: multi_id,
+                    name: "Photos".into(),
+                    field_type: FieldType::Images,
+                    required: false,
+                    default: None,
+                    default_relative_days: None,
+                    validation: ValidationMetadata::default(),
+                    display: DisplayMetadata::default(),
+                    order: 1,
+                    deleted: false,
+                    enum_options: vec![],
+                    allow_options_from_records: false,
+                    allow_multiple: true,
+                },
+            ],
+            deleted: false,
+        };
+        let a = ImageAttachment {
+            relative_path: "0195f3a0-7c4b-7d20-8a1e-4b92c8103f1a_receipt.jpg".into(),
+            original_name: "receipt.jpg".into(),
+            mime_type: "image/jpeg".into(),
+            size_bytes: 421_888,
+        };
+        let b = ImageAttachment {
+            relative_path: "0195f3a1-12b0-7a84-9c03-8e41d902b77c_espresso.png".into(),
+            original_name: "espresso.png".into(),
+            mime_type: "image/png".into(),
+            size_bytes: 120_000,
+        };
+
+        // Empty list normalizes to Null.
+        let mut empty_rec = GenericRecord {
+            id: RecordId::new(),
+            collection_id,
+            values: BTreeMap::from([(single_id, FieldValue::Images(vec![]))]),
+            stamps: BTreeMap::new(),
+            deleted: false,
+        };
+        validate_record(&mut empty_rec, &schema, true).unwrap();
+        assert_eq!(empty_rec.values.get(&single_id), Some(&FieldValue::Null));
+
+        // Multiple attachments on single-image field rejected.
+        let mut too_many = GenericRecord {
+            id: RecordId::new(),
+            collection_id,
+            values: BTreeMap::from([(single_id, FieldValue::Images(vec![a.clone(), b.clone()]))]),
+            stamps: BTreeMap::new(),
+            deleted: false,
+        };
+        let err = validate_record(&mut too_many, &schema, true).unwrap_err();
+        assert_eq!(err.issues()[0].code, IssueCode::Invalid);
+
+        // Unsafe path traversal and unsupported MIME rejected.
+        for bad in [
+            ImageAttachment {
+                relative_path: "../secret.jpg".into(),
+                ..a.clone()
+            },
+            ImageAttachment {
+                relative_path: "/home/gean/receipt.jpg".into(),
+                ..a.clone()
+            },
+            ImageAttachment {
+                relative_path: "sub\\receipt.jpg".into(),
+                ..a.clone()
+            },
+            ImageAttachment {
+                mime_type: "application/pdf".into(),
+                ..a.clone()
+            },
+        ] {
+            let mut rec = GenericRecord {
+                id: RecordId::new(),
+                collection_id,
+                values: BTreeMap::from([(multi_id, FieldValue::Images(vec![bad]))]),
+                stamps: BTreeMap::new(),
+                deleted: false,
+            };
+            assert_eq!(
+                validate_record(&mut rec, &schema, true)
+                    .unwrap_err()
+                    .issues()[0]
+                    .code,
+                IssueCode::Invalid
+            );
+        }
+
+        // LWW register round-trip for non-empty and empty Images values.
+        let val = FieldValue::Images(vec![a, b]);
+        let mut doc = automerge::Automerge::new();
+        let fields_obj = {
+            let mut tx = doc.transaction();
+            let obj = tx
+                .put_object(automerge::ROOT, "values", ObjType::Map)
+                .unwrap();
+            let stamp = HlcStamp {
+                physical_time_ms: 100,
+                logical_counter: 0,
+                node_id: HlcNodeId([1; 32]),
+            };
+            write_lww_register(&mut tx, &obj, "photos", &val, stamp).unwrap();
+            write_lww_register(&mut tx, &obj, "empty", &FieldValue::Images(vec![]), stamp).unwrap();
+            tx.commit();
+            obj
+        };
+        assert_eq!(
+            read_lww_winner(&doc, &fields_obj, "photos")
+                .unwrap()
+                .unwrap()
+                .value,
+            val
+        );
+        assert_eq!(
+            read_lww_winner(&doc, &fields_obj, "empty")
+                .unwrap()
+                .unwrap()
+                .value,
+            FieldValue::Null
+        );
     }
 }

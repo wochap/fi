@@ -14,6 +14,8 @@ enum HelpId {
   fieldMultiline,
   fieldSlider,
   fieldShowMapPreview,
+  fieldAllowMultiple,
+  fieldShowThumbnails,
 
   // Widget form: query.
   widgetType,
@@ -91,6 +93,14 @@ HelpEntry helpEntry(AppLocalizations l, HelpId id) => switch (id) {
   HelpId.fieldShowMapPreview => HelpEntry(
     title: l.helpFieldShowMapPreviewTitle,
     body: l.helpFieldShowMapPreviewBody,
+  ),
+  HelpId.fieldAllowMultiple => HelpEntry(
+    title: l.helpFieldAllowMultipleTitle,
+    body: l.helpFieldAllowMultipleBody,
+  ),
+  HelpId.fieldShowThumbnails => HelpEntry(
+    title: l.helpFieldShowThumbnailsTitle,
+    body: l.helpFieldShowThumbnailsBody,
   ),
   HelpId.widgetType => HelpEntry(
     title: l.helpWidgetTypeTitle,

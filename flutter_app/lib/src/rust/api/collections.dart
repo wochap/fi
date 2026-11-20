@@ -57,9 +57,73 @@ Future<ImportOutcomeDto> importCollectionCsv({
   text: text,
 );
 
+/// Adds every row of `text` as a new record, reading image sizes from `media_folder` when set.
+Future<ImportOutcomeDto> importCollectionCsvWithMedia({
+  required String collectionId,
+  required String text,
+  String? mediaFolder,
+}) => RustLib.instance.api.crateApiCollectionsImportCollectionCsvWithMedia(
+  collectionId: collectionId,
+  text: text,
+  mediaFolder: mediaFolder,
+);
+
 /// Creates new collections from a `fi-collection` document; a rejected document writes nothing.
 Future<ImportOutcomeDto> importCollectionsJson({required String text}) =>
     RustLib.instance.api.crateApiCollectionsImportCollectionsJson(text: text);
+
+/// Summarizes referenced media files for the given collections compared against `media_folder`.
+Future<ReferencedMediaSummaryDto> summarizeCollectionsMedia({
+  required List<String> ids,
+  String? mediaFolder,
+}) => RustLib.instance.api.crateApiCollectionsSummarizeCollectionsMedia(
+  ids: ids,
+  mediaFolder: mediaFolder,
+);
+
+/// Packages `collections.json` and locally present referenced media files into a `.zip` archive.
+Future<ZipExportDto> exportCollectionsZip({
+  required List<String> ids,
+  String? mediaFolder,
+}) => RustLib.instance.api.crateApiCollectionsExportCollectionsZip(
+  ids: ids,
+  mediaFolder: mediaFolder,
+);
+
+/// Imports a `.zip` media bundle, extracting bundled media files into `media_folder` when set.
+Future<ImportOutcomeDto> importCollectionsZip({
+  required List<int> zipBytes,
+  String? mediaFolder,
+}) => RustLib.instance.api.crateApiCollectionsImportCollectionsZip(
+  zipBytes: zipBytes,
+  mediaFolder: mediaFolder,
+);
+
+/// Copies an image file into `media_folder` under `<uuidv7>_<sanitized_name>.<ext>`.
+Future<ImageAttachmentDto> ingestImageFile({
+  required String sourcePath,
+  required String mediaFolder,
+}) => RustLib.instance.api.crateApiCollectionsIngestImageFile(
+  sourcePath: sourcePath,
+  mediaFolder: mediaFolder,
+);
+
+/// Writes image bytes into `media_folder` under `<uuidv7>_<sanitized_name>.<ext>`.
+Future<ImageAttachmentDto> ingestImageBytes({
+  required List<int> bytes,
+  required String originalName,
+  required String mediaFolder,
+}) => RustLib.instance.api.crateApiCollectionsIngestImageBytes(
+  bytes: bytes,
+  originalName: originalName,
+  mediaFolder: mediaFolder,
+);
+
+/// Scans `media_folder` for accessibility, local file count/bytes, and missing referenced files.
+Future<MediaFolderStatusDto> scanMediaFolder({required String mediaFolder}) =>
+    RustLib.instance.api.crateApiCollectionsScanMediaFolder(
+      mediaFolder: mediaFolder,
+    );
 
 Future<void> deleteCollection({required String id}) =>
     RustLib.instance.api.crateApiCollectionsDeleteCollection(id: id);

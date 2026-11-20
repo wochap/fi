@@ -114,6 +114,18 @@ abstract final class FiIcons {
   static const IconData choice = PhosphorIconsRegular.listBullets;
   static const IconData choices = PhosphorIconsRegular.listChecks;
   static const IconData location = PhosphorIconsRegular.mapPin;
+  static const IconData images = PhosphorIconsRegular.image;
+
+  // Media storage and image fields.
+  static const IconData camera = PhosphorIconsRegular.camera;
+  static const IconData folderOpen = PhosphorIconsRegular.folderOpen;
+  static const IconData folderDashed = PhosphorIconsRegular.folderDashed;
+  static const IconData folderLock = PhosphorIconsRegular.folderLock;
+  static const IconData fileImage = PhosphorIconsRegular.fileImage;
+  static const IconData fileDashed = PhosphorIconsRegular.fileDashed;
+  static const IconData cloudArrowDown = PhosphorIconsRegular.cloudArrowDown;
+  static const IconData openExternal = PhosphorIconsRegular.arrowSquareOut;
+  static const IconData chevronLeft = PhosphorIconsRegular.caretLeft;
 }
 
 /// The one icon for a field type of [kind].
@@ -128,4 +140,5 @@ IconData fieldTypeIcon(FieldTypeKindDto kind) => switch (kind) {
   FieldTypeKindDto.enum_ => FiIcons.choice,
   FieldTypeKindDto.enumSet => FiIcons.choices,
   FieldTypeKindDto.location => FiIcons.location,
+  FieldTypeKindDto.images => FiIcons.images,
 };

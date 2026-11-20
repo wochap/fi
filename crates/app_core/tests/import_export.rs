@@ -13,6 +13,7 @@ use automerge_repo::testing::MemoryTransport;
 fn field(name: &str, field_type: FieldType, required: bool, order: i64) -> FieldDefinition {
     FieldDefinition {
         allow_options_from_records: false,
+        allow_multiple: false,
         id: FieldId::new(),
         name: name.into(),
         field_type,

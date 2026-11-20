@@ -164,7 +164,7 @@ fn field(dto: VoiceFieldDto) -> Option<VoiceField> {
         FieldTypeKindDto::Duration => FieldKind::Duration,
         FieldTypeKindDto::Enum => FieldKind::Choice,
         FieldTypeKindDto::EnumSet => FieldKind::Choices,
-        FieldTypeKindDto::Location => return None,
+        FieldTypeKindDto::Location | FieldTypeKindDto::Images => return None,
     };
     Some(VoiceField {
         id: dto.id,
@@ -231,6 +231,7 @@ fn entry_dto(entry: PatchEntry) -> VoicePatchEntryDto {
             boolean_value,
             list_value,
             location_value: None,
+            images_value: Vec::new(),
         },
         evidence: entry.evidence,
     }

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:fi/build_label.dart';
 import 'package:fi/crash_reporting.dart';
+import 'package:fi/images/media_storage.dart';
 import 'package:fi/l10n/l10n.dart';
 import 'package:fi/l10n/language.dart';
 import 'package:fi/location/tile_cache.dart';
@@ -123,6 +124,10 @@ class _SettingsPageState extends State<SettingsPage>
         ),
       if (micShown && services != null)
         (label: context.l10n.settingsMicrophone, child: _microphone(services)),
+      (
+        label: context.l10n.settingsMediaStorage,
+        child: _MediaStorageSection(store: widget.uiPrefs),
+      ),
       (
         label: context.l10n.settingsDiagnostics,
         child: _DiagnosticsSection(store: widget.uiPrefs),
@@ -1235,6 +1240,407 @@ class _MapsSectionState extends State<_MapsSection> {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _MediaStorageSection extends StatefulWidget {
+  const _MediaStorageSection({this.store});
+
+  final UiPrefsStore? store;
+
+  @override
+  State<_MediaStorageSection> createState() => _MediaStorageSectionState();
+}
+
+class _MediaStorageSectionState extends State<_MediaStorageSection>
+    with WidgetsBindingObserver {
+  MediaStorageController? _controller;
+  MediaFolderStatusDto? _status;
+  bool _scanning = false;
+  bool? _allFilesGranted;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final next = MediaStorageScope.maybeOf(context);
+    if (next != _controller) {
+      _controller?.removeListener(_onControllerChanged);
+      _controller = next;
+      _controller?.addListener(_onControllerChanged);
+      unawaited(_refreshAll());
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller?.removeListener(_onControllerChanged);
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_refreshAll());
+    }
+  }
+
+  void _onControllerChanged() {
+    unawaited(_scanFolder());
+  }
+
+  Future<void> _refreshAll() async {
+    await Future.wait([_readAllFilesAccess(), _scanFolder()]);
+  }
+
+  Future<void> _readAllFilesAccess() async {
+    if (!mounted || !PlatformScope.of(context).android) return;
+    final service = _controller?.service ?? const DefaultMediaStorageService();
+    bool granted;
+    try {
+      granted = await service.hasAllFilesAccess();
+    } catch (_) {
+      granted = false;
+    }
+    if (mounted) {
+      setState(() => _allFilesGranted = granted);
+    }
+  }
+
+  Future<void> _scanFolder() async {
+    final folder = _controller?.mediaFolderPath;
+    if (folder == null || folder.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _status = null;
+          _scanning = false;
+        });
+      }
+      return;
+    }
+    if (mounted) setState(() => _scanning = true);
+    final service = _controller?.service ?? const DefaultMediaStorageService();
+    MediaFolderStatusDto status;
+    try {
+      status = await service.scanFolder(folder);
+    } catch (_) {
+      status = const MediaFolderStatusDto(
+        accessible: false,
+        fileCount: 0,
+        totalBytes: 0,
+        missingReferencedCount: 0,
+      );
+    }
+    if (mounted) {
+      setState(() {
+        _status = status;
+        _scanning = false;
+      });
+    }
+  }
+
+  Future<void> _chooseFolder() async {
+    final controller = _controller;
+    if (controller == null) return;
+    await controller.pickAndSetMediaFolder();
+    await _scanFolder();
+  }
+
+  Future<void> _clearFolder() async {
+    final controller = _controller;
+    if (controller == null) return;
+    await controller.setMediaFolder(null);
+  }
+
+  Future<void> _rescan() async {
+    _controller?.bumpRevision();
+    await _scanFolder();
+  }
+
+  Future<void> _openAndroidSettings() async {
+    final service = _controller?.service ?? const DefaultMediaStorageService();
+    await service.openAndroidAllFilesSettings();
+    await _readAllFilesAccess();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = context.l10n;
+    final nocturne = context.nocturne;
+    final isAndroid = PlatformScope.of(context).android;
+    final folder = _controller?.mediaFolderPath;
+    final status = _status;
+    final folderMissing =
+        folder != null && status != null && !status.accessible;
+
+    final cardContent = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: 12,
+      children: [
+        if (folder == null) ...[
+          // State A: Not configured
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  l.settingsMediaFolder,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+              Container(
+                key: const Key('settings-media-not-set'),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: nocturne.divider),
+                ),
+                child: Text(
+                  l.settingsMediaNotSet,
+                  style: TextStyle(fontSize: 12, color: nocturne.muted(.7)),
+                ),
+              ),
+            ],
+          ),
+          Text(
+            l.settingsMediaUnsetBody,
+            style: TextStyle(fontSize: 13, color: nocturne.muted(.65)),
+          ),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              key: const Key('settings-media-choose-folder'),
+              onPressed: () => unawaited(_chooseFolder()),
+              icon: const Icon(FiIcons.folderOpen, size: 16),
+              label: Text(l.settingsMediaChooseFolder),
+            ),
+          ),
+        ] else if (folderMissing) ...[
+          // State D: Configured folder missing / inaccessible on disk
+          Row(
+            spacing: 8,
+            children: [
+              Icon(FiIcons.error, size: 18, color: nocturne.danger),
+              Expanded(
+                child: Text(
+                  l.settingsMediaFolderNotFound,
+                  key: const Key('settings-media-folder-not-found'),
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: nocturne.danger,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          Text(
+            folder,
+            key: const Key('settings-media-path'),
+            style: TextStyle(
+              fontSize: 12.5,
+              fontFamily: 'monospace',
+              color: nocturne.muted(.85),
+            ),
+          ),
+          Text(
+            l.settingsMediaFolderNotFoundBody,
+            style: TextStyle(fontSize: 13, color: nocturne.muted(.65)),
+          ),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              OutlinedButton.icon(
+                key: const Key('settings-media-choose-folder'),
+                onPressed: () => unawaited(_chooseFolder()),
+                icon: const Icon(FiIcons.folderOpen, size: 16),
+                label: Text(l.settingsMediaChooseFolder),
+              ),
+              TextButton(
+                key: const Key('settings-media-clear'),
+                onPressed: () => unawaited(_clearFolder()),
+                child: Text(l.settingsMediaClear),
+              ),
+            ],
+          ),
+        ] else ...[
+          // State B: Configured & accessible
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  l.settingsMediaFolder,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+              if (status != null)
+                Text(
+                  l.settingsMediaFolderStats(
+                    status.fileCount,
+                    formatByteSize(status.totalBytes),
+                  ),
+                  key: const Key('settings-media-stats'),
+                  style: TextStyle(fontSize: 12.5, color: nocturne.muted(.65)),
+                ),
+            ],
+          ),
+          Text(
+            folder,
+            key: const Key('settings-media-path'),
+            style: TextStyle(
+              fontSize: 12.5,
+              fontFamily: 'monospace',
+              color: nocturne.muted(.85),
+            ),
+          ),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              OutlinedButton.icon(
+                key: const Key('settings-media-change-folder'),
+                onPressed: () => unawaited(_chooseFolder()),
+                icon: const Icon(FiIcons.folderOpen, size: 16),
+                label: Text(l.settingsMediaChangeFolder),
+              ),
+              TextButton(
+                key: const Key('settings-media-clear'),
+                onPressed: () => unawaited(_clearFolder()),
+                child: Text(l.settingsMediaClear),
+              ),
+            ],
+          ),
+          if (status != null && status.missingReferencedCount > 0)
+            Container(
+              key: const Key('settings-media-missing-banner'),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: nocturne.warning.withValues(alpha: .10),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(
+                  color: nocturne.warning.withValues(alpha: .35),
+                ),
+              ),
+              child: Row(
+                spacing: 10,
+                children: [
+                  Icon(
+                    FiIcons.cloudArrowDown,
+                    size: 18,
+                    color: nocturne.warning,
+                  ),
+                  Expanded(
+                    child: Text(
+                      l.settingsMediaMissingReferenced(
+                        status.missingReferencedCount,
+                      ),
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        color: nocturne.muted(.9),
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    key: const Key('settings-media-rescan'),
+                    onPressed: _scanning ? null : () => unawaited(_rescan()),
+                    child: Text(l.settingsMediaRescan),
+                  ),
+                ],
+              ),
+            ),
+        ],
+        if (isAndroid) ...[
+          const FadedRule(),
+          _androidAllFilesRow(context),
+        ],
+      ],
+    );
+
+    if (folderMissing) {
+      return Container(
+        key: const Key('settings-media-storage'),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: nocturne.surface,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: nocturne.danger.withValues(alpha: .6)),
+        ),
+        child: cardContent,
+      );
+    }
+
+    return NocturneCard(
+      key: const Key('settings-media-storage'),
+      child: cardContent,
+    );
+  }
+
+  Widget _androidAllFilesRow(BuildContext context) {
+    final l = context.l10n;
+    final nocturne = context.nocturne;
+    final granted = _allFilesGranted == true;
+    return Column(
+      key: const Key('settings-media-all-files'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: 6,
+      children: [
+        Row(
+          spacing: 8,
+          children: [
+            Icon(FiIcons.folderLock, size: 16, color: nocturne.muted(.75)),
+            Expanded(
+              child: Text(
+                l.settingsMediaAllFilesAccess,
+                style: const TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            Icon(
+              granted ? FiIcons.allowed : FiIcons.blocked,
+              size: 16,
+              color: granted ? nocturne.accentInk : nocturne.muted(.7),
+            ),
+            Text(
+              granted ? l.settingsMicAllowed : l.settingsMicOff,
+              key: const Key('settings-media-all-files-status'),
+              style: TextStyle(
+                fontSize: 13,
+                color: granted ? nocturne.accentInk : nocturne.muted(.7),
+              ),
+            ),
+          ],
+        ),
+        if (!granted) ...[
+          Text(
+            l.settingsMediaAllFilesOffBody,
+            style: TextStyle(fontSize: 12.5, color: nocturne.muted(.65)),
+          ),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              key: const Key('settings-media-android-settings'),
+              onPressed: () => unawaited(_openAndroidSettings()),
+              icon: const Icon(FiIcons.systemSettings, size: 16),
+              label: Text(l.settingsAndroidSettings),
+            ),
+          ),
+        ],
+      ],
     );
   }
 }

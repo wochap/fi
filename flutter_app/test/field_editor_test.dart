@@ -1566,6 +1566,114 @@ void main() {
     expect(fieldSummary(l, integer(slider: true)), 'Integer · 0–10 · slider');
     expect(fieldSummary(l, integer(slider: false)), 'Integer · 0–10');
   });
+
+  group('Images field in schema editor', () {
+    test('fieldSummary reads Images or Images · multiple', () {
+      final l = lookupAppLocalizations(const Locale('en'));
+      FieldDefinitionDto images({required bool allowMultiple}) =>
+          FieldDefinitionDto(
+            id: 'img',
+            name: 'Photos',
+            fieldType: const FieldTypeDto(kind: FieldTypeKindDto.images),
+            required_: false,
+            validation: const ValidationMetadataDto(),
+            display: const DisplayMetadataDto(
+              multiline: false,
+              slider: false,
+              sliderStep: null,
+            ),
+            order: 0,
+            deleted: false,
+            enumOptions: const [],
+            allowMultiple: allowMultiple,
+          );
+      expect(fieldSummary(l, images(allowMultiple: false)), 'Images');
+      expect(fieldSummary(l, images(allowMultiple: true)), 'Images · multiple');
+    });
+
+    testWidgets(
+      'picks Images tile, toggles Allow multiple & Show thumbnails, and shows blocked error',
+      (tester) async {
+        final seeded = await seed(tester);
+        await tester.pumpWidget(
+          MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(
+              body: SingleChildScrollView(
+                child: FieldEditorBody(
+                  controller: seeded.controller,
+                  onClosed: () {},
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // 11th tile in the type grid is Images.
+        await pickType(tester, FieldTypeKindDto.images);
+
+        expect(find.byKey(const Key('chip-required')), findsOneWidget);
+        expect(find.byKey(const Key('chip-allow-multiple')), findsOneWidget);
+        expect(find.byKey(const Key('chip-show-thumbnails')), findsOneWidget);
+        expect(find.byKey(const Key('chip-default')), findsNothing);
+        expect(find.byKey(const Key('images-options-help')), findsOneWidget);
+
+        await tester.enterText(find.byKey(const Key('field-name')), 'Photos');
+        await tapChip(tester, 'allow-multiple');
+        await tapChip(tester, 'show-thumbnails'); // turn off
+        await save(tester);
+
+        final saved = seeded.controller.schema!.fields.firstWhere(
+          (f) => f.name == 'Photos',
+        );
+        expect(saved.fieldType.kind, FieldTypeKindDto.images);
+        expect(saved.allowMultiple, isTrue);
+        expect(saved.display.showThumbnails, isFalse);
+
+        var closed = false;
+        await tester.pumpWidget(
+          MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(
+              body: SingleChildScrollView(
+                child: FieldEditorBody(
+                  controller: seeded.controller,
+                  existing: saved,
+                  onClosed: () => closed = true,
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tapChip(tester, 'allow-multiple'); // turn off
+        // Simulate Rust rejecting turning Allow multiple off when 2 records hold >1 image.
+        seeded.bridge.nextUpdateFieldError = const BridgeError(
+          kind: BridgeErrorKind.validation,
+          message: '2 records hold more than one image. Edit them first.',
+          issues: [
+            BridgeIssueDto(
+              fields: [],
+              code: 'images_single_conversion_blocked',
+              message: '2 records hold more than one image. Edit them first.',
+              count: 2,
+            ),
+          ],
+          resetResolvable: false,
+        );
+        await save(tester);
+
+        expect(closed, isFalse);
+        expect(
+          find.text('2 records hold more than one image. Edit them first.'),
+          findsOneWidget,
+        );
+      },
+    );
+  });
 }
 
 void _spanishHelpTest() {

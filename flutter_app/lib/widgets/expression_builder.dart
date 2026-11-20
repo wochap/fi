@@ -402,6 +402,7 @@ String describeValueType(AppLocalizations l, ValueTypeDto type) =>
       ValueTypeKindDto.enum_ => l.exprTypeChoice,
       ValueTypeKindDto.enumSet => l.fieldTypeChoices,
       ValueTypeKindDto.location => l.fieldKindLocation,
+      ValueTypeKindDto.images => l.fieldTypeImages,
       ValueTypeKindDto.null_ => l.exprTypeEmpty,
     };
 

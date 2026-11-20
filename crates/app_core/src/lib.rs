@@ -15,6 +15,7 @@ pub mod events;
 pub mod generic;
 pub mod hlc;
 pub mod identity;
+pub mod images;
 pub mod import_export;
 pub mod location;
 pub mod models;
@@ -86,9 +87,16 @@ pub use identity::{
     PublicDeviceKey, SecureKeyStore, SecureStoreError, UnavailableSecureKeyStore,
     WriteThroughSecureKeyStore,
 };
+pub use images::{
+    ImageIngestError, MediaFolderStatus, build_relative_path,
+    derive_original_name_from_relative_path, detect_image_format, infer_mime_from_extension,
+    ingest_image_bytes, ingest_image_file, sanitize_filename_stem, scan_media_folder,
+};
 pub use import_export::{
     CloneOutcome, ENVELOPE_FORMAT, ENVELOPE_VERSION, Envelope, ExportedCollection, ExportedRecord,
-    ImportAbort, ImportOutcome, ImportedCollection, JsonExport, prepare_import,
+    ImportAbort, ImportOutcome, ImportedCollection, JsonExport, ParsedZipBundle,
+    ReferencedMediaSummary, ZipExport, build_zip_bundle, collect_envelope_media_paths,
+    extract_bundle_media, parse_zip_bundle, prepare_import, summarize_envelope_media,
 };
 pub use location::{
     LocationParseError, format_location_4dp, format_location_6dp, format_location_canonical,
@@ -130,8 +138,9 @@ pub use schema::{
     FieldDefinition, FieldId, FieldType, ValidationMetadata,
 };
 pub use values::{
-    DecimalError, FieldValue, FixedDecimal, LocationValue, MAX_LATITUDE_MICRODEG,
+    DecimalError, FieldValue, FixedDecimal, ImageAttachment, LocationValue, MAX_LATITUDE_MICRODEG,
     MAX_LONGITUDE_MICRODEG, MIN_LATITUDE_MICRODEG, MIN_LONGITUDE_MICRODEG,
+    SUPPORTED_IMAGE_EXTENSIONS, SUPPORTED_IMAGE_MIME_TYPES,
 };
 pub use view::*;
 pub use widget_registry::{

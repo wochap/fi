@@ -374,16 +374,17 @@ fn sort_key_resolves(
 ) -> bool {
     match expression {
         Expression::RecordCreatedAt => true,
-        Expression::Field { .. } => {
-            infer_expression(expression, &TypeEnvironment { schema, computed }, true).is_ok_and(
-                |inferred| {
-                    !matches!(
-                        inferred.value_type,
-                        ValueType::Null | ValueType::EnumSet | ValueType::Location
-                    )
-                },
+        Expression::Field { .. } => infer_expression(
+            expression,
+            &TypeEnvironment { schema, computed },
+            true,
+        )
+        .is_ok_and(|inferred| {
+            !matches!(
+                inferred.value_type,
+                ValueType::Null | ValueType::EnumSet | ValueType::Location | ValueType::Images
             )
-        }
+        }),
         _ => false,
     }
 }
@@ -783,6 +784,7 @@ mod tests {
     fn field(name: &str, field_type: FieldType, options: Vec<EnumOption>) -> FieldDefinition {
         FieldDefinition {
             allow_options_from_records: false,
+            allow_multiple: false,
             id: FieldId::new(),
             name: name.into(),
             field_type,
@@ -1437,6 +1439,37 @@ mod tests {
         assert_eq!(
             kept[0].body.body().unwrap().sorting,
             vec![sort_on(start, SortDirection::Descending)]
+        );
+    }
+
+    #[test]
+    fn images_field_allows_null_filters_and_rejects_sort_key() {
+        let mut fixture = fixture();
+        let photos = add_field(&mut fixture, "photos", FieldType::Images);
+        let with_filter = ViewBody {
+            filter: Some(Expression::IsNotNull {
+                expression: Box::new(Expression::Field {
+                    field: FieldReference::Source(photos),
+                }),
+            }),
+            sorting: vec![],
+            grouping: None,
+        };
+        validate_view("Has photos", &with_filter, &fixture.schema, &[]).unwrap();
+
+        let with_sort = ViewBody {
+            filter: None,
+            sorting: vec![sort_on(photos, SortDirection::Ascending)],
+            grouping: None,
+        };
+        let err = validate_view("Sorted", &with_sort, &fixture.schema, &[]).unwrap_err();
+        let DomainError::InvalidMany(issues) = err else {
+            panic!("expected InvalidMany, got {err:?}");
+        };
+        assert!(
+            issues
+                .iter()
+                .any(|issue| issue.code == IssueCode::ViewSortKey)
         );
     }
 }

@@ -80,6 +80,7 @@ final class UiPrefs {
     this.crashReportingEnabled = true,
     this.customSentryDsn,
     this.cartoApiKey,
+    this.mediaFolderPath,
   });
 
   final CollectionSort collectionSort;
@@ -108,6 +109,9 @@ final class UiPrefs {
   /// Optional CARTO Basemaps API key for @2x retina tiles; falls back to standard OSM tiles when null.
   final String? cartoApiKey;
 
+  /// Device-local absolute path to the user's Media Folder for attached images; never synced.
+  final String? mediaFolderPath;
+
   UiPrefs copyWith({
     CollectionSort? collectionSort,
     bool? voiceTipDismissed,
@@ -118,6 +122,7 @@ final class UiPrefs {
     bool? crashReportingEnabled,
     Object? customSentryDsn = _unspecified,
     Object? cartoApiKey = _unspecified,
+    Object? mediaFolderPath = _unspecified,
   }) => UiPrefs(
     collectionSort: collectionSort ?? this.collectionSort,
     voiceTipDismissed: voiceTipDismissed ?? this.voiceTipDismissed,
@@ -132,6 +137,9 @@ final class UiPrefs {
     cartoApiKey: identical(cartoApiKey, _unspecified)
         ? this.cartoApiKey
         : (cartoApiKey as String?),
+    mediaFolderPath: identical(mediaFolderPath, _unspecified)
+        ? this.mediaFolderPath
+        : (mediaFolderPath as String?),
   );
 
   /// A copy with [collectionId]'s view state replaced, or removed when [entry] is null.
@@ -160,6 +168,7 @@ final class UiPrefs {
     'crash_reporting_enabled': crashReportingEnabled,
     if (customSentryDsn != null) 'custom_sentry_dsn': customSentryDsn,
     if (cartoApiKey != null) 'carto_api_key': cartoApiKey,
+    if (mediaFolderPath != null) 'media_folder_path': mediaFolderPath,
     'views': {
       for (final MapEntry(:key, :value) in views.entries) key: value.toJson(),
     },
@@ -174,6 +183,7 @@ final class UiPrefs {
     final crashReporting = json['crash_reporting_enabled'];
     final customDsn = json['custom_sentry_dsn'];
     final cartoKey = json['carto_api_key'];
+    final mediaFolder = json['media_folder_path'];
     return UiPrefs(
       collectionSort: sort ?? CollectionSort.lastEdited,
       voiceTipDismissed: json['voice_tip_dismissed'] == true,
@@ -186,6 +196,9 @@ final class UiPrefs {
           : null,
       cartoApiKey: cartoKey is String && cartoKey.trim().isNotEmpty
           ? cartoKey.trim()
+          : null,
+      mediaFolderPath: mediaFolder is String && mediaFolder.trim().isNotEmpty
+          ? mediaFolder.trim()
           : null,
       views: _readViews(json['views']),
     );

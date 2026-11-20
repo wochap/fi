@@ -290,7 +290,8 @@ fn remap_typed_value(value: &TypedValue, remap: &IdRemap) -> Result<TypedValue, 
         | TypedValue::Date(_)
         | TypedValue::DateTime(_)
         | TypedValue::Duration(_)
-        | TypedValue::Location(_) => value.clone(),
+        | TypedValue::Location(_)
+        | TypedValue::Images(_) => value.clone(),
     })
 }
 
@@ -536,7 +537,8 @@ pub fn remap_record_values(
                 | FieldValue::Date(_)
                 | FieldValue::DateTime(_)
                 | FieldValue::Duration(_)
-                | FieldValue::Location(_) => value.clone(),
+                | FieldValue::Location(_)
+                | FieldValue::Images(_) => value.clone(),
             };
             Ok((remap.field(*field)?, value))
         })
@@ -590,6 +592,7 @@ mod tests {
     fn field(name: &str, field_type: FieldType, order: i64) -> FieldDefinition {
         FieldDefinition {
             allow_options_from_records: false,
+            allow_multiple: false,
             id: FieldId::new(),
             name: name.into(),
             field_type,

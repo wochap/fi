@@ -8,7 +8,7 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `from_app`, `from_core`, `from_core`, `from_core`, `from_core`, `from_core`, `from_core`, `from_core`, `hex_id`, `initialization`, `into_core`, `issues`, `lifecycle`, `new`, `new`, `safe`, `validation`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `QueryValidationErrorDto`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `try_from`, `try_from`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `try_from`, `try_from`
 
 class AggregationDto {
   final AggregationKindDto kind;
@@ -513,12 +513,14 @@ class DisplayMetadataDto {
   final bool slider;
   final int? sliderStep;
   final bool showMapPreview;
+  final bool showThumbnails;
 
   const DisplayMetadataDto({
     required this.multiline,
     required this.slider,
     this.sliderStep,
     this.showMapPreview = true,
+    this.showThumbnails = true,
   });
 
   static Future<DisplayMetadataDto> default_() =>
@@ -529,7 +531,8 @@ class DisplayMetadataDto {
       multiline.hashCode ^
       slider.hashCode ^
       sliderStep.hashCode ^
-      showMapPreview.hashCode;
+      showMapPreview.hashCode ^
+      showThumbnails.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -539,7 +542,8 @@ class DisplayMetadataDto {
           multiline == other.multiline &&
           slider == other.slider &&
           sliderStep == other.sliderStep &&
-          showMapPreview == other.showMapPreview;
+          showMapPreview == other.showMapPreview &&
+          showThumbnails == other.showThumbnails;
 }
 
 enum DomainKindDto {
@@ -713,6 +717,9 @@ class FieldDefinitionDto {
   /// Choice/Choices only: the record form may add options to this field.
   final bool allowOptionsFromRecords;
 
+  /// Images only: holds an ordered list of images instead of a single image.
+  final bool allowMultiple;
+
   const FieldDefinitionDto({
     required this.id,
     required this.name,
@@ -726,6 +733,7 @@ class FieldDefinitionDto {
     required this.deleted,
     required this.enumOptions,
     this.allowOptionsFromRecords = false,
+    this.allowMultiple = false,
   });
 
   @override
@@ -741,7 +749,8 @@ class FieldDefinitionDto {
       order.hashCode ^
       deleted.hashCode ^
       enumOptions.hashCode ^
-      allowOptionsFromRecords.hashCode;
+      allowOptionsFromRecords.hashCode ^
+      allowMultiple.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -759,7 +768,8 @@ class FieldDefinitionDto {
           order == other.order &&
           deleted == other.deleted &&
           enumOptions == other.enumOptions &&
-          allowOptionsFromRecords == other.allowOptionsFromRecords;
+          allowOptionsFromRecords == other.allowOptionsFromRecords &&
+          allowMultiple == other.allowMultiple;
 }
 
 class FieldReferenceDto {
@@ -811,6 +821,7 @@ enum FieldTypeKindDto {
   enum_,
   enumSet,
   location,
+  images,
 }
 
 class FieldValueDto {
@@ -825,6 +836,9 @@ class FieldValueDto {
   /// WGS 84 location payload when `kind == FieldValueKindDto::Location`.
   final LocationValueDto? locationValue;
 
+  /// Ordered image attachments when `kind == FieldValueKindDto::Images`.
+  final List<ImageAttachmentDto> imagesValue;
+
   const FieldValueDto({
     required this.kind,
     this.integerValue,
@@ -832,6 +846,7 @@ class FieldValueDto {
     this.booleanValue,
     this.listValue = const [],
     this.locationValue,
+    this.imagesValue = const [],
   });
 
   @override
@@ -841,7 +856,8 @@ class FieldValueDto {
       textValue.hashCode ^
       booleanValue.hashCode ^
       listValue.hashCode ^
-      locationValue.hashCode;
+      locationValue.hashCode ^
+      imagesValue.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -853,7 +869,8 @@ class FieldValueDto {
           textValue == other.textValue &&
           booleanValue == other.booleanValue &&
           listValue == other.listValue &&
-          locationValue == other.locationValue;
+          locationValue == other.locationValue &&
+          imagesValue == other.imagesValue;
 }
 
 enum FieldValueKindDto {
@@ -868,6 +885,7 @@ enum FieldValueKindDto {
   enum_,
   enumSet,
   location,
+  images,
 }
 
 class GroupingDto {
@@ -886,6 +904,37 @@ class GroupingDto {
           runtimeType == other.runtimeType &&
           expression == other.expression &&
           period == other.period;
+}
+
+class ImageAttachmentDto {
+  final String relativePath;
+  final String originalName;
+  final String mimeType;
+  final int sizeBytes;
+
+  const ImageAttachmentDto({
+    required this.relativePath,
+    required this.originalName,
+    required this.mimeType,
+    required this.sizeBytes,
+  });
+
+  @override
+  int get hashCode =>
+      relativePath.hashCode ^
+      originalName.hashCode ^
+      mimeType.hashCode ^
+      sizeBytes.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ImageAttachmentDto &&
+          runtimeType == other.runtimeType &&
+          relativePath == other.relativePath &&
+          originalName == other.originalName &&
+          mimeType == other.mimeType &&
+          sizeBytes == other.sizeBytes;
 }
 
 /// Result of a CSV or JSON import. When `imported` is false the file was rejected and nothing
@@ -1097,6 +1146,37 @@ class ManualConnectOutcomeDto {
           kind == other.kind &&
           failureKind == other.failureKind &&
           message == other.message;
+}
+
+class MediaFolderStatusDto {
+  final bool accessible;
+  final int fileCount;
+  final int totalBytes;
+  final int missingReferencedCount;
+
+  const MediaFolderStatusDto({
+    required this.accessible,
+    required this.fileCount,
+    required this.totalBytes,
+    required this.missingReferencedCount,
+  });
+
+  @override
+  int get hashCode =>
+      accessible.hashCode ^
+      fileCount.hashCode ^
+      totalBytes.hashCode ^
+      missingReferencedCount.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is MediaFolderStatusDto &&
+          runtimeType == other.runtimeType &&
+          accessible == other.accessible &&
+          fileCount == other.fileCount &&
+          totalBytes == other.totalBytes &&
+          missingReferencedCount == other.missingReferencedCount;
 }
 
 /// UDP ports used for peer networking. Bound ports are absent while
@@ -1710,6 +1790,37 @@ enum RecoveryReasonDto {
   orphanedDocuments,
 }
 
+class ReferencedMediaSummaryDto {
+  final int totalReferenced;
+  final int presentCount;
+  final int presentBytes;
+  final int missingCount;
+
+  const ReferencedMediaSummaryDto({
+    required this.totalReferenced,
+    required this.presentCount,
+    required this.presentBytes,
+    required this.missingCount,
+  });
+
+  @override
+  int get hashCode =>
+      totalReferenced.hashCode ^
+      presentCount.hashCode ^
+      presentBytes.hashCode ^
+      missingCount.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ReferencedMediaSummaryDto &&
+          runtimeType == other.runtimeType &&
+          totalReferenced == other.totalReferenced &&
+          presentCount == other.presentCount &&
+          presentBytes == other.presentBytes &&
+          missingCount == other.missingCount;
+}
+
 class ResultRecordDto {
   final String id;
   final List<ResultRecordValueDto> values;
@@ -1990,6 +2101,9 @@ class TypedValueDto {
   /// WGS 84 location payload for a `Location` value.
   final LocationValueDto? locationValue;
 
+  /// Ordered image attachments for an `Images` value.
+  final List<ImageAttachmentDto> imagesValue;
+
   const TypedValueDto({
     required this.valueType,
     this.integerValue,
@@ -1998,6 +2112,7 @@ class TypedValueDto {
     this.listValue = const [],
     this.fieldId,
     this.locationValue,
+    this.imagesValue = const [],
   });
 
   @override
@@ -2008,7 +2123,8 @@ class TypedValueDto {
       booleanValue.hashCode ^
       listValue.hashCode ^
       fieldId.hashCode ^
-      locationValue.hashCode;
+      locationValue.hashCode ^
+      imagesValue.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -2021,7 +2137,8 @@ class TypedValueDto {
           booleanValue == other.booleanValue &&
           listValue == other.listValue &&
           fieldId == other.fieldId &&
-          locationValue == other.locationValue;
+          locationValue == other.locationValue &&
+          imagesValue == other.imagesValue;
 }
 
 class ValidationMetadataDto {
@@ -2087,6 +2204,7 @@ enum ValueTypeKindDto {
   enum_,
   enumSet,
   location,
+  images,
   null_,
 }
 
@@ -2330,4 +2448,43 @@ class WidgetUpdateDto {
           configuration == other.configuration &&
           layout == other.layout &&
           order == other.order;
+}
+
+class ZipExportDto {
+  final Uint8List bytes;
+  final int records;
+  final int viewsWritten;
+  final List<String> viewsOmitted;
+  final int mediaIncluded;
+  final int mediaMissing;
+
+  const ZipExportDto({
+    required this.bytes,
+    required this.records,
+    required this.viewsWritten,
+    required this.viewsOmitted,
+    required this.mediaIncluded,
+    required this.mediaMissing,
+  });
+
+  @override
+  int get hashCode =>
+      bytes.hashCode ^
+      records.hashCode ^
+      viewsWritten.hashCode ^
+      viewsOmitted.hashCode ^
+      mediaIncluded.hashCode ^
+      mediaMissing.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ZipExportDto &&
+          runtimeType == other.runtimeType &&
+          bytes == other.bytes &&
+          records == other.records &&
+          viewsWritten == other.viewsWritten &&
+          viewsOmitted == other.viewsOmitted &&
+          mediaIncluded == other.mediaIncluded &&
+          mediaMissing == other.mediaMissing;
 }

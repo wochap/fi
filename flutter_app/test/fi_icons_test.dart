@@ -16,11 +16,12 @@ void main() {
       FieldTypeKindDto.enum_: PhosphorIconsRegular.listBullets,
       FieldTypeKindDto.enumSet: PhosphorIconsRegular.listChecks,
       FieldTypeKindDto.location: PhosphorIconsRegular.mapPin,
+      FieldTypeKindDto.images: PhosphorIconsRegular.image,
     };
     for (final kind in FieldTypeKindDto.values) {
       expect(fieldTypeIcon(kind), expected[kind], reason: kind.name);
     }
     final glyphs = FieldTypeKindDto.values.map(fieldTypeIcon).toSet();
-    expect(glyphs, hasLength(10));
+    expect(glyphs, hasLength(11));
   });
 }

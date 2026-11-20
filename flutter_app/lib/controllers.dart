@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:fi/bridge/collection_bridge.dart';
 import 'package:fi/exact_format.dart';
@@ -211,6 +212,7 @@ FieldDefinitionDto _fieldWith(
   deleted: field.deleted,
   enumOptions: enumOptions,
   allowOptionsFromRecords: field.allowOptionsFromRecords,
+  allowMultiple: field.allowMultiple,
 );
 
 /// What a collection holds, as shown before deleting it.
@@ -1078,21 +1080,67 @@ final class CollectionsController extends ChangeNotifier {
     return name == null ? null : export;
   }
 
+  /// Summarizes referenced image files for [ids] compared against [mediaFolder].
+  Future<ReferencedMediaSummaryDto> summarizeMedia(
+    List<String> ids, {
+    String? mediaFolder,
+  }) => bridge.summarizeCollectionsMedia(ids, mediaFolder: mediaFolder);
+
+  /// Exports [collections] together with locally present referenced media files as a `.zip`
+  /// bundle. Returns the written filename and export metadata, or null if dismissed.
+  Future<({String filename, ZipExportDto export})?> exportZip(
+    List<CollectionDto> collections, {
+    String? mediaFolder,
+  }) async {
+    final export = await bridge.exportCollectionsZip([
+      for (final item in collections) item.id,
+    ], mediaFolder: mediaFolder);
+    final name = await fileDialogs.saveBytes(
+      suggestedName: collections.length == 1
+          ? '${exportFileStem(collections.single.name)}.zip'
+          : 'collections.zip',
+      kind: FileKind.zip,
+      bytes: export.bytes,
+    );
+    return name == null ? null : (filename: name, export: export);
+  }
+
   /// Imports a CSV file the user picks into [collectionId]. Null when the dialog was dismissed,
   /// in which case nothing is sent to Rust.
-  Future<ImportOutcomeDto?> importCsv(String collectionId) async {
+  Future<ImportOutcomeDto?> importCsv(
+    String collectionId, {
+    String? mediaFolder,
+  }) async {
     final text = await fileDialogs.openText(kind: FileKind.csv);
     if (text == null) return null;
-    final outcome = await bridge.importCollectionCsv(collectionId, text);
+    final outcome = mediaFolder != null
+        ? await bridge.importCollectionCsvWithMedia(
+            collectionId,
+            text,
+            mediaFolder: mediaFolder,
+          )
+        : await bridge.importCollectionCsv(collectionId, text);
     if (outcome.imported) await refresh();
     return outcome;
   }
 
-  /// Imports a `fi-collection` JSON file as new collections; see [importCsv].
-  Future<ImportOutcomeDto?> importJson() async {
-    final text = await fileDialogs.openText(kind: FileKind.json);
-    if (text == null) return null;
-    final outcome = await bridge.importCollectionsJson(text);
+  /// Imports a `fi-collection` JSON file or `.zip` media bundle as new collections.
+  Future<ImportOutcomeDto?> importJson({String? mediaFolder}) async {
+    final picked = await fileDialogs.openJsonOrZip();
+    if (picked == null) return null;
+    final isZip =
+        picked.name.toLowerCase().endsWith('.zip') ||
+        (picked.bytes.length >= 4 &&
+            picked.bytes[0] == 0x50 &&
+            picked.bytes[1] == 0x4B &&
+            picked.bytes[2] == 0x03 &&
+            picked.bytes[3] == 0x04);
+    final outcome = isZip
+        ? await bridge.importCollectionsZip(
+            picked.bytes,
+            mediaFolder: mediaFolder,
+          )
+        : await bridge.importCollectionsJson(utf8.decode(picked.bytes));
     if (outcome.imported) await refresh();
     return outcome;
   }
@@ -2386,7 +2434,8 @@ SortDirectionDto defaultSortDirection(FieldTypeKindDto kind) => switch (kind) {
   FieldTypeKindDto.text ||
   FieldTypeKindDto.enum_ ||
   FieldTypeKindDto.enumSet ||
-  FieldTypeKindDto.location => SortDirectionDto.ascending,
+  FieldTypeKindDto.location ||
+  FieldTypeKindDto.images => SortDirectionDto.ascending,
   FieldTypeKindDto.date ||
   FieldTypeKindDto.dateTime ||
   FieldTypeKindDto.integer ||

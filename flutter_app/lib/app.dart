@@ -32,6 +32,7 @@ import 'package:fi/theme/nocturne.dart';
 import 'package:fi/theme/nocturne_widgets.dart';
 import 'package:fi/ui_prefs.dart';
 import 'package:fi/voice/services.dart';
+import 'package:fi/images/media_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -46,6 +47,7 @@ class CollectionApp extends StatefulWidget {
     this.uiPrefs,
     this.voiceServices,
     this.capabilities,
+    this.mediaStorageService,
     super.key,
   });
 
@@ -67,6 +69,9 @@ class CollectionApp extends StatefulWidget {
   /// What this platform can do; `PlatformCapabilities.current()` by default, replaced in tests.
   final PlatformCapabilities? capabilities;
 
+  /// Media folder picking, permission checking, scanning, and ingestion; replaced in tests.
+  final MediaStorageService? mediaStorageService;
+
   @override
   State<CollectionApp> createState() => _CollectionAppState();
 }
@@ -87,12 +92,17 @@ class _CollectionAppState extends State<CollectionApp>
   static const _platform = MethodChannel('fi/platform');
   final LanguageController _language = LanguageController();
   final AppThemeController _theme = AppThemeController();
+  late final MediaStorageController _mediaStorage = MediaStorageController(
+    prefsStore: _uiPrefs,
+    service: widget.mediaStorageService ?? const DefaultMediaStorageService(),
+  );
 
   @override
   void initState() {
     super.initState();
     unawaited(_language.load(_uiPrefs));
     unawaited(_theme.load(_uiPrefs));
+    unawaited(_mediaStorage.load());
     unawaited(
       _uiPrefs.load().then((prefs) {
         MapTileCache.setCartoApiKey(prefs.cartoApiKey);
@@ -188,6 +198,7 @@ class _CollectionAppState extends State<CollectionApp>
   void dispose() {
     _language.dispose();
     _theme.dispose();
+    _mediaStorage.dispose();
     devices.dispose();
     controller.dispose();
     WidgetsBinding.instance.removeObserver(this);
@@ -199,13 +210,16 @@ class _CollectionAppState extends State<CollectionApp>
   @override
   Widget build(BuildContext context) => PlatformScope(
     capabilities: widget.capabilities ?? PlatformCapabilities.current(),
-    child: LanguageScope(
-      notifier: _language,
-      child: ThemeScope(
-        notifier: _theme,
-        child: ListenableBuilder(
-          listenable: Listenable.merge([_language, _theme]),
-          builder: (context, _) => _app(),
+    child: MediaStorageScope(
+      controller: _mediaStorage,
+      child: LanguageScope(
+        notifier: _language,
+        child: ThemeScope(
+          notifier: _theme,
+          child: ListenableBuilder(
+            listenable: Listenable.merge([_language, _theme]),
+            builder: (context, _) => _app(),
+          ),
         ),
       ),
     ),

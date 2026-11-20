@@ -6,6 +6,12 @@
 //! fresh identities.
 
 pub mod csv;
+pub mod zip_bundle;
+
+pub use zip_bundle::{
+    ParsedZipBundle, ReferencedMediaSummary, build_zip_bundle, collect_envelope_media_paths,
+    extract_bundle_media, parse_zip_bundle, summarize_envelope_media,
+};
 
 use std::collections::{BTreeMap, HashSet};
 
@@ -296,6 +302,18 @@ pub struct JsonExport {
     pub views_omitted: Vec<String>,
 }
 
+/// A `.zip` media bundle containing `collections.json` plus locally present referenced media files.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ZipExport {
+    pub bytes: Vec<u8>,
+    pub records: usize,
+    pub views_written: usize,
+    /// Names of the broken views left out.
+    pub views_omitted: Vec<String>,
+    pub media_included: usize,
+    pub media_missing: usize,
+}
+
 /// Result of a collection clone.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CloneOutcome {
@@ -392,6 +410,7 @@ mod tests {
     fn field(name: &str, field_type: FieldType, order: i64) -> FieldDefinition {
         FieldDefinition {
             allow_options_from_records: false,
+            allow_multiple: false,
             id: FieldId::new(),
             name: name.into(),
             field_type,
@@ -651,5 +670,86 @@ mod tests {
             &error,
             ImportAbort::Json { collection_index: Some(1), item, .. } if item == "record 1"
         ));
+    }
+
+    #[test]
+    fn json_and_zip_bundle_round_trip_with_present_and_missing_media() {
+        use crate::values::ImageAttachment;
+        use tempfile::TempDir;
+
+        let src_media = TempDir::new().unwrap();
+        let dst_media = TempDir::new().unwrap();
+        let present_name = "0195f3a0-7c4b-7d20-8a1e-4b92c8103f1a_receipt.jpg";
+        let missing_name = "0195f3a1-12b0-7a84-9c03-8e41d902b77c_pending.png";
+        let present_bytes = b"\xFF\xD8\xFF\xE0JFIF_DATA";
+        std::fs::write(src_media.path().join(present_name), present_bytes).unwrap();
+
+        let mut entry = sample();
+        let mut photos = field("Photos", FieldType::Images, 10);
+        photos.allow_multiple = true;
+        let photos_id = photos.id;
+        entry.schema.fields.push(photos);
+        let attachments = vec![
+            ImageAttachment {
+                relative_path: present_name.into(),
+                original_name: "receipt.jpg".into(),
+                mime_type: "image/jpeg".into(),
+                size_bytes: present_bytes.len() as u64,
+            },
+            ImageAttachment {
+                relative_path: missing_name.into(),
+                original_name: "pending.png".into(),
+                mime_type: "image/png".into(),
+                size_bytes: 999,
+            },
+        ];
+        entry.records[0]
+            .values
+            .insert(photos_id, FieldValue::Images(attachments.clone()));
+
+        let envelope = Envelope::new(vec![entry]);
+
+        // JSON round-trip preserves ImageAttachment metadata.
+        let json = envelope.to_json().unwrap();
+        let reparsed = Envelope::parse(&json).unwrap();
+        assert_eq!(reparsed, envelope);
+
+        // Media summary counts 1 present and 1 missing.
+        let summary = summarize_envelope_media(&envelope, Some(src_media.path()));
+        assert_eq!(summary.total_referenced, 2);
+        assert_eq!(summary.present_count, 1);
+        assert_eq!(summary.present_bytes, present_bytes.len() as u64);
+        assert_eq!(summary.missing_count, 1);
+
+        // Zip bundle packages collections.json + present file, skips missing file.
+        let (zip_bytes, included, missing) =
+            build_zip_bundle(&envelope, Some(src_media.path())).unwrap();
+        assert_eq!(included, 1);
+        assert_eq!(missing, 1);
+
+        // Parse zip bundle and verify contents.
+        let parsed = parse_zip_bundle(&zip_bytes).unwrap();
+        assert_eq!(parsed.envelope, envelope);
+        assert_eq!(parsed.media_entries.len(), 1);
+        assert_eq!(parsed.media_entries[0].0, present_name);
+        assert_eq!(parsed.media_entries[0].1, present_bytes);
+
+        // Extract into destination media folder without overwriting existing files.
+        let extracted = extract_bundle_media(&parsed.media_entries, dst_media.path()).unwrap();
+        assert_eq!(extracted, 1);
+        assert_eq!(
+            std::fs::read(dst_media.path().join(present_name)).unwrap(),
+            present_bytes
+        );
+
+        // Modify file on disk and re-extract -> existing file is NOT overwritten.
+        std::fs::write(dst_media.path().join(present_name), b"KEEP_ME").unwrap();
+        let extracted_again =
+            extract_bundle_media(&parsed.media_entries, dst_media.path()).unwrap();
+        assert_eq!(extracted_again, 0);
+        assert_eq!(
+            std::fs::read(dst_media.path().join(present_name)).unwrap(),
+            b"KEEP_ME"
+        );
     }
 }

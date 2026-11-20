@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::{
     CollectionSchema, CollectionSchemaId, EnumOptionId, FieldId, FieldType, FieldValue,
-    GenericRecord, LocationValue, RecordId,
+    GenericRecord, ImageAttachment, LocationValue, RecordId,
 };
 
 pub const EXPRESSION_VERSION: u32 = 1;
@@ -82,6 +82,7 @@ pub enum ValueType {
     /// A set of options of one Choices field.
     EnumSet,
     Location,
+    Images,
     Null,
 }
 
@@ -98,6 +99,7 @@ impl From<&FieldType> for ValueType {
             FieldType::Enum => Self::Enum,
             FieldType::EnumSet => Self::EnumSet,
             FieldType::Location => Self::Location,
+            FieldType::Images => Self::Images,
         }
     }
 }
@@ -124,6 +126,7 @@ pub enum TypedValue {
         options: Vec<EnumOptionId>,
     },
     Location(LocationValue),
+    Images(Vec<ImageAttachment>),
 }
 
 impl TypedValue {
@@ -141,6 +144,7 @@ impl TypedValue {
             Self::Enum(_) => ValueType::Enum,
             Self::EnumOptionSet { .. } => ValueType::EnumSet,
             Self::Location(_) => ValueType::Location,
+            Self::Images(_) => ValueType::Images,
         }
     }
 
@@ -174,6 +178,8 @@ impl TypedValue {
             (FieldValue::Duration(v), FieldType::Duration) => Self::Duration(*v),
             (FieldValue::Enum(v), FieldType::Enum) => Self::Enum(*v),
             (FieldValue::Location(v), FieldType::Location) => Self::Location(*v),
+            (FieldValue::Images(v), FieldType::Images) if v.is_empty() => Self::Null,
+            (FieldValue::Images(v), FieldType::Images) => Self::Images(v.clone()),
             _ => {
                 return Err(QueryEvaluationError::InvalidRecord(
                     "projected value does not match schema".into(),
@@ -711,6 +717,12 @@ fn infer_at(
                     "a Location value can't be compared; use is empty or is not empty",
                 ));
             }
+            if left.value_type == ValueType::Images || right.value_type == ValueType::Images {
+                return Err(QueryValidationError::new(
+                    path,
+                    "an Images value can't be compared; use has file or is empty",
+                ));
+            }
             if left.value_type != ValueType::Null
                 && right.value_type != ValueType::Null
                 && left.value_type != right.value_type
@@ -915,6 +927,12 @@ pub fn validate_computed_field(
             "a computed field can't hold a Location",
         ));
     }
+    if inferred.value_type == ValueType::Images {
+        return Err(QueryValidationError::new(
+            "declared_type",
+            "a computed field can't hold Images",
+        ));
+    }
     if inferred.value_type != definition.declared_type {
         return Err(QueryValidationError::new(
             "declared_type",
@@ -976,7 +994,7 @@ pub fn validate_query(
         let inferred = infer_expression(&sort.expression, &env, true)?;
         if matches!(
             inferred.value_type,
-            ValueType::Null | ValueType::EnumSet | ValueType::Location
+            ValueType::Null | ValueType::EnumSet | ValueType::Location | ValueType::Images
         ) {
             return Err(QueryValidationError::new(
                 format!("sorting[{index}]"),
@@ -1006,6 +1024,12 @@ pub fn validate_query(
                 "can't group by a Location",
             ));
         }
+        if inferred.value_type == ValueType::Images {
+            return Err(QueryValidationError::new(
+                "shape.category",
+                "can't group by Images",
+            ));
+        }
     }
     Ok(())
 }
@@ -1032,6 +1056,12 @@ fn validate_aggregation(
         return Err(QueryValidationError::new(
             "aggregation",
             "can't aggregate a Location",
+        ));
+    }
+    if inferred.value_type == ValueType::Images {
+        return Err(QueryValidationError::new(
+            "aggregation",
+            "can't aggregate Images",
         ));
     }
     if numeric && !is_numeric(&inferred.value_type) {
@@ -2006,6 +2036,7 @@ mod tests {
                 fields: vec![
                     FieldDefinition {
                         allow_options_from_records: false,
+                        allow_multiple: false,
                         id: integer,
                         name: "intensity".into(),
                         field_type: FieldType::Integer,
@@ -2020,6 +2051,7 @@ mod tests {
                     },
                     FieldDefinition {
                         allow_options_from_records: false,
+                        allow_multiple: false,
                         id: optional,
                         name: "ended".into(),
                         field_type: FieldType::DateTime,
@@ -2359,6 +2391,7 @@ mod tests {
             .enumerate()
             .map(|(index, kind)| FieldDefinition {
                 allow_options_from_records: false,
+                allow_multiple: false,
                 id: FieldId::new(),
                 name: format!("field {index}"),
                 field_type: kind.clone(),
@@ -2772,6 +2805,7 @@ mod tests {
         let intensity = FieldId::new();
         let field = |id, name: &str, field_type, required, order| FieldDefinition {
             allow_options_from_records: false,
+            allow_multiple: false,
             id,
             name: name.into(),
             field_type,
@@ -2975,6 +3009,7 @@ mod tests {
             fields: vec![
                 FieldDefinition {
                     allow_options_from_records: false,
+                    allow_multiple: false,
                     id: occurred,
                     name: "occurred".into(),
                     field_type: FieldType::DateTime,
@@ -2989,6 +3024,7 @@ mod tests {
                 },
                 FieldDefinition {
                     allow_options_from_records: false,
+                    allow_multiple: false,
                     id: amount,
                     name: "amount".into(),
                     field_type: FieldType::FixedDecimal { scale: 2 },
@@ -3003,6 +3039,7 @@ mod tests {
                 },
                 FieldDefinition {
                     allow_options_from_records: false,
+                    allow_multiple: false,
                     id: other_scale,
                     name: "tax".into(),
                     field_type: FieldType::FixedDecimal { scale: 3 },
@@ -3136,6 +3173,7 @@ mod sort_semantics_tests {
     fn field(name: &str, field_type: FieldType, order: i64) -> FieldDefinition {
         FieldDefinition {
             allow_options_from_records: false,
+            allow_multiple: false,
             id: FieldId::new(),
             name: name.into(),
             field_type,

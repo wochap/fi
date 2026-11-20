@@ -4,7 +4,10 @@
 //! and `Z`, Duration raw milliseconds, FixedDecimal at the field scale, Enum by label, Boolean
 //! `true`/`false`, Null as an empty cell. An unchanged export re-imports to the same values.
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::{
+    collections::{BTreeMap, HashMap, HashSet},
+    path::Path,
+};
 
 use chrono::{DateTime, NaiveDate, SecondsFormat, Utc};
 
@@ -129,6 +132,11 @@ pub fn format_field_value(field: &FieldDefinition, value: &FieldValue) -> String
         (FieldType::Location, FieldValue::Location(location)) => {
             crate::location::format_location_canonical(*location)
         }
+        (FieldType::Images, FieldValue::Images(attachments)) => attachments
+            .iter()
+            .map(|item| item.relative_path.as_str())
+            .collect::<Vec<_>>()
+            .join("; "),
         _ => String::new(),
     }
 }
@@ -164,6 +172,11 @@ fn format_typed_value(schema: &CollectionSchema, value: &TypedValue) -> String {
             .find(|item| item.id == *field)
             .map_or_else(String::new, |field| set_labels(field, options)),
         TypedValue::Location(location) => crate::location::format_location_canonical(*location),
+        TypedValue::Images(attachments) => attachments
+            .iter()
+            .map(|item| item.relative_path.as_str())
+            .collect::<Vec<_>>()
+            .join("; "),
     }
 }
 
@@ -198,6 +211,17 @@ pub fn parse_csv(
     text: &str,
     schema: &CollectionSchema,
     computed: &[ComputedFieldDefinition],
+) -> Result<Vec<GenericRecord>, ImportAbort> {
+    parse_csv_with_media_folder(text, schema, computed, None)
+}
+
+/// Like [`parse_csv`], reading `size_bytes` from `media_folder` for any referenced image files
+/// that are present on disk.
+pub fn parse_csv_with_media_folder(
+    text: &str,
+    schema: &CollectionSchema,
+    computed: &[ComputedFieldDefinition],
+    media_folder: Option<&Path>,
 ) -> Result<Vec<GenericRecord>, ImportAbort> {
     let text = text.strip_prefix('\u{feff}').unwrap_or(text);
     let mut reader = ::csv::ReaderBuilder::new()
@@ -277,7 +301,7 @@ pub fn parse_csv(
         let mut values = BTreeMap::new();
         for (cell, column) in row.iter().zip(&columns) {
             let Some(field) = column else { continue };
-            let value = parse_cell(field, cell.trim(), labels.get(&field.id))
+            let value = parse_cell(field, cell.trim(), labels.get(&field.id), media_folder)
                 .map_err(|reason| row_abort(&field.name, reason))?;
             values.insert(field.id, value);
         }
@@ -323,6 +347,7 @@ fn parse_cell(
     field: &FieldDefinition,
     cell: &str,
     labels: Option<&HashMap<&str, Vec<EnumOptionId>>>,
+    media_folder: Option<&Path>,
 ) -> Result<FieldValue, String> {
     if cell.is_empty() {
         return Ok(FieldValue::Null);
@@ -397,6 +422,31 @@ fn parse_cell(
         FieldType::Location => FieldValue::Location(
             crate::location::parse_location_input(cell).map_err(|error| error.to_string())?,
         ),
+        FieldType::Images => {
+            let mut attachments = Vec::new();
+            for part in cell
+                .split(';')
+                .map(str::trim)
+                .filter(|part| !part.is_empty())
+            {
+                if !crate::values::ImageAttachment::is_valid_relative_path(part) {
+                    return Err(format!("\"{part}\" is not a valid relative image filename"));
+                }
+                let mime_type = crate::images::infer_mime_from_extension(part)
+                    .ok_or_else(|| format!("\"{part}\" is not a supported image type"))?;
+                let original_name = crate::images::derive_original_name_from_relative_path(part);
+                let size_bytes = media_folder
+                    .and_then(|dir| std::fs::metadata(dir.join(part)).ok())
+                    .map_or(0, |meta| meta.len());
+                attachments.push(crate::values::ImageAttachment {
+                    relative_path: part.to_string(),
+                    original_name,
+                    mime_type: mime_type.to_string(),
+                    size_bytes,
+                });
+            }
+            FieldValue::images(attachments)
+        }
     })
 }
 
@@ -424,6 +474,7 @@ mod tests {
     fn field(name: &str, field_type: FieldType, order: i64) -> FieldDefinition {
         FieldDefinition {
             allow_options_from_records: false,
+            allow_multiple: false,
             id: FieldId::new(),
             name: name.into(),
             field_type,
@@ -736,5 +787,63 @@ mod tests {
             parse_csv(&text, &schema, &[]).unwrap().len(),
             MAX_IMPORT_ROWS
         );
+    }
+
+    #[test]
+    fn images_csv_round_trip_media_folder_size_and_validation() {
+        use tempfile::TempDir;
+
+        let media_dir = TempDir::new().unwrap();
+        let file_a = "0195f3a0-7c4b-7d20-8a1e-4b92c8103f1a_receipt.jpg";
+        let file_b = "0195f3a1-12b0-7a84-9c03-8e41d902b77c_espresso.png";
+        std::fs::write(media_dir.path().join(file_a), b"1234567890").unwrap();
+
+        let mut single = field("Receipt", FieldType::Images, 0);
+        single.allow_multiple = false;
+        let mut multi = field("Photos", FieldType::Images, 1);
+        multi.allow_multiple = true;
+        let schema = CollectionSchema {
+            id: CollectionSchemaId::new(),
+            name: "Expenses".into(),
+            description: String::new(),
+            fields: vec![single.clone(), multi.clone()],
+            deleted: false,
+        };
+
+        let csv_in = format!("Receipt,Photos\n{file_a},{file_a}; {file_b}\n,\n");
+        let parsed =
+            parse_csv_with_media_folder(&csv_in, &schema, &[], Some(media_dir.path())).unwrap();
+        assert_eq!(parsed.len(), 2);
+        let FieldValue::Images(r0_receipt) = &parsed[0].values[&single.id] else {
+            panic!("expected Images");
+        };
+        assert_eq!(r0_receipt.len(), 1);
+        assert_eq!(r0_receipt[0].original_name, "receipt.jpg");
+        assert_eq!(r0_receipt[0].mime_type, "image/jpeg");
+        assert_eq!(r0_receipt[0].size_bytes, 10);
+
+        let FieldValue::Images(r0_photos) = &parsed[0].values[&multi.id] else {
+            panic!("expected Images");
+        };
+        assert_eq!(r0_photos.len(), 2);
+        assert_eq!(r0_photos[1].original_name, "espresso.png");
+        assert_eq!(r0_photos[1].mime_type, "image/png");
+        assert_eq!(r0_photos[1].size_bytes, 0); // not on disk yet
+
+        assert_eq!(parsed[1].values[&single.id], FieldValue::Null);
+        assert_eq!(parsed[1].values[&multi.id], FieldValue::Null);
+
+        let exported = export_csv(&schema, &[], &parsed, 0).unwrap();
+        assert_eq!(exported, csv_in);
+
+        // Path traversal rejected.
+        let bad_path = abort("Receipt,Photos\n../secret.jpg,\n", &schema);
+        assert_eq!(bad_path.0, 1);
+        assert_eq!(bad_path.1, "Receipt");
+
+        // Multiple images in single-image column rejected.
+        let bad_multi = abort(&format!("Receipt,Photos\n{file_a}; {file_b},\n"), &schema);
+        assert_eq!(bad_multi.0, 1);
+        assert_eq!(bad_multi.1, "Receipt");
     }
 }

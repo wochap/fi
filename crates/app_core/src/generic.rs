@@ -284,6 +284,24 @@ impl GenericCommand {
                         .filter(|record| !record.deleted && record.collection_id == *collection_id)
                 };
                 match (&prior.field_type, &field.field_type) {
+                    (FieldType::Images, FieldType::Images)
+                        if prior.allow_multiple && !field.allow_multiple =>
+                    {
+                        let blocking = active_values()
+                            .filter(|record| {
+                                matches!(
+                                    record.values.get(&field.id),
+                                    Some(FieldValue::Images(items)) if items.len() > 1
+                                )
+                            })
+                            .count();
+                        if blocking > 0 {
+                            return Err(DomainError::ImagesSingleConversionBlocked {
+                                field: field.id,
+                                records: u32::try_from(blocking).unwrap_or(u32::MAX),
+                            });
+                        }
+                    }
                     (before, after) if before == after => {}
                     // Each Choice value reads as a set of one; nothing is rewritten.
                     (FieldType::Enum, FieldType::EnumSet) => {}
@@ -389,6 +407,10 @@ impl GenericCommand {
                 let field = active_field(snapshot, record.collection_id, *field_id)?;
                 if let FieldValue::EnumSet(ids) = value {
                     *value = FieldValue::enum_set(ids.iter().copied());
+                } else if let FieldValue::Images(attachments) = value
+                    && attachments.is_empty()
+                {
+                    *value = FieldValue::Null;
                 }
                 if let (FieldValue::EnumSet(ids), Some(FieldValue::EnumSet(held))) =
                     (&*value, record.values.get(field_id))
@@ -2378,6 +2400,7 @@ mod tests {
             description: String::new(),
             fields: vec![FieldDefinition {
                 allow_options_from_records: false,
+                allow_multiple: false,
                 id: FieldId::new(),
                 name: "Intensity".into(),
                 field_type: FieldType::Integer,
@@ -2479,6 +2502,7 @@ mod tests {
         let mut schema = schema();
         let note = FieldDefinition {
             allow_options_from_records: false,
+            allow_multiple: false,
             id: FieldId::new(),
             name: "Note".into(),
             field_type: FieldType::Text,
@@ -2804,6 +2828,7 @@ mod tests {
             .collect();
         collection.fields.push(FieldDefinition {
             allow_options_from_records: false,
+            allow_multiple: false,
             id: FieldId::new(),
             name: "Kind".into(),
             field_type: FieldType::Enum,
@@ -3215,6 +3240,7 @@ mod tests {
         );
         let due = FieldDefinition {
             allow_options_from_records: false,
+            allow_multiple: false,
             id: FieldId::new(),
             name: "Due".into(),
             field_type: FieldType::Date,
@@ -3678,6 +3704,7 @@ mod tests {
         let mut schema = schema();
         schema.fields.push(FieldDefinition {
             allow_options_from_records: false,
+            allow_multiple: false,
             id: FieldId::new(),
             name: "Note".into(),
             field_type: FieldType::Text,
@@ -4024,6 +4051,7 @@ mod tests {
         collection.description = "Daily log".into();
         collection.fields.push(FieldDefinition {
             allow_options_from_records: false,
+            allow_multiple: false,
             id: FieldId::new(),
             name: "Kind".into(),
             field_type: FieldType::Enum,
@@ -4038,6 +4066,7 @@ mod tests {
         });
         collection.fields.push(FieldDefinition {
             allow_options_from_records: false,
+            allow_multiple: false,
             id: FieldId::new(),
             name: "Removed".into(),
             field_type: FieldType::Text,
@@ -4434,5 +4463,138 @@ mod tests {
                 ..
             })
         ));
+    }
+
+    #[test]
+    fn images_allow_multiple_safe_schema_evolution() {
+        let mut doc = Automerge::new();
+        let mut tx = doc.transaction();
+        initialize_generic(&mut tx).unwrap();
+        tx.commit();
+
+        let collection_id = CollectionSchemaId::new();
+        let field_id = FieldId::new();
+        let mut photos_field = FieldDefinition {
+            id: field_id,
+            name: "Photos".into(),
+            field_type: FieldType::Images,
+            required: false,
+            default: None,
+            default_relative_days: None,
+            validation: ValidationMetadata::default(),
+            display: DisplayMetadata::default(),
+            order: 0,
+            deleted: false,
+            enum_options: vec![],
+            allow_options_from_records: false,
+            allow_multiple: false,
+        };
+        let collection = CollectionSchema {
+            id: collection_id,
+            name: "Expenses".into(),
+            description: String::new(),
+            fields: vec![photos_field.clone()],
+            deleted: false,
+        };
+        commit(
+            &mut doc,
+            &mut GenericCommand::CreateCollection(collection),
+            1,
+        );
+
+        let img_a = crate::values::ImageAttachment {
+            relative_path: "0195f3a0-7c4b-7d20-8a1e-4b92c8103f1a_a.jpg".into(),
+            original_name: "a.jpg".into(),
+            mime_type: "image/jpeg".into(),
+            size_bytes: 100,
+        };
+        let img_b = crate::values::ImageAttachment {
+            relative_path: "0195f3a1-7c4b-7d20-8a1e-4b92c8103f1a_b.png".into(),
+            original_name: "b.png".into(),
+            mime_type: "image/png".into(),
+            size_bytes: 200,
+        };
+
+        // Create a record with 1 image.
+        let r1 = RecordId::new();
+        commit(
+            &mut doc,
+            &mut GenericCommand::CreateRecord(GenericRecord {
+                id: r1,
+                collection_id,
+                values: BTreeMap::from([(field_id, FieldValue::Images(vec![img_a.clone()]))]),
+                stamps: BTreeMap::new(),
+                deleted: false,
+            }),
+            2,
+        );
+
+        // Turn allow_multiple on -> always allowed.
+        photos_field.allow_multiple = true;
+        commit(
+            &mut doc,
+            &mut GenericCommand::UpdateField {
+                collection_id,
+                field: photos_field.clone(),
+            },
+            3,
+        );
+
+        // Add two records holding 2 images each.
+        let r2 = RecordId::new();
+        let r3 = RecordId::new();
+        for (idx, rid) in [r2, r3].into_iter().enumerate() {
+            commit(
+                &mut doc,
+                &mut GenericCommand::CreateRecord(GenericRecord {
+                    id: rid,
+                    collection_id,
+                    values: BTreeMap::from([(
+                        field_id,
+                        FieldValue::Images(vec![img_a.clone(), img_b.clone()]),
+                    )]),
+                    stamps: BTreeMap::new(),
+                    deleted: false,
+                }),
+                4 + idx as i64,
+            );
+        }
+
+        // Turning allow_multiple off is blocked naming field_id and 2 records.
+        photos_field.allow_multiple = false;
+        let mut blocked = GenericCommand::UpdateField {
+            collection_id,
+            field: photos_field.clone(),
+        };
+        let err = blocked
+            .validate_against(&decode_generic(&doc).unwrap())
+            .unwrap_err();
+        assert_eq!(
+            err,
+            DomainError::ImagesSingleConversionBlocked {
+                field: field_id,
+                records: 2,
+            }
+        );
+
+        // Trim r2 to 1 image and delete r3 -> turning allow_multiple off now succeeds.
+        commit(
+            &mut doc,
+            &mut GenericCommand::UpdateRecordField {
+                record_id: r2,
+                field_id,
+                value: FieldValue::Images(vec![img_a]),
+            },
+            6,
+        );
+        commit(&mut doc, &mut GenericCommand::DeleteRecord(r3), 7);
+        commit(
+            &mut doc,
+            &mut GenericCommand::UpdateField {
+                collection_id,
+                field: photos_field,
+            },
+            8,
+        );
     }
 }

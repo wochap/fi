@@ -144,6 +144,31 @@ abstract interface class CollectionBridge {
 
   /// Creates a new collection per envelope entry; a rejected document writes nothing.
   Future<ImportOutcomeDto> importCollectionsJson(String text);
+
+  /// Summarizes referenced image files for [ids] against [mediaFolder].
+  Future<ReferencedMediaSummaryDto> summarizeCollectionsMedia(
+    List<String> ids, {
+    String? mediaFolder,
+  });
+
+  /// Packages `collections.json` and locally present referenced media files into a `.zip` archive.
+  Future<ZipExportDto> exportCollectionsZip(
+    List<String> ids, {
+    String? mediaFolder,
+  });
+
+  /// Imports a `.zip` media bundle, extracting bundled media files into [mediaFolder] when set.
+  Future<ImportOutcomeDto> importCollectionsZip(
+    Uint8List zipBytes, {
+    String? mediaFolder,
+  });
+
+  /// Imports CSV rows into [collectionId], reading image sizes from [mediaFolder] when set.
+  Future<ImportOutcomeDto> importCollectionCsvWithMedia(
+    String collectionId,
+    String text, {
+    String? mediaFolder,
+  });
   Future<void> deleteCollection(String id);
   Future<String> addField(String collectionId, FieldDefinitionDto field);
   Future<void> updateField(String collectionId, FieldDefinitionDto field);
@@ -474,6 +499,41 @@ final class RustCollectionBridge implements CollectionBridge {
   @override
   Future<ImportOutcomeDto> importCollectionsJson(String text) =>
       collections.importCollectionsJson(text: text);
+
+  @override
+  Future<ReferencedMediaSummaryDto> summarizeCollectionsMedia(
+    List<String> ids, {
+    String? mediaFolder,
+  }) => collections.summarizeCollectionsMedia(
+    ids: ids,
+    mediaFolder: mediaFolder,
+  );
+
+  @override
+  Future<ZipExportDto> exportCollectionsZip(
+    List<String> ids, {
+    String? mediaFolder,
+  }) => collections.exportCollectionsZip(ids: ids, mediaFolder: mediaFolder);
+
+  @override
+  Future<ImportOutcomeDto> importCollectionsZip(
+    Uint8List zipBytes, {
+    String? mediaFolder,
+  }) => collections.importCollectionsZip(
+    zipBytes: zipBytes,
+    mediaFolder: mediaFolder,
+  );
+
+  @override
+  Future<ImportOutcomeDto> importCollectionCsvWithMedia(
+    String collectionId,
+    String text, {
+    String? mediaFolder,
+  }) => collections.importCollectionCsvWithMedia(
+    collectionId: collectionId,
+    text: text,
+    mediaFolder: mediaFolder,
+  );
   @override
   Future<void> deleteCollection(String id) =>
       collections.deleteCollection(id: id);
