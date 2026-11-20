@@ -5,6 +5,7 @@ import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/ui_prefs.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -67,6 +68,8 @@ abstract interface class MediaStorageService {
 final class DefaultMediaStorageService implements MediaStorageService {
   const DefaultMediaStorageService();
 
+  static const _platformChannel = MethodChannel('fi/platform');
+
   static const _imageTypeGroup = XTypeGroup(
     label: 'Images',
     extensions: ['jpg', 'jpeg', 'png', 'webp', 'gif'],
@@ -85,8 +88,11 @@ final class DefaultMediaStorageService implements MediaStorageService {
         : [?await openFile(acceptedTypeGroups: const [_imageTypeGroup])];
     final picked = <PickedImageSource>[];
     for (final file in files) {
-      if (file.path.isNotEmpty) {
-        picked.add(PickedImageSource(name: file.name, path: file.path));
+      final path = file.path;
+      if (path.isNotEmpty &&
+          !path.startsWith('content://') &&
+          File(path).existsSync()) {
+        picked.add(PickedImageSource(name: file.name, path: path));
       } else {
         picked.add(
           PickedImageSource(name: file.name, bytes: await file.readAsBytes()),
@@ -98,8 +104,17 @@ final class DefaultMediaStorageService implements MediaStorageService {
 
   @override
   Future<PickedImageSource?> takePhoto() async {
-    // Uses system picker/camera sheet when available; platforms without a dedicated camera plugin
-    // fall back cleanly to the single-image picker.
+    if (Platform.isAndroid) {
+      final result = await _platformChannel.invokeMapMethod<String, dynamic>(
+        'takePhoto',
+      );
+      if (result == null) return null;
+      final path = result['path'] as String?;
+      final name = result['name'] as String? ?? 'photo.jpg';
+      if (path == null || path.isEmpty) return null;
+      return PickedImageSource(name: name, path: path);
+    }
+    // Non-Android platforms without a dedicated camera intent fall back to the single-image picker.
     final list = await pickImages(allowMultiple: false);
     return list.firstOrNull;
   }
@@ -156,7 +171,11 @@ final class DefaultMediaStorageService implements MediaStorageService {
 
   @override
   Future<void> openExternally(String fullPath) async {
-    if (Platform.isLinux) {
+    if (Platform.isAndroid) {
+      await _platformChannel.invokeMethod<void>('openExternalFile', {
+        'path': fullPath,
+      });
+    } else if (Platform.isLinux) {
       await Process.start('xdg-open', [fullPath]);
     } else if (Platform.isMacOS) {
       await Process.start('open', [fullPath]);

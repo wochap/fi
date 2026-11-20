@@ -2,6 +2,7 @@ package com.wochap.fi
 
 import android.Manifest
 import android.app.Activity
+import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -14,6 +15,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Looper
+import android.provider.MediaStore
 import android.provider.OpenableColumns
 import android.provider.Settings
 import android.security.keystore.KeyGenParameterSpec
@@ -21,12 +23,17 @@ import android.security.keystore.KeyProperties
 import android.util.Base64
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
+import java.io.File
 import java.security.KeyStore
 import java.security.SecureRandom
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -36,12 +43,16 @@ import javax.crypto.spec.GCMParameterSpec
 class MainActivity : FlutterActivity() {
     private var multicastLock: WifiManager.MulticastLock? = null
     private var pendingSave: PendingSave? = null
+    private var pendingPhoto: PendingPhoto? = null
     private var platformChannel: MethodChannel? = null
     private var pendingLocationPermission: MethodChannel.Result? = null
     private var activeLocationListener: LocationListener? = null
 
     /** An export waiting for the user to pick a destination in the system save dialog. */
     private class PendingSave(val bytes: ByteArray, val result: MethodChannel.Result)
+
+    /** A camera capture waiting for the system camera app to write to [file]. */
+    private class PendingPhoto(val file: File, val result: MethodChannel.Result)
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -129,6 +140,8 @@ class MainActivity : FlutterActivity() {
                     startActivity(target)
                     result.success(null)
                 }
+                "takePhoto" -> takePhoto(result)
+                "openExternalFile" -> openExternalFile(call, result)
                 else -> result.notImplemented()
             }
         } catch (failure: Exception) {
@@ -155,25 +168,104 @@ class MainActivity : FlutterActivity() {
         startActivityForResult(intent, SAVE_DOCUMENT_REQUEST)
     }
 
+    /**
+     * Launches the system camera app to capture a full-resolution JPEG into app cache.
+     * Replies with `{"path": ..., "name": ...}` on capture, or null when cancelled.
+     */
+    private fun takePhoto(result: MethodChannel.Result) {
+        pendingPhoto?.let { prev ->
+            prev.file.delete()
+            prev.result.success(null)
+        }
+        val captureDir = File(cacheDir, "camera_captures").apply { mkdirs() }
+        // Clean up any leftover captures from previous sessions so cache stays bounded.
+        captureDir.listFiles()?.forEach { it.delete() }
+        val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+        val photoFile = File(captureDir, "photo_$timestamp.jpg")
+        val contentUri = FileProvider.getUriForFile(
+            this,
+            "$packageName.fi.fileprovider",
+            photoFile,
+        )
+        val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE).apply {
+            putExtra(MediaStore.EXTRA_OUTPUT, contentUri)
+            clipData = ClipData.newRawUri("photo", contentUri)
+            addFlags(
+                Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION,
+            )
+        }
+        pendingPhoto = PendingPhoto(photoFile, result)
+        try {
+            @Suppress("DEPRECATION")
+            startActivityForResult(intent, TAKE_PHOTO_REQUEST)
+        } catch (failure: Exception) {
+            pendingPhoto = null
+            photoFile.delete()
+            throw failure
+        }
+    }
+
+    private fun openExternalFile(call: MethodCall, result: MethodChannel.Result) {
+        val path = call.argument<String>("path") ?: throw IllegalArgumentException("path")
+        val file = File(path)
+        require(file.exists()) { "file_missing" }
+        val uri = FileProvider.getUriForFile(this, "$packageName.fi.fileprovider", file)
+        val mime = when (file.extension.lowercase(Locale.US)) {
+            "jpg", "jpeg" -> "image/jpeg"
+            "png" -> "image/png"
+            "webp" -> "image/webp"
+            "gif" -> "image/gif"
+            else -> "image/*"
+        }
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, mime)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        startActivity(intent)
+        result.success(null)
+    }
+
     @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         @Suppress("DEPRECATION")
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode != SAVE_DOCUMENT_REQUEST) return
-        val pending = pendingSave ?: return
-        pendingSave = null
-        val uri = data?.data
-        if (resultCode != Activity.RESULT_OK || uri == null) {
-            pending.result.success(null)
-            return
-        }
-        try {
-            val stream = contentResolver.openOutputStream(uri, "wt")
-                ?: error("document_unwritable")
-            stream.use { it.write(pending.bytes) }
-            pending.result.success(displayName(uri))
-        } catch (failure: Exception) {
-            pending.result.error("android_capability", safeCategory(failure), null)
+        when (requestCode) {
+            SAVE_DOCUMENT_REQUEST -> {
+                val pending = pendingSave ?: return
+                pendingSave = null
+                val uri = data?.data
+                if (resultCode != Activity.RESULT_OK || uri == null) {
+                    pending.result.success(null)
+                    return
+                }
+                try {
+                    val stream = contentResolver.openOutputStream(uri, "wt")
+                        ?: error("document_unwritable")
+                    stream.use { it.write(pending.bytes) }
+                    pending.result.success(displayName(uri))
+                } catch (failure: Exception) {
+                    pending.result.error("android_capability", safeCategory(failure), null)
+                }
+            }
+            TAKE_PHOTO_REQUEST -> {
+                val pending = pendingPhoto ?: return
+                pendingPhoto = null
+                if (resultCode == Activity.RESULT_OK &&
+                    pending.file.exists() &&
+                    pending.file.length() > 0
+                ) {
+                    pending.result.success(
+                        mapOf(
+                            "path" to pending.file.absolutePath,
+                            "name" to pending.file.name,
+                        ),
+                    )
+                } else {
+                    pending.file.delete()
+                    pending.result.success(null)
+                }
+            }
         }
     }
 
@@ -448,6 +540,7 @@ class MainActivity : FlutterActivity() {
         private const val CHANNEL = "fi/platform"
         private const val SAVE_DOCUMENT_REQUEST = 4101
         private const val LOCATION_PERMISSION_REQUEST = 4102
+        private const val TAKE_PHOTO_REQUEST = 4103
         private const val MULTICAST_TAG = "fi-mdns-foreground"
         private const val ANDROID_KEY_STORE = "AndroidKeyStore"
         private const val KEY_ALIAS = "fi.secure-store.wrap.v1"
