@@ -313,7 +313,7 @@ void main() {
           .where((e) => e is File && e.path.endsWith('.png'))
           .toList();
       expect(files.length, 1);
-      expect(files.single.path, endsWith('15_2_2.png'));
+      expect(files.single.path, endsWith('voyager_2x_15_2_2.png'));
     });
   });
 }

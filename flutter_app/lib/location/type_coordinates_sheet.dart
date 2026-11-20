@@ -5,6 +5,7 @@ import 'package:fi/location/format.dart';
 import 'package:fi/location/services.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/theme/nocturne.dart';
+import 'package:fi/theme/side_sheet.dart';
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
@@ -23,11 +24,10 @@ Future<LocationValueDto?> showTypeCoordinatesSheet(
       useSafeArea: true,
       builder: (sheetContext) => LocationScope(
         services: services,
-        child: Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.viewInsetsOf(sheetContext).bottom,
+        child: BottomSheetInsets(
+          child: SingleChildScrollView(
+            child: _TypeCoordinatesBody(initialValue: initialValue),
           ),
-          child: _TypeCoordinatesBody(initialValue: initialValue),
         ),
       ),
     );

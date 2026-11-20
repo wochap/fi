@@ -180,6 +180,7 @@ class _OsmMapCanvasState extends State<OsmMapCanvas> {
   Widget build(BuildContext context) {
     final colors = context.nocturne;
     final l10n = AppLocalizations.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -204,7 +205,7 @@ class _OsmMapCanvasState extends State<OsmMapCanvas> {
           if (ty < 0 || ty >= maxTileIndex) continue;
           for (var tx = minTx; tx <= maxTx; tx++) {
             final wrappedTx = ((tx % maxTileIndex) + maxTileIndex) % maxTileIndex;
-            final coord = TileCoord(intZoom, wrappedTx, ty);
+            final coord = TileCoord(intZoom, wrappedTx, ty, dark: isDark);
             visible.add(coord);
             final left = tx * tileRenderSize - topLeftPx.dx;
             final top = ty * tileRenderSize - topLeftPx.dy;
@@ -222,7 +223,7 @@ class _OsmMapCanvasState extends State<OsmMapCanvas> {
                     bytes,
                     fit: BoxFit.fill,
                     gaplessPlayback: true,
-                    filterQuality: FilterQuality.low,
+                    filterQuality: FilterQuality.medium,
                   ),
                 ),
               );
@@ -320,7 +321,8 @@ class _OsmMapCanvasState extends State<OsmMapCanvas> {
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(
-                        l10n?.locationOsmAttribution ?? '© OpenStreetMap',
+                        l10n?.locationOsmAttribution ??
+                            '© OpenStreetMap · © CARTO',
                         style: TextStyle(
                           fontSize: 10,
                           color: colors.muted(.6),

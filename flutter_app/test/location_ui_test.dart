@@ -602,6 +602,38 @@ void main() {
       expect(result!.latitudeMicrodeg, 38713900);
       expect(result!.longitudeMicrodeg, -9133400);
     });
+
+    testWidgets('Type coordinates bottom sheet clears Android navigation bar on phone',
+        (tester) async {
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPadding);
+      addTearDown(tester.view.resetViewPadding);
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.padding = const FakeViewPadding(bottom: 48);
+      tester.view.viewPadding = const FakeViewPadding(bottom: 48);
+
+      final services = _FakeLocationServices();
+      await tester.pumpWidget(
+        _wrapApp(
+          Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showTypeCoordinatesSheet(context),
+              child: const Text('Open type'),
+            ),
+          ),
+          services: services,
+        ),
+      );
+
+      await tester.tap(find.text('Open type'));
+      await tester.pumpAndSettle();
+
+      final buttonRect =
+          tester.getRect(find.byKey(const Key('location-show-on-map')));
+      expect(buttonRect.bottom, lessThanOrEqualTo(844 - 48));
+    });
   });
 
   group('Task 4.4 — View mode (desktop table & mobile card) and presence filters',

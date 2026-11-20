@@ -6605,7 +6605,7 @@ abstract class AppLocalizations {
   /// Map tile attribution badge.
   ///
   /// In en, this message translates to:
-  /// **'© OpenStreetMap'**
+  /// **'© OpenStreetMap · © CARTO'**
   String get locationOsmAttribution;
 
   /// Row in place search to switch to manual coordinate entry.

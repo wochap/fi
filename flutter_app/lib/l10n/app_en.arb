@@ -5700,7 +5700,7 @@
       }
     }
   },
-  "locationOsmAttribution": "© OpenStreetMap",
+  "locationOsmAttribution": "© OpenStreetMap · © CARTO",
   "@locationOsmAttribution": {
     "description": "Map tile attribution badge."
   },

@@ -1084,7 +1084,7 @@
   "locationNearPlace": "Cerca de {place}",
   "locationNearPlaceDistance": "Cerca de {place} · a {distance} de ti",
   "locationDistanceFromYou": "a {distance} de ti",
-  "locationOsmAttribution": "© OpenStreetMap",
+  "locationOsmAttribution": "© OpenStreetMap · © CARTO",
   "locationTypeCoordinatesInstead": "Escribir coordenadas en su lugar",
   "locationSearchCaption": "Resultados de OpenStreetMap · más cercanos primero",
   "locationSearchNeedsInternet": "La búsqueda necesita internet",

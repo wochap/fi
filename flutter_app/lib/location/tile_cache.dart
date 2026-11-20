@@ -8,24 +8,35 @@ import 'package:path_provider/path_provider.dart';
 
 const String fiMapUserAgent = 'Fi/0.1.0 (https://github.com/wochap/fi)';
 
-/// Key identifying one 256×256 Web Mercator raster tile.
+/// Key identifying one 512×512 (`@2x` retina) Web Mercator raster tile.
 class TileCoord {
-  const TileCoord(this.z, this.x, this.y);
+  const TileCoord(this.z, this.x, this.y, {this.dark = false});
 
   final int z;
   final int x;
   final int y;
+  final bool dark;
 
-  String get cacheKey => '${z}_${x}_$y';
+  String get _styleSlug => dark ? 'dark_2x' : 'voyager_2x';
 
-  Uri get osmUri => Uri.parse('https://tile.openstreetmap.org/$z/$x/$y.png');
+  String get cacheKey => '${_styleSlug}_${z}_${x}_$y';
+
+  Uri get osmUri => dark
+      ? Uri.parse('https://basemaps.cartocdn.com/dark_all/$z/$x/$y@2x.png')
+      : Uri.parse(
+          'https://basemaps.cartocdn.com/rastertiles/voyager/$z/$x/$y@2x.png',
+        );
 
   @override
   bool operator ==(Object other) =>
-      other is TileCoord && z == other.z && x == other.x && y == other.y;
+      other is TileCoord &&
+      z == other.z &&
+      x == other.x &&
+      y == other.y &&
+      dark == other.dark;
 
   @override
-  int get hashCode => Object.hash(z, x, y);
+  int get hashCode => Object.hash(z, x, y, dark);
 }
 
 enum TileFetchOutcomeKind {

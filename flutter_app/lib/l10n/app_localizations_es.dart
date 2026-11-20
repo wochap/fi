@@ -4246,7 +4246,7 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get locationOsmAttribution => '© OpenStreetMap';
+  String get locationOsmAttribution => '© OpenStreetMap · © CARTO';
 
   @override
   String get locationTypeCoordinatesInstead =>
