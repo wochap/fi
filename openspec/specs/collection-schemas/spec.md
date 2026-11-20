@@ -23,16 +23,18 @@ Every field and enum option SHALL have a globally unique stable ID independent o
 - **THEN** records referencing its `EnumOptionId` display the new label without changing their stored value
 
 ### Requirement: Supported field definitions
-Field definitions SHALL support Text, Integer, FixedDecimal with scale, Boolean, Date, DateTime, Duration, Enum (shown as "Choice"), EnumSet (shown as "Choices"), and Location types plus requiredness, optional default, applicable validation metadata, display metadata, deterministic order, and logical deletion. Multiline text SHALL be represented as Text display metadata. A slider presentation SHALL be represented as Integer display metadata and SHALL be valid only when the field declares both a minimum and a maximum. A slider MAY carry a positive whole-number step as Integer display metadata; a definition without a step SHALL read as step 1. A Location field SHALL carry a `show_map_preview` flag in display metadata that defaults to `true` when omitted in serialized JSON. Display metadata SHALL be forward compatible: a definition missing `multiline` or `slider` SHALL read as that flag unset, a definition missing `slider_step` SHALL read as step 1, and a definition missing `show_map_preview` SHALL read as `true`.
+Field definitions SHALL support Text, Integer, FixedDecimal with scale, Boolean, Date, DateTime, Duration, Enum (shown as "Choice"), EnumSet (shown as "Choices"), Location, and Images types plus requiredness, optional default, applicable validation metadata, display metadata, deterministic order, and logical deletion. Multiline text SHALL be represented as Text display metadata. A slider presentation SHALL be represented as Integer display metadata and SHALL be valid only when the field declares both a minimum and a maximum. A slider MAY carry a positive whole-number step as Integer display metadata; a definition without a step SHALL read as step 1. A Location field SHALL carry a `show_map_preview` flag in display metadata that defaults to `true` when omitted in serialized JSON. An Images field SHALL carry an `allow_multiple` flag (defaulting to `false` when omitted in serialized JSON) and a `show_thumbnails` flag in display metadata that defaults to `true` when omitted in serialized JSON. Display metadata SHALL be forward compatible: a definition missing `multiline` or `slider` SHALL read as that flag unset, a definition missing `slider_step` SHALL read as step 1, a definition missing `show_map_preview` SHALL read as `true`, and a definition missing `show_thumbnails` SHALL read as `true`.
 
 An EnumSet field SHALL carry an option list with the same structure and rules as an Enum field (stable option ids, labels, order, logical removal). Its value SHALL be a set of that field's option ids. Its default, when present, SHALL be a non-empty set of active options of the field. A required EnumSet field SHALL be satisfied only by a set holding at least one option. An option label of an EnumSet field SHALL NOT contain the character `;`.
 
 A Date field MAY declare a relative default: a signed whole number of days added to the record's creation day. A field SHALL NOT declare both a fixed default and a relative default, and a relative default SHALL be rejected on any type other than Date. The relative default SHALL be stored so that a device that does not know it reads the field as having no default rather than failing to read the schema.
 
-A Location field SHALL NOT carry a default value, a relative default, integer or length validation bounds, enum options, `allow_options_from_records`, `multiline`, `slider`, or `slider_step`. Setting `show_map_preview` to `false` SHALL be valid only on a Location field.
+A Location field SHALL NOT carry a default value, a relative default, integer or length validation bounds, enum options, `allow_options_from_records`, `multiline`, `slider`, `slider_step`, `allow_multiple`, or `show_thumbnails = false`. Setting `show_map_preview` to `false` SHALL be valid only on a Location field.
+
+An Images field SHALL NOT carry a default value, a relative default, integer or length validation bounds, enum options, `allow_options_from_records`, `multiline`, `slider`, `slider_step`, or `show_map_preview = false`. Setting `allow_multiple` to `true` or `show_thumbnails` to `false` SHALL be valid only on an Images field. A required Images field SHALL be satisfied only by a non-empty list of image attachments (exactly 1 when `allow_multiple` is `false`, or 1 or more when `allow_multiple` is `true`).
 
 #### Scenario: Add every supported field type
-- **WHEN** a user adds one valid field of every supported type (including Location)
+- **WHEN** a user adds one valid field of every supported type (including Location and Images)
 - **THEN** the schema round-trips through Automerge and projection without losing type or metadata
 
 #### Scenario: Future field type
@@ -79,6 +81,10 @@ A Location field SHALL NOT carry a default value, a relative default, integer or
 - **WHEN** a Location field "place" is created with `show_map_preview` set to `true` (default) or `false`
 - **THEN** another device reads the same Location field and `show_map_preview` value, and a definition written without `show_map_preview` parses with `show_map_preview = true`
 
+#### Scenario: Images field and metadata round-trip
+- **WHEN** an Images field "photos" is created with `allow_multiple` set to `true` and `show_thumbnails` set to `false`
+- **THEN** another device reads the same Images field with `allow_multiple = true` and `show_thumbnails = false`, and an Images definition written without `allow_multiple` or `show_thumbnails` parses with `allow_multiple = false` and `show_thumbnails = true`
+
 ### Requirement: Schema validation before mutation
 Rust application-core commands SHALL validate names, field types, scale bounds, defaults, min/max constraints, enum membership metadata, display metadata applicability, slider step, duplicate identities, and command targets before committing authoritative schema changes. A slider step SHALL be rejected when it is zero, when it is present without the slider flag, or when it does not divide the distance between the maximum and the minimum exactly.
 
@@ -114,6 +120,8 @@ Rust application-core commands SHALL validate names, field types, scale bounds, 
 Schema commands SHALL support collection create, rename, logical delete, field add/update/logical removal/reorder, and enum option maintenance. A field base type or FixedDecimal scale MUST NOT change once active records contain a value for that field, except between Enum and EnumSet as stated below. A required constraint MAY be introduced or a default removed while active records lack the field; the command SHALL be accepted, and each active record lacking the field SHALL be projected as invalid with a typed missing-required diagnostic until it is repaired or the constraint is relaxed. When the field carries a default, the default SHALL continue to satisfy the constraint for records lacking the field.
 
 An Enum field SHALL be convertible to EnumSet whether or not active records hold values; each record value `X` SHALL then read as the set {`X`}, a Null value as the empty set, and the field's default `X` as the default {`X`}. The conversion SHALL be rejected when any active option label contains `;`. An EnumSet field SHALL be convertible to Enum only while no active record holds two or more options; the conversion SHALL rewrite each active record holding one option to that option and each empty set to Null in the same change, and a default of one option SHALL become that option. A conversion blocked by a record holding two or more options SHALL return a typed error naming the field and the number of such records.
+
+An Images field with `allow_multiple = false` MAY be updated to `allow_multiple = true` whether or not active records hold values. An Images field with `allow_multiple = true` SHALL be updatable to `allow_multiple = false` only while no active record in the collection holds two or more image attachments for that field; when one or more active records hold two or more images, Rust SHALL reject the update with a typed error naming the field and the number of such records and commit nothing.
 
 Removing an enum option SHALL be accepted whether or not active records hold it. Records that hold a removed option SHALL keep that value, SHALL remain valid, and SHALL read the option's last label; the option SHALL no longer be accepted as a new value. This SHALL apply to both Enum values and members of EnumSet values.
 
@@ -156,6 +164,14 @@ Removing an enum option SHALL be accepted whether or not active records hold it.
 #### Scenario: Removed option in a set
 - **WHEN** the option "urgent" is removed while a record holds {"work", "urgent"}
 - **THEN** the record keeps both, stays valid, reads "urgent" with its last label, and a new set holding "urgent" is rejected
+
+#### Scenario: Images allow_multiple turned off blocked when records hold multiple images
+- **WHEN** an Images field "photos" with `allow_multiple = true` is updated to `allow_multiple = false` while 2 active records hold two or more image attachments
+- **THEN** Rust rejects the command with a typed error naming the field and 2 records, and nothing changes
+
+#### Scenario: Images allow_multiple turned off allowed when records hold at most one image
+- **WHEN** an Images field "photos" with `allow_multiple = true` is updated to `allow_multiple = false` while every active record holds at most one image attachment
+- **THEN** the command commits and existing single-image record values remain valid
 
 ### Requirement: Deterministic schema ordering
 Fields and enum options SHALL have explicit order metadata and SHALL be presented using the stable ID as a final tie-breaker so concurrent reorder operations converge deterministically.

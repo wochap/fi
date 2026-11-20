@@ -31,6 +31,7 @@ The app SHALL decide which Settings sections appear from the running platform's 
 - Appearance: shown on every platform. Its content is defined by the Appearance section requirement.
 - Voice input: shown only when the platform supports on-device voice (Android) and a voice engine is available to the build. Its content is defined by the voice-record-fill capability.
 - Microphone: shown only on Android and only when Voice input is shown. It holds "Microphone access" with the permission state ("Allowed", "Not allowed yet" with "Fi asks the first time you use voice.", "Off" with "Turn it on in Android settings to fill by voice."), and an "Android settings" secondary button with a settings icon that opens this app's Android settings page (mock settings-microphone). The permission state SHALL be shown as an icon beside its text, never by colour alone: a check for "Allowed" (in the accent colour), a dashed circle for "Not allowed yet", and a prohibit sign for "Off". The permission state SHALL be read again when the app returns to the foreground.
+- Media storage: shown on every platform. Its content is defined by the Media storage section requirement.
 - Diagnostics: shown on every platform. Its content is defined by the Diagnostics section requirement.
 - About: shown on every platform.
 
@@ -38,19 +39,19 @@ No text mentioning Android, and no control that opens Android settings, SHALL ap
 
 #### Scenario: Desktop shows Language, Appearance and About
 - **WHEN** the app runs with desktop capabilities, even with a voice engine available, and the user opens Settings on a 1240px-wide screen
-- **THEN** Settings shows "Preferences for this computer.", the Language section, the Appearance section, the Diagnostics section, and then the About section, and shows no Voice input section, no Microphone section and no "Android settings" button
+- **THEN** Settings shows "Preferences for this computer.", the Language section, the Appearance section, the Media storage section, the Diagnostics section, and then the About section, and shows no Voice input section, no Microphone section and no "Android settings" button
 
 #### Scenario: Desktop capabilities at phone width
 - **WHEN** the app runs with desktop capabilities and a voice engine available, and the window is 390px wide
-- **THEN** Settings still shows no Voice input and no Microphone section, and shows the Diagnostics section
+- **THEN** Settings still shows no Voice input and no Microphone section, and shows the Media storage and Diagnostics sections
 
 #### Scenario: Android with voice available
 - **WHEN** the app runs with Android capabilities and a voice engine is available
-- **THEN** Settings shows Language, Appearance, Voice input, Microphone, Diagnostics and About in that order
+- **THEN** Settings shows Language, Appearance, Voice input, Microphone, Media storage, Diagnostics and About in that order
 
 #### Scenario: Android without a voice engine
 - **WHEN** the app runs with Android capabilities and no voice engine is available to the build
-- **THEN** Settings shows Language, Appearance, Diagnostics and About in that order
+- **THEN** Settings shows Language, Appearance, Media storage, Diagnostics and About in that order
 
 #### Scenario: Permission changed in Android settings
 - **WHEN** the Microphone section shows "Off", the user taps "Android settings", allows the microphone there and returns to the app
@@ -179,3 +180,29 @@ The About section SHALL render even while the build identity is pending or after
 #### Scenario: Build identity unavailable
 - **WHEN** the build-identity query fails and the user opens Settings
 - **THEN** About shows the This device and Network rows and no Version row
+
+### Requirement: Media storage folder configuration
+The Media storage section SHALL be shown on every platform as a card managing the device-local Media Folder path (stored in device-local preferences and never synced). When unconfigured, it SHALL show `Media folder` with `Not set` and `Choose folder…`. When configured and accessible, it SHALL show the path in monospace, local file count and byte size, `Change folder…`, and `Clear` (which unsets the path without deleting files). When the saved path no longer exists or cannot be read, it SHALL show a danger-edged `Media folder not found` card with `Choose folder…` and `Clear`.
+
+#### Scenario: Pick a media folder on desktop
+- **WHEN** Media storage is `Not set` and the user clicks `Choose folder…` and selects `/home/gean/Sync/fi-media` containing 142 files totaling 84.6 MB
+- **THEN** the setting is persisted locally and the card shows `/home/gean/Sync/fi-media`, `142 files · 84.6 MB`, `Change folder…`, and `Clear`
+
+#### Scenario: Clear media folder keeps files on disk
+- **WHEN** the user clicks `Clear` on a configured Media Folder
+- **THEN** the device-local Media Folder setting returns to `Not set` and no files in the folder on disk are deleted
+
+#### Scenario: Configured folder deleted from disk
+- **WHEN** the configured folder `/mnt/usb/fi-media` is unmounted or deleted outside Fi and the user opens Settings
+- **THEN** Media storage displays `Media folder not found` with `/mnt/usb/fi-media`, `Choose folder…`, and `Clear`
+
+### Requirement: Missing referenced files status and Android all-files access
+When a configured Media Folder is accessible on disk and one or more files referenced by active records are missing from it, the Media storage card SHALL show a status banner reading `<K> file(s) referenced by records are not in this folder yet.` with a `Rescan` action. On Android only, the card SHALL also show an `All files access` (`MANAGE_EXTERNAL_STORAGE`) permission row using icon and text (`Allowed` with `ph-check-circle` or `Off` with `ph-prohibit` and an `Android settings` button), refreshed when the app returns to the foreground.
+
+#### Scenario: Missing referenced files warning and rescan
+- **WHEN** active records reference 3 image files that have not yet arrived in `/home/gean/Sync/fi-media`
+- **THEN** the Media storage card displays `3 files referenced by records are not in this folder yet.` with `Rescan`, and clicking `Rescan` after those files arrive removes the warning banner
+
+#### Scenario: Android All files access permission row
+- **WHEN** the user opens Settings on Android while `MANAGE_EXTERNAL_STORAGE` is not granted
+- **THEN** the Media storage card shows `All files access` with `ph-prohibit` and `Off` plus `Android settings`, and returning after granting updates it to `ph-check-circle` `Allowed`

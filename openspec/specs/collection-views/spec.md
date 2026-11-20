@@ -33,8 +33,8 @@ Every active collection SHALL have an implicit view "All" that is not stored in 
 ### Requirement: View validation
 Before persisting a local create, rename or body update, Rust SHALL validate the structure of the view against the collection's active schema and computed fields:
 - The name SHALL be trimmed and SHALL be 1 to 40 characters.
-- A filter, when present, SHALL produce Boolean under the typed-expression rules (including `IsNull` and `IsNotNull` on a Location field).
-- There SHALL be at most three sort clauses. Each SHALL be record creation time or an active source or computed field whose type is orderable, and SHALL NOT be a multi-option Choices field or a Location field.
+- A filter, when present, SHALL produce Boolean under the typed-expression rules (including `IsNull` and `IsNotNull` on a Location field or an Images field).
+- There SHALL be at most three sort clauses. Each SHALL be record creation time or an active source or computed field whose type is orderable, and SHALL NOT be a multi-option Choices field, a Location field, or an Images field.
 - Every sort clause SHALL keep empty values last. Rust SHALL store the null order "last" for every clause of a view, whatever null order the command carried.
 
 A failed validation SHALL return a typed validation error whose issues carry one of the stable codes `length` (name), `view_filter_type`, `view_sort_key` or `view_sort_limit` and name the offending part, and SHALL write nothing. Rust SHALL NOT reject a name for being equal to another view's name or to the localized name of All; those checks belong to the app.
@@ -46,6 +46,14 @@ A failed validation SHALL return a typed validation error whose issues carry one
 #### Scenario: Reject sort by a Location field
 - **WHEN** a view sorts by "place", a Location field
 - **THEN** validation fails with the code `view_sort_key` on that sort clause and the view is not persisted
+
+#### Scenario: Reject sort by an Images field
+- **WHEN** a view sorts by "photos", an Images field
+- **THEN** validation fails with the code `view_sort_key` on that sort clause and the view is not persisted
+
+#### Scenario: Filter by an Images field
+- **WHEN** a view filters `IsNotNull` ("has file") or `IsNull` ("is empty") on an Images field "photos"
+- **THEN** validation accepts the view and execution returns only the matching records
 
 #### Scenario: Reject a fourth sort key
 - **WHEN** a view carries four sort clauses

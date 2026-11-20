@@ -7,7 +7,7 @@ Defines the portable CSV and JSON forms of collection data and the export and im
 ## Requirements
 
 ### Requirement: CSV record export
-The system SHALL export the active records of one collection as UTF-8 CSV (RFC 4180 quoting, comma separator, `\n` line ends). The header row SHALL contain the name of every active field in schema order, followed by the name of every active computed field. Deleted records, deleted fields, and deleted enum options SHALL NOT be exported. Values SHALL be rendered as: Integer as a decimal integer; FixedDecimal in its exact decimal form at the field scale; Boolean as `true` or `false`; Date as ISO-8601 `YYYY-MM-DD`; DateTime as ISO-8601 UTC with a `Z` suffix and millisecond precision; Duration as the raw millisecond integer; Enum as the option label; EnumSet as the labels of its active options in the field's option order joined with `; `; Location as `<lat>, <lng>` formatted to 6 decimal places (or 4 decimal places when the stored value is marked approximate); Null as an empty cell. When two active fields, or a field and a computed field, share a name, the export SHALL fail with an error naming the duplicated name and produce no file.
+The system SHALL export the active records of one collection as UTF-8 CSV (RFC 4180 quoting, comma separator, `\n` line ends). The header row SHALL contain the name of every active field in schema order, followed by the name of every active computed field. Deleted records, deleted fields, and deleted enum options SHALL NOT be exported. Values SHALL be rendered as: Integer as a decimal integer; FixedDecimal in its exact decimal form at the field scale; Boolean as `true` or `false`; Date as ISO-8601 `YYYY-MM-DD`; DateTime as ISO-8601 UTC with a `Z` suffix and millisecond precision; Duration as the raw millisecond integer; Enum as the option label; EnumSet as the labels of its active options in the field's option order joined with `; `; Location as `<lat>, <lng>` formatted to 6 decimal places (or 4 decimal places when the stored value is marked approximate); Images as the attachment `relative_path` values in list order joined with `; `; Null as an empty cell. When two active fields, or a field and a computed field, share a name, the export SHALL fail with an error naming the duplicated name and produce no file.
 
 #### Scenario: Typed values rendered
 - **WHEN** a record holds Integer 3, FixedDecimal 1.50 at scale 2, Boolean true, Date 2024-03-01, DateTime 2024-03-01T10:15:00.000Z, Duration 90000 ms, Enum option "Mild", and a Null text
@@ -20,6 +20,10 @@ The system SHALL export the active records of one collection as UTF-8 CSV (RFC 4
 #### Scenario: Location cell
 - **WHEN** a record holds the Location value `38.710841, -9.137265`
 - **THEN** the CSV cell reads `"38.710841, -9.137265"`
+
+#### Scenario: Images cell
+- **WHEN** a record holds the Images value with relative paths `0195f3a0-7c4b-7d20-8a1e-4b92c8103f1a_receipt.jpg` and `0195f3a1-12b0-7a84-9c03-8e41d902b77c_espresso.jpg`
+- **THEN** the CSV cell reads `0195f3a0-7c4b-7d20-8a1e-4b92c8103f1a_receipt.jpg; 0195f3a1-12b0-7a84-9c03-8e41d902b77c_espresso.jpg`
 
 #### Scenario: Computed columns appended
 - **WHEN** a collection has fields `a`, `b` and computed field `sum`
@@ -53,7 +57,7 @@ The system SHALL export one or more collections as a single JSON document with t
 - **THEN** the entry's `views` array holds exactly "Headaches" and "Stomach" in their order, and no entry for All
 
 ### Requirement: CSV record import validates before writing
-The system SHALL import CSV rows into an existing active collection only after parsing and validating every row. Header columns SHALL be matched to active fields by exact name. A column that matches no active field SHALL abort the import, except a column that matches an active computed field, which SHALL be ignored. A missing column for an optional field SHALL yield Null; a missing column for a required field SHALL abort. Cell text SHALL be trimmed before parsing and parsed strictly for the field type: Integer as a decimal integer; FixedDecimal by exact parse at the field scale; Boolean as `true` or `false`; Date as ISO-8601 date; DateTime as ISO-8601 with `Z` or offset; Duration as a millisecond integer; Enum by exact match on an active option label; EnumSet by splitting on `;`, trimming each part, ignoring empty parts, and matching each part exactly to an active option label, with a repeated label counted once; Location by parsing a decimal coordinate pair, DMS pair, `geo:` link, or full Google Maps/Waze/OpenStreetMap link within `-90..=90` latitude and `-180..=180` longitude. An empty cell SHALL be Null. Each row SHALL be validated with the same rules as a record draft. Any parse, mapping, or validation failure SHALL abort the whole import, reporting the 1-based data row number, the column name, and the reason, and SHALL write nothing.
+The system SHALL import CSV rows into an existing active collection only after parsing and validating every row. Header columns SHALL be matched to active fields by exact name. A column that matches no active field SHALL abort the import, except a column that matches an active computed field, which SHALL be ignored. A missing column for an optional field SHALL yield Null; a missing column for a required field SHALL abort. Cell text SHALL be trimmed before parsing and parsed strictly for the field type: Integer as a decimal integer; FixedDecimal by exact parse at the field scale; Boolean as `true` or `false`; Date as ISO-8601 date; DateTime as ISO-8601 with `Z` or offset; Duration as a millisecond integer; Enum by exact match on an active option label; EnumSet by splitting on `;`, trimming each part, ignoring empty parts, and matching each part exactly to an active option label, with a repeated label counted once; Location by parsing a decimal coordinate pair, DMS pair, `geo:` link, or full Google Maps/Waze/OpenStreetMap link within `-90..=90` latitude and `-180..=180` longitude; Images by splitting on `;`, trimming each part, ignoring empty parts, validating that each part is a safe single-segment relative image filename (`<name>.<jpg|jpeg|png|webp|gif>` with no `/`, `\`, or `..`), inferring `mime_type` from the extension, deriving `original_name` by stripping any leading `<uuidv7>_` prefix when present, and reading `size_bytes` from the local Media Folder when the file is present on disk (or `0` when the file is not currently in the local Media Folder). An empty cell SHALL be Null. Each row SHALL be validated with the same rules as a record draft (including rejecting multiple relative paths when the Images field has `allow_multiple = false`). Any parse, mapping, or validation failure SHALL abort the whole import, reporting the 1-based data row number, the column name, and the reason, and SHALL write nothing.
 
 #### Scenario: All rows valid
 - **WHEN** a CSV with 200 valid rows is imported into "Headache"
@@ -82,6 +86,10 @@ The system SHALL import CSV rows into an existing active collection only after p
 #### Scenario: Location cell parsed and validated
 - **WHEN** a Location column holds `"38.710841, -9.137265"` in row 1 and `"99.0, -9.13"` in row 2
 - **THEN** row 1 parses as a valid Location and row 2 aborts the import naming row 2 and the Location column
+
+#### Scenario: Images cell parsed and validated
+- **WHEN** an Images column holds `"0195f3a0-7c4b-7d20-8a1e-4b92c8103f1a_receipt.jpg"` in row 1 and `"../secret.jpg"` in row 2
+- **THEN** row 1 parses as a valid Images attachment with `original_name: "receipt.jpg"` and `mime_type: "image/jpeg"`, and row 2 aborts the import naming row 2 and the Images column
 
 #### Scenario: Required empty cell
 - **WHEN** a required field's cell is empty in some row
@@ -146,3 +154,21 @@ The JSON collection export SHALL write an EnumSet record value and an EnumSet de
 #### Scenario: Unknown option id
 - **WHEN** an imported record's Choices list names an option id the field doesn't have
 - **THEN** the import is aborted with a reason and writes nothing
+
+### Requirement: Images values in JSON collections
+The JSON collection export SHALL write an `Images` record value as a list of objects `{ "relative_path": "<path>", "original_name": "<name>", "mime_type": "<mime>", "size_bytes": <bytes> }` in list order. The JSON import SHALL validate and preserve each attachment item's metadata.
+
+#### Scenario: Round-trip an Images value in JSON
+- **WHEN** a collection with a record holding `[ { "relative_path": "0195f3a0-7c4b-7d20-8a1e-4b92c8103f1a_receipt.jpg", "original_name": "receipt.jpg", "mime_type": "image/jpeg", "size_bytes": 421888 } ]` is exported as JSON and imported
+- **THEN** the imported record holds the same attachment list with `relative_path`, `original_name`, `mime_type`, and `size_bytes` preserved
+
+### Requirement: Optional .zip media bundle export and import
+When exporting collections that reference media files, the Export collections dialog/sheet SHALL display referenced media file counts and sizes and offer an `Include media files (.zip)` toggle. When enabled, `Export .zip` SHALL write a `.zip` archive containing `collections.json` and every locally present referenced file from the device's Media Folder at its `relative_path`, warning and skipping any files currently missing on disk. `Import JSON…` SHALL accept `.zip` bundles by validating `collections.json`, copying bundled media files into the configured Media Folder without overwriting existing files, and importing `collections.json` atomically.
+
+#### Scenario: Export collections as a .zip media bundle with missing files warning
+- **WHEN** the user exports "expenses" (referencing 38 media files totaling 24.2 MB, 36 present locally and 2 missing) with `Include media files (.zip)` enabled
+- **THEN** the dialog warns that 2 referenced files are missing locally and will be skipped from the archive while their paths stay in `collections.json`, writes `collections.json` plus the 36 present files into the `.zip`, and shows `Exported to <filename>.zip · 2 missing media files weren't included.`
+
+#### Scenario: Import a .zip media bundle
+- **WHEN** the user selects a valid Fi `.zip` bundle in `Import JSON…` while a Media Folder is configured
+- **THEN** Fi extracts the bundled image files into the Media Folder under their relative paths and creates the imported collection(s)

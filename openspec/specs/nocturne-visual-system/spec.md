@@ -18,11 +18,11 @@ The Flutter app SHALL draw every icon from the Phosphor icon set, in the regular
 - **THEN** it shows the Phosphor `dots-three-vertical` glyph at the same size and still has the tooltip "More actions"
 
 ### Requirement: Field type icons
-The app SHALL show one fixed Phosphor icon for each field type wherever a field type is shown with an icon: Text `text-aa`, Integer `hash`, Decimal `percent`, Boolean `toggle-left`, Date `calendar-blank`, Date & time `calendar-check`, Duration `timer`, Choice `list-bullets`, Choices `list-checks`. Every field type SHALL have exactly one icon, and no two types SHALL share an icon.
+The app SHALL show one fixed Phosphor icon for each field type wherever a field type is shown with an icon: Text `text-aa`, Integer `hash`, Decimal `percent`, Boolean `toggle-left`, Date `calendar-blank`, Date & time `calendar-check`, Duration `timer`, Choice `list-bullets`, Choices `list-checks`, Location `map-pin`, Images `image`. Every field type SHALL have exactly one icon, and no two types SHALL share an icon.
 
 #### Scenario: Every type has its icon
-- **WHEN** the type icon is requested for each of the nine field types
-- **THEN** each returns the Phosphor glyph listed above and the nine glyphs are distinct
+- **WHEN** the type icon is requested for each of the eleven field types
+- **THEN** each returns the Phosphor glyph listed above and the eleven glyphs are distinct
 
 ### Requirement: Clear mark
 The app SHALL provide one clear (✕) mark for removing a field's value: a 22px circle filled with the neutral edge role holding an 11px `x` glyph in the text color. On screens narrower than 720px its tappable area SHALL be at least 44×44px while the drawn circle stays 22px. A form field SHALL show the clear mark only when the field is optional and currently has a value, and MUST NOT show it on a required field. Activating it SHALL clear the value and SHALL carry the accessible label "Clear".

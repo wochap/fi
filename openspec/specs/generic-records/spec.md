@@ -5,7 +5,7 @@ TBD: Define generic typed records, authoritative validation, field-granular muta
 ## Requirements
 
 ### Requirement: Generic typed record representation
-Records SHALL use canonical UUIDv7 `RecordId` and `CollectionSchemaId` values, a map from stable `FieldId` to strongly typed `FieldValue`, and logical deletion metadata; the application MUST NOT generate a Rust struct or physical SQLite table per user schema. `FieldValue` SHALL include an EnumSet variant holding a set of option ids, ordered by the field's option order with the option id as tie-breaker when read. An empty EnumSet value SHALL read as Null. `FieldValue` SHALL also include a `Location` variant storing a WGS 84 coordinate pair in exact integer microdegrees (`latitude_microdeg` in `-90_000_000..=90_000_000`, `longitude_microdeg` in `-180_000_000..=180_000_000`), an optional horizontal accuracy in whole meters (`accuracy_meters: Option<u32>`), and an `approximate: bool` flag indicating coarse-only precision (4 decimal places). Reverse-geocoded street addresses MUST NOT be stored in `FieldValue::Location`.
+Records SHALL use canonical UUIDv7 `RecordId` and `CollectionSchemaId` values, a map from stable `FieldId` to strongly typed `FieldValue`, and logical deletion metadata; the application MUST NOT generate a Rust struct or physical SQLite table per user schema. `FieldValue` SHALL include an EnumSet variant holding a set of option ids, ordered by the field's option order with the option id as tie-breaker when read. An empty EnumSet value SHALL read as Null. `FieldValue` SHALL also include a `Location` variant storing a WGS 84 coordinate pair in exact integer microdegrees (`latitude_microdeg` in `-90_000_000..=90_000_000`, `longitude_microdeg` in `-180_000_000..=180_000_000`), an optional horizontal accuracy in whole meters (`accuracy_meters: Option<u32>`), and an `approximate: bool` flag indicating coarse-only precision (4 decimal places). Reverse-geocoded street addresses MUST NOT be stored in `FieldValue::Location`. `FieldValue` SHALL also include an `Images` variant storing an ordered list of image attachment records (`Vec<ImageAttachment>`), where each `ImageAttachment` carries `relative_path: String`, `original_name: String`, `mime_type: String`, and `size_bytes: u64`. An empty `Images` list SHALL read as Null, and device-local absolute media folder paths MUST NOT be stored in `FieldValue::Images`.
 
 #### Scenario: Create records for unrelated schemas
 - **WHEN** the user creates Headache and Money Movement records
@@ -23,8 +23,15 @@ Records SHALL use canonical UUIDv7 `RecordId` and `CollectionSchemaId` values, a
 - **WHEN** a record is created with a Location field "place" set to latitude `38.710841`, longitude `-9.137265`, and accuracy `12 m`
 - **THEN** the record stores and projects the exact microdegree coordinates and accuracy through Automerge LWW registers without floating-point drift or street address text
 
+#### Scenario: Images value in a record
+- **WHEN** a record is created with an Images field "photos" holding `[ { relative_path: "0195f3a0-7c4b-7d20-8a1e-4b92c8103f1a_receipt.jpg", original_name: "receipt.jpg", mime_type: "image/jpeg", size_bytes: 421888 } ]`
+- **THEN** the record stores and projects the ordered attachment list through Automerge LWW registers, and updating an optional Images field to an empty list stores and reads as Null
+
 ### Requirement: Rust-authoritative record validation
-Before authoritative mutation, Rust SHALL verify that the collection and field are active, value types match definitions, required fields are present, numeric ranges hold, enum options are active members (except that an existing record may keep a removed option it already holds, as long as the command does not newly set it), relative Date defaults resolve from the record's creation day, defaults are valid, FixedDecimal representations use the field's scale, and Location values have latitude within `-90..=90` degrees (`-90_000_000..=90_000_000` microdegrees) and longitude within `-180..=180` degrees (`-180_000_000..=180_000_000` microdegrees). Validation SHALL report every issue it finds rather than stopping at the first, and each issue SHALL carry the ids of the fields it concerns, a stable code, and a safe message that contains no ids.
+Before authoritative mutation, Rust SHALL verify that the collection and field are active, value types match definitions, required fields are present, numeric ranges hold, enum options are active members (except that an existing record may keep a removed option it already holds, as long as the command does not newly set it), relative Date defaults resolve from the record's creation day, defaults are valid, FixedDecimal representations use the field's scale, Location values have latitude within `-90..=90` degrees (`-90_000_000..=90_000_000` microdegrees) and longitude within `-180..=180` degrees (`-180_000_000..=180_000_000` microdegrees), and Images values satisfy attachment rules:
+- When the Images field has `allow_multiple = false`, the attachment list MUST contain at most 1 item (rejecting 2 or more items with a validation issue on that field).
+- Every `ImageAttachment` in an Images value MUST have a non-empty `relative_path` that is a single relative filename segment (no leading `/`, no `/` or `\` path separators, and no `..` traversal), a non-empty `original_name`, and a supported image `mime_type` (`image/jpeg`, `image/png`, `image/webp`, or `image/gif`).
+Validation SHALL report every issue it finds rather than stopping at the first, and each issue SHALL carry the ids of the fields it concerns, a stable code, and a safe message that contains no ids.
 
 #### Scenario: Reject wrong value type
 - **WHEN** Flutter supplies Text for an Integer field
@@ -57,6 +64,14 @@ Before authoritative mutation, Rust SHALL verify that the collection and field a
 #### Scenario: Reject out-of-range Location coordinates
 - **WHEN** a command supplies a Location value with latitude greater than 90 degrees or longitude outside `-180..=180` degrees
 - **THEN** Rust rejects the command with an `out_of_range` validation issue on that field and commits nothing
+
+#### Scenario: Reject multiple attachments on a single-image field
+- **WHEN** a command supplies two image attachments for an Images field whose `allow_multiple` flag is `false`
+- **THEN** Rust rejects the command with a validation issue on that field and commits nothing
+
+#### Scenario: Reject unsafe relative_path or non-image mime_type
+- **WHEN** a command supplies an `ImageAttachment` with `relative_path: "../secret.jpg"` or `/home/gean/receipt.jpg` or `mime_type: "application/pdf"`
+- **THEN** Rust rejects the command with an `invalid` validation issue on that field and commits nothing
 
 ### Requirement: Field-granular record commands
 Record creation SHALL initialize fields individually, record updates SHALL write only explicitly targeted fields, and ordinary edits MUST NOT replace the entire record object.

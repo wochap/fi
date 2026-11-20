@@ -71,8 +71,8 @@ A change to the selected view's filter or sort that has not been saved SHALL mak
 ### Requirement: Edit-view editor
 "+ View", "Save as new view", Edit from a chip menu and a tap on the view line SHALL open the edit-view editor. On phones it SHALL be a bottom sheet and at 720px and wider a popover anchored to the chip row. It SHALL hold these sections, in order:
 - **Name**: hidden when editing All.
-- **Filter · all must match**: condition rows in the query builder's filter style. Each row is field · operator · value, with "Add filter", and the rows are combined with AND. Single and multi-option Choices fields SHALL offer "is any of", "is none of", "is empty" and "is not empty"; "is empty" and "is not empty" take no options. Other fields SHALL offer the query builder's operators for their type.
-- **Sort**: Created or any field except multi-option Choices, each with type-worded directions, plus "Then by" for up to three keys in total.
+- **Filter · all must match**: condition rows in the query builder's filter style. Each row is field · operator · value, with "Add filter", and the rows are combined with AND. Single and multi-option Choices fields SHALL offer "is any of", "is none of", "is empty" and "is not empty"; "is empty" and "is not empty" take no options. Images fields SHALL offer "has file" (`IsNotNull`) and "is empty" (`IsNull`), taking no value input. Other fields SHALL offer the query builder's operators for their type.
+- **Sort**: Created or any field except multi-option Choices, Location, and Images, each with type-worded directions, plus "Then by" for up to three keys in total.
 
 The footer SHALL hold Cancel and Save. Save SHALL create the view, or update the body and name of the one being edited, and select it.
 
@@ -90,6 +90,10 @@ A typed validation error from Rust SHALL be shown inline, in the active language
 #### Scenario: Multi-option Choices not offered for sort
 - **WHEN** the Sort picker is opened on a collection with a "tags" field
 - **THEN** "tags" is not in the list, and it is still offered in Filter
+
+#### Scenario: Images field offered in Filter with has file and is empty, excluded from Sort
+- **WHEN** the edit-view editor is opened on a collection with an Images field "photos"
+- **THEN** "photos" is not in the Sort picker, and selecting "photos" in Filter offers "has file" and "is empty"
 
 #### Scenario: Duplicate name warns
 - **WHEN** the user names a new view "headaches" while "Headaches" exists
