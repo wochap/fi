@@ -23,7 +23,7 @@ use crate::{
     widgets::{WidgetDefinition, WidgetId},
 };
 
-pub const PROJECTION_SCHEMA_VERSION: i64 = 7;
+pub const PROJECTION_SCHEMA_VERSION: i64 = 8;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProjectionCheckpoint {
@@ -177,7 +177,7 @@ impl ReadModel {
                     CHECK(boolean_value IS NULL OR boolean_value IN (0,1)),
                     CHECK((value_kind='null' AND integer_value IS NULL AND text_value IS NULL AND boolean_value IS NULL)
                        OR (value_kind IN ('integer','fixed_decimal','date','date_time','duration') AND integer_value IS NOT NULL AND text_value IS NULL AND boolean_value IS NULL)
-                       OR (value_kind IN ('text','enum','enum_set') AND integer_value IS NULL AND text_value IS NOT NULL AND boolean_value IS NULL)
+                       OR (value_kind IN ('text','enum','enum_set','location','images') AND integer_value IS NULL AND text_value IS NOT NULL AND boolean_value IS NULL)
                        OR (value_kind='boolean' AND integer_value IS NULL AND text_value IS NULL AND boolean_value IS NOT NULL))
                  ) STRICT;
                  CREATE TABLE IF NOT EXISTS projection_diagnostics (
@@ -1374,5 +1374,109 @@ mod tests {
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
         assert_eq!(version, PROJECTION_SCHEMA_VERSION);
+    }
+
+    #[test]
+    fn projects_and_reloads_location_and_images_values() {
+        use crate::{
+            schema::{DisplayMetadata, FieldType},
+            values::{ImageAttachment, LocationValue},
+        };
+
+        let dir = tempfile::tempdir().unwrap();
+        let model = ReadModel::open_disposable(dir.path().join("read-model.sqlite")).unwrap();
+
+        let collection_id = CollectionSchemaId::new();
+        let location_field_id = FieldId::new();
+        let images_field_id = FieldId::new();
+        let record_id = RecordId::new();
+        let stamp = HlcStamp {
+            physical_time_ms: 1_700_000_000_000,
+            logical_counter: 0,
+            node_id: HlcNodeId([4; 32]),
+        };
+
+        let location = LocationValue::new(-18_039_280, -70_253_598, Some(13), false);
+        let attachment = ImageAttachment {
+            relative_path: "01a1fb06-814e-7e32-bcdf-4fb3e0000001_photo.jpg".into(),
+            original_name: "photo_20261120_171420.jpg".into(),
+            mime_type: "image/jpeg".into(),
+            size_bytes: 1_300_000,
+        };
+
+        let snapshot = GenericSnapshot {
+            schema_version: APP_SCHEMA_VERSION,
+            collections: vec![CollectionSchema {
+                id: collection_id,
+                name: "places".into(),
+                description: String::new(),
+                fields: vec![
+                    FieldDefinition {
+                        id: location_field_id,
+                        name: "location".into(),
+                        field_type: FieldType::Location,
+                        required: true,
+                        default: None,
+                        default_relative_days: None,
+                        validation: ValidationMetadata::default(),
+                        display: DisplayMetadata::default(),
+                        order: 0,
+                        deleted: false,
+                        enum_options: vec![],
+                        allow_options_from_records: false,
+                        allow_multiple: false,
+                    },
+                    FieldDefinition {
+                        id: images_field_id,
+                        name: "photos".into(),
+                        field_type: FieldType::Images,
+                        required: false,
+                        default: None,
+                        default_relative_days: None,
+                        validation: ValidationMetadata::default(),
+                        display: DisplayMetadata::default(),
+                        order: 1,
+                        deleted: false,
+                        enum_options: vec![],
+                        allow_options_from_records: false,
+                        allow_multiple: false,
+                    },
+                ],
+                deleted: false,
+            }],
+            records: vec![GenericRecord {
+                id: record_id,
+                collection_id,
+                values: BTreeMap::from([
+                    (location_field_id, FieldValue::Location(location)),
+                    (images_field_id, FieldValue::Images(vec![attachment.clone()])),
+                ]),
+                stamps: BTreeMap::from([
+                    (location_field_id, stamp),
+                    (images_field_id, stamp),
+                ]),
+                deleted: false,
+            }],
+            computed_fields: vec![],
+            query_definitions: vec![],
+            widgets: vec![],
+            views: vec![],
+            diagnostics: vec![],
+            max_stamp: None,
+        };
+
+        let checkpoint =
+            ProjectionCheckpoint::from_heads(DocumentId::new(), &[ChangeHash([9; 32])]);
+        model.replace(&snapshot, &checkpoint).unwrap();
+
+        let loaded = model.record(record_id).unwrap().unwrap();
+        assert_eq!(
+            loaded.record.values[&location_field_id],
+            FieldValue::Location(location)
+        );
+        assert_eq!(
+            loaded.record.values[&images_field_id],
+            FieldValue::Images(vec![attachment])
+        );
     }
 }
