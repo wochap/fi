@@ -77,6 +77,8 @@ pub enum FieldType {
     Enum,
     /// "Choices": a set of the field's options. Shares `enum_options` with [`FieldType::Enum`].
     EnumSet,
+    /// Geographic WGS 84 point (latitude, longitude, optional capture accuracy).
+    Location,
 }
 
 impl FieldType {
@@ -99,7 +101,7 @@ pub struct ValidationMetadata {
     pub max_length: Option<u32>,
 }
 
-#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct DisplayMetadata {
     #[serde(default)]
     pub multiline: bool,
@@ -109,6 +111,29 @@ pub struct DisplayMetadata {
     /// Slider step; `None` reads as 1. Must divide `max - min` exactly.
     #[serde(default)]
     pub slider_step: Option<u32>,
+    /// Location-only presentation hint; defaults to `true` when omitted.
+    #[serde(default = "default_true", skip_serializing_if = "is_true")]
+    pub show_map_preview: bool,
+}
+
+impl Default for DisplayMetadata {
+    fn default() -> Self {
+        Self {
+            multiline: false,
+            slider: false,
+            slider_step: None,
+            show_map_preview: true,
+        }
+    }
+}
+
+const fn default_true() -> bool {
+    true
+}
+
+#[allow(clippy::trivially_copy_pass_by_ref)]
+fn is_true(value: &bool) -> bool {
+    *value
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -222,6 +247,29 @@ impl FieldDefinition {
         if self.display.multiline && !matches!(self.field_type, FieldType::Text) {
             return Err(invalid("multiline", "is valid only for Text fields"));
         }
+        if !self.display.show_map_preview && !matches!(self.field_type, FieldType::Location) {
+            return Err(invalid(
+                "show_map_preview",
+                "is valid only for Location fields",
+            ));
+        }
+        if matches!(self.field_type, FieldType::Location) {
+            if self.default.is_some() {
+                return Err(invalid("default", "is not supported for Location fields"));
+            }
+            if self.validation.min_integer.is_some() || self.validation.max_integer.is_some() {
+                return Err(invalid(
+                    "numeric_range",
+                    "is not supported for Location fields",
+                ));
+            }
+            if self.validation.min_length.is_some() || self.validation.max_length.is_some() {
+                return Err(invalid(
+                    "length_range",
+                    "is not supported for Location fields",
+                ));
+            }
+        }
         if self.display.slider {
             if !matches!(self.field_type, FieldType::Integer) {
                 return Err(invalid("slider", "is valid only for Integer fields"));
@@ -325,6 +373,7 @@ impl FieldDefinition {
                 | (FieldType::Duration, FieldValue::Duration(_))
                 | (FieldType::Enum, FieldValue::Enum(_))
                 | (FieldType::EnumSet, FieldValue::EnumSet(_))
+                | (FieldType::Location, FieldValue::Location(_))
         );
         if !type_matches {
             return Err(ValidationIssue::new(
@@ -405,6 +454,20 @@ impl FieldDefinition {
                             "Pick active options",
                         ));
                     }
+                }
+            }
+            FieldValue::Location(location) => {
+                if !location.latitude_in_range() {
+                    return Err(ValidationIssue::new(
+                        IssueCode::OutOfRange,
+                        "Latitude goes from -90 to 90",
+                    ));
+                }
+                if !location.longitude_in_range() {
+                    return Err(ValidationIssue::new(
+                        IssueCode::OutOfRange,
+                        "Longitude goes from -180 to 180",
+                    ));
                 }
             }
             FieldValue::Null | FieldValue::Boolean(_) => {}
@@ -657,6 +720,7 @@ mod tests {
             multiline: false,
             slider: true,
             slider_step: Some(10),
+            ..DisplayMetadata::default()
         };
         let encoded = serde_json::to_string(&stepped).unwrap();
         assert!(encoded.contains(r#""slider_step":10"#));
@@ -938,5 +1002,152 @@ mod tests {
             deleted: false,
             enum_options: Vec::new(),
         }
+    }
+
+    fn location_field(name: &str, order: i64) -> FieldDefinition {
+        FieldDefinition {
+            field_type: FieldType::Location,
+            ..text_field(name, order)
+        }
+    }
+
+    #[test]
+    fn location_field_show_map_preview_defaults_true_and_round_trips() {
+        let mut field = location_field("Place", 0);
+        field.validate().unwrap();
+        assert!(field.display.show_map_preview);
+
+        // When true, show_map_preview is omitted from JSON for backwards compatibility.
+        let encoded_default = serde_json::to_string(&field.display).unwrap();
+        assert!(!encoded_default.contains("show_map_preview"));
+        let decoded_missing: DisplayMetadata = serde_json::from_str("{}").unwrap();
+        assert!(decoded_missing.show_map_preview);
+
+        // When false, show_map_preview serializes and round-trips.
+        field.display.show_map_preview = false;
+        field.validate().unwrap();
+        let encoded_off = serde_json::to_string(&field.display).unwrap();
+        assert!(encoded_off.contains("\"show_map_preview\":false"));
+        let decoded_off: DisplayMetadata = serde_json::from_str(&encoded_off).unwrap();
+        assert!(!decoded_off.show_map_preview);
+
+        // Non-Location field with show_map_preview = false is rejected.
+        let mut text = text_field("Notes", 1);
+        text.display.show_map_preview = false;
+        assert!(matches!(
+            text.validate(),
+            Err(DomainError::Invalid {
+                field: "show_map_preview",
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn location_field_rejects_unsupported_metadata_and_validates_bounds() {
+        use crate::values::LocationValue;
+
+        let mut with_default = location_field("Place", 0);
+        with_default.default = Some(FieldValue::Location(LocationValue::new(
+            38_710_841, -9_137_265, None, false,
+        )));
+        assert!(matches!(
+            with_default.validate(),
+            Err(DomainError::Invalid {
+                field: "default",
+                ..
+            })
+        ));
+
+        let mut with_rel_default = location_field("Place", 0);
+        with_rel_default.default_relative_days = Some(1);
+        assert!(matches!(
+            with_rel_default.validate(),
+            Err(DomainError::Invalid {
+                field: "default",
+                ..
+            })
+        ));
+
+        let mut with_num_bounds = location_field("Place", 0);
+        with_num_bounds.validation.min_integer = Some(0);
+        assert!(matches!(
+            with_num_bounds.validate(),
+            Err(DomainError::Invalid {
+                field: "numeric_range",
+                ..
+            })
+        ));
+
+        let mut with_len_bounds = location_field("Place", 0);
+        with_len_bounds.validation.max_length = Some(10);
+        assert!(matches!(
+            with_len_bounds.validate(),
+            Err(DomainError::Invalid {
+                field: "length_range",
+                ..
+            })
+        ));
+
+        let mut with_multiline = location_field("Place", 0);
+        with_multiline.display.multiline = true;
+        assert!(matches!(
+            with_multiline.validate(),
+            Err(DomainError::Invalid {
+                field: "multiline",
+                ..
+            })
+        ));
+
+        let mut with_slider = location_field("Place", 0);
+        with_slider.display.slider = true;
+        assert!(matches!(
+            with_slider.validate(),
+            Err(DomainError::Invalid {
+                field: "slider",
+                ..
+            })
+        ));
+
+        let mut with_options = location_field("Place", 0);
+        with_options.enum_options.push(EnumOption {
+            id: EnumOptionId::new(),
+            label: "A".into(),
+            order: 0,
+            deleted: false,
+            merged_into: None,
+        });
+        assert!(matches!(
+            with_options.validate(),
+            Err(DomainError::Invalid {
+                field: "enum_options",
+                ..
+            })
+        ));
+
+        let field = location_field("Place", 0);
+        field
+            .validate_value(&FieldValue::Location(LocationValue::new(
+                90_000_000,
+                -180_000_000,
+                Some(12),
+                false,
+            )))
+            .unwrap();
+        let lat_err = field
+            .validate_value(&FieldValue::Location(LocationValue::new(
+                90_000_001, 0, None, false,
+            )))
+            .unwrap_err();
+        assert_eq!(lat_err.code, IssueCode::OutOfRange);
+        let lng_err = field
+            .validate_value(&FieldValue::Location(LocationValue::new(
+                0,
+                -180_000_001,
+                None,
+                false,
+            )))
+            .unwrap_err();
+        assert_eq!(lng_err.code, IssueCode::OutOfRange);
     }
 }

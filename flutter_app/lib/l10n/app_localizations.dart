@@ -6409,6 +6409,324 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count, plural, =1{Collection cloned. 1 broken view wasn\'t copied: {names}.} other{Collection cloned. {count} broken views weren\'t copied: {names}.}}'**
   String collectionsCloneViewsSkipped(int count, String names);
+
+  /// Human label for the Location field type.
+  ///
+  /// In en, this message translates to:
+  /// **'Location'**
+  String get fieldKindLocation;
+
+  /// Schema field editor chip for Location map preview.
+  ///
+  /// In en, this message translates to:
+  /// **'Show map preview'**
+  String get fieldShowMapPreview;
+
+  /// Helper text under Location option chips in field editor.
+  ///
+  /// In en, this message translates to:
+  /// **'On by default. Shows a mini map on the record form and a thumbnail on mobile cards. When off, the field is a single row of coordinates.'**
+  String get fieldShowMapPreviewHelper;
+
+  /// Help popup title for fieldShowMapPreview
+  ///
+  /// In en, this message translates to:
+  /// **'Show map preview'**
+  String get helpFieldShowMapPreviewTitle;
+
+  /// Help popup body for fieldShowMapPreview
+  ///
+  /// In en, this message translates to:
+  /// **'On by default. Shows a mini map on the record form and a thumbnail on mobile cards. When off, the field is a single row of coordinates.'**
+  String get helpFieldShowMapPreviewBody;
+
+  /// Button to capture device current location.
+  ///
+  /// In en, this message translates to:
+  /// **'Current location'**
+  String get locationCurrentLocation;
+
+  /// Button to open the interactive map picker.
+  ///
+  /// In en, this message translates to:
+  /// **'Pick on map'**
+  String get locationPickOnMap;
+
+  /// Status while acquiring a GPS fix.
+  ///
+  /// In en, this message translates to:
+  /// **'Finding you…'**
+  String get locationFindingYou;
+
+  /// Status while acquiring a GPS fix with current accuracy.
+  ///
+  /// In en, this message translates to:
+  /// **'Finding you… ±{accuracy}'**
+  String locationFindingYouAccuracy(String accuracy);
+
+  /// Button to adjust an existing location on the map.
+  ///
+  /// In en, this message translates to:
+  /// **'Move pin'**
+  String get locationMovePin;
+
+  /// Action to copy coordinates to clipboard.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy coordinates'**
+  String get locationCopyCoordinates;
+
+  /// Snackbar feedback when coordinates are copied.
+  ///
+  /// In en, this message translates to:
+  /// **'Coordinates copied'**
+  String get locationCoordinatesCopied;
+
+  /// Offline placeholder text in mini map slot.
+  ///
+  /// In en, this message translates to:
+  /// **'Map needs internet'**
+  String get locationMapNeedsInternet;
+
+  /// Inline alert when location permission is denied.
+  ///
+  /// In en, this message translates to:
+  /// **'Location access is off for Fi'**
+  String get locationPermissionOff;
+
+  /// Button to open app OS settings.
+  ///
+  /// In en, this message translates to:
+  /// **'Settings'**
+  String get locationOpenSettings;
+
+  /// Inline alert when device location services are turned off.
+  ///
+  /// In en, this message translates to:
+  /// **'Location is off on this phone'**
+  String get locationDeviceOff;
+
+  /// Button to open device location settings.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn on'**
+  String get locationTurnOn;
+
+  /// Warning shown when only coarse/approximate location is granted.
+  ///
+  /// In en, this message translates to:
+  /// **'Approximate location. The pin may be off by streets.'**
+  String get locationApproximateWarning;
+
+  /// Action to request precise location permission.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow precise'**
+  String get locationAllowPrecise;
+
+  /// Title of the inline location permission primer.
+  ///
+  /// In en, this message translates to:
+  /// **'Save where you are'**
+  String get locationPrimerTitle;
+
+  /// Body of the inline location permission primer.
+  ///
+  /// In en, this message translates to:
+  /// **'Fi reads your location only when you tap Current location or open the map, and stores it only in this record. Choose Precise for exact spots.'**
+  String get locationPrimerBody;
+
+  /// Dismiss button on the inline location permission primer.
+  ///
+  /// In en, this message translates to:
+  /// **'Not now'**
+  String get locationPrimerNotNow;
+
+  /// Proceed button on the inline location permission primer.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get locationPrimerContinue;
+
+  /// Fallback error when location capture fails.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not find your location'**
+  String get locationCouldNotLocate;
+
+  /// Placeholder for place search input in map picker.
+  ///
+  /// In en, this message translates to:
+  /// **'Search places'**
+  String get locationSearchPlaces;
+
+  /// Guidance in the map picker bottom sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'Drag the map; the pin stays put'**
+  String get locationDragMapHint;
+
+  /// Button in map picker to open the Type coordinates sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'Type'**
+  String get locationTypeAction;
+
+  /// Primary confirm button in the map picker.
+  ///
+  /// In en, this message translates to:
+  /// **'Use this spot'**
+  String get locationUseThisSpot;
+
+  /// Tooltip for recenter button in map picker.
+  ///
+  /// In en, this message translates to:
+  /// **'Go to my location'**
+  String get locationGoToMyLocation;
+
+  /// Reverse-geocoded hint without distance.
+  ///
+  /// In en, this message translates to:
+  /// **'Near {place}'**
+  String locationNearPlace(String place);
+
+  /// Reverse-geocoded hint with distance from user.
+  ///
+  /// In en, this message translates to:
+  /// **'Near {place} · {distance} from you'**
+  String locationNearPlaceDistance(String place, String distance);
+
+  /// Distance-only hint when offline.
+  ///
+  /// In en, this message translates to:
+  /// **'{distance} from you'**
+  String locationDistanceFromYou(String distance);
+
+  /// Map tile attribution badge.
+  ///
+  /// In en, this message translates to:
+  /// **'© OpenStreetMap'**
+  String get locationOsmAttribution;
+
+  /// Row in place search to switch to manual coordinate entry.
+  ///
+  /// In en, this message translates to:
+  /// **'Type coordinates instead'**
+  String get locationTypeCoordinatesInstead;
+
+  /// Footer caption in place search overlay.
+  ///
+  /// In en, this message translates to:
+  /// **'Results from OpenStreetMap · nearest first'**
+  String get locationSearchCaption;
+
+  /// Offline message in place search overlay.
+  ///
+  /// In en, this message translates to:
+  /// **'Search needs internet'**
+  String get locationSearchNeedsInternet;
+
+  /// Empty state in place search overlay.
+  ///
+  /// In en, this message translates to:
+  /// **'No matching places'**
+  String get locationSearchNoResults;
+
+  /// Title of the manual coordinate entry sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'Type coordinates'**
+  String get locationTypeCoordinatesTitle;
+
+  /// Label of the paste/parse input in Type coordinates.
+  ///
+  /// In en, this message translates to:
+  /// **'Coordinates or a map link'**
+  String get locationCoordinatesOrLink;
+
+  /// Label of the latitude input.
+  ///
+  /// In en, this message translates to:
+  /// **'Latitude'**
+  String get locationLatitude;
+
+  /// Label of the longitude input.
+  ///
+  /// In en, this message translates to:
+  /// **'Longitude'**
+  String get locationLongitude;
+
+  /// Success feedback when coordinates or a link are parsed.
+  ///
+  /// In en, this message translates to:
+  /// **'Found {coords}'**
+  String locationFoundCoordinates(String coords);
+
+  /// Confirm button in Type coordinates sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'Show on map'**
+  String get locationShowOnMap;
+
+  /// Error when input cannot be parsed as coordinates or a map link.
+  ///
+  /// In en, this message translates to:
+  /// **'Not a coordinate. Try 38.7139, -9.1334'**
+  String get locationInvalidSyntax;
+
+  /// Error when latitude is outside -90..90.
+  ///
+  /// In en, this message translates to:
+  /// **'Latitude goes from -90 to 90'**
+  String get locationLatitudeOutOfRange;
+
+  /// Error when longitude is outside -180..180.
+  ///
+  /// In en, this message translates to:
+  /// **'Longitude goes from -180 to 180'**
+  String get locationLongitudeOutOfRange;
+
+  /// Error when resolving a short Google Maps link fails offline.
+  ///
+  /// In en, this message translates to:
+  /// **'Resolving a short map link requires internet'**
+  String get locationShortLinkNeedsInternet;
+
+  /// Status while resolving a short Google Maps link.
+  ///
+  /// In en, this message translates to:
+  /// **'Resolving map link…'**
+  String get locationResolvingLink;
+
+  /// Short button label for Google Maps.
+  ///
+  /// In en, this message translates to:
+  /// **'Google Maps'**
+  String get locationGoogleMaps;
+
+  /// Short button label for Waze.
+  ///
+  /// In en, this message translates to:
+  /// **'Waze'**
+  String get locationWaze;
+
+  /// Menu item to open coordinates in Google Maps.
+  ///
+  /// In en, this message translates to:
+  /// **'Open in Google Maps'**
+  String get locationOpenInGoogleMaps;
+
+  /// Menu item to navigate to coordinates with Waze.
+  ///
+  /// In en, this message translates to:
+  /// **'Navigate with Waze'**
+  String get locationNavigateWithWaze;
+
+  /// Android menu item to open coordinates via geo: chooser.
+  ///
+  /// In en, this message translates to:
+  /// **'Open in another app…'**
+  String get locationOpenInAnotherApp;
 }
 
 class _AppLocalizationsDelegate

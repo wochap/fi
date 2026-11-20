@@ -14,6 +14,7 @@ import 'package:fi/ui_prefs.dart';
 import 'package:fi/controllers.dart';
 import 'package:fi/field_editor.dart';
 import 'package:fi/field_registry.dart';
+import 'package:fi/location/location_field.dart';
 import 'package:fi/platform_capabilities.dart';
 import 'package:fi/help_button.dart';
 import 'package:fi/help_copy.dart';
@@ -1431,7 +1432,20 @@ class CollectionsPage extends StatelessWidget {
                         ),
                       ),
                     for (final field in shown)
-                      Row(
+                      if (field.fieldType.kind == FieldTypeKindDto.location &&
+                          !missing.contains(field.id) &&
+                          _recordValue(record, field.id)?.locationValue != null)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          child: LocationCardView(
+                            fieldName: field.name,
+                            location:
+                                _recordValue(record, field.id)!.locationValue!,
+                            showMapPreview: field.display.showMapPreview,
+                          ),
+                        )
+                      else
+                        Row(
                         children: [
                           Icon(
                             fieldTypeIcon(field.fieldType.kind),
@@ -3866,7 +3880,8 @@ class _RecordTableState extends State<_RecordTable>
     final l = context.l10n;
     final c = context.nocturne;
     final field = widget.fields[column];
-    final sortable = field.fieldType.kind != FieldTypeKindDto.enumSet;
+    final sortable = field.fieldType.kind != FieldTypeKindDto.enumSet &&
+        field.fieldType.kind != FieldTypeKindDto.location;
     final position = widget.sorting.indexWhere(
       (clause) => sortFieldId(clause) == field.id,
     );
@@ -3998,8 +4013,13 @@ class _RecordTableState extends State<_RecordTable>
                 key: const Key('required-cell'),
               ),
             )
-          : _choicesTags(field, _recordValue(record, field.id)) ??
-                CollectionsPage._cell(
+          : (field.fieldType.kind == FieldTypeKindDto.location &&
+                  _recordValue(record, field.id)?.locationValue != null)
+              ? LocationTableCell(
+                  location: _recordValue(record, field.id)!.locationValue!,
+                )
+              : _choicesTags(field, _recordValue(record, field.id)) ??
+                    CollectionsPage._cell(
                   context.nocturne,
                   const FieldRendererRegistry().displayText(
                     field,

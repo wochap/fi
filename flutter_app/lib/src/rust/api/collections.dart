@@ -231,6 +231,12 @@ Future<List<RecordDto>> listRecords({required String collectionId}) => RustLib
 Future<RecordDto?> getRecord({required String id}) =>
     RustLib.instance.api.crateApiCollectionsGetRecord(id: id);
 
+/// Parses user-supplied coordinates or map links (decimal, DMS, `geo:`, Google Maps, Waze, OSM)
+/// into microdegrees, or identifies short `maps.app.goo.gl` / `goo.gl/maps` links that need
+/// online redirect resolution.
+ParsedLocationDto parseLocationText({required String input}) =>
+    RustLib.instance.api.crateApiCollectionsParseLocationText(input: input);
+
 /// The new collection of a structure clone and the broken views that were not copied.
 class CloneOutcomeDto {
   final String collectionId;

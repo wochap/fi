@@ -181,6 +181,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   LocalDeviceDto dco_decode_box_autoadd_local_device_dto(dynamic raw);
 
   @protected
+  LocationValueDto dco_decode_box_autoadd_location_value_dto(dynamic raw);
+
+  @protected
   ModelErrorDto dco_decode_box_autoadd_model_error_dto(dynamic raw);
 
   @protected
@@ -532,6 +535,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   LocalDeviceDto dco_decode_local_device_dto(dynamic raw);
 
   @protected
+  LocationParseStatusDto dco_decode_location_parse_status_dto(dynamic raw);
+
+  @protected
+  LocationValueDto dco_decode_location_value_dto(dynamic raw);
+
+  @protected
   LogEventDto dco_decode_log_event_dto(dynamic raw);
 
   @protected
@@ -651,6 +660,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   LocalDeviceDto? dco_decode_opt_box_autoadd_local_device_dto(dynamic raw);
 
   @protected
+  LocationValueDto? dco_decode_opt_box_autoadd_location_value_dto(dynamic raw);
+
+  @protected
   ModelErrorDto? dco_decode_opt_box_autoadd_model_error_dto(dynamic raw);
 
   @protected
@@ -752,6 +764,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   PairingStateDto dco_decode_pairing_state_dto(dynamic raw);
+
+  @protected
+  ParsedLocationDto dco_decode_parsed_location_dto(dynamic raw);
 
   @protected
   PeerConnectionKindDto dco_decode_peer_connection_kind_dto(dynamic raw);
@@ -1128,6 +1143,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   LocalDeviceDto sse_decode_box_autoadd_local_device_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  LocationValueDto sse_decode_box_autoadd_location_value_dto(
     SseDeserializer deserializer,
   );
 
@@ -1603,6 +1623,14 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   LocalDeviceDto sse_decode_local_device_dto(SseDeserializer deserializer);
 
   @protected
+  LocationParseStatusDto sse_decode_location_parse_status_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  LocationValueDto sse_decode_location_value_dto(SseDeserializer deserializer);
+
+  @protected
   LogEventDto sse_decode_log_event_dto(SseDeserializer deserializer);
 
   @protected
@@ -1750,6 +1778,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  LocationValueDto? sse_decode_opt_box_autoadd_location_value_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   ModelErrorDto? sse_decode_opt_box_autoadd_model_error_dto(
     SseDeserializer deserializer,
   );
@@ -1877,6 +1910,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   PairingStateDto sse_decode_pairing_state_dto(SseDeserializer deserializer);
+
+  @protected
+  ParsedLocationDto sse_decode_parsed_location_dto(
+    SseDeserializer deserializer,
+  );
 
   @protected
   PeerConnectionKindDto sse_decode_peer_connection_kind_dto(
@@ -2356,6 +2394,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_box_autoadd_local_device_dto(
     LocalDeviceDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_location_value_dto(
+    LocationValueDto self,
     SseSerializer serializer,
   );
 
@@ -2960,6 +3004,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_location_parse_status_dto(
+    LocationParseStatusDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_location_value_dto(
+    LocationValueDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_log_event_dto(LogEventDto self, SseSerializer serializer);
 
   @protected
@@ -3134,6 +3190,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_opt_box_autoadd_location_value_dto(
+    LocationValueDto? self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_opt_box_autoadd_model_error_dto(
     ModelErrorDto? self,
     SseSerializer serializer,
@@ -3289,6 +3351,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_pairing_state_dto(
     PairingStateDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_parsed_location_dto(
+    ParsedLocationDto self,
     SseSerializer serializer,
   );
 

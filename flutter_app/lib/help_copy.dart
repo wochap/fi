@@ -13,6 +13,7 @@ enum HelpId {
   fieldMinMaxLength,
   fieldMultiline,
   fieldSlider,
+  fieldShowMapPreview,
 
   // Widget form: query.
   widgetType,
@@ -86,6 +87,10 @@ HelpEntry helpEntry(AppLocalizations l, HelpId id) => switch (id) {
   HelpId.fieldSlider => HelpEntry(
     title: l.helpFieldSliderTitle,
     body: l.helpFieldSliderBody,
+  ),
+  HelpId.fieldShowMapPreview => HelpEntry(
+    title: l.helpFieldShowMapPreviewTitle,
+    body: l.helpFieldShowMapPreviewBody,
   ),
   HelpId.widgetType => HelpEntry(
     title: l.helpWidgetTypeTitle,

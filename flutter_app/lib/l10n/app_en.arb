@@ -5548,5 +5548,245 @@
         "type": "String"
       }
     }
+  },
+  "fieldKindLocation": "Location",
+  "@fieldKindLocation": {
+    "description": "Human label for the Location field type."
+  },
+  "fieldShowMapPreview": "Show map preview",
+  "@fieldShowMapPreview": {
+    "description": "Schema field editor chip for Location map preview."
+  },
+  "fieldShowMapPreviewHelper": "On by default. Shows a mini map on the record form and a thumbnail on mobile cards. When off, the field is a single row of coordinates.",
+  "@fieldShowMapPreviewHelper": {
+    "description": "Helper text under Location option chips in field editor."
+  },
+  "helpFieldShowMapPreviewTitle": "Show map preview",
+  "@helpFieldShowMapPreviewTitle": {
+    "description": "Help popup title for fieldShowMapPreview"
+  },
+  "helpFieldShowMapPreviewBody": "On by default. Shows a mini map on the record form and a thumbnail on mobile cards. When off, the field is a single row of coordinates.",
+  "@helpFieldShowMapPreviewBody": {
+    "description": "Help popup body for fieldShowMapPreview"
+  },
+  "locationCurrentLocation": "Current location",
+  "@locationCurrentLocation": {
+    "description": "Button to capture device current location."
+  },
+  "locationPickOnMap": "Pick on map",
+  "@locationPickOnMap": {
+    "description": "Button to open the interactive map picker."
+  },
+  "locationFindingYou": "Finding you…",
+  "@locationFindingYou": {
+    "description": "Status while acquiring a GPS fix."
+  },
+  "locationFindingYouAccuracy": "Finding you… ±{accuracy}",
+  "@locationFindingYouAccuracy": {
+    "description": "Status while acquiring a GPS fix with current accuracy.",
+    "placeholders": {
+      "accuracy": {
+        "type": "String"
+      }
+    }
+  },
+  "locationMovePin": "Move pin",
+  "@locationMovePin": {
+    "description": "Button to adjust an existing location on the map."
+  },
+  "locationCopyCoordinates": "Copy coordinates",
+  "@locationCopyCoordinates": {
+    "description": "Action to copy coordinates to clipboard."
+  },
+  "locationCoordinatesCopied": "Coordinates copied",
+  "@locationCoordinatesCopied": {
+    "description": "Snackbar feedback when coordinates are copied."
+  },
+  "locationMapNeedsInternet": "Map needs internet",
+  "@locationMapNeedsInternet": {
+    "description": "Offline placeholder text in mini map slot."
+  },
+  "locationPermissionOff": "Location access is off for Fi",
+  "@locationPermissionOff": {
+    "description": "Inline alert when location permission is denied."
+  },
+  "locationOpenSettings": "Settings",
+  "@locationOpenSettings": {
+    "description": "Button to open app OS settings."
+  },
+  "locationDeviceOff": "Location is off on this phone",
+  "@locationDeviceOff": {
+    "description": "Inline alert when device location services are turned off."
+  },
+  "locationTurnOn": "Turn on",
+  "@locationTurnOn": {
+    "description": "Button to open device location settings."
+  },
+  "locationApproximateWarning": "Approximate location. The pin may be off by streets.",
+  "@locationApproximateWarning": {
+    "description": "Warning shown when only coarse/approximate location is granted."
+  },
+  "locationAllowPrecise": "Allow precise",
+  "@locationAllowPrecise": {
+    "description": "Action to request precise location permission."
+  },
+  "locationPrimerTitle": "Save where you are",
+  "@locationPrimerTitle": {
+    "description": "Title of the inline location permission primer."
+  },
+  "locationPrimerBody": "Fi reads your location only when you tap Current location or open the map, and stores it only in this record. Choose Precise for exact spots.",
+  "@locationPrimerBody": {
+    "description": "Body of the inline location permission primer."
+  },
+  "locationPrimerNotNow": "Not now",
+  "@locationPrimerNotNow": {
+    "description": "Dismiss button on the inline location permission primer."
+  },
+  "locationPrimerContinue": "Continue",
+  "@locationPrimerContinue": {
+    "description": "Proceed button on the inline location permission primer."
+  },
+  "locationCouldNotLocate": "Could not find your location",
+  "@locationCouldNotLocate": {
+    "description": "Fallback error when location capture fails."
+  },
+  "locationSearchPlaces": "Search places",
+  "@locationSearchPlaces": {
+    "description": "Placeholder for place search input in map picker."
+  },
+  "locationDragMapHint": "Drag the map; the pin stays put",
+  "@locationDragMapHint": {
+    "description": "Guidance in the map picker bottom sheet."
+  },
+  "locationTypeAction": "Type",
+  "@locationTypeAction": {
+    "description": "Button in map picker to open the Type coordinates sheet."
+  },
+  "locationUseThisSpot": "Use this spot",
+  "@locationUseThisSpot": {
+    "description": "Primary confirm button in the map picker."
+  },
+  "locationGoToMyLocation": "Go to my location",
+  "@locationGoToMyLocation": {
+    "description": "Tooltip for recenter button in map picker."
+  },
+  "locationNearPlace": "Near {place}",
+  "@locationNearPlace": {
+    "description": "Reverse-geocoded hint without distance.",
+    "placeholders": {
+      "place": {
+        "type": "String"
+      }
+    }
+  },
+  "locationNearPlaceDistance": "Near {place} · {distance} from you",
+  "@locationNearPlaceDistance": {
+    "description": "Reverse-geocoded hint with distance from user.",
+    "placeholders": {
+      "place": {
+        "type": "String"
+      },
+      "distance": {
+        "type": "String"
+      }
+    }
+  },
+  "locationDistanceFromYou": "{distance} from you",
+  "@locationDistanceFromYou": {
+    "description": "Distance-only hint when offline.",
+    "placeholders": {
+      "distance": {
+        "type": "String"
+      }
+    }
+  },
+  "locationOsmAttribution": "© OpenStreetMap",
+  "@locationOsmAttribution": {
+    "description": "Map tile attribution badge."
+  },
+  "locationTypeCoordinatesInstead": "Type coordinates instead",
+  "@locationTypeCoordinatesInstead": {
+    "description": "Row in place search to switch to manual coordinate entry."
+  },
+  "locationSearchCaption": "Results from OpenStreetMap · nearest first",
+  "@locationSearchCaption": {
+    "description": "Footer caption in place search overlay."
+  },
+  "locationSearchNeedsInternet": "Search needs internet",
+  "@locationSearchNeedsInternet": {
+    "description": "Offline message in place search overlay."
+  },
+  "locationSearchNoResults": "No matching places",
+  "@locationSearchNoResults": {
+    "description": "Empty state in place search overlay."
+  },
+  "locationTypeCoordinatesTitle": "Type coordinates",
+  "@locationTypeCoordinatesTitle": {
+    "description": "Title of the manual coordinate entry sheet."
+  },
+  "locationCoordinatesOrLink": "Coordinates or a map link",
+  "@locationCoordinatesOrLink": {
+    "description": "Label of the paste/parse input in Type coordinates."
+  },
+  "locationLatitude": "Latitude",
+  "@locationLatitude": {
+    "description": "Label of the latitude input."
+  },
+  "locationLongitude": "Longitude",
+  "@locationLongitude": {
+    "description": "Label of the longitude input."
+  },
+  "locationFoundCoordinates": "Found {coords}",
+  "@locationFoundCoordinates": {
+    "description": "Success feedback when coordinates or a link are parsed.",
+    "placeholders": {
+      "coords": {
+        "type": "String"
+      }
+    }
+  },
+  "locationShowOnMap": "Show on map",
+  "@locationShowOnMap": {
+    "description": "Confirm button in Type coordinates sheet."
+  },
+  "locationInvalidSyntax": "Not a coordinate. Try 38.7139, -9.1334",
+  "@locationInvalidSyntax": {
+    "description": "Error when input cannot be parsed as coordinates or a map link."
+  },
+  "locationLatitudeOutOfRange": "Latitude goes from -90 to 90",
+  "@locationLatitudeOutOfRange": {
+    "description": "Error when latitude is outside -90..90."
+  },
+  "locationLongitudeOutOfRange": "Longitude goes from -180 to 180",
+  "@locationLongitudeOutOfRange": {
+    "description": "Error when longitude is outside -180..180."
+  },
+  "locationShortLinkNeedsInternet": "Resolving a short map link requires internet",
+  "@locationShortLinkNeedsInternet": {
+    "description": "Error when resolving a short Google Maps link fails offline."
+  },
+  "locationResolvingLink": "Resolving map link…",
+  "@locationResolvingLink": {
+    "description": "Status while resolving a short Google Maps link."
+  },
+  "locationGoogleMaps": "Google Maps",
+  "@locationGoogleMaps": {
+    "description": "Short button label for Google Maps."
+  },
+  "locationWaze": "Waze",
+  "@locationWaze": {
+    "description": "Short button label for Waze."
+  },
+  "locationOpenInGoogleMaps": "Open in Google Maps",
+  "@locationOpenInGoogleMaps": {
+    "description": "Menu item to open coordinates in Google Maps."
+  },
+  "locationNavigateWithWaze": "Navigate with Waze",
+  "@locationNavigateWithWaze": {
+    "description": "Menu item to navigate to coordinates with Waze."
+  },
+  "locationOpenInAnotherApp": "Open in another app…",
+  "@locationOpenInAnotherApp": {
+    "description": "Android menu item to open coordinates via geo: chooser."
   }
 }

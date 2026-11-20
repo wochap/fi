@@ -4099,4 +4099,179 @@ class AppLocalizationsEn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get fieldKindLocation => 'Location';
+
+  @override
+  String get fieldShowMapPreview => 'Show map preview';
+
+  @override
+  String get fieldShowMapPreviewHelper =>
+      'On by default. Shows a mini map on the record form and a thumbnail on mobile cards. When off, the field is a single row of coordinates.';
+
+  @override
+  String get helpFieldShowMapPreviewTitle => 'Show map preview';
+
+  @override
+  String get helpFieldShowMapPreviewBody =>
+      'On by default. Shows a mini map on the record form and a thumbnail on mobile cards. When off, the field is a single row of coordinates.';
+
+  @override
+  String get locationCurrentLocation => 'Current location';
+
+  @override
+  String get locationPickOnMap => 'Pick on map';
+
+  @override
+  String get locationFindingYou => 'Finding you…';
+
+  @override
+  String locationFindingYouAccuracy(String accuracy) {
+    return 'Finding you… ±$accuracy';
+  }
+
+  @override
+  String get locationMovePin => 'Move pin';
+
+  @override
+  String get locationCopyCoordinates => 'Copy coordinates';
+
+  @override
+  String get locationCoordinatesCopied => 'Coordinates copied';
+
+  @override
+  String get locationMapNeedsInternet => 'Map needs internet';
+
+  @override
+  String get locationPermissionOff => 'Location access is off for Fi';
+
+  @override
+  String get locationOpenSettings => 'Settings';
+
+  @override
+  String get locationDeviceOff => 'Location is off on this phone';
+
+  @override
+  String get locationTurnOn => 'Turn on';
+
+  @override
+  String get locationApproximateWarning =>
+      'Approximate location. The pin may be off by streets.';
+
+  @override
+  String get locationAllowPrecise => 'Allow precise';
+
+  @override
+  String get locationPrimerTitle => 'Save where you are';
+
+  @override
+  String get locationPrimerBody =>
+      'Fi reads your location only when you tap Current location or open the map, and stores it only in this record. Choose Precise for exact spots.';
+
+  @override
+  String get locationPrimerNotNow => 'Not now';
+
+  @override
+  String get locationPrimerContinue => 'Continue';
+
+  @override
+  String get locationCouldNotLocate => 'Could not find your location';
+
+  @override
+  String get locationSearchPlaces => 'Search places';
+
+  @override
+  String get locationDragMapHint => 'Drag the map; the pin stays put';
+
+  @override
+  String get locationTypeAction => 'Type';
+
+  @override
+  String get locationUseThisSpot => 'Use this spot';
+
+  @override
+  String get locationGoToMyLocation => 'Go to my location';
+
+  @override
+  String locationNearPlace(String place) {
+    return 'Near $place';
+  }
+
+  @override
+  String locationNearPlaceDistance(String place, String distance) {
+    return 'Near $place · $distance from you';
+  }
+
+  @override
+  String locationDistanceFromYou(String distance) {
+    return '$distance from you';
+  }
+
+  @override
+  String get locationOsmAttribution => '© OpenStreetMap';
+
+  @override
+  String get locationTypeCoordinatesInstead => 'Type coordinates instead';
+
+  @override
+  String get locationSearchCaption =>
+      'Results from OpenStreetMap · nearest first';
+
+  @override
+  String get locationSearchNeedsInternet => 'Search needs internet';
+
+  @override
+  String get locationSearchNoResults => 'No matching places';
+
+  @override
+  String get locationTypeCoordinatesTitle => 'Type coordinates';
+
+  @override
+  String get locationCoordinatesOrLink => 'Coordinates or a map link';
+
+  @override
+  String get locationLatitude => 'Latitude';
+
+  @override
+  String get locationLongitude => 'Longitude';
+
+  @override
+  String locationFoundCoordinates(String coords) {
+    return 'Found $coords';
+  }
+
+  @override
+  String get locationShowOnMap => 'Show on map';
+
+  @override
+  String get locationInvalidSyntax => 'Not a coordinate. Try 38.7139, -9.1334';
+
+  @override
+  String get locationLatitudeOutOfRange => 'Latitude goes from -90 to 90';
+
+  @override
+  String get locationLongitudeOutOfRange => 'Longitude goes from -180 to 180';
+
+  @override
+  String get locationShortLinkNeedsInternet =>
+      'Resolving a short map link requires internet';
+
+  @override
+  String get locationResolvingLink => 'Resolving map link…';
+
+  @override
+  String get locationGoogleMaps => 'Google Maps';
+
+  @override
+  String get locationWaze => 'Waze';
+
+  @override
+  String get locationOpenInGoogleMaps => 'Open in Google Maps';
+
+  @override
+  String get locationNavigateWithWaze => 'Navigate with Waze';
+
+  @override
+  String get locationOpenInAnotherApp => 'Open in another app…';
 }

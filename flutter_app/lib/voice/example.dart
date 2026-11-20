@@ -24,6 +24,7 @@ String exampleUtterance(List<VoiceField> fields, {String language = 'en'}) {
         es ? 'ayer al mediodía' : 'yesterday at noon',
       FieldTypeKindDto.boolean => es ? '$name sí' : '$name yes',
       FieldTypeKindDto.duration => es ? '45 minutos' : '45 minutes',
+      FieldTypeKindDto.location => null,
     };
     // Two text samples would both read the same; only the first is used.
     if (sample == null || parts.contains(sample)) continue;

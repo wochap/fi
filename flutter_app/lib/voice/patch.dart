@@ -102,6 +102,7 @@ FieldValueKindDto _valueKindFor(FieldTypeKindDto kind) => switch (kind) {
   FieldTypeKindDto.duration => FieldValueKindDto.duration,
   FieldTypeKindDto.enum_ => FieldValueKindDto.enum_,
   FieldTypeKindDto.enumSet => FieldValueKindDto.enumSet,
+  FieldTypeKindDto.location => FieldValueKindDto.location,
 };
 
 /// Whether [value] is a valid value of [field]'s type, options and bounds.
@@ -135,7 +136,7 @@ bool validVoiceValue(VoiceField field, FieldValueDto value) {
         FieldValueKindDto.dateTime ||
         FieldValueKindDto.duration:
       return value.integerValue != null;
-    case FieldValueKindDto.null_:
+    case FieldValueKindDto.null_ || FieldValueKindDto.location:
       return false;
   }
 }

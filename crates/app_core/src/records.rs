@@ -16,7 +16,7 @@ use crate::{
     error::{DomainError, IssueCode, ValidationIssue, summarize_issues},
     hlc::{HlcNodeId, HlcStamp},
     schema::{CollectionSchema, CollectionSchemaId, EnumOptionId, FieldId},
-    values::FieldValue,
+    values::{FieldValue, LocationValue},
 };
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
@@ -262,6 +262,20 @@ pub fn write_lww_register(
                 "a set of options is written as membership registers",
             ));
         }
+        FieldValue::Location(location) => {
+            tx.put(&register, "latitude_microdeg", location.latitude_microdeg)
+                .map_err(repo_change)?;
+            tx.put(&register, "longitude_microdeg", location.longitude_microdeg)
+                .map_err(repo_change)?;
+            if let Some(accuracy) = location.accuracy_meters {
+                tx.put(&register, "accuracy_meters", i64::from(accuracy))
+                    .map_err(repo_change)?;
+            }
+            if location.approximate {
+                tx.put(&register, "approximate", true)
+                    .map_err(repo_change)?;
+            }
+        }
     }
     tx.put(&register, "physical_time_ms", stamp.physical_time_ms)
         .map_err(repo_change)?;
@@ -298,6 +312,32 @@ pub fn read_lww_candidates(
             "date_time" => FieldValue::DateTime(integer(doc, &object, "integer")?),
             "duration" => FieldValue::Duration(integer(doc, &object, "integer")?),
             "enum" => FieldValue::Enum(string(doc, &object, "enum_id")?.parse()?),
+            "location" => {
+                let latitude_microdeg = integer(doc, &object, "latitude_microdeg")?;
+                let longitude_microdeg = integer(doc, &object, "longitude_microdeg")?;
+                let accuracy_meters = match doc.get(&object, "accuracy_meters").map_err(malformed)? {
+                    Some((raw, _)) => {
+                        let meters = raw
+                            .to_i64()
+                            .and_then(|v| u32::try_from(v).ok())
+                            .ok_or_else(|| malformed("invalid accuracy_meters"))?;
+                        Some(meters)
+                    }
+                    None => None,
+                };
+                let approximate = match doc.get(&object, "approximate").map_err(malformed)? {
+                    Some((raw, _)) => raw
+                        .to_bool()
+                        .ok_or_else(|| malformed("invalid approximate flag"))?,
+                    None => false,
+                };
+                FieldValue::Location(LocationValue {
+                    latitude_microdeg,
+                    longitude_microdeg,
+                    accuracy_meters,
+                    approximate,
+                })
+            }
             _ => return Err(malformed(format!("unsupported register kind {kind}"))),
         };
         let logical_counter = u32::try_from(integer(doc, &object, "logical_counter")?)
@@ -345,6 +385,7 @@ fn value_kind(value: &FieldValue) -> &'static str {
         FieldValue::Duration(_) => "duration",
         FieldValue::Enum(_) => "enum",
         FieldValue::EnumSet(_) => "enum_set",
+        FieldValue::Location(_) => "location",
     }
 }
 
@@ -854,5 +895,108 @@ mod tests {
         );
         assert!(read_lww_winner(&left, &fields, "left").unwrap().is_some());
         assert!(read_lww_winner(&left, &fields, "right").unwrap().is_some());
+    }
+
+    #[test]
+    fn location_lww_register_and_validation_round_trip() {
+        let collection_id = CollectionSchemaId::new();
+        let field_id = FieldId::new();
+        let schema = CollectionSchema {
+            id: collection_id,
+            name: "Places".into(),
+            description: String::new(),
+            deleted: false,
+            fields: vec![FieldDefinition {
+                allow_options_from_records: false,
+                id: field_id,
+                name: "Spot".into(),
+                field_type: FieldType::Location,
+                required: true,
+                default: None,
+                default_relative_days: None,
+                validation: ValidationMetadata::default(),
+                display: DisplayMetadata::default(),
+                order: 0,
+                deleted: false,
+                enum_options: vec![],
+            }],
+        };
+
+        let exact = FieldValue::Location(LocationValue::new(
+            38_710_841,
+            -9_137_265,
+            Some(12),
+            false,
+        ));
+        let approx = FieldValue::Location(LocationValue::new(
+            38_710_200,
+            -9_138_000,
+            Some(1_900),
+            true,
+        ));
+        let manual = FieldValue::Location(LocationValue::new(38_713_900, -9_133_400, None, false));
+
+        // Automerge LWW register round-trip.
+        let mut doc = automerge::Automerge::new();
+        let fields_obj = {
+            let mut tx = doc.transaction();
+            let obj = tx
+                .put_object(automerge::ROOT, "values", ObjType::Map)
+                .unwrap();
+            let stamp = HlcStamp {
+                physical_time_ms: 100,
+                logical_counter: 0,
+                node_id: HlcNodeId([1; 32]),
+            };
+            write_lww_register(&mut tx, &obj, "exact", &exact, stamp).unwrap();
+            write_lww_register(&mut tx, &obj, "approx", &approx, stamp).unwrap();
+            write_lww_register(&mut tx, &obj, "manual", &manual, stamp).unwrap();
+            tx.commit();
+            obj
+        };
+        assert_eq!(
+            read_lww_winner(&doc, &fields_obj, "exact")
+                .unwrap()
+                .unwrap()
+                .value,
+            exact
+        );
+        assert_eq!(
+            read_lww_winner(&doc, &fields_obj, "approx")
+                .unwrap()
+                .unwrap()
+                .value,
+            approx
+        );
+        assert_eq!(
+            read_lww_winner(&doc, &fields_obj, "manual")
+                .unwrap()
+                .unwrap()
+                .value,
+            manual
+        );
+
+        // Record validation accepts in-range values and rejects out-of-range values.
+        let mut valid_record = GenericRecord {
+            id: RecordId::new(),
+            collection_id,
+            values: BTreeMap::from([(field_id, exact)]),
+            stamps: BTreeMap::new(),
+            deleted: false,
+        };
+        validate_record(&mut valid_record, &schema, true).unwrap();
+
+        let mut bad_record = GenericRecord {
+            id: RecordId::new(),
+            collection_id,
+            values: BTreeMap::from([(
+                field_id,
+                FieldValue::Location(LocationValue::new(91_000_000, -9_137_265, None, false)),
+            )]),
+            stamps: BTreeMap::new(),
+            deleted: false,
+        };
+        let err = validate_record(&mut bad_record, &schema, true).unwrap_err();
+        assert_eq!(err.issues()[0].code, IssueCode::OutOfRange);
     }
 }

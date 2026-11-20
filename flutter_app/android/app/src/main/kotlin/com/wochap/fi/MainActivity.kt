@@ -1,16 +1,26 @@
 package com.wochap.fi
 
+import android.Manifest
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.location.Location
+import android.location.LocationListener
+import android.location.LocationManager
 import android.net.ConnectivityManager
 import android.net.wifi.WifiManager
 import android.net.Uri
 import android.os.Build
+import android.os.Bundle
+import android.os.Looper
 import android.provider.OpenableColumns
+import android.provider.Settings
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodCall
@@ -26,23 +36,28 @@ import javax.crypto.spec.GCMParameterSpec
 class MainActivity : FlutterActivity() {
     private var multicastLock: WifiManager.MulticastLock? = null
     private var pendingSave: PendingSave? = null
+    private var platformChannel: MethodChannel? = null
+    private var pendingLocationPermission: MethodChannel.Result? = null
+    private var activeLocationListener: LocationListener? = null
 
     /** An export waiting for the user to pick a destination in the system save dialog. */
     private class PendingSave(val bytes: ByteArray, val result: MethodChannel.Result)
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler(
-            ::handlePlatformCall,
-        )
+        platformChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).also {
+            it.setMethodCallHandler(::handlePlatformCall)
+        }
     }
 
     override fun onDestroy() {
+        stopLocationUpdates()
         releaseMulticast()
         super.onDestroy()
     }
 
     override fun onPause() {
+        stopLocationUpdates()
         releaseMulticast()
         super.onPause()
     }
@@ -83,6 +98,37 @@ class MainActivity : FlutterActivity() {
                     result.success(null)
                 }
                 "saveDocument" -> saveDocument(call, result)
+                "locationStatus" -> result.success(locationStatusMap())
+                "requestLocationPermission" -> requestLocationPermission(result)
+                "openLocationSettings" -> {
+                    startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+                    result.success(null)
+                }
+                "openAppSettings" -> {
+                    val intent = Intent(
+                        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.fromParts("package", packageName, null),
+                    )
+                    startActivity(intent)
+                    result.success(null)
+                }
+                "startLocationFix" -> {
+                    startLocationUpdates()
+                    result.success(null)
+                }
+                "stopLocationFix" -> {
+                    stopLocationUpdates()
+                    result.success(null)
+                }
+                "openExternalUrl" -> {
+                    val url = call.argument<String>("url")
+                        ?: throw IllegalArgumentException("url")
+                    val chooser = call.argument<Boolean>("chooser") ?: false
+                    val base = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                    val target = if (chooser) Intent.createChooser(base, null) else base
+                    startActivity(target)
+                    result.success(null)
+                }
                 else -> result.notImplemented()
             }
         } catch (failure: Exception) {
@@ -252,9 +298,156 @@ class MainActivity : FlutterActivity() {
         else -> if (Build.VERSION.SDK_INT < 24) "unsupported_android" else "capability_failed"
     }
 
+    private fun hasFineLocation(): Boolean =
+        ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED
+
+    private fun hasCoarseLocation(): Boolean =
+        ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED
+
+    private fun isLocationServicesEnabled(): Boolean {
+        val manager = getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return false
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            manager.isLocationEnabled
+        } else {
+            @Suppress("DEPRECATION")
+            manager.isProviderEnabled(LocationManager.GPS_PROVIDER) ||
+                manager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+        }
+    }
+
+    private fun locationStatusMap(): Map<String, Any> = mapOf(
+        "fine" to hasFineLocation(),
+        "coarse" to hasCoarseLocation(),
+        "servicesEnabled" to isLocationServicesEnabled(),
+        "shouldShowRationale" to ActivityCompat.shouldShowRequestPermissionRationale(
+            this,
+            Manifest.permission.ACCESS_FINE_LOCATION,
+        ),
+    )
+
+    private fun requestLocationPermission(result: MethodChannel.Result) {
+        pendingLocationPermission?.success(locationStatusMap())
+        pendingLocationPermission = result
+        ActivityCompat.requestPermissions(
+            this,
+            arrayOf(
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION,
+            ),
+            LOCATION_PERMISSION_REQUEST,
+        )
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != LOCATION_PERMISSION_REQUEST) return
+        val pending = pendingLocationPermission ?: return
+        pendingLocationPermission = null
+        pending.success(locationStatusMap())
+    }
+
+    @Suppress("MissingPermission")
+    private fun startLocationUpdates() {
+        stopLocationUpdates()
+        val fine = hasFineLocation()
+        val coarse = hasCoarseLocation()
+        if (!fine && !coarse) {
+            throw SecurityException("location_permission_denied")
+        }
+        val manager = getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+            ?: error("location_unavailable")
+        val approximateOnly = !fine && coarse
+        val listener = object : LocationListener {
+            override fun onLocationChanged(location: Location) {
+                emitLocationFix(location, approximateOnly)
+            }
+
+            @Deprecated("Deprecated in Java")
+            override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
+            override fun onProviderEnabled(provider: String) {}
+            override fun onProviderDisabled(provider: String) {}
+        }
+        activeLocationListener = listener
+
+        val providers = buildList {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                manager.allProviders.contains(LocationManager.FUSED_PROVIDER)
+            ) {
+                add(LocationManager.FUSED_PROVIDER)
+            }
+            if (fine && manager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+                add(LocationManager.GPS_PROVIDER)
+            }
+            if (manager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+                add(LocationManager.NETWORK_PROVIDER)
+            }
+        }
+
+        // Emit a recent cached fix immediately if fresh (< 30s) so UI updates quickly.
+        var bestLast: Location? = null
+        val nowMs = System.currentTimeMillis()
+        for (provider in providers) {
+            val last = try {
+                manager.getLastKnownLocation(provider)
+            } catch (_: Exception) {
+                null
+            } ?: continue
+            if (nowMs - last.time <= 30_000L) {
+                if (bestLast == null || last.accuracy < bestLast.accuracy) {
+                    bestLast = last
+                }
+            }
+        }
+        bestLast?.let { emitLocationFix(it, approximateOnly) }
+
+        for (provider in providers) {
+            try {
+                manager.requestLocationUpdates(
+                    provider,
+                    500L,
+                    0f,
+                    listener,
+                    Looper.getMainLooper(),
+                )
+            } catch (_: Exception) {
+                // Skip unavailable provider.
+            }
+        }
+    }
+
+    private fun emitLocationFix(location: Location, approximateOnly: Boolean) {
+        val payload = mapOf(
+            "lat" to location.latitude,
+            "lng" to location.longitude,
+            "accuracy" to if (location.hasAccuracy()) location.accuracy.toDouble() else 50.0,
+            "approximate" to approximateOnly,
+        )
+        runOnUiThread {
+            platformChannel?.invokeMethod("onLocationFix", payload)
+        }
+    }
+
+    private fun stopLocationUpdates() {
+        val listener = activeLocationListener ?: return
+        activeLocationListener = null
+        val manager = getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return
+        try {
+            manager.removeUpdates(listener)
+        } catch (_: Exception) {
+            // Ignore cleanup errors.
+        }
+    }
+
     companion object {
         private const val CHANNEL = "fi/platform"
         private const val SAVE_DOCUMENT_REQUEST = 4101
+        private const val LOCATION_PERMISSION_REQUEST = 4102
         private const val MULTICAST_TAG = "fi-mdns-foreground"
         private const val ANDROID_KEY_STORE = "AndroidKeyStore"
         private const val KEY_ALIAS = "fi.secure-store.wrap.v1"

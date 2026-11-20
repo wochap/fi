@@ -41,11 +41,16 @@ enum ChoicesFilterOperator {
   };
 
   /// The operators offered for [kind]: a single-choice field holds at most one option, so
-  /// "has all of" is left out for it.
-  static List<ChoicesFilterOperator> offeredFor(FieldTypeKindDto? kind) => [
-    for (final operator in values)
-      if (operator != hasAllOf || kind != FieldTypeKindDto.enum_) operator,
-  ];
+  /// "has all of" is left out for it; a Location field supports only presence checks.
+  static List<ChoicesFilterOperator> offeredFor(FieldTypeKindDto? kind) {
+    if (kind == FieldTypeKindDto.location) {
+      return const [isEmpty, isNotEmpty];
+    }
+    return [
+      for (final operator in values)
+        if (operator != hasAllOf || kind != FieldTypeKindDto.enum_) operator,
+    ];
+  }
 
   String label(AppLocalizations l) => switch (this) {
     hasAnyOf => l.queryOpHasAnyOf,
@@ -885,10 +890,12 @@ _ParsedChoicesFilter? _parseChoicesFilter(
   return (fieldId: field.id, operator: operator, options: value.listValue);
 }
 
-/// Whether a field of [kind] is filtered with the Choices operators: multi-option Choices and
-/// single choice alike.
+/// Whether a field of [kind] is filtered with the Choices/presence operators: multi-option
+/// Choices, single choice, and Location (presence only).
 bool isChoicesFilterKind(FieldTypeKindDto? kind) =>
-    kind == FieldTypeKindDto.enumSet || kind == FieldTypeKindDto.enum_;
+    kind == FieldTypeKindDto.enumSet ||
+    kind == FieldTypeKindDto.enum_ ||
+    kind == FieldTypeKindDto.location;
 
 final class _ParsedFilter {
   const _ParsedFilter(this.fieldId, this.operator, this.value);
@@ -955,6 +962,7 @@ ValueTypeKindDto valueKindFor(FieldTypeKindDto kind) => switch (kind) {
   FieldTypeKindDto.duration => ValueTypeKindDto.duration,
   FieldTypeKindDto.enum_ => ValueTypeKindDto.enum_,
   FieldTypeKindDto.enumSet => ValueTypeKindDto.enumSet,
+  FieldTypeKindDto.location => ValueTypeKindDto.location,
 };
 
 List<FieldDefinitionDto> activeFieldsOf(CollectionSchemaDto schema) =>
@@ -1484,7 +1492,9 @@ class _QueryConditionRowState extends State<QueryConditionRow> {
                   filterChoices: choices,
                   choicesOperator: offered.contains(state.choicesOperator)
                       ? state.choicesOperator
-                      : ChoicesFilterOperator.hasAnyOf,
+                      : (offered.isNotEmpty
+                          ? offered.first
+                          : ChoicesFilterOperator.hasAnyOf),
                   // Options belong to one field, so a new field starts with none picked.
                   filterOptions: const [],
                 ),

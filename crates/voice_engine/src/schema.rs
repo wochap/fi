@@ -90,28 +90,34 @@ fn schema_hash(fields: &[VoiceField]) -> u64 {
 }
 
 /// The engine's fields for a schema: active fields in form order, with live options only.
+/// Location fields are excluded from the voice LLM grammar and prompt.
 pub fn voice_fields(definitions: &[FieldDefinition]) -> Vec<VoiceField> {
-    let mut active: Vec<&FieldDefinition> = definitions.iter().filter(|f| !f.deleted).collect();
+    let mut active: Vec<&FieldDefinition> = definitions
+        .iter()
+        .filter(|f| !f.deleted && !matches!(f.field_type, FieldType::Location))
+        .collect();
     active.sort_by_key(|field| field.order);
     active
         .into_iter()
-        .map(|field| {
+        .filter_map(|field| {
+            let kind = match field.field_type {
+                FieldType::Text => FieldKind::Text,
+                FieldType::Integer => FieldKind::Integer,
+                FieldType::FixedDecimal { scale } => FieldKind::Decimal { scale },
+                FieldType::Boolean => FieldKind::Boolean,
+                FieldType::Date => FieldKind::Date,
+                FieldType::DateTime => FieldKind::DateTime,
+                FieldType::Duration => FieldKind::Duration,
+                FieldType::Enum => FieldKind::Choice,
+                FieldType::EnumSet => FieldKind::Choices,
+                FieldType::Location => return None,
+            };
             let mut options: Vec<_> = field.enum_options.iter().filter(|o| !o.deleted).collect();
             options.sort_by_key(|option| option.order);
-            VoiceField {
+            Some(VoiceField {
                 id: field.id.to_string(),
                 name: field.name.clone(),
-                kind: match field.field_type {
-                    FieldType::Text => FieldKind::Text,
-                    FieldType::Integer => FieldKind::Integer,
-                    FieldType::FixedDecimal { scale } => FieldKind::Decimal { scale },
-                    FieldType::Boolean => FieldKind::Boolean,
-                    FieldType::Date => FieldKind::Date,
-                    FieldType::DateTime => FieldKind::DateTime,
-                    FieldType::Duration => FieldKind::Duration,
-                    FieldType::Enum => FieldKind::Choice,
-                    FieldType::EnumSet => FieldKind::Choices,
-                },
+                kind,
                 required: field.required,
                 options: options
                     .into_iter()
@@ -121,7 +127,7 @@ pub fn voice_fields(definitions: &[FieldDefinition]) -> Vec<VoiceField> {
                     })
                     .collect(),
                 max_length: field.validation.max_length,
-            }
+            })
         })
         .collect()
 }

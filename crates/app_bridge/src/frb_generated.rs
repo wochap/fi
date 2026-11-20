@@ -27,7 +27,7 @@
 // Section: imports
 
 use flutter_rust_bridge::for_generated::byteorder::{NativeEndian, ReadBytesExt, WriteBytesExt};
-use flutter_rust_bridge::for_generated::{Lifetimeable, Lockable, transform_result_dco};
+use flutter_rust_bridge::for_generated::{transform_result_dco, Lifetimeable, Lockable};
 use flutter_rust_bridge::{Handler, IntoIntoDart};
 
 // Section: boilerplate
@@ -38,7 +38,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 516179183;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1454185592;
 
 // Section: executor
 
@@ -2756,6 +2756,37 @@ fn wire__crate__api__durations__parse_duration_text_impl(
             transform_result_sse::<_, ()>((move || {
                 let output_ok =
                     Result::<_, ()>::Ok(crate::api::durations::parse_duration_text(api_text))?;
+                Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__crate__api__collections__parse_location_text_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "parse_location_text",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_input = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let output_ok =
+                    Result::<_, ()>::Ok(crate::api::collections::parse_location_text(api_input))?;
                 Ok(output_ok)
             })())
         },
@@ -5583,10 +5614,12 @@ impl SseDecode for crate::api::models::DisplayMetadataDto {
         let mut var_multiline = <bool>::sse_decode(deserializer);
         let mut var_slider = <bool>::sse_decode(deserializer);
         let mut var_sliderStep = <Option<u32>>::sse_decode(deserializer);
+        let mut var_showMapPreview = <bool>::sse_decode(deserializer);
         return crate::api::models::DisplayMetadataDto {
             multiline: var_multiline,
             slider: var_slider,
             slider_step: var_sliderStep,
+            show_map_preview: var_showMapPreview,
         };
     }
 }
@@ -5787,6 +5820,7 @@ impl SseDecode for crate::api::models::FieldTypeKindDto {
             6 => crate::api::models::FieldTypeKindDto::Duration,
             7 => crate::api::models::FieldTypeKindDto::Enum,
             8 => crate::api::models::FieldTypeKindDto::EnumSet,
+            9 => crate::api::models::FieldTypeKindDto::Location,
             _ => unreachable!("Invalid variant for FieldTypeKindDto: {}", inner),
         };
     }
@@ -5800,12 +5834,15 @@ impl SseDecode for crate::api::models::FieldValueDto {
         let mut var_textValue = <Option<String>>::sse_decode(deserializer);
         let mut var_booleanValue = <Option<bool>>::sse_decode(deserializer);
         let mut var_listValue = <Vec<String>>::sse_decode(deserializer);
+        let mut var_locationValue =
+            <Option<crate::api::models::LocationValueDto>>::sse_decode(deserializer);
         return crate::api::models::FieldValueDto {
             kind: var_kind,
             integer_value: var_integerValue,
             text_value: var_textValue,
             boolean_value: var_booleanValue,
             list_value: var_listValue,
+            location_value: var_locationValue,
         };
     }
 }
@@ -5825,6 +5862,7 @@ impl SseDecode for crate::api::models::FieldValueKindDto {
             7 => crate::api::models::FieldValueKindDto::Duration,
             8 => crate::api::models::FieldValueKindDto::Enum,
             9 => crate::api::models::FieldValueKindDto::EnumSet,
+            10 => crate::api::models::FieldValueKindDto::Location,
             _ => unreachable!("Invalid variant for FieldValueKindDto: {}", inner),
         };
     }
@@ -6503,6 +6541,37 @@ impl SseDecode for crate::api::models::LocalDeviceDto {
     }
 }
 
+impl SseDecode for crate::api::models::LocationParseStatusDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::api::models::LocationParseStatusDto::Ok,
+            1 => crate::api::models::LocationParseStatusDto::InvalidSyntax,
+            2 => crate::api::models::LocationParseStatusDto::LatitudeOutOfRange,
+            3 => crate::api::models::LocationParseStatusDto::LongitudeOutOfRange,
+            4 => crate::api::models::LocationParseStatusDto::ShortLinkNeedsResolution,
+            _ => unreachable!("Invalid variant for LocationParseStatusDto: {}", inner),
+        };
+    }
+}
+
+impl SseDecode for crate::api::models::LocationValueDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_latitudeMicrodeg = <i64>::sse_decode(deserializer);
+        let mut var_longitudeMicrodeg = <i64>::sse_decode(deserializer);
+        let mut var_accuracyMeters = <Option<u32>>::sse_decode(deserializer);
+        let mut var_approximate = <bool>::sse_decode(deserializer);
+        return crate::api::models::LocationValueDto {
+            latitude_microdeg: var_latitudeMicrodeg,
+            longitude_microdeg: var_longitudeMicrodeg,
+            accuracy_meters: var_accuracyMeters,
+            approximate: var_approximate,
+        };
+    }
+}
+
 impl SseDecode for crate::api::models::LogEventDto {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -6989,6 +7058,19 @@ impl SseDecode for Option<crate::api::models::LocalDeviceDto> {
     }
 }
 
+impl SseDecode for Option<crate::api::models::LocationValueDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<crate::api::models::LocationValueDto>::sse_decode(
+                deserializer,
+            ));
+        } else {
+            return None;
+        }
+    }
+}
+
 impl SseDecode for Option<crate::api::voice_models::ModelErrorDto> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -7359,6 +7441,23 @@ impl SseDecode for crate::api::models::PairingStateDto {
             message: var_message,
             failure: var_failure,
             already_paired: var_alreadyPaired,
+        };
+    }
+}
+
+impl SseDecode for crate::api::models::ParsedLocationDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_status = <crate::api::models::LocationParseStatusDto>::sse_decode(deserializer);
+        let mut var_value =
+            <Option<crate::api::models::LocationValueDto>>::sse_decode(deserializer);
+        let mut var_shortLinkUrl = <Option<String>>::sse_decode(deserializer);
+        let mut var_errorMessage = <Option<String>>::sse_decode(deserializer);
+        return crate::api::models::ParsedLocationDto {
+            status: var_status,
+            value: var_value,
+            short_link_url: var_shortLinkUrl,
+            error_message: var_errorMessage,
         };
     }
 }
@@ -7882,6 +7981,8 @@ impl SseDecode for crate::api::models::TypedValueDto {
         let mut var_booleanValue = <Option<bool>>::sse_decode(deserializer);
         let mut var_listValue = <Vec<String>>::sse_decode(deserializer);
         let mut var_fieldId = <Option<String>>::sse_decode(deserializer);
+        let mut var_locationValue =
+            <Option<crate::api::models::LocationValueDto>>::sse_decode(deserializer);
         return crate::api::models::TypedValueDto {
             value_type: var_valueType,
             integer_value: var_integerValue,
@@ -7889,6 +7990,7 @@ impl SseDecode for crate::api::models::TypedValueDto {
             boolean_value: var_booleanValue,
             list_value: var_listValue,
             field_id: var_fieldId,
+            location_value: var_locationValue,
         };
     }
 }
@@ -7975,7 +8077,8 @@ impl SseDecode for crate::api::models::ValueTypeKindDto {
             6 => crate::api::models::ValueTypeKindDto::Duration,
             7 => crate::api::models::ValueTypeKindDto::Enum,
             8 => crate::api::models::ValueTypeKindDto::EnumSet,
-            9 => crate::api::models::ValueTypeKindDto::Null,
+            9 => crate::api::models::ValueTypeKindDto::Location,
+            10 => crate::api::models::ValueTypeKindDto::Null,
             _ => unreachable!("Invalid variant for ValueTypeKindDto: {}", inner),
         };
     }
@@ -8585,155 +8688,157 @@ fn pde_ffi_dispatcher_primary_impl(
         71 => {
             wire__crate__api__pairing__pairing_state_stream_impl(port, ptr, rust_vec_len, data_len)
         }
-        73 => wire__crate__api__voice_models__pause_model_download_impl(
+        74 => wire__crate__api__voice_models__pause_model_download_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        74 => wire__crate__api__lifecycle__projection_state_impl(port, ptr, rust_vec_len, data_len),
-        75 => {
+        75 => wire__crate__api__lifecycle__projection_state_impl(port, ptr, rust_vec_len, data_len),
+        76 => {
             wire__crate__api__lifecycle__projection_stream_impl(port, ptr, rust_vec_len, data_len)
         }
-        76 => wire__crate__api__diagnostics__recent_device_logs_impl(
+        77 => wire__crate__api__diagnostics__recent_device_logs_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        77 => {
+        78 => {
             wire__crate__api__diagnostics__recent_local_logs_impl(port, ptr, rust_vec_len, data_len)
         }
-        78 => wire__crate__api__voice_models__redownload_models_impl(
+        79 => wire__crate__api__voice_models__redownload_models_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        79 => wire__crate__api__pairing__reject_pairing_impl(port, ptr, rust_vec_len, data_len),
-        80 => {
+        80 => wire__crate__api__pairing__reject_pairing_impl(port, ptr, rust_vec_len, data_len),
+        81 => {
             wire__crate__api__queries__remove_computed_field_impl(port, ptr, rust_vec_len, data_len)
         }
-        81 => wire__crate__api__collections__remove_enum_option_impl(
+        82 => wire__crate__api__collections__remove_enum_option_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        82 => wire__crate__api__collections__remove_field_impl(port, ptr, rust_vec_len, data_len),
-        83 => wire__crate__api__queries__remove_query_definition_impl(
+        83 => wire__crate__api__collections__remove_field_impl(port, ptr, rust_vec_len, data_len),
+        84 => wire__crate__api__queries__remove_query_definition_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        84 => wire__crate__api__views__remove_view_impl(port, ptr, rust_vec_len, data_len),
-        85 => wire__crate__api__widgets__remove_widget_impl(port, ptr, rust_vec_len, data_len),
-        86 => {
+        85 => wire__crate__api__views__remove_view_impl(port, ptr, rust_vec_len, data_len),
+        86 => wire__crate__api__widgets__remove_widget_impl(port, ptr, rust_vec_len, data_len),
+        87 => {
             wire__crate__api__collections__rename_collection_impl(port, ptr, rust_vec_len, data_len)
         }
-        87 => {
+        88 => {
             wire__crate__api__pairing__rename_trusted_device_impl(port, ptr, rust_vec_len, data_len)
         }
-        88 => wire__crate__api__views__rename_view_impl(port, ptr, rust_vec_len, data_len),
-        89 => wire__crate__api__queries__reorder_computed_fields_impl(
+        89 => wire__crate__api__views__rename_view_impl(port, ptr, rust_vec_len, data_len),
+        90 => wire__crate__api__queries__reorder_computed_fields_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        90 => wire__crate__api__collections__reorder_fields_impl(port, ptr, rust_vec_len, data_len),
-        91 => wire__crate__api__queries__reorder_query_definitions_impl(
+        91 => wire__crate__api__collections__reorder_fields_impl(port, ptr, rust_vec_len, data_len),
+        92 => wire__crate__api__queries__reorder_query_definitions_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        92 => wire__crate__api__views__reorder_views_impl(port, ptr, rust_vec_len, data_len),
-        93 => wire__crate__api__widgets__reorder_widgets_impl(port, ptr, rust_vec_len, data_len),
-        94 => wire__crate__api__lifecycle__reset_dataset_impl(port, ptr, rust_vec_len, data_len),
-        95 => wire__crate__api__lifecycle__retry_networking_impl(port, ptr, rust_vec_len, data_len),
-        96 => {
+        93 => wire__crate__api__views__reorder_views_impl(port, ptr, rust_vec_len, data_len),
+        94 => wire__crate__api__widgets__reorder_widgets_impl(port, ptr, rust_vec_len, data_len),
+        95 => wire__crate__api__lifecycle__reset_dataset_impl(port, ptr, rust_vec_len, data_len),
+        96 => wire__crate__api__lifecycle__retry_networking_impl(port, ptr, rust_vec_len, data_len),
+        97 => {
             wire__crate__api__pairing__revoke_trusted_device_impl(port, ptr, rust_vec_len, data_len)
         }
-        97 => wire__crate__api__pairing__rotate_discovery_secret_impl(
+        98 => wire__crate__api__pairing__rotate_discovery_secret_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        98 => {
+        99 => {
             wire__crate__api__collections__save_record_draft_impl(port, ptr, rust_vec_len, data_len)
         }
-        99 => wire__crate__api__diagnostics__set_build_info_impl(port, ptr, rust_vec_len, data_len),
-        100 => wire__crate__api__pairing__set_discoverable_impl(port, ptr, rust_vec_len, data_len),
-        101 => wire__crate__api__lifecycle__set_foreground_impl(port, ptr, rust_vec_len, data_len),
-        102 => {
+        100 => {
+            wire__crate__api__diagnostics__set_build_info_impl(port, ptr, rust_vec_len, data_len)
+        }
+        101 => wire__crate__api__pairing__set_discoverable_impl(port, ptr, rust_vec_len, data_len),
+        102 => wire__crate__api__lifecycle__set_foreground_impl(port, ptr, rust_vec_len, data_len),
+        103 => {
             wire__crate__api__pairing__set_local_device_name_impl(port, ptr, rust_vec_len, data_len)
         }
-        104 => {
+        105 => {
             wire__crate__api__collections__set_records_field_impl(port, ptr, rust_vec_len, data_len)
         }
-        105 => wire__crate__api__pairing__set_sync_enabled_impl(port, ptr, rust_vec_len, data_len),
-        107 => wire__crate__api__lifecycle__shutdown_impl(port, ptr, rust_vec_len, data_len),
-        108 => wire__crate__api__voice_models__start_model_download_impl(
+        106 => wire__crate__api__pairing__set_sync_enabled_impl(port, ptr, rust_vec_len, data_len),
+        108 => wire__crate__api__lifecycle__shutdown_impl(port, ptr, rust_vec_len, data_len),
+        109 => wire__crate__api__voice_models__start_model_download_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        109 => wire__crate__api__pairing__start_pairing_impl(port, ptr, rust_vec_len, data_len),
-        110 => wire__crate__api__pairing__stop_pairing_impl(port, ptr, rust_vec_len, data_len),
-        111 => wire__crate__api__pairing__sync_status_impl(port, ptr, rust_vec_len, data_len),
-        112 => {
+        110 => wire__crate__api__pairing__start_pairing_impl(port, ptr, rust_vec_len, data_len),
+        111 => wire__crate__api__pairing__stop_pairing_impl(port, ptr, rust_vec_len, data_len),
+        112 => wire__crate__api__pairing__sync_status_impl(port, ptr, rust_vec_len, data_len),
+        113 => {
             wire__crate__api__pairing__sync_status_stream_impl(port, ptr, rust_vec_len, data_len)
         }
-        113 => wire__crate__api__pairing__trusted_devices_impl(port, ptr, rust_vec_len, data_len),
-        114 => {
+        114 => wire__crate__api__pairing__trusted_devices_impl(port, ptr, rust_vec_len, data_len),
+        115 => {
             wire__crate__api__queries__update_computed_field_impl(port, ptr, rust_vec_len, data_len)
         }
-        115 => wire__crate__api__collections__update_field_impl(port, ptr, rust_vec_len, data_len),
-        116 => wire__crate__api__queries__update_query_definition_impl(
+        116 => wire__crate__api__collections__update_field_impl(port, ptr, rust_vec_len, data_len),
+        117 => wire__crate__api__queries__update_query_definition_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        117 => wire__crate__api__collections__update_record_field_impl(
+        118 => wire__crate__api__collections__update_record_field_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        118 => wire__crate__api__views__update_view_impl(port, ptr, rust_vec_len, data_len),
-        119 => wire__crate__api__widgets__update_widget_impl(port, ptr, rust_vec_len, data_len),
-        120 => wire__crate__api__collections__upsert_enum_option_impl(
+        119 => wire__crate__api__views__update_view_impl(port, ptr, rust_vec_len, data_len),
+        120 => wire__crate__api__widgets__update_widget_impl(port, ptr, rust_vec_len, data_len),
+        121 => wire__crate__api__collections__upsert_enum_option_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        121 => wire__crate__api__queries__validate_collection_query_impl(
+        122 => wire__crate__api__queries__validate_collection_query_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        122 => wire__crate__api__collections__validate_record_draft_impl(
+        123 => wire__crate__api__collections__validate_record_draft_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        123 => wire__crate__api__models__validation_metadata_dto_default_impl(
+        124 => wire__crate__api__models__validation_metadata_dto_default_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        125 => wire__crate__api__voice__voice_dictate_turn_impl(port, ptr, rust_vec_len, data_len),
-        126 => wire__crate__api__voice__voice_fill_turn_impl(port, ptr, rust_vec_len, data_len),
-        131 => {
+        126 => wire__crate__api__voice__voice_dictate_turn_impl(port, ptr, rust_vec_len, data_len),
+        127 => wire__crate__api__voice__voice_fill_turn_impl(port, ptr, rust_vec_len, data_len),
+        132 => {
             wire__crate__api__widgets__widget_diagnostics_impl(port, ptr, rust_vec_len, data_len)
         }
         _ => unreachable!(),
@@ -8757,15 +8862,16 @@ fn pde_ffi_dispatcher_sync_impl(
         ),
         63 => wire__crate__api__voice_models__model_status_impl(ptr, rust_vec_len, data_len),
         72 => wire__crate__api__durations__parse_duration_text_impl(ptr, rust_vec_len, data_len),
-        103 => wire__crate__api__voice_models__set_model_language_impl(ptr, rust_vec_len, data_len),
-        106 => {
+        73 => wire__crate__api__collections__parse_location_text_impl(ptr, rust_vec_len, data_len),
+        104 => wire__crate__api__voice_models__set_model_language_impl(ptr, rust_vec_len, data_len),
+        107 => {
             wire__crate__api__voice_models__set_voice_turn_active_impl(ptr, rust_vec_len, data_len)
         }
-        124 => wire__crate__api__voice__voice_cancel_impl(ptr, rust_vec_len, data_len),
-        127 => wire__crate__api__voice__voice_native_available_impl(ptr, rust_vec_len, data_len),
-        128 => wire__crate__api__voice__voice_prepare_impl(ptr, rust_vec_len, data_len),
-        129 => wire__crate__api__voice__voice_release_impl(ptr, rust_vec_len, data_len),
-        130 => wire__crate__api__voice__voice_skip_cleanup_impl(ptr, rust_vec_len, data_len),
+        125 => wire__crate__api__voice__voice_cancel_impl(ptr, rust_vec_len, data_len),
+        128 => wire__crate__api__voice__voice_native_available_impl(ptr, rust_vec_len, data_len),
+        129 => wire__crate__api__voice__voice_prepare_impl(ptr, rust_vec_len, data_len),
+        130 => wire__crate__api__voice__voice_release_impl(ptr, rust_vec_len, data_len),
+        131 => wire__crate__api__voice__voice_skip_cleanup_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -9343,6 +9449,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::models::DisplayMetadataDto {
             self.multiline.into_into_dart().into_dart(),
             self.slider.into_into_dart().into_dart(),
             self.slider_step.into_into_dart().into_dart(),
+            self.show_map_preview.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -9600,6 +9707,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::models::FieldTypeKindDto {
             Self::Duration => 6.into_dart(),
             Self::Enum => 7.into_dart(),
             Self::EnumSet => 8.into_dart(),
+            Self::Location => 9.into_dart(),
             _ => unreachable!(),
         }
     }
@@ -9624,6 +9732,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::models::FieldValueDto {
             self.text_value.into_into_dart().into_dart(),
             self.boolean_value.into_into_dart().into_dart(),
             self.list_value.into_into_dart().into_dart(),
+            self.location_value.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -9653,6 +9762,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::models::FieldValueKindDto {
             Self::Duration => 7.into_dart(),
             Self::Enum => 8.into_dart(),
             Self::EnumSet => 9.into_dart(),
+            Self::Location => 10.into_dart(),
             _ => unreachable!(),
         }
     }
@@ -9847,6 +9957,53 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::models::LocalDeviceDto>
     for crate::api::models::LocalDeviceDto
 {
     fn into_into_dart(self) -> crate::api::models::LocalDeviceDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::models::LocationParseStatusDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Ok => 0.into_dart(),
+            Self::InvalidSyntax => 1.into_dart(),
+            Self::LatitudeOutOfRange => 2.into_dart(),
+            Self::LongitudeOutOfRange => 3.into_dart(),
+            Self::ShortLinkNeedsResolution => 4.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::models::LocationParseStatusDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::models::LocationParseStatusDto>
+    for crate::api::models::LocationParseStatusDto
+{
+    fn into_into_dart(self) -> crate::api::models::LocationParseStatusDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::models::LocationValueDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.latitude_microdeg.into_into_dart().into_dart(),
+            self.longitude_microdeg.into_into_dart().into_dart(),
+            self.accuracy_meters.into_into_dart().into_dart(),
+            self.approximate.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::models::LocationValueDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::models::LocationValueDto>
+    for crate::api::models::LocationValueDto
+{
+    fn into_into_dart(self) -> crate::api::models::LocationValueDto {
         self
     }
 }
@@ -10306,6 +10463,29 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::models::PairingStateDto>
     for crate::api::models::PairingStateDto
 {
     fn into_into_dart(self) -> crate::api::models::PairingStateDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::models::ParsedLocationDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.status.into_into_dart().into_dart(),
+            self.value.into_into_dart().into_dart(),
+            self.short_link_url.into_into_dart().into_dart(),
+            self.error_message.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::models::ParsedLocationDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::models::ParsedLocationDto>
+    for crate::api::models::ParsedLocationDto
+{
+    fn into_into_dart(self) -> crate::api::models::ParsedLocationDto {
         self
     }
 }
@@ -11042,6 +11222,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::models::TypedValueDto {
             self.boolean_value.into_into_dart().into_dart(),
             self.list_value.into_into_dart().into_dart(),
             self.field_id.into_into_dart().into_dart(),
+            self.location_value.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -11114,7 +11295,8 @@ impl flutter_rust_bridge::IntoDart for crate::api::models::ValueTypeKindDto {
             Self::Duration => 6.into_dart(),
             Self::Enum => 7.into_dart(),
             Self::EnumSet => 8.into_dart(),
-            Self::Null => 9.into_dart(),
+            Self::Location => 9.into_dart(),
+            Self::Null => 10.into_dart(),
             _ => unreachable!(),
         }
     }
@@ -12131,6 +12313,7 @@ impl SseEncode for crate::api::models::DisplayMetadataDto {
         <bool>::sse_encode(self.multiline, serializer);
         <bool>::sse_encode(self.slider, serializer);
         <Option<u32>>::sse_encode(self.slider_step, serializer);
+        <bool>::sse_encode(self.show_map_preview, serializer);
     }
 }
 
@@ -12293,6 +12476,7 @@ impl SseEncode for crate::api::models::FieldTypeKindDto {
                 crate::api::models::FieldTypeKindDto::Duration => 6,
                 crate::api::models::FieldTypeKindDto::Enum => 7,
                 crate::api::models::FieldTypeKindDto::EnumSet => 8,
+                crate::api::models::FieldTypeKindDto::Location => 9,
                 _ => {
                     unimplemented!("");
                 }
@@ -12310,6 +12494,7 @@ impl SseEncode for crate::api::models::FieldValueDto {
         <Option<String>>::sse_encode(self.text_value, serializer);
         <Option<bool>>::sse_encode(self.boolean_value, serializer);
         <Vec<String>>::sse_encode(self.list_value, serializer);
+        <Option<crate::api::models::LocationValueDto>>::sse_encode(self.location_value, serializer);
     }
 }
 
@@ -12328,6 +12513,7 @@ impl SseEncode for crate::api::models::FieldValueKindDto {
                 crate::api::models::FieldValueKindDto::Duration => 7,
                 crate::api::models::FieldValueKindDto::Enum => 8,
                 crate::api::models::FieldValueKindDto::EnumSet => 9,
+                crate::api::models::FieldValueKindDto::Location => 10,
                 _ => {
                     unimplemented!("");
                 }
@@ -12852,6 +13038,35 @@ impl SseEncode for crate::api::models::LocalDeviceDto {
     }
 }
 
+impl SseEncode for crate::api::models::LocationParseStatusDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::api::models::LocationParseStatusDto::Ok => 0,
+                crate::api::models::LocationParseStatusDto::InvalidSyntax => 1,
+                crate::api::models::LocationParseStatusDto::LatitudeOutOfRange => 2,
+                crate::api::models::LocationParseStatusDto::LongitudeOutOfRange => 3,
+                crate::api::models::LocationParseStatusDto::ShortLinkNeedsResolution => 4,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
+impl SseEncode for crate::api::models::LocationValueDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i64>::sse_encode(self.latitude_microdeg, serializer);
+        <i64>::sse_encode(self.longitude_microdeg, serializer);
+        <Option<u32>>::sse_encode(self.accuracy_meters, serializer);
+        <bool>::sse_encode(self.approximate, serializer);
+    }
+}
+
 impl SseEncode for crate::api::models::LogEventDto {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -13265,6 +13480,16 @@ impl SseEncode for Option<crate::api::models::LocalDeviceDto> {
     }
 }
 
+impl SseEncode for Option<crate::api::models::LocationValueDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::api::models::LocationValueDto>::sse_encode(value, serializer);
+        }
+    }
+}
+
 impl SseEncode for Option<crate::api::voice_models::ModelErrorDto> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -13569,6 +13794,16 @@ impl SseEncode for crate::api::models::PairingStateDto {
         <Option<String>>::sse_encode(self.message, serializer);
         <Option<crate::api::models::PairingFailureKindDto>>::sse_encode(self.failure, serializer);
         <bool>::sse_encode(self.already_paired, serializer);
+    }
+}
+
+impl SseEncode for crate::api::models::ParsedLocationDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <crate::api::models::LocationParseStatusDto>::sse_encode(self.status, serializer);
+        <Option<crate::api::models::LocationValueDto>>::sse_encode(self.value, serializer);
+        <Option<String>>::sse_encode(self.short_link_url, serializer);
+        <Option<String>>::sse_encode(self.error_message, serializer);
     }
 }
 
@@ -14019,6 +14254,7 @@ impl SseEncode for crate::api::models::TypedValueDto {
         <Option<bool>>::sse_encode(self.boolean_value, serializer);
         <Vec<String>>::sse_encode(self.list_value, serializer);
         <Option<String>>::sse_encode(self.field_id, serializer);
+        <Option<crate::api::models::LocationValueDto>>::sse_encode(self.location_value, serializer);
     }
 }
 
@@ -14097,7 +14333,8 @@ impl SseEncode for crate::api::models::ValueTypeKindDto {
                 crate::api::models::ValueTypeKindDto::Duration => 6,
                 crate::api::models::ValueTypeKindDto::Enum => 7,
                 crate::api::models::ValueTypeKindDto::EnumSet => 8,
-                crate::api::models::ValueTypeKindDto::Null => 9,
+                crate::api::models::ValueTypeKindDto::Location => 9,
+                crate::api::models::ValueTypeKindDto::Null => 10,
                 _ => {
                     unimplemented!("");
                 }
@@ -14395,7 +14632,7 @@ mod io {
     use flutter_rust_bridge::for_generated::byteorder::{
         NativeEndian, ReadBytesExt, WriteBytesExt,
     };
-    use flutter_rust_bridge::for_generated::{Lifetimeable, Lockable, transform_result_dco};
+    use flutter_rust_bridge::for_generated::{transform_result_dco, Lifetimeable, Lockable};
     use flutter_rust_bridge::{Handler, IntoIntoDart};
 
     // Section: boilerplate
@@ -14419,7 +14656,7 @@ mod web {
     };
     use flutter_rust_bridge::for_generated::wasm_bindgen;
     use flutter_rust_bridge::for_generated::wasm_bindgen::prelude::*;
-    use flutter_rust_bridge::for_generated::{Lifetimeable, Lockable, transform_result_dco};
+    use flutter_rust_bridge::for_generated::{transform_result_dco, Lifetimeable, Lockable};
     use flutter_rust_bridge::{Handler, IntoIntoDart};
 
     // Section: boilerplate

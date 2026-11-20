@@ -126,6 +126,9 @@ pub fn format_field_value(field: &FieldDefinition, value: &FieldValue) -> String
             .find(|option| option.id == *id && !option.deleted)
             .map_or_else(String::new, |option| option.label.clone()),
         (FieldType::EnumSet, FieldValue::EnumSet(ids)) => set_labels(field, ids),
+        (FieldType::Location, FieldValue::Location(location)) => {
+            crate::location::format_location_canonical(*location)
+        }
         _ => String::new(),
     }
 }
@@ -160,6 +163,7 @@ fn format_typed_value(schema: &CollectionSchema, value: &TypedValue) -> String {
             .iter()
             .find(|item| item.id == *field)
             .map_or_else(String::new, |field| set_labels(field, options)),
+        TypedValue::Location(location) => crate::location::format_location_canonical(*location),
     }
 }
 
@@ -390,6 +394,9 @@ fn parse_cell(
             }
             value
         }
+        FieldType::Location => FieldValue::Location(
+            crate::location::parse_location_input(cell).map_err(|error| error.to_string())?,
+        ),
     })
 }
 

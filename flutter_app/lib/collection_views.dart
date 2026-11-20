@@ -72,7 +72,8 @@ FieldDefinitionDto? _field(CollectionSchemaDto schema, String? id) =>
   FieldTypeKindDto.fixedDecimal ||
   FieldTypeKindDto.duration => (l.viewDirLow, l.viewDirHigh),
   FieldTypeKindDto.enum_ ||
-  FieldTypeKindDto.enumSet => (l.viewDirOptionOrder, l.viewDirReverse),
+  FieldTypeKindDto.enumSet ||
+  FieldTypeKindDto.location => (l.viewDirOptionOrder, l.viewDirReverse),
   FieldTypeKindDto.boolean => (l.viewDirNoFirst, l.viewDirYesFirst),
 };
 
@@ -914,10 +915,12 @@ class _ViewEditorState extends State<_ViewEditor> {
     super.dispose();
   }
 
-  /// Fields a view may sort by: every active field except multi-option Choices.
+  /// Fields a view may sort by: every active field except multi-option Choices and Location.
   List<FieldDefinitionDto> get _sortFields => [
     for (final field in activeFieldsOf(widget.schema))
-      if (field.fieldType.kind != FieldTypeKindDto.enumSet) field,
+      if (field.fieldType.kind != FieldTypeKindDto.enumSet &&
+          field.fieldType.kind != FieldTypeKindDto.location)
+        field,
   ];
 
   ViewBodyDto _body(String decimalSeparator) => ViewBodyDto(

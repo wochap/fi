@@ -6,6 +6,58 @@ use thiserror::Error;
 use crate::schema::EnumOptionId;
 
 pub const MAX_DECIMAL_SCALE: u8 = 18;
+pub const MIN_LATITUDE_MICRODEG: i64 = -90_000_000;
+pub const MAX_LATITUDE_MICRODEG: i64 = 90_000_000;
+pub const MIN_LONGITUDE_MICRODEG: i64 = -180_000_000;
+pub const MAX_LONGITUDE_MICRODEG: i64 = 180_000_000;
+
+#[allow(clippy::trivially_copy_pass_by_ref)]
+fn is_false(value: &bool) -> bool {
+    !*value
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct LocationValue {
+    /// Latitude in microdegrees (10^-6 degrees), -90_000_000..=90_000_000.
+    pub latitude_microdeg: i64,
+    /// Longitude in microdegrees (10^-6 degrees), -180_000_000..=180_000_000.
+    pub longitude_microdeg: i64,
+    /// Horizontal GPS accuracy in whole meters, when captured from device location.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accuracy_meters: Option<u32>,
+    /// True when captured from an approximate-only (coarse) grant, formatted to 4 decimals.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub approximate: bool,
+}
+
+impl LocationValue {
+    #[must_use]
+    pub const fn new(
+        latitude_microdeg: i64,
+        longitude_microdeg: i64,
+        accuracy_meters: Option<u32>,
+        approximate: bool,
+    ) -> Self {
+        Self {
+            latitude_microdeg,
+            longitude_microdeg,
+            accuracy_meters,
+            approximate,
+        }
+    }
+
+    #[must_use]
+    pub const fn latitude_in_range(self) -> bool {
+        self.latitude_microdeg >= MIN_LATITUDE_MICRODEG
+            && self.latitude_microdeg <= MAX_LATITUDE_MICRODEG
+    }
+
+    #[must_use]
+    pub const fn longitude_in_range(self) -> bool {
+        self.longitude_microdeg >= MIN_LONGITUDE_MICRODEG
+            && self.longitude_microdeg <= MAX_LONGITUDE_MICRODEG
+    }
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct FixedDecimal {
@@ -181,6 +233,8 @@ pub enum FieldValue {
     /// A Choices value: a set of option ids of one field. Never empty when stored or read; an
     /// empty set reads as [`FieldValue::Null`] (see [`FieldValue::enum_set`]).
     EnumSet(Vec<EnumOptionId>),
+    /// A geographic WGS 84 point in fixed-point microdegrees.
+    Location(LocationValue),
 }
 
 impl FieldValue {
@@ -277,6 +331,8 @@ mod tests {
             FieldValue::Duration(-500),
             FieldValue::Enum(EnumOptionId::new()),
             FieldValue::EnumSet(vec![EnumOptionId::new(), EnumOptionId::new()]),
+            FieldValue::Location(LocationValue::new(38_710_841, -9_137_265, Some(12), false)),
+            FieldValue::Location(LocationValue::new(38_710_200, -9_138_000, Some(1_900), true)),
         ];
         for value in values {
             let encoded = serde_json::to_string(&value).unwrap();

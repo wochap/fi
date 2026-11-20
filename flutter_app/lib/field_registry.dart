@@ -3,6 +3,8 @@ import 'package:fi/l10n/l10n.dart';
 import 'package:fi/theme/nocturne_widgets.dart';
 import 'package:fi/theme/fi_icons.dart';
 import 'package:fi/exact_format.dart';
+import 'package:fi/location/format.dart';
+import 'package:fi/location/location_field.dart';
 import 'package:fi/src/rust/api/models.dart';
 import 'package:fi/theme/choice_input.dart';
 import 'package:fi/theme/form_errors.dart';
@@ -26,6 +28,7 @@ String fieldKindLabel(AppLocalizations l, FieldTypeKindDto kind) =>
       FieldTypeKindDto.duration => l.fieldTypeDuration,
       FieldTypeKindDto.enum_ => l.fieldTypeChoice,
       FieldTypeKindDto.enumSet => l.fieldTypeChoices,
+      FieldTypeKindDto.location => l.fieldKindLocation,
     };
 
 typedef FieldValueChanged = void Function(FieldValueDto value);
@@ -206,6 +209,9 @@ final class FieldRendererRegistry {
       ).toString(),
       FieldValueKindDto.duration => '${value.integerValue ?? 0} ms',
       FieldValueKindDto.integer => '${value.integerValue ?? 0}',
+      FieldValueKindDto.location => value.locationValue == null
+          ? '—'
+          : formatLocation4dp(value.locationValue!),
     };
   }
 }
@@ -255,6 +261,7 @@ final class _FieldEditorState extends State<_FieldEditor> {
   int? durationValue;
   String? choice;
   List<String> choices = const [];
+  FieldValueDto? locationValue;
   @override
   void initState() {
     super.initState();
@@ -273,6 +280,7 @@ final class _FieldEditorState extends State<_FieldEditor> {
     choices = value?.kind == FieldValueKindDto.enumSet
         ? value!.listValue
         : const [];
+    locationValue = value?.kind == FieldValueKindDto.location ? value : null;
   }
 
   /// The initial text needs the locale's decimal separator, so it is set once dependencies exist.
@@ -648,6 +656,36 @@ final class _FieldEditorState extends State<_FieldEditor> {
     final multiline =
         field.fieldType.kind == FieldTypeKindDto.text &&
         field.display.multiline;
+    if (field.fieldType.kind == FieldTypeKindDto.location) {
+      final input = LocationFieldInput(
+        field: field,
+        value: locationValue,
+        errors: widget.errors,
+        onChanged: (next) {
+          setState(() => locationValue = next);
+          widget.onChanged(next ?? _null);
+        },
+      );
+      if (!widget.showLabel) return input;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Text(
+              _required ? '$_label *' : _label,
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w500,
+                color: context.nocturne.text,
+              ),
+            ),
+          ),
+          input,
+        ],
+      );
+    }
     final decimal = field.fieldType.kind == FieldTypeKindDto.fixedDecimal;
     final scale = field.fieldType.scale ?? 0;
     return FiTextInput(

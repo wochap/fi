@@ -38,6 +38,7 @@ enum _Chip {
   range('chip-range', HelpId.fieldMinMax),
   slider('field-slider', HelpId.fieldSlider),
   dateRange('chip-date-range', HelpId.fieldMinMax),
+  showMapPreview('chip-show-map-preview', HelpId.fieldShowMapPreview),
   defaultValue('chip-default', HelpId.fieldDefault);
 
   const _Chip(this.key, this.help);
@@ -52,6 +53,7 @@ enum _Chip {
     range => l.fieldEditorChipRange,
     slider => l.fieldEditorChipSlider,
     dateRange => l.fieldEditorChipDateRange,
+    showMapPreview => l.fieldShowMapPreview,
     defaultValue => l.fieldEditorChipDefaultValue,
   };
 }
@@ -66,10 +68,12 @@ List<_Chip> _chipsFor(FieldTypeKindDto kind) => [
   if (kind == FieldTypeKindDto.integer) _Chip.slider,
   if (kind == FieldTypeKindDto.date || kind == FieldTypeKindDto.dateTime)
     _Chip.dateRange,
-  _Chip.defaultValue,
+  if (kind == FieldTypeKindDto.location) _Chip.showMapPreview,
+  if (kind != FieldTypeKindDto.location) _Chip.defaultValue,
 ];
 
-/// The field types in grid order: three rows of three, Choices directly after Choice.
+/// The field types in grid order: 3-column grid (3×4), Choices directly after Choice,
+/// Location after Choices.
 const _typeGrid = [
   FieldTypeKindDto.text,
   FieldTypeKindDto.integer,
@@ -80,6 +84,7 @@ const _typeGrid = [
   FieldTypeKindDto.duration,
   FieldTypeKindDto.enum_,
   FieldTypeKindDto.enumSet,
+  FieldTypeKindDto.location,
 ];
 
 bool _isChoiceKind(FieldTypeKindDto kind) =>
@@ -328,6 +333,7 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
   late var required = existing?.required_ ?? false;
   late var multiline = existing?.display.multiline ?? false;
   late var slider = existing?.display.slider ?? false;
+  late var showMapPreview = existing?.display.showMapPreview ?? true;
 
   /// "Allow adding options from records", held until Save like every other setting.
   late var allowAdding = existing?.allowOptionsFromRecords ?? false;
@@ -510,6 +516,9 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
       minLength.clear();
       maxLength.clear();
     }
+    if (kind != FieldTypeKindDto.location) {
+      showMapPreview = true;
+    }
     open.removeWhere((chip) => !_chipsFor(kind).contains(chip));
     open.removeAll([_Chip.range, _Chip.dateRange]);
   }
@@ -518,6 +527,7 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
     _Chip.required => required,
     _Chip.multiline => multiline,
     _Chip.slider => slider && _sliderAvailable,
+    _Chip.showMapPreview => showMapPreview,
     _ => open.contains(chip),
   };
 
@@ -534,6 +544,8 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
       case _Chip.slider:
         slider = true;
         open.add(chip);
+      case _Chip.showMapPreview:
+        showMapPreview = true;
       default:
         open.add(chip);
     }
@@ -546,6 +558,8 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
         required = false;
       case _Chip.multiline:
         multiline = false;
+      case _Chip.showMapPreview:
+        showMapPreview = false;
       case _Chip.lengthLimits:
         minLength.clear();
         maxLength.clear();
@@ -682,6 +696,8 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
           multiline: multiline,
           slider: slider && _sliderAvailable,
           sliderStep: _submittedStep,
+          showMapPreview:
+              kind == FieldTypeKindDto.location ? showMapPreview : true,
         ),
         order: order,
         deleted: false,
@@ -851,6 +867,15 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
             child: Text(
               context.l10n.fieldEditorChoicesRequiredHelp,
               key: const Key('choices-required-help'),
+              style: TextStyle(fontSize: 12, color: context.nocturne.muted(.5)),
+            ),
+          ),
+        if (kind == FieldTypeKindDto.location)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+              context.l10n.fieldShowMapPreviewHelper,
+              key: const Key('location-map-preview-help'),
               style: TextStyle(fontSize: 12, color: context.nocturne.muted(.5)),
             ),
           ),
@@ -1031,15 +1056,23 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
       );
     }
 
-    Widget row(Iterable<FieldTypeKindDto> kinds) =>
-        Row(spacing: 6, children: [for (final value in kinds) tile(value)]);
+    Widget row(Iterable<FieldTypeKindDto> kinds) {
+      final list = kinds.toList();
+      return Row(
+        spacing: 6,
+        children: [
+          for (final value in list) tile(value),
+          for (var i = list.length; i < 3; i++)
+            const Expanded(child: SizedBox()),
+        ],
+      );
+    }
     return Column(
       key: const Key('type-grid'),
       spacing: 6,
       children: [
-        row(_typeGrid.take(3)),
-        row(_typeGrid.skip(3).take(3)),
-        row(_typeGrid.skip(6)),
+        for (var i = 0; i < _typeGrid.length; i += 3)
+          row(_typeGrid.skip(i).take(3)),
       ],
     );
   }
@@ -1073,7 +1106,7 @@ class _FieldEditorBodyState extends State<FieldEditorBody> {
       child: child,
     );
     switch (chip) {
-      case _Chip.required || _Chip.multiline:
+      case _Chip.required || _Chip.multiline || _Chip.showMapPreview:
         return null;
       case _Chip.lengthLimits:
         return block(

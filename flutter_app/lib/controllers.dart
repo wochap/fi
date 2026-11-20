@@ -2385,7 +2385,8 @@ String? sortFieldId(SortClauseDto clause) {
 SortDirectionDto defaultSortDirection(FieldTypeKindDto kind) => switch (kind) {
   FieldTypeKindDto.text ||
   FieldTypeKindDto.enum_ ||
-  FieldTypeKindDto.enumSet => SortDirectionDto.ascending,
+  FieldTypeKindDto.enumSet ||
+  FieldTypeKindDto.location => SortDirectionDto.ascending,
   FieldTypeKindDto.date ||
   FieldTypeKindDto.dateTime ||
   FieldTypeKindDto.integer ||

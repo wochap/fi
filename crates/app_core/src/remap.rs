@@ -289,7 +289,8 @@ fn remap_typed_value(value: &TypedValue, remap: &IdRemap) -> Result<TypedValue, 
         | TypedValue::Boolean(_)
         | TypedValue::Date(_)
         | TypedValue::DateTime(_)
-        | TypedValue::Duration(_) => value.clone(),
+        | TypedValue::Duration(_)
+        | TypedValue::Location(_) => value.clone(),
     })
 }
 
@@ -534,7 +535,8 @@ pub fn remap_record_values(
                 | FieldValue::Boolean(_)
                 | FieldValue::Date(_)
                 | FieldValue::DateTime(_)
-                | FieldValue::Duration(_) => value.clone(),
+                | FieldValue::Duration(_)
+                | FieldValue::Location(_) => value.clone(),
             };
             Ok((remap.field(*field)?, value))
         })

@@ -151,23 +151,25 @@ impl VoiceTurnEventDto {
     }
 }
 
-fn field(dto: VoiceFieldDto) -> VoiceField {
-    VoiceField {
+fn field(dto: VoiceFieldDto) -> Option<VoiceField> {
+    let kind = match dto.kind {
+        FieldTypeKindDto::Text => FieldKind::Text,
+        FieldTypeKindDto::Integer => FieldKind::Integer,
+        FieldTypeKindDto::FixedDecimal => FieldKind::Decimal {
+            scale: dto.scale.unwrap_or(0),
+        },
+        FieldTypeKindDto::Boolean => FieldKind::Boolean,
+        FieldTypeKindDto::Date => FieldKind::Date,
+        FieldTypeKindDto::DateTime => FieldKind::DateTime,
+        FieldTypeKindDto::Duration => FieldKind::Duration,
+        FieldTypeKindDto::Enum => FieldKind::Choice,
+        FieldTypeKindDto::EnumSet => FieldKind::Choices,
+        FieldTypeKindDto::Location => return None,
+    };
+    Some(VoiceField {
         id: dto.id,
         name: dto.name,
-        kind: match dto.kind {
-            FieldTypeKindDto::Text => FieldKind::Text,
-            FieldTypeKindDto::Integer => FieldKind::Integer,
-            FieldTypeKindDto::FixedDecimal => FieldKind::Decimal {
-                scale: dto.scale.unwrap_or(0),
-            },
-            FieldTypeKindDto::Boolean => FieldKind::Boolean,
-            FieldTypeKindDto::Date => FieldKind::Date,
-            FieldTypeKindDto::DateTime => FieldKind::DateTime,
-            FieldTypeKindDto::Duration => FieldKind::Duration,
-            FieldTypeKindDto::Enum => FieldKind::Choice,
-            FieldTypeKindDto::EnumSet => FieldKind::Choices,
-        },
+        kind,
         required: dto.required,
         options: dto
             .options
@@ -178,13 +180,13 @@ fn field(dto: VoiceFieldDto) -> VoiceField {
             })
             .collect(),
         max_length: dto.max_length,
-    }
+    })
 }
 
 fn request(dto: VoiceFillRequestDto) -> Option<voice_engine::FillRequest> {
     Some(voice_engine::FillRequest {
         collection_id: dto.collection_id,
-        fields: dto.fields.into_iter().map(field).collect(),
+        fields: dto.fields.into_iter().filter_map(field).collect(),
         draft: dto
             .draft
             .into_iter()
@@ -228,6 +230,7 @@ fn entry_dto(entry: PatchEntry) -> VoicePatchEntryDto {
             text_value,
             boolean_value,
             list_value,
+            location_value: None,
         },
         evidence: entry.evidence,
     }

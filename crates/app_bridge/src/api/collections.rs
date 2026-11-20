@@ -1,15 +1,17 @@
 use std::{collections::BTreeMap, str::FromStr};
 
 use app_core::{
-    CollectionSchemaId, DraftValue, FieldId, PENDING_OPTION_PREFIX, PendingOption, RecordId,
+    CollectionSchemaId, DraftValue, FieldId, LocationParseError, PENDING_OPTION_PREFIX,
+    PendingOption, RecordId, parse_location_input,
 };
+use flutter_rust_bridge::frb;
 
 use crate::api::{
     lifecycle::core,
     models::{
         BootstrapDto, BridgeError, BridgeIssueDto, CollectionDto, CollectionSchemaDto,
-        FieldDefinitionDto, FieldValueDto, FieldValueKindDto, ImportOutcomeDto, PendingOptionDto,
-        RecordDto,
+        FieldDefinitionDto, FieldValueDto, FieldValueKindDto, ImportOutcomeDto,
+        LocationParseStatusDto, ParsedLocationDto, PendingOptionDto, RecordDto,
     },
 };
 
@@ -465,6 +467,45 @@ fn core_error(error: app_core::DomainError) -> BridgeError {
     BridgeError::from(app_core::AppError::from(error))
 }
 
+/// Parses user-supplied coordinates or map links (decimal, DMS, `geo:`, Google Maps, Waze, OSM)
+/// into microdegrees, or identifies short `maps.app.goo.gl` / `goo.gl/maps` links that need
+/// online redirect resolution.
+#[frb(sync)]
+pub fn parse_location_text(input: String) -> ParsedLocationDto {
+    match parse_location_input(&input) {
+        Ok(value) => ParsedLocationDto {
+            status: LocationParseStatusDto::Ok,
+            value: Some(value.into()),
+            short_link_url: None,
+            error_message: None,
+        },
+        Err(LocationParseError::ShortLinkNeedsResolution(url)) => ParsedLocationDto {
+            status: LocationParseStatusDto::ShortLinkNeedsResolution,
+            value: None,
+            short_link_url: Some(url),
+            error_message: Some(LocationParseError::ShortLinkNeedsResolution(String::new()).to_string()),
+        },
+        Err(err @ LocationParseError::LatitudeOutOfRange) => ParsedLocationDto {
+            status: LocationParseStatusDto::LatitudeOutOfRange,
+            value: None,
+            short_link_url: None,
+            error_message: Some(err.to_string()),
+        },
+        Err(err @ LocationParseError::LongitudeOutOfRange) => ParsedLocationDto {
+            status: LocationParseStatusDto::LongitudeOutOfRange,
+            value: None,
+            short_link_url: None,
+            error_message: Some(err.to_string()),
+        },
+        Err(err @ LocationParseError::InvalidSyntax) => ParsedLocationDto {
+            status: LocationParseStatusDto::InvalidSyntax,
+            value: None,
+            short_link_url: None,
+            error_message: Some(err.to_string()),
+        },
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -477,6 +518,7 @@ mod tests {
             text_value: text.map(Into::into),
             boolean_value: None,
             list_value: list.iter().map(|item| (*item).to_owned()).collect(),
+            location_value: None,
         }
     }
 

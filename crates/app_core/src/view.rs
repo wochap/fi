@@ -376,7 +376,12 @@ fn sort_key_resolves(
         Expression::RecordCreatedAt => true,
         Expression::Field { .. } => {
             infer_expression(expression, &TypeEnvironment { schema, computed }, true).is_ok_and(
-                |inferred| !matches!(inferred.value_type, ValueType::Null | ValueType::EnumSet),
+                |inferred| {
+                    !matches!(
+                        inferred.value_type,
+                        ValueType::Null | ValueType::EnumSet | ValueType::Location
+                    )
+                },
             )
         }
         _ => false,

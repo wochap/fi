@@ -202,6 +202,7 @@ impl TryFrom<ValueTypeDto> for app_core::ValueType {
             ValueTypeKindDto::Duration => Self::Duration,
             ValueTypeKindDto::Enum => Self::Enum,
             ValueTypeKindDto::EnumSet => Self::EnumSet,
+            ValueTypeKindDto::Location => Self::Location,
             ValueTypeKindDto::Null => Self::Null,
         })
     }
@@ -229,6 +230,7 @@ impl From<app_core::ValueType> for ValueTypeDto {
             app_core::ValueType::Duration => (ValueTypeKindDto::Duration, None),
             app_core::ValueType::Enum => (ValueTypeKindDto::Enum, None),
             app_core::ValueType::EnumSet => (ValueTypeKindDto::EnumSet, None),
+            app_core::ValueType::Location => (ValueTypeKindDto::Location, None),
             app_core::ValueType::Null => (ValueTypeKindDto::Null, None),
         };
         Self { kind, scale }
@@ -292,6 +294,12 @@ impl TryFrom<TypedValueDto> for app_core::TypedValue {
                     .map(|id| id.parse().map_err(validation))
                     .collect::<Result<Vec<_>, _>>()?,
             },
+            ValueTypeKindDto::Location => Self::Location(
+                value
+                    .location_value
+                    .ok_or_else(|| missing("location_value"))?
+                    .into(),
+            ),
         })
     }
 }
@@ -318,6 +326,18 @@ impl From<app_core::TypedValue> for TypedValueDto {
                     boolean_value: None,
                     list_value: options.iter().map(ToString::to_string).collect(),
                     field_id: Some(field.to_string()),
+                    location_value: None,
+                };
+            }
+            app_core::TypedValue::Location(location) => {
+                return Self {
+                    value_type,
+                    integer_value: None,
+                    text_value: None,
+                    boolean_value: None,
+                    list_value: Vec::new(),
+                    field_id: None,
+                    location_value: Some(location.into()),
                 };
             }
         };
@@ -328,6 +348,7 @@ impl From<app_core::TypedValue> for TypedValueDto {
             boolean_value,
             list_value: Vec::new(),
             field_id: None,
+            location_value: None,
         }
     }
 }

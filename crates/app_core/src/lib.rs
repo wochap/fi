@@ -16,6 +16,7 @@ pub mod generic;
 pub mod hlc;
 pub mod identity;
 pub mod import_export;
+pub mod location;
 pub mod models;
 pub mod option_edits;
 pub mod pairing;
@@ -89,6 +90,10 @@ pub use import_export::{
     CloneOutcome, ENVELOPE_FORMAT, ENVELOPE_VERSION, Envelope, ExportedCollection, ExportedRecord,
     ImportAbort, ImportOutcome, ImportedCollection, JsonExport, prepare_import,
 };
+pub use location::{
+    LocationParseError, format_location_4dp, format_location_6dp, format_location_canonical,
+    format_microdeg, parse_decimal_to_microdeg, parse_location_input,
+};
 pub use option_edits::{
     DraftTarget, DraftValue, PENDING_OPTION_PREFIX, PendingOption, ResolvedDraft, resolve_draft,
 };
@@ -124,7 +129,10 @@ pub use schema::{
     CollectionSchema, CollectionSchemaId, DisplayMetadata, EnumOption, EnumOptionId,
     FieldDefinition, FieldId, FieldType, ValidationMetadata,
 };
-pub use values::{DecimalError, FieldValue, FixedDecimal};
+pub use values::{
+    DecimalError, FieldValue, FixedDecimal, LocationValue, MAX_LATITUDE_MICRODEG,
+    MAX_LONGITUDE_MICRODEG, MIN_LATITUDE_MICRODEG, MIN_LONGITUDE_MICRODEG,
+};
 pub use view::*;
 pub use widget_registry::{
     AggregateNumberConfig, BarChartConfig, CORE_AGGREGATE_NUMBER, CORE_BAR_CHART, CORE_LINE_CHART,

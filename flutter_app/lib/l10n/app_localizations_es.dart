@@ -4134,4 +4134,183 @@ class AppLocalizationsEs extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get fieldKindLocation => 'Ubicación';
+
+  @override
+  String get fieldShowMapPreview => 'Mostrar vista previa del mapa';
+
+  @override
+  String get fieldShowMapPreviewHelper =>
+      'Activado por defecto. Muestra un minimapa en el formulario del registro y una miniatura en las tarjetas móviles. Cuando está desactivado, el campo es una sola fila de coordenadas.';
+
+  @override
+  String get helpFieldShowMapPreviewTitle => 'Mostrar vista previa del mapa';
+
+  @override
+  String get helpFieldShowMapPreviewBody =>
+      'Activado por defecto. Muestra un minimapa en el formulario del registro y una miniatura en las tarjetas móviles. Cuando está desactivado, el campo es una sola fila de coordenadas.';
+
+  @override
+  String get locationCurrentLocation => 'Ubicación actual';
+
+  @override
+  String get locationPickOnMap => 'Elegir en el mapa';
+
+  @override
+  String get locationFindingYou => 'Buscando tu ubicación…';
+
+  @override
+  String locationFindingYouAccuracy(String accuracy) {
+    return 'Buscando tu ubicación… ±$accuracy';
+  }
+
+  @override
+  String get locationMovePin => 'Mover pin';
+
+  @override
+  String get locationCopyCoordinates => 'Copiar coordenadas';
+
+  @override
+  String get locationCoordinatesCopied => 'Coordenadas copiadas';
+
+  @override
+  String get locationMapNeedsInternet => 'El mapa necesita internet';
+
+  @override
+  String get locationPermissionOff =>
+      'El acceso a la ubicación está desactivado para Fi';
+
+  @override
+  String get locationOpenSettings => 'Ajustes';
+
+  @override
+  String get locationDeviceOff =>
+      'La ubicación está desactivada en este teléfono';
+
+  @override
+  String get locationTurnOn => 'Activar';
+
+  @override
+  String get locationApproximateWarning =>
+      'Ubicación aproximada. El pin puede variar por calles.';
+
+  @override
+  String get locationAllowPrecise => 'Permitir precisa';
+
+  @override
+  String get locationPrimerTitle => 'Guarda dónde estás';
+
+  @override
+  String get locationPrimerBody =>
+      'Fi lee tu ubicación solo cuando tocas Ubicación actual o abres el mapa, y la guarda únicamente en este registro. Elige Precisa para ubicaciones exactas.';
+
+  @override
+  String get locationPrimerNotNow => 'Ahora no';
+
+  @override
+  String get locationPrimerContinue => 'Continuar';
+
+  @override
+  String get locationCouldNotLocate => 'No se pudo obtener tu ubicación';
+
+  @override
+  String get locationSearchPlaces => 'Buscar lugares';
+
+  @override
+  String get locationDragMapHint => 'Arrastra el mapa; el pin se queda fijo';
+
+  @override
+  String get locationTypeAction => 'Escribir';
+
+  @override
+  String get locationUseThisSpot => 'Usar este punto';
+
+  @override
+  String get locationGoToMyLocation => 'Ir a mi ubicación';
+
+  @override
+  String locationNearPlace(String place) {
+    return 'Cerca de $place';
+  }
+
+  @override
+  String locationNearPlaceDistance(String place, String distance) {
+    return 'Cerca de $place · a $distance de ti';
+  }
+
+  @override
+  String locationDistanceFromYou(String distance) {
+    return 'a $distance de ti';
+  }
+
+  @override
+  String get locationOsmAttribution => '© OpenStreetMap';
+
+  @override
+  String get locationTypeCoordinatesInstead =>
+      'Escribir coordenadas en su lugar';
+
+  @override
+  String get locationSearchCaption =>
+      'Resultados de OpenStreetMap · más cercanos primero';
+
+  @override
+  String get locationSearchNeedsInternet => 'La búsqueda necesita internet';
+
+  @override
+  String get locationSearchNoResults => 'No se encontraron lugares';
+
+  @override
+  String get locationTypeCoordinatesTitle => 'Escribir coordenadas';
+
+  @override
+  String get locationCoordinatesOrLink => 'Coordenadas o enlace de mapa';
+
+  @override
+  String get locationLatitude => 'Latitud';
+
+  @override
+  String get locationLongitude => 'Longitud';
+
+  @override
+  String locationFoundCoordinates(String coords) {
+    return 'Encontrado: $coords';
+  }
+
+  @override
+  String get locationShowOnMap => 'Mostrar en el mapa';
+
+  @override
+  String get locationInvalidSyntax =>
+      'No es una coordenada. Prueba 38.7139, -9.1334';
+
+  @override
+  String get locationLatitudeOutOfRange => 'La latitud va de -90 a 90';
+
+  @override
+  String get locationLongitudeOutOfRange => 'La longitud va de -180 a 180';
+
+  @override
+  String get locationShortLinkNeedsInternet =>
+      'Resolver un enlace corto de mapa requiere internet';
+
+  @override
+  String get locationResolvingLink => 'Resolviendo enlace de mapa…';
+
+  @override
+  String get locationGoogleMaps => 'Google Maps';
+
+  @override
+  String get locationWaze => 'Waze';
+
+  @override
+  String get locationOpenInGoogleMaps => 'Abrir en Google Maps';
+
+  @override
+  String get locationNavigateWithWaze => 'Navegar con Waze';
+
+  @override
+  String get locationOpenInAnotherApp => 'Abrir en otra aplicación…';
 }

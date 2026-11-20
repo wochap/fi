@@ -227,11 +227,59 @@ pub enum FieldTypeKindDto {
     Duration,
     Enum,
     EnumSet,
+    Location,
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FieldTypeDto {
     pub kind: FieldTypeKindDto,
     pub scale: Option<u8>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct LocationValueDto {
+    pub latitude_microdeg: i64,
+    pub longitude_microdeg: i64,
+    pub accuracy_meters: Option<u32>,
+    pub approximate: bool,
+}
+
+impl From<app_core::LocationValue> for LocationValueDto {
+    fn from(value: app_core::LocationValue) -> Self {
+        Self {
+            latitude_microdeg: value.latitude_microdeg,
+            longitude_microdeg: value.longitude_microdeg,
+            accuracy_meters: value.accuracy_meters,
+            approximate: value.approximate,
+        }
+    }
+}
+
+impl From<LocationValueDto> for app_core::LocationValue {
+    fn from(value: LocationValueDto) -> Self {
+        Self {
+            latitude_microdeg: value.latitude_microdeg,
+            longitude_microdeg: value.longitude_microdeg,
+            accuracy_meters: value.accuracy_meters,
+            approximate: value.approximate,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum LocationParseStatusDto {
+    Ok,
+    InvalidSyntax,
+    LatitudeOutOfRange,
+    LongitudeOutOfRange,
+    ShortLinkNeedsResolution,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ParsedLocationDto {
+    pub status: LocationParseStatusDto,
+    pub value: Option<LocationValueDto>,
+    pub short_link_url: Option<String>,
+    pub error_message: Option<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -246,6 +294,7 @@ pub enum FieldValueKindDto {
     Duration,
     Enum,
     EnumSet,
+    Location,
 }
 #[frb]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -257,6 +306,9 @@ pub struct FieldValueDto {
     /// Option ids of an `EnumSet` value, in option order. Empty for other kinds.
     #[frb(default = "const []")]
     pub list_value: Vec<String>,
+    /// WGS 84 location payload when `kind == FieldValueKindDto::Location`.
+    #[frb(default = "null")]
+    pub location_value: Option<LocationValueDto>,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -266,11 +318,25 @@ pub struct ValidationMetadataDto {
     pub min_length: Option<u32>,
     pub max_length: Option<u32>,
 }
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
+#[frb]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DisplayMetadataDto {
     pub multiline: bool,
     pub slider: bool,
     pub slider_step: Option<u32>,
+    #[frb(default = "true")]
+    pub show_map_preview: bool,
+}
+
+impl Default for DisplayMetadataDto {
+    fn default() -> Self {
+        Self {
+            multiline: false,
+            slider: false,
+            slider_step: None,
+            show_map_preview: true,
+        }
+    }
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[frb]
@@ -345,6 +411,7 @@ pub enum ValueTypeKindDto {
     Duration,
     Enum,
     EnumSet,
+    Location,
     Null,
 }
 
@@ -373,6 +440,9 @@ pub struct TypedValueDto {
     /// Field id an `EnumOptionSet` constant belongs to.
     #[frb(default = "null")]
     pub field_id: Option<String>,
+    /// WGS 84 location payload for a `Location` value.
+    #[frb(default = "null")]
+    pub location_value: Option<LocationValueDto>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1447,6 +1517,7 @@ impl From<app_core::FieldType> for FieldTypeDto {
             app_core::FieldType::Duration => (FieldTypeKindDto::Duration, None),
             app_core::FieldType::Enum => (FieldTypeKindDto::Enum, None),
             app_core::FieldType::EnumSet => (FieldTypeKindDto::EnumSet, None),
+            app_core::FieldType::Location => (FieldTypeKindDto::Location, None),
         };
         Self { kind, scale }
     }
@@ -1465,6 +1536,7 @@ impl From<FieldTypeDto> for app_core::FieldType {
             FieldTypeKindDto::Duration => Self::Duration,
             FieldTypeKindDto::Enum => Self::Enum,
             FieldTypeKindDto::EnumSet => Self::EnumSet,
+            FieldTypeKindDto::Location => Self::Location,
         }
     }
 }
@@ -1499,6 +1571,17 @@ impl From<app_core::FieldValue> for FieldValueDto {
                     text_value: None,
                     boolean_value: None,
                     list_value: ids.iter().map(ToString::to_string).collect(),
+                    location_value: None,
+                };
+            }
+            app_core::FieldValue::Location(location) => {
+                return Self {
+                    kind: FieldValueKindDto::Location,
+                    integer_value: None,
+                    text_value: None,
+                    boolean_value: None,
+                    list_value: Vec::new(),
+                    location_value: Some(location.into()),
                 };
             }
         };
@@ -1508,6 +1591,7 @@ impl From<app_core::FieldValue> for FieldValueDto {
             text_value,
             boolean_value,
             list_value: Vec::new(),
+            location_value: None,
         }
     }
 }
@@ -1549,6 +1633,9 @@ impl FieldValueDto {
                     .collect::<Result<Vec<_>, app_core::DomainError>>()
                     .map_err(|error| BridgeError::from(AppError::from(error)))?,
             ),
+            FieldValueKindDto::Location => {
+                app_core::FieldValue::Location(self.location_value.ok_or_else(missing)?.into())
+            }
         })
     }
 }
@@ -1571,6 +1658,7 @@ impl From<app_core::FieldDefinition> for FieldDefinitionDto {
                 multiline: value.display.multiline,
                 slider: value.display.slider,
                 slider_step: value.display.slider_step,
+                show_map_preview: value.display.show_map_preview,
             },
             order: value.order,
             deleted: value.deleted,
@@ -1606,6 +1694,7 @@ impl TryFrom<FieldDefinitionDto> for app_core::FieldDefinition {
                 multiline: value.display.multiline,
                 slider: value.display.slider,
                 slider_step: value.display.slider_step,
+                show_map_preview: value.display.show_map_preview,
             },
             order: value.order,
             deleted: value.deleted,

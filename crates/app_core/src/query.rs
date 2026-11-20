@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::{
     CollectionSchema, CollectionSchemaId, EnumOptionId, FieldId, FieldType, FieldValue,
-    GenericRecord, RecordId,
+    GenericRecord, LocationValue, RecordId,
 };
 
 pub const EXPRESSION_VERSION: u32 = 1;
@@ -81,6 +81,7 @@ pub enum ValueType {
     Enum,
     /// A set of options of one Choices field.
     EnumSet,
+    Location,
     Null,
 }
 
@@ -96,6 +97,7 @@ impl From<&FieldType> for ValueType {
             FieldType::Duration => Self::Duration,
             FieldType::Enum => Self::Enum,
             FieldType::EnumSet => Self::EnumSet,
+            FieldType::Location => Self::Location,
         }
     }
 }
@@ -121,6 +123,7 @@ pub enum TypedValue {
         field: FieldId,
         options: Vec<EnumOptionId>,
     },
+    Location(LocationValue),
 }
 
 impl TypedValue {
@@ -137,6 +140,7 @@ impl TypedValue {
             Self::Duration(_) => ValueType::Duration,
             Self::Enum(_) => ValueType::Enum,
             Self::EnumOptionSet { .. } => ValueType::EnumSet,
+            Self::Location(_) => ValueType::Location,
         }
     }
 
@@ -169,6 +173,7 @@ impl TypedValue {
             (FieldValue::DateTime(v), FieldType::DateTime) => Self::DateTime(*v),
             (FieldValue::Duration(v), FieldType::Duration) => Self::Duration(*v),
             (FieldValue::Enum(v), FieldType::Enum) => Self::Enum(*v),
+            (FieldValue::Location(v), FieldType::Location) => Self::Location(*v),
             _ => {
                 return Err(QueryEvaluationError::InvalidRecord(
                     "projected value does not match schema".into(),
@@ -700,6 +705,12 @@ fn infer_at(
                     "a Choices value can't be compared; use has any of, has all of or has none of",
                 ));
             }
+            if left.value_type == ValueType::Location || right.value_type == ValueType::Location {
+                return Err(QueryValidationError::new(
+                    path,
+                    "a Location value can't be compared; use is empty or is not empty",
+                ));
+            }
             if left.value_type != ValueType::Null
                 && right.value_type != ValueType::Null
                 && left.value_type != right.value_type
@@ -898,6 +909,12 @@ pub fn validate_computed_field(
             "a computed field can't hold a set of options",
         ));
     }
+    if inferred.value_type == ValueType::Location {
+        return Err(QueryValidationError::new(
+            "declared_type",
+            "a computed field can't hold a Location",
+        ));
+    }
     if inferred.value_type != definition.declared_type {
         return Err(QueryValidationError::new(
             "declared_type",
@@ -957,7 +974,10 @@ pub fn validate_query(
     }
     for (index, sort) in query.sorting.iter().enumerate() {
         let inferred = infer_expression(&sort.expression, &env, true)?;
-        if matches!(inferred.value_type, ValueType::Null | ValueType::EnumSet) {
+        if matches!(
+            inferred.value_type,
+            ValueType::Null | ValueType::EnumSet | ValueType::Location
+        ) {
             return Err(QueryValidationError::new(
                 format!("sorting[{index}]"),
                 "type is not orderable",
@@ -979,7 +999,13 @@ pub fn validate_query(
         }
     }
     if let QueryShape::CategorySeries { category, .. } = &query.shape {
-        infer_expression(category, &env, true)?;
+        let inferred = infer_expression(category, &env, true)?;
+        if inferred.value_type == ValueType::Location {
+            return Err(QueryValidationError::new(
+                "shape.category",
+                "can't group by a Location",
+            ));
+        }
     }
     Ok(())
 }
@@ -1000,6 +1026,12 @@ fn validate_aggregation(
         return Err(QueryValidationError::new(
             "aggregation",
             "can't aggregate a set of options",
+        ));
+    }
+    if inferred.value_type == ValueType::Location {
+        return Err(QueryValidationError::new(
+            "aggregation",
+            "can't aggregate a Location",
         ));
     }
     if numeric && !is_numeric(&inferred.value_type) {
