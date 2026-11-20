@@ -13,6 +13,7 @@ import 'package:fi/theme/inputs.dart';
 import 'package:fi/theme/app_theme.dart';
 import 'package:fi/theme/nocturne.dart';
 import 'package:fi/theme/nocturne_widgets.dart';
+import 'package:fi/theme/side_sheet.dart';
 import 'package:fi/ui_prefs.dart';
 import 'package:fi/voice/models_card.dart';
 import 'package:fi/voice/services.dart';
@@ -1406,11 +1407,8 @@ class _MediaStorageSectionState extends State<_MediaStorageSection>
         context: context,
         isScrollControlled: true,
         useSafeArea: true,
-        builder: (sheetContext) => Padding(
+        builder: (sheetContext) => BottomSheetInsets(
           key: const Key('settings-media-cleanup-sheet'),
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.viewInsetsOf(sheetContext).bottom,
-          ),
           child: _UnusedMediaCleanupContent(
             controller: controller,
             prefsStore: prefsStore,
@@ -1931,7 +1929,7 @@ class _UnusedMediaCleanupContentState
     return SingleChildScrollView(
       padding: EdgeInsets.fromLTRB(
         20,
-        widget.isSheet ? 12 : 20,
+        widget.isSheet ? 4 : 20,
         20,
         20,
       ),
@@ -1940,17 +1938,6 @@ class _UnusedMediaCleanupContentState
         crossAxisAlignment: CrossAxisAlignment.stretch,
         spacing: 16,
         children: [
-          if (widget.isSheet)
-            Center(
-              child: Container(
-                width: 36,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: nocturne.divider,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             spacing: 6,
