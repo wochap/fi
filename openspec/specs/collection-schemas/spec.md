@@ -23,14 +23,16 @@ Every field and enum option SHALL have a globally unique stable ID independent o
 - **THEN** records referencing its `EnumOptionId` display the new label without changing their stored value
 
 ### Requirement: Supported field definitions
-Field definitions SHALL support Text, Integer, FixedDecimal with scale, Boolean, Date, DateTime, Duration, Enum (shown as "Choice") and EnumSet (shown as "Choices") types plus requiredness, optional default, applicable validation metadata, display metadata, deterministic order, and logical deletion. Multiline text SHALL be represented as Text display metadata. A slider presentation SHALL be represented as Integer display metadata and SHALL be valid only when the field declares both a minimum and a maximum. A slider MAY carry a positive whole-number step as Integer display metadata; a definition without a step SHALL read as step 1. Display metadata SHALL be forward compatible: a definition missing a display flag SHALL read as that flag unset, and a definition missing the step SHALL read as step 1.
+Field definitions SHALL support Text, Integer, FixedDecimal with scale, Boolean, Date, DateTime, Duration, Enum (shown as "Choice"), EnumSet (shown as "Choices"), and Location types plus requiredness, optional default, applicable validation metadata, display metadata, deterministic order, and logical deletion. Multiline text SHALL be represented as Text display metadata. A slider presentation SHALL be represented as Integer display metadata and SHALL be valid only when the field declares both a minimum and a maximum. A slider MAY carry a positive whole-number step as Integer display metadata; a definition without a step SHALL read as step 1. A Location field SHALL carry a `show_map_preview` flag in display metadata that defaults to `true` when omitted in serialized JSON. Display metadata SHALL be forward compatible: a definition missing `multiline` or `slider` SHALL read as that flag unset, a definition missing `slider_step` SHALL read as step 1, and a definition missing `show_map_preview` SHALL read as `true`.
 
 An EnumSet field SHALL carry an option list with the same structure and rules as an Enum field (stable option ids, labels, order, logical removal). Its value SHALL be a set of that field's option ids. Its default, when present, SHALL be a non-empty set of active options of the field. A required EnumSet field SHALL be satisfied only by a set holding at least one option. An option label of an EnumSet field SHALL NOT contain the character `;`.
 
 A Date field MAY declare a relative default: a signed whole number of days added to the record's creation day. A field SHALL NOT declare both a fixed default and a relative default, and a relative default SHALL be rejected on any type other than Date. The relative default SHALL be stored so that a device that does not know it reads the field as having no default rather than failing to read the schema.
 
+A Location field SHALL NOT carry a default value, a relative default, integer or length validation bounds, enum options, `allow_options_from_records`, `multiline`, `slider`, or `slider_step`. Setting `show_map_preview` to `false` SHALL be valid only on a Location field.
+
 #### Scenario: Add every supported field type
-- **WHEN** a user adds one valid field of every supported type
+- **WHEN** a user adds one valid field of every supported type (including Location)
 - **THEN** the schema round-trips through Automerge and projection without losing type or metadata
 
 #### Scenario: Future field type
@@ -72,6 +74,10 @@ A Date field MAY declare a relative default: a signed whole number of days added
 #### Scenario: Choices default with a removed option
 - **WHEN** an EnumSet field's default names an option that is removed or not of that field
 - **THEN** the command returns a typed validation error naming the default and commits nothing
+
+#### Scenario: Location field and show_map_preview round-trip
+- **WHEN** a Location field "place" is created with `show_map_preview` set to `true` (default) or `false`
+- **THEN** another device reads the same Location field and `show_map_preview` value, and a definition written without `show_map_preview` parses with `show_map_preview = true`
 
 ### Requirement: Schema validation before mutation
 Rust application-core commands SHALL validate names, field types, scale bounds, defaults, min/max constraints, enum membership metadata, display metadata applicability, slider step, duplicate identities, and command targets before committing authoritative schema changes. A slider step SHALL be rejected when it is zero, when it is present without the slider flag, or when it does not divide the distance between the maximum and the minimum exactly.

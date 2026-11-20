@@ -19,7 +19,7 @@ Rust SHALL validate filters, grouping, aggregation, sorting, limits, field membe
 - **THEN** Rust returns a typed validation error and does not persist the query
 
 ### Requirement: Filtering and sorting
-Queries SHALL support typed filtering expressions and deterministic ascending or descending sorting by compatible source or computed values, or by the record creation time, with record ID as the final tie-breaker.
+Queries SHALL support typed filtering expressions and deterministic ascending or descending sorting by compatible source or computed values, or by the record creation time, with record ID as the final tie-breaker. A Location field SHALL support `IsNull` and `IsNotNull` filter expressions.
 
 Sort order by type SHALL be:
 - Text: case- and accent-insensitive, comparing a folded key of each value: Unicode canonical decomposition (NFD) with combining marks removed, then simple Unicode lowercase. Ties SHALL be broken by the exact code-point order of the original text. It SHALL NOT be locale-aware and SHALL NOT compare digit runs numerically.
@@ -27,7 +27,7 @@ Sort order by type SHALL be:
 - A single-choice (Enum) value: the position of its option in the field's option order, active and removed options keeping their stored position, with the option id breaking ties.
 - Integer, FixedDecimal of one scale, Date, DateTime and Duration: by value.
 - Record creation time: as DateTime.
-- A multi-option Choices (EnumSet) value: not orderable, so it SHALL NOT be a sort key.
+- A multi-option Choices (EnumSet) value or a Location value: not orderable, so it SHALL NOT be a sort key.
 
 These sort orders SHALL NOT change the semantics of comparison operators in filters.
 
@@ -62,6 +62,10 @@ These sort orders SHALL NOT change the semantics of comparison operators in filt
 #### Scenario: Reject multi-option sort
 - **WHEN** a query sorts by a multi-option Choices field
 - **THEN** validation rejects it as not orderable
+
+#### Scenario: Filter by Location presence and reject Location sort
+- **WHEN** a query filters `IsNotNull` on a Location field "place"
+- **THEN** it returns only records with a populated Location value, and attempting to sort by "place" is rejected as not orderable
 
 ### Requirement: Checked aggregations
 Queries SHALL support Count, Sum, Average, Min, and Max. Sum SHALL use checked compatible integer arithmetic; Average SHALL require explicit output scale and rounding policy when its result may be inexact; and no authoritative aggregation SHALL use binary floating-point.

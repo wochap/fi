@@ -7,7 +7,7 @@ Defines the portable CSV and JSON forms of collection data and the export and im
 ## Requirements
 
 ### Requirement: CSV record export
-The system SHALL export the active records of one collection as UTF-8 CSV (RFC 4180 quoting, comma separator, `\n` line ends). The header row SHALL contain the name of every active field in schema order, followed by the name of every active computed field. Deleted records, deleted fields, and deleted enum options SHALL NOT be exported. Values SHALL be rendered as: Integer as a decimal integer; FixedDecimal in its exact decimal form at the field scale; Boolean as `true` or `false`; Date as ISO-8601 `YYYY-MM-DD`; DateTime as ISO-8601 UTC with a `Z` suffix and millisecond precision; Duration as the raw millisecond integer; Enum as the option label; EnumSet as the labels of its active options in the field's option order joined with `; `; Null as an empty cell. When two active fields, or a field and a computed field, share a name, the export SHALL fail with an error naming the duplicated name and produce no file.
+The system SHALL export the active records of one collection as UTF-8 CSV (RFC 4180 quoting, comma separator, `\n` line ends). The header row SHALL contain the name of every active field in schema order, followed by the name of every active computed field. Deleted records, deleted fields, and deleted enum options SHALL NOT be exported. Values SHALL be rendered as: Integer as a decimal integer; FixedDecimal in its exact decimal form at the field scale; Boolean as `true` or `false`; Date as ISO-8601 `YYYY-MM-DD`; DateTime as ISO-8601 UTC with a `Z` suffix and millisecond precision; Duration as the raw millisecond integer; Enum as the option label; EnumSet as the labels of its active options in the field's option order joined with `; `; Location as `<lat>, <lng>` formatted to 6 decimal places (or 4 decimal places when the stored value is marked approximate); Null as an empty cell. When two active fields, or a field and a computed field, share a name, the export SHALL fail with an error naming the duplicated name and produce no file.
 
 #### Scenario: Typed values rendered
 - **WHEN** a record holds Integer 3, FixedDecimal 1.50 at scale 2, Boolean true, Date 2024-03-01, DateTime 2024-03-01T10:15:00.000Z, Duration 90000 ms, Enum option "Mild", and a Null text
@@ -16,6 +16,10 @@ The system SHALL export the active records of one collection as UTF-8 CSV (RFC 4
 #### Scenario: Choices cell
 - **WHEN** a record holds the Choices value {"work", "urgent"} and the field's option order is "urgent", "work"
 - **THEN** the cell reads `urgent; work`
+
+#### Scenario: Location cell
+- **WHEN** a record holds the Location value `38.710841, -9.137265`
+- **THEN** the CSV cell reads `"38.710841, -9.137265"`
 
 #### Scenario: Computed columns appended
 - **WHEN** a collection has fields `a`, `b` and computed field `sum`
@@ -49,7 +53,7 @@ The system SHALL export one or more collections as a single JSON document with t
 - **THEN** the entry's `views` array holds exactly "Headaches" and "Stomach" in their order, and no entry for All
 
 ### Requirement: CSV record import validates before writing
-The system SHALL import CSV rows into an existing active collection only after parsing and validating every row. Header columns SHALL be matched to active fields by exact name. A column that matches no active field SHALL abort the import, except a column that matches an active computed field, which SHALL be ignored. A missing column for an optional field SHALL yield Null; a missing column for a required field SHALL abort. Cell text SHALL be trimmed before parsing and parsed strictly for the field type: Integer as a decimal integer; FixedDecimal by exact parse at the field scale; Boolean as `true` or `false`; Date as ISO-8601 date; DateTime as ISO-8601 with `Z` or offset; Duration as a millisecond integer; Enum by exact match on an active option label; EnumSet by splitting on `;`, trimming each part, ignoring empty parts, and matching each part exactly to an active option label, with a repeated label counted once. An empty cell SHALL be Null. Each row SHALL be validated with the same rules as a record draft. Any parse, mapping, or validation failure SHALL abort the whole import, reporting the 1-based data row number, the column name, and the reason, and SHALL write nothing.
+The system SHALL import CSV rows into an existing active collection only after parsing and validating every row. Header columns SHALL be matched to active fields by exact name. A column that matches no active field SHALL abort the import, except a column that matches an active computed field, which SHALL be ignored. A missing column for an optional field SHALL yield Null; a missing column for a required field SHALL abort. Cell text SHALL be trimmed before parsing and parsed strictly for the field type: Integer as a decimal integer; FixedDecimal by exact parse at the field scale; Boolean as `true` or `false`; Date as ISO-8601 date; DateTime as ISO-8601 with `Z` or offset; Duration as a millisecond integer; Enum by exact match on an active option label; EnumSet by splitting on `;`, trimming each part, ignoring empty parts, and matching each part exactly to an active option label, with a repeated label counted once; Location by parsing a decimal coordinate pair, DMS pair, `geo:` link, or full Google Maps/Waze/OpenStreetMap link within `-90..=90` latitude and `-180..=180` longitude. An empty cell SHALL be Null. Each row SHALL be validated with the same rules as a record draft. Any parse, mapping, or validation failure SHALL abort the whole import, reporting the 1-based data row number, the column name, and the reason, and SHALL write nothing.
 
 #### Scenario: All rows valid
 - **WHEN** a CSV with 200 valid rows is imported into "Headache"
@@ -74,6 +78,10 @@ The system SHALL import CSV rows into an existing active collection only after p
 #### Scenario: Unknown label in a Choices cell
 - **WHEN** a Choices column holds `work; travel` and no active option is labelled `travel`
 - **THEN** the import is rejected naming the row and column
+
+#### Scenario: Location cell parsed and validated
+- **WHEN** a Location column holds `"38.710841, -9.137265"` in row 1 and `"99.0, -9.13"` in row 2
+- **THEN** row 1 parses as a valid Location and row 2 aborts the import naming row 2 and the Location column
 
 #### Scenario: Required empty cell
 - **WHEN** a required field's cell is empty in some row
