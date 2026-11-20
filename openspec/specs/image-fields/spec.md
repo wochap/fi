@@ -74,3 +74,24 @@ Tapping a locally present image thumbnail in the desktop records table, on a mob
 #### Scenario: Navigate multi-image lightbox and open externally
 - **WHEN** the user taps the first thumbnail of a record with two images (`receipt.jpg` and `espresso.jpg`)
 - **THEN** the lightbox opens showing `receipt.jpg`, `1 of 2 · 412 KB · 1600×1200`, the relative path inside the media folder, next/previous arrows, and the 2-item thumbnail strip; tapping `Next image` switches to `espresso.jpg` (`2 of 2`)
+
+### Requirement: Fi-managed unused media identification and age-filtered manual deletion
+Fi SHALL identify unused media files strictly as root-level regular files in the configured Media Folder that:
+1. Match Fi's managed naming convention `<uuidv7>_<name>.<ext>` where `<uuidv7>` is a valid RFC 9562 version-7 UUID and `<ext>` is a supported image extension (`jpg`, `jpeg`, `png`, `webp`, or `gif`, case-insensitive); and
+2. Are not referenced by any active (non-deleted) record across any active (non-deleted) collection (including cloned records and cross-collection copies).
+
+Subdirectories, temporary `.fi_tmp_*` files, Syncthing metadata (such as `.stfolder`), and any non-Fi-managed files MUST NEVER be counted as unused or deleted.
+
+When previewing or executing manual cleanup with a minimum age of `N` days (`N >= 0`), Fi SHALL compute each candidate's age from the millisecond creation timestamp embedded in its UUIDv7 prefix relative to the current UTC time:
+- When `N == 0`, every unused Fi-managed file matches regardless of age.
+- When `N > 0`, only unused Fi-managed files whose age is at least `N * 86,400` seconds match.
+
+Deleting unused media SHALL occur only when explicitly confirmed by the user via manual cleanup; removing an attachment, deleting a record, or clearing the Media Folder setting MUST still leave files on disk.
+
+#### Scenario: Non-Fi files, subdirectories, and cloned record references are protected
+- **WHEN** the Media Folder contains a referenced file `0195f3a0-7c4b-7d20-8a1e-4b92c8103f1a_receipt.jpg` (referenced by a cloned record in another collection), an unreferenced Fi-managed file `01900000-0000-7000-8000-000000000001_old.jpg`, an unrelated file `vacation.jpg`, and a `.stfolder` directory
+- **THEN** only `01900000-0000-7000-8000-000000000001_old.jpg` is reported as unused, and deleting unused media with `min_age_days = 0` removes only that file while leaving the cloned-record image, `vacation.jpg`, and `.stfolder` intact
+
+#### Scenario: Minimum age threshold filters by UUIDv7 creation timestamp
+- **WHEN** the Media Folder contains two unreferenced Fi-managed files — one whose UUIDv7 timestamp is 400 days old (`400 KB`) and one whose UUIDv7 timestamp is 10 days old (`1.2 MB`)
+- **THEN** previewing cleanup with `min_age_days = 365` reports `1` matching file (`400 KB`) out of `2` total unused files (`1.6 MB`), and executing cleanup with `min_age_days = 365` deletes only the 400-day-old file while preserving the 10-day-old file

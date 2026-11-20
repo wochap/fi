@@ -206,3 +206,36 @@ When a configured Media Folder is accessible on disk and one or more files refer
 #### Scenario: Android All files access permission row
 - **WHEN** the user opens Settings on Android while `MANAGE_EXTERNAL_STORAGE` is not granted
 - **THEN** the Media storage card shows `All files access` with `ph-prohibit` and `Off` plus `Android settings`, and returning after granting updates it to `ph-check-circle` `Allowed`
+
+### Requirement: Unused media status and cleanup trigger in Media storage settings
+When the device-local Media Folder is configured and accessible on disk, the Settings → Media storage card SHALL report unused Fi-managed image files (files in the Media Folder root not referenced by any active record in any active collection). When one or more unused Fi-managed files exist, the card SHALL render an **Unused media** row below the local file summary (and below the missing-referenced-files banner, when present) showing `ph-broom`, `<K> unused file(s) · <human_size>` in tabular numerals, the secondary caption `Not referenced by any active record`, and a `Clean up…` secondary button (minimum 44px height on phone). When zero unused Fi-managed files exist, the card SHALL omit the cleanup row and display a quiet `· No unused files` inline status beside the local file count and size.
+
+#### Scenario: Configured folder with unused media shows cleanup row
+- **WHEN** the Media Folder is configured and accessible with 142 files totaling 84.6 MB, of which 14 Fi-managed image files totaling 18.4 MB are not referenced by any active record
+- **THEN** the Media storage card displays `14 unused files · 18.4 MB`, `Not referenced by any active record`, and a `Clean up…` button
+
+#### Scenario: Configured folder with zero unused media omits cleanup row
+- **WHEN** the Media Folder is configured and accessible and every Fi-managed image file in the folder is referenced by at least one active record
+- **THEN** the Media storage card shows `· No unused files` inline with the local file summary and does not render the `Clean up…` row
+
+### Requirement: Manual unused media cleanup dialog and outcome feedback
+Activating `Clean up…` SHALL open a `Clean up unused media` modal dialog at `>= 720px` or bottom sheet below `720px`. The surface SHALL include:
+- A muted scope explanation stating that only Fi-managed image files not referenced by any active record across any collection are affected and other files in the folder are never touched.
+- An editable `Only delete files older than` numeric input with a `days` suffix (defaulting to `365`, persisted in device-local preferences, where `0` means any age) paired with quick-preset chips (`Any age`, `30d`, `1 year`) whose active state reflects `0`, `30`, or `365` and clears for custom numbers.
+- A live preview card showing `<matching> of <total_unused> unused files · <human_size>` and `Will be permanently deleted from this folder.` when at least one file matches, or `0 of <total_unused> unused files are older than <N> days.` when zero files match.
+- An amber/warning external-sync caution callout (`ph-warning`) explaining that deleting removes files from disk and any externally synced folder (such as Syncthing) and advising the user to sync other devices first.
+- `Cancel` and a danger-styled `Delete <matching> files` (`ph-trash`) action that is disabled when `<matching>` is `0`.
+
+Confirming deletion SHALL delete only the matching files, refresh the Media storage card counts, close the dialog/sheet, and show a completion toast reading `Deleted <N> unused file(s) · <human_size> freed.` with `ph-check-circle`.
+
+#### Scenario: Cleanup with default 1-year threshold and preset switch
+- **WHEN** the Media Folder has 14 unused Fi-managed files (5 older than 365 days totaling 6.2 MB, and 14 total totaling 18.4 MB) and the user opens `Clean up…`
+- **THEN** the input defaults to `365` with the `1 year` chip active and previews `5 of 14 unused files · 6.2 MB`, and tapping `Any age` sets the input to `0` and updates the preview to `14 of 14 unused files · 18.4 MB`
+
+#### Scenario: Zero matching files disables delete action
+- **WHEN** the Media Folder has 14 unused Fi-managed files that are all newer than 365 days and the user opens `Clean up…` with threshold `365`
+- **THEN** the preview card reads `0 of 14 unused files are older than 365 days.` and `Delete 0 files` is disabled
+
+#### Scenario: Confirming deletion frees space and refreshes Settings
+- **WHEN** 5 unused files totaling 6.2 MB match the selected threshold and the user activates `Delete 5 files`
+- **THEN** only those 5 files are deleted from disk, the dialog closes, a toast displays `Deleted 5 unused files · 6.2 MB freed.`, and the Media storage card refreshes to reflect the remaining files
