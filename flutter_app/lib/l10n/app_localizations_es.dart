@@ -4590,4 +4590,107 @@ class AppLocalizationsEs extends AppLocalizations {
     );
     return 'Exportado a $filename · $_temp0';
   }
+
+  @override
+  String settingsMediaUnusedStats(int count, String size) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count archivos sin usar',
+      one: '1 archivo sin usar',
+    );
+    return '$_temp0 · $size';
+  }
+
+  @override
+  String get settingsMediaUnusedCaption =>
+      'Sin referencia en ningún registro activo';
+
+  @override
+  String get settingsMediaCleanUpEllipsis => 'Limpiar…';
+
+  @override
+  String get settingsMediaNoUnusedFiles => 'Sin archivos sin usar';
+
+  @override
+  String get settingsMediaCleanupTitle => 'Limpiar archivos sin usar';
+
+  @override
+  String get settingsMediaCleanupScopeNote =>
+      'Solo se ven afectados los archivos de imagen gestionados por Fi que no estén referenciados por ningún registro activo en ninguna colección. Los demás archivos de esta carpeta nunca se tocan.';
+
+  @override
+  String get settingsMediaCleanupOlderThanLabel =>
+      'Solo eliminar archivos con más de';
+
+  @override
+  String get settingsMediaCleanupDaysSuffix => 'días';
+
+  @override
+  String get settingsMediaCleanupZeroHint => '0 = cualquier antigüedad';
+
+  @override
+  String get settingsMediaCleanupPresetAnyAge => 'Cualquier antigüedad';
+
+  @override
+  String get settingsMediaCleanupPreset30d => '30 d';
+
+  @override
+  String get settingsMediaCleanupPreset1Year => '1 año';
+
+  @override
+  String settingsMediaCleanupPreviewMatch(
+    int matching,
+    int total,
+    String size,
+  ) {
+    String _temp0 = intl.Intl.pluralLogic(
+      total,
+      locale: localeName,
+      other: '$matching de $total archivos sin usar',
+      one: '$matching de 1 archivo sin usar',
+    );
+    return '$_temp0 · $size';
+  }
+
+  @override
+  String get settingsMediaCleanupPreviewNote =>
+      'Se eliminarán permanentemente de esta carpeta.';
+
+  @override
+  String settingsMediaCleanupPreviewZero(int total, int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      total,
+      locale: localeName,
+      other: '0 de $total archivos sin usar tienen más de $days días.',
+      one: '0 de 1 archivo sin usar tiene más de $days días.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingsMediaCleanupSyncWarning =>
+      'Al eliminar se borran los archivos del disco y de cualquier carpeta sincronizada externamente (como Syncthing). Sincroniza primero tus otros dispositivos para no perder fotos recientes.';
+
+  @override
+  String settingsMediaCleanupDeleteAction(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Eliminar $count archivos',
+      one: 'Eliminar 1 archivo',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String settingsMediaCleanupDone(int count, String size) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Se eliminaron $count archivos sin usar · $size liberados.',
+      one: 'Se eliminó 1 archivo sin usar · $size liberados.',
+    );
+    return '$_temp0';
+  }
 }

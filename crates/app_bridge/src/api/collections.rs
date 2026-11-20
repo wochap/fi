@@ -12,7 +12,8 @@ use crate::api::{
         BootstrapDto, BridgeError, BridgeIssueDto, CollectionDto, CollectionSchemaDto,
         FieldDefinitionDto, FieldValueDto, FieldValueKindDto, ImageAttachmentDto, ImportOutcomeDto,
         LocationParseStatusDto, MediaFolderStatusDto, ParsedLocationDto, PendingOptionDto,
-        RecordDto, ReferencedMediaSummaryDto, ZipExportDto,
+        RecordDto, ReferencedMediaSummaryDto, UnusedMediaCleanupResultDto, UnusedMediaPreviewDto,
+        ZipExportDto,
     },
 };
 
@@ -221,11 +222,34 @@ pub async fn ingest_image_bytes(
         .map(Into::into)
         .map_err(|error| BridgeError::validation("image", error.to_string()))
 }
-/// Scans `media_folder` for accessibility, local file count/bytes, and missing referenced files.
+/// Scans `media_folder` for accessibility, local file count/bytes, missing referenced files, and
+/// unused Fi-managed image files.
 pub async fn scan_media_folder(media_folder: String) -> Result<MediaFolderStatusDto, BridgeError> {
     core()
         .await?
         .scan_media_folder(Path::new(&media_folder))
+        .map(Into::into)
+        .map_err(Into::into)
+}
+/// Previews unused Fi-managed image files in `media_folder` matching `min_age_days`.
+pub async fn preview_unused_media_cleanup(
+    media_folder: String,
+    min_age_days: u32,
+) -> Result<UnusedMediaPreviewDto, BridgeError> {
+    core()
+        .await?
+        .preview_unused_media_cleanup(Path::new(&media_folder), min_age_days)
+        .map(Into::into)
+        .map_err(Into::into)
+}
+/// Deletes unused Fi-managed image files in `media_folder` matching `min_age_days`.
+pub async fn delete_unused_media(
+    media_folder: String,
+    min_age_days: u32,
+) -> Result<UnusedMediaCleanupResultDto, BridgeError> {
+    core()
+        .await?
+        .delete_unused_media(Path::new(&media_folder), min_age_days)
         .map(Into::into)
         .map_err(Into::into)
 }

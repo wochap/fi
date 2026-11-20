@@ -51,6 +51,16 @@ abstract interface class MediaStorageService {
 
   Future<MediaFolderStatusDto> scanFolder(String folderPath);
 
+  Future<UnusedMediaPreviewDto> previewUnusedMediaCleanup(
+    String folderPath, {
+    required int minAgeDays,
+  });
+
+  Future<UnusedMediaCleanupResultDto> deleteUnusedMedia(
+    String folderPath, {
+    required int minAgeDays,
+  });
+
   Future<ImageAttachmentDto> ingestFile(String sourcePath, String folderPath);
 
   Future<ImageAttachmentDto> ingestBytes(
@@ -144,6 +154,24 @@ final class DefaultMediaStorageService implements MediaStorageService {
   @override
   Future<MediaFolderStatusDto> scanFolder(String folderPath) =>
       rust_collections.scanMediaFolder(mediaFolder: folderPath);
+
+  @override
+  Future<UnusedMediaPreviewDto> previewUnusedMediaCleanup(
+    String folderPath, {
+    required int minAgeDays,
+  }) => rust_collections.previewUnusedMediaCleanup(
+    mediaFolder: folderPath,
+    minAgeDays: minAgeDays < 0 ? 0 : minAgeDays,
+  );
+
+  @override
+  Future<UnusedMediaCleanupResultDto> deleteUnusedMedia(
+    String folderPath, {
+    required int minAgeDays,
+  }) => rust_collections.deleteUnusedMedia(
+    mediaFolder: folderPath,
+    minAgeDays: minAgeDays < 0 ? 0 : minAgeDays,
+  );
 
   @override
   Future<ImageAttachmentDto> ingestFile(String sourcePath, String folderPath) =>
@@ -256,6 +284,31 @@ final class MediaStorageController extends ChangeNotifier {
       throw StateError('Picked image has neither path nor bytes');
     }
     return service.ingestBytes(bytes, source.name, root);
+  }
+
+  Future<UnusedMediaPreviewDto> previewUnusedMediaCleanup({
+    required int minAgeDays,
+  }) async {
+    final root = _mediaFolderPath;
+    if (root == null || root.isEmpty) {
+      throw StateError('Media folder is not configured');
+    }
+    return service.previewUnusedMediaCleanup(root, minAgeDays: minAgeDays);
+  }
+
+  Future<UnusedMediaCleanupResultDto> deleteUnusedMedia({
+    required int minAgeDays,
+  }) async {
+    final root = _mediaFolderPath;
+    if (root == null || root.isEmpty) {
+      throw StateError('Media folder is not configured');
+    }
+    final result = await service.deleteUnusedMedia(
+      root,
+      minAgeDays: minAgeDays,
+    );
+    bumpRevision();
+    return result;
   }
 }
 

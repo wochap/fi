@@ -905,6 +905,8 @@ void main() {
           fileCount: 142,
           totalBytes: 88709529, // ~84.6 MB
           missingReferencedCount: 3,
+          unusedFileCount: 0,
+          unusedTotalBytes: 0,
         ),
       );
       final prefs = MemoryUiPrefsStore();
@@ -945,6 +947,8 @@ void main() {
         fileCount: 145,
         totalBytes: 90000000,
         missingReferencedCount: 0,
+        unusedFileCount: 0,
+        unusedTotalBytes: 0,
       );
       await tester.tap(find.byKey(const Key('settings-media-rescan')));
       await tester.pumpAndSettle();
@@ -959,6 +963,8 @@ void main() {
         fileCount: 0,
         totalBytes: 0,
         missingReferencedCount: 3,
+        unusedFileCount: 0,
+        unusedTotalBytes: 0,
       );
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
       await tester.pumpAndSettle();
@@ -1013,6 +1019,239 @@ void main() {
         findsOneWidget,
       );
     });
+
+    testWidgets(
+      'desktop unused media cleanup: modal, presets, custom days, deletion toast & refresh',
+      (tester) async {
+        const unused14Bytes = 19293798; // 18.4 MB
+        const match5Bytes = 6501171; // 6.2 MB
+        late _FakeMediaStorageService mediaService;
+        mediaService = _FakeMediaStorageService(
+          scanResult: const MediaFolderStatusDto(
+            accessible: true,
+            fileCount: 142,
+            totalBytes: 88709529, // 84.6 MB
+            missingReferencedCount: 0,
+            unusedFileCount: 14,
+            unusedTotalBytes: unused14Bytes,
+          ),
+          onPreviewUnusedMedia: (minAgeDays) {
+            if (minAgeDays == 0) {
+              return const UnusedMediaPreviewDto(
+                totalUnusedCount: 14,
+                totalUnusedBytes: unused14Bytes,
+                matchingCount: 14,
+                matchingBytes: unused14Bytes,
+              );
+            }
+            if (minAgeDays == 90) {
+              return const UnusedMediaPreviewDto(
+                totalUnusedCount: 14,
+                totalUnusedBytes: unused14Bytes,
+                matchingCount: 8,
+                matchingBytes: 10485760, // 10.0 MB
+              );
+            }
+            return const UnusedMediaPreviewDto(
+              totalUnusedCount: 14,
+              totalUnusedBytes: unused14Bytes,
+              matchingCount: 5,
+              matchingBytes: match5Bytes,
+            );
+          },
+          onDeleteUnusedMedia: (minAgeDays) {
+            mediaService.scanResult = const MediaFolderStatusDto(
+              accessible: true,
+              fileCount: 137,
+              totalBytes: 82208358,
+              missingReferencedCount: 0,
+              unusedFileCount: 0,
+              unusedTotalBytes: 0,
+            );
+            return const UnusedMediaCleanupResultDto(
+              deletedCount: 5,
+              freedBytes: match5Bytes,
+            );
+          },
+        );
+        final prefs = MemoryUiPrefsStore(
+          const UiPrefs(mediaFolderPath: '/home/gean/Sync/fi-media'),
+        );
+        tester.view.devicePixelRatio = 1;
+        tester.view.physicalSize = const Size(1240, 1400);
+        addTearDown(tester.view.reset);
+
+        await tester.pumpWidget(
+          app(
+            _ready(),
+            capabilities: PlatformCapabilities.desktop,
+            uiPrefs: prefs,
+            mediaStorageService: mediaService,
+          ),
+        );
+        await pumpUntilFound(tester, find.text('Collections'));
+        await tester.tap(find.byKey(const Key('nav-settings')));
+        await tester.pumpAndSettle();
+
+        // Unused media row is visible with count, size, caption, and Clean up… button.
+        expect(find.byKey(const Key('settings-media-unused-row')), findsOneWidget);
+        expect(find.text('14 unused files · 18.4 MB'), findsOneWidget);
+        expect(
+          find.text('Not referenced by any active record'),
+          findsOneWidget,
+        );
+        expect(find.byKey(const Key('settings-media-no-unused')), findsNothing);
+
+        // Open desktop modal -> defaults to 365 days & 1 year preset active.
+        await tester.tap(find.byKey(const Key('settings-media-clean-up')));
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const Key('settings-media-cleanup-dialog')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const Key('settings-media-cleanup-sheet')),
+          findsNothing,
+        );
+        expect(find.text('5 of 14 unused files · 6.2 MB'), findsOneWidget);
+        expect(
+          tester
+              .widget<ChoiceChip>(
+                find.byKey(const Key('settings-media-cleanup-preset-365')),
+              )
+              .selected,
+          isTrue,
+        );
+
+        // Switch preset to Any age (0) -> preview updates and persists 0.
+        await tester.tap(
+          find.byKey(const Key('settings-media-cleanup-preset-0')),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('14 of 14 unused files · 18.4 MB'), findsOneWidget);
+        expect(prefs.prefs.unusedMediaMinAgeDays, 0);
+
+        // Type custom days (90) -> clears preset selection and persists 90.
+        await tester.enterText(
+          find.byKey(const Key('settings-media-cleanup-days-input')),
+          '90',
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('8 of 14 unused files · 10.0 MB'), findsOneWidget);
+        expect(prefs.prefs.unusedMediaMinAgeDays, 90);
+        expect(
+          tester
+              .widget<ChoiceChip>(
+                find.byKey(const Key('settings-media-cleanup-preset-0')),
+              )
+              .selected,
+          isFalse,
+        );
+        expect(
+          tester
+              .widget<ChoiceChip>(
+                find.byKey(const Key('settings-media-cleanup-preset-30')),
+              )
+              .selected,
+          isFalse,
+        );
+        expect(
+          tester
+              .widget<ChoiceChip>(
+                find.byKey(const Key('settings-media-cleanup-preset-365')),
+              )
+              .selected,
+          isFalse,
+        );
+
+        // Switch back to 1 year and delete.
+        await tester.tap(
+          find.byKey(const Key('settings-media-cleanup-preset-365')),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byKey(const Key('settings-media-cleanup-delete')),
+        );
+        await tester.pumpAndSettle();
+
+        expect(mediaService.deleteRequests, [365]);
+        expect(
+          find.byKey(const Key('settings-media-cleanup-dialog')),
+          findsNothing,
+        );
+        expect(find.text('Deleted 5 unused files · 6.2 MB freed.'), findsOneWidget);
+        expect(find.byKey(const Key('settings-media-unused-row')), findsNothing);
+        expect(find.byKey(const Key('settings-media-no-unused')), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'mobile bottom sheet & zero-match state disables Delete 0 files',
+      (tester) async {
+        final mediaService = _FakeMediaStorageService(
+          scanResult: const MediaFolderStatusDto(
+            accessible: true,
+            fileCount: 20,
+            totalBytes: 20971520,
+            missingReferencedCount: 0,
+            unusedFileCount: 14,
+            unusedTotalBytes: 19293798,
+          ),
+          onPreviewUnusedMedia: (_) => const UnusedMediaPreviewDto(
+            totalUnusedCount: 14,
+            totalUnusedBytes: 19293798,
+            matchingCount: 0,
+            matchingBytes: 0,
+          ),
+        );
+        final prefs = MemoryUiPrefsStore(
+          const UiPrefs(mediaFolderPath: '/storage/emulated/0/Sync/fi-media'),
+        );
+        tester.view.devicePixelRatio = 1;
+        tester.view.physicalSize = const Size(390, 1400);
+        addTearDown(tester.view.reset);
+
+        await tester.pumpWidget(
+          app(
+            _ready(),
+            capabilities: PlatformCapabilities.androidPhone,
+            uiPrefs: prefs,
+            mediaStorageService: mediaService,
+          ),
+        );
+        await pumpUntilFound(tester, find.text('Collections'));
+        await tester.tap(find.text('Settings'));
+        await tester.pumpAndSettle();
+
+        final cleanUpButton = find.byKey(const Key('settings-media-clean-up'));
+        expect(cleanUpButton, findsOneWidget);
+        expect(tester.getSize(cleanUpButton).height, greaterThanOrEqualTo(44));
+
+        await tester.tap(cleanUpButton);
+        await tester.pumpAndSettle();
+
+        // Mobile opens bottom sheet instead of desktop dialog.
+        expect(
+          find.byKey(const Key('settings-media-cleanup-sheet')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const Key('settings-media-cleanup-dialog')),
+          findsNothing,
+        );
+
+        // Zero-match message & disabled Delete 0 files button.
+        expect(
+          find.text('0 of 14 unused files are older than 365 days.'),
+          findsOneWidget,
+        );
+        final deleteButton = tester.widget<FilledButton>(
+          find.byKey(const Key('settings-media-cleanup-delete')),
+        );
+        expect(deleteButton.onPressed, isNull);
+        expect(find.text('Delete 0 files'), findsOneWidget);
+      },
+    );
   });
 }
 
@@ -1025,13 +1264,21 @@ final class _FakeMediaStorageService implements MediaStorageService {
       fileCount: 0,
       totalBytes: 0,
       missingReferencedCount: 0,
+      unusedFileCount: 0,
+      unusedTotalBytes: 0,
     ),
+    this.onPreviewUnusedMedia,
+    this.onDeleteUnusedMedia,
   });
 
   String? pickedFolder;
   bool allFilesGranted;
   MediaFolderStatusDto scanResult;
+  UnusedMediaPreviewDto Function(int minAgeDays)? onPreviewUnusedMedia;
+  UnusedMediaCleanupResultDto Function(int minAgeDays)? onDeleteUnusedMedia;
   int androidSettingsOpened = 0;
+  final List<int> previewRequests = [];
+  final List<int> deleteRequests = [];
 
   @override
   Future<String?> pickFolder() async => pickedFolder;
@@ -1056,6 +1303,35 @@ final class _FakeMediaStorageService implements MediaStorageService {
   @override
   Future<MediaFolderStatusDto> scanFolder(String folderPath) async =>
       scanResult;
+
+  @override
+  Future<UnusedMediaPreviewDto> previewUnusedMediaCleanup(
+    String folderPath, {
+    required int minAgeDays,
+  }) async {
+    previewRequests.add(minAgeDays);
+    if (onPreviewUnusedMedia case final callback?) {
+      return callback(minAgeDays);
+    }
+    return UnusedMediaPreviewDto(
+      totalUnusedCount: scanResult.unusedFileCount,
+      totalUnusedBytes: scanResult.unusedTotalBytes,
+      matchingCount: scanResult.unusedFileCount,
+      matchingBytes: scanResult.unusedTotalBytes,
+    );
+  }
+
+  @override
+  Future<UnusedMediaCleanupResultDto> deleteUnusedMedia(
+    String folderPath, {
+    required int minAgeDays,
+  }) async {
+    deleteRequests.add(minAgeDays);
+    if (onDeleteUnusedMedia case final callback?) {
+      return callback(minAgeDays);
+    }
+    return const UnusedMediaCleanupResultDto(deletedCount: 0, freedBytes: 0);
+  }
 
   @override
   Future<ImageAttachmentDto> ingestFile(String sourcePath, String folderPath) =>

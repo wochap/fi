@@ -70,6 +70,8 @@ const Object _unspecified = Object();
 
 /// Device-local presentation choices. They never enter Rust or sync.
 final class UiPrefs {
+  static const int defaultUnusedMediaMinAgeDays = 365;
+
   const UiPrefs({
     this.collectionSort = CollectionSort.lastEdited,
     this.voiceTipDismissed = false,
@@ -81,6 +83,7 @@ final class UiPrefs {
     this.customSentryDsn,
     this.cartoApiKey,
     this.mediaFolderPath,
+    this.unusedMediaMinAgeDays = defaultUnusedMediaMinAgeDays,
   });
 
   final CollectionSort collectionSort;
@@ -112,6 +115,9 @@ final class UiPrefs {
   /// Device-local absolute path to the user's Media Folder for attached images; never synced.
   final String? mediaFolderPath;
 
+  /// Device-local minimum age in days for manual unused media cleanup (`0` = any age).
+  final int unusedMediaMinAgeDays;
+
   UiPrefs copyWith({
     CollectionSort? collectionSort,
     bool? voiceTipDismissed,
@@ -123,6 +129,7 @@ final class UiPrefs {
     Object? customSentryDsn = _unspecified,
     Object? cartoApiKey = _unspecified,
     Object? mediaFolderPath = _unspecified,
+    int? unusedMediaMinAgeDays,
   }) => UiPrefs(
     collectionSort: collectionSort ?? this.collectionSort,
     voiceTipDismissed: voiceTipDismissed ?? this.voiceTipDismissed,
@@ -140,7 +147,12 @@ final class UiPrefs {
     mediaFolderPath: identical(mediaFolderPath, _unspecified)
         ? this.mediaFolderPath
         : (mediaFolderPath as String?),
+    unusedMediaMinAgeDays: _clampMinAgeDays(
+      unusedMediaMinAgeDays ?? this.unusedMediaMinAgeDays,
+    ),
   );
+
+  static int _clampMinAgeDays(int days) => days < 0 ? 0 : days;
 
   /// A copy with [collectionId]'s view state replaced, or removed when [entry] is null.
   UiPrefs withView(String collectionId, ViewPrefs? entry) => copyWith(
@@ -169,6 +181,7 @@ final class UiPrefs {
     if (customSentryDsn != null) 'custom_sentry_dsn': customSentryDsn,
     if (cartoApiKey != null) 'carto_api_key': cartoApiKey,
     if (mediaFolderPath != null) 'media_folder_path': mediaFolderPath,
+    'unused_media_min_age_days': unusedMediaMinAgeDays,
     'views': {
       for (final MapEntry(:key, :value) in views.entries) key: value.toJson(),
     },
@@ -184,6 +197,10 @@ final class UiPrefs {
     final customDsn = json['custom_sentry_dsn'];
     final cartoKey = json['carto_api_key'];
     final mediaFolder = json['media_folder_path'];
+    final rawMinAgeDays = json['unused_media_min_age_days'];
+    final unusedMediaMinAgeDays = rawMinAgeDays is num
+        ? _clampMinAgeDays(rawMinAgeDays.toInt())
+        : defaultUnusedMediaMinAgeDays;
     return UiPrefs(
       collectionSort: sort ?? CollectionSort.lastEdited,
       voiceTipDismissed: json['voice_tip_dismissed'] == true,
@@ -200,6 +217,7 @@ final class UiPrefs {
       mediaFolderPath: mediaFolder is String && mediaFolder.trim().isNotEmpty
           ? mediaFolder.trim()
           : null,
+      unusedMediaMinAgeDays: unusedMediaMinAgeDays,
       views: _readViews(json['views']),
     );
   }

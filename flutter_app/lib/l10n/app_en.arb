@@ -6122,5 +6122,117 @@
         "type": "int"
       }
     }
+  },
+  "settingsMediaUnusedStats": "{count, plural, =1{1 unused file} other{{count} unused files}} · {size}",
+  "@settingsMediaUnusedStats": {
+    "description": "Count and size of unused Fi-managed image files in the Media Folder.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsMediaUnusedCaption": "Not referenced by any active record",
+  "@settingsMediaUnusedCaption": {
+    "description": "Secondary caption under the unused media count in Settings."
+  },
+  "settingsMediaCleanUpEllipsis": "Clean up…",
+  "@settingsMediaCleanUpEllipsis": {
+    "description": "Secondary button in Media storage settings to open the unused media cleanup surface."
+  },
+  "settingsMediaNoUnusedFiles": "No unused files",
+  "@settingsMediaNoUnusedFiles": {
+    "description": "Quiet inline status shown beside the Media Folder file count when zero unused files exist."
+  },
+  "settingsMediaCleanupTitle": "Clean up unused media",
+  "@settingsMediaCleanupTitle": {
+    "description": "Title of the unused media cleanup dialog and bottom sheet."
+  },
+  "settingsMediaCleanupScopeNote": "Only Fi-managed image files not referenced by any active record across any collection are affected. Other files in this folder are never touched.",
+  "@settingsMediaCleanupScopeNote": {
+    "description": "Muted scope explanation at the top of the unused media cleanup dialog."
+  },
+  "settingsMediaCleanupOlderThanLabel": "Only delete files older than",
+  "@settingsMediaCleanupOlderThanLabel": {
+    "description": "Label for the numeric minimum-age threshold input."
+  },
+  "settingsMediaCleanupDaysSuffix": "days",
+  "@settingsMediaCleanupDaysSuffix": {
+    "description": "Unit suffix inside the minimum-age numeric input."
+  },
+  "settingsMediaCleanupZeroHint": "0 = any age",
+  "@settingsMediaCleanupZeroHint": {
+    "description": "Helper hint explaining that 0 matches unused files of any age."
+  },
+  "settingsMediaCleanupPresetAnyAge": "Any age",
+  "@settingsMediaCleanupPresetAnyAge": {
+    "description": "Quick preset chip for 0 days."
+  },
+  "settingsMediaCleanupPreset30d": "30d",
+  "@settingsMediaCleanupPreset30d": {
+    "description": "Quick preset chip for 30 days."
+  },
+  "settingsMediaCleanupPreset1Year": "1 year",
+  "@settingsMediaCleanupPreset1Year": {
+    "description": "Quick preset chip for 365 days."
+  },
+  "settingsMediaCleanupPreviewMatch": "{total, plural, =1{{matching} of 1 unused file} other{{matching} of {total} unused files}} · {size}",
+  "@settingsMediaCleanupPreviewMatch": {
+    "description": "Live match summary in the unused media cleanup dialog when at least one file matches.",
+    "placeholders": {
+      "matching": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      },
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsMediaCleanupPreviewNote": "Will be permanently deleted from this folder.",
+  "@settingsMediaCleanupPreviewNote": {
+    "description": "Secondary line under the live match summary in the unused media cleanup dialog."
+  },
+  "settingsMediaCleanupPreviewZero": "{total, plural, =1{0 of 1 unused file is older than {days} days.} other{0 of {total} unused files are older than {days} days.}}",
+  "@settingsMediaCleanupPreviewZero": {
+    "description": "Live summary in the unused media cleanup dialog when zero files match the age threshold.",
+    "placeholders": {
+      "total": {
+        "type": "int"
+      },
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "settingsMediaCleanupSyncWarning": "Deleting removes files from disk and any externally synced folder (such as Syncthing). Sync other devices first so recently added photos aren't lost.",
+  "@settingsMediaCleanupSyncWarning": {
+    "description": "Warning callout explaining external sync propagation when deleting unused media."
+  },
+  "settingsMediaCleanupDeleteAction": "{count, plural, =1{Delete 1 file} other{Delete {count} files}}",
+  "@settingsMediaCleanupDeleteAction": {
+    "description": "Danger confirmation button label in the unused media cleanup dialog.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "settingsMediaCleanupDone": "{count, plural, =1{Deleted 1 unused file · {size} freed.} other{Deleted {count} unused files · {size} freed.}}",
+  "@settingsMediaCleanupDone": {
+    "description": "Completion toast after deleting unused media files.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "size": {
+        "type": "String"
+      }
+    }
   }
 }

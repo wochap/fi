@@ -1336,6 +1336,8 @@ class _MediaStorageSectionState extends State<_MediaStorageSection>
         fileCount: 0,
         totalBytes: 0,
         missingReferencedCount: 0,
+        unusedFileCount: 0,
+        unusedTotalBytes: 0,
       );
     }
     if (mounted) {
@@ -1368,6 +1370,80 @@ class _MediaStorageSectionState extends State<_MediaStorageSection>
     final service = _controller?.service ?? const DefaultMediaStorageService();
     await service.openAndroidAllFilesSettings();
     await _readAllFilesAccess();
+  }
+
+  Future<void> _openUnusedMediaCleanup() async {
+    final controller = _controller;
+    if (controller == null || controller.mediaFolderPath == null) return;
+    final prefsStore = widget.store ?? controller.prefsStore;
+    final initialPrefs = await prefsStore.load();
+    if (!mounted) return;
+
+    final isDesktop = MediaQuery.sizeOf(context).width >= 720;
+    final UnusedMediaCleanupResultDto? result;
+    if (isDesktop) {
+      result = await showDialog<UnusedMediaCleanupResultDto>(
+        context: context,
+        builder: (dialogContext) => Dialog(
+          key: const Key('settings-media-cleanup-dialog'),
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 24,
+            vertical: 24,
+          ),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 560),
+            child: _UnusedMediaCleanupContent(
+              controller: controller,
+              prefsStore: prefsStore,
+              initialMinAgeDays: initialPrefs.unusedMediaMinAgeDays,
+              isSheet: false,
+            ),
+          ),
+        ),
+      );
+    } else {
+      result = await showModalBottomSheet<UnusedMediaCleanupResultDto>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        builder: (sheetContext) => Padding(
+          key: const Key('settings-media-cleanup-sheet'),
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.viewInsetsOf(sheetContext).bottom,
+          ),
+          child: _UnusedMediaCleanupContent(
+            controller: controller,
+            prefsStore: prefsStore,
+            initialMinAgeDays: initialPrefs.unusedMediaMinAgeDays,
+            isSheet: true,
+          ),
+        ),
+      );
+    }
+
+    if (result == null || !mounted) return;
+    await _scanFolder();
+    if (!mounted) return;
+    final l = context.l10n;
+    final nocturne = context.nocturne;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          spacing: 8,
+          children: [
+            Icon(FiIcons.allowed, size: 18, color: nocturne.accentInk),
+            Expanded(
+              child: Text(
+                l.settingsMediaCleanupDone(
+                  result.deletedCount,
+                  formatByteSize(result.freedBytes),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -1487,13 +1563,34 @@ class _MediaStorageSectionState extends State<_MediaStorageSection>
                 ),
               ),
               if (status != null)
-                Text(
-                  l.settingsMediaFolderStats(
-                    status.fileCount,
-                    formatByteSize(status.totalBytes),
+                Flexible(
+                  child: Wrap(
+                    alignment: WrapAlignment.end,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Text(
+                        l.settingsMediaFolderStats(
+                          status.fileCount,
+                          formatByteSize(status.totalBytes),
+                        ),
+                        key: const Key('settings-media-stats'),
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          color: nocturne.muted(.65),
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                      if (status.unusedFileCount == 0)
+                        Text(
+                          ' · ${l.settingsMediaNoUnusedFiles}',
+                          key: const Key('settings-media-no-unused'),
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            color: nocturne.muted(.5),
+                          ),
+                        ),
+                    ],
                   ),
-                  key: const Key('settings-media-stats'),
-                  style: TextStyle(fontSize: 12.5, color: nocturne.muted(.65)),
                 ),
             ],
           ),
@@ -1561,6 +1658,10 @@ class _MediaStorageSectionState extends State<_MediaStorageSection>
                 ],
               ),
             ),
+          if (status != null && status.unusedFileCount > 0) ...[
+            const FadedRule(),
+            _unusedMediaRow(context, status),
+          ],
         ],
         if (isAndroid) ...[
           const FadedRule(),
@@ -1585,6 +1686,52 @@ class _MediaStorageSectionState extends State<_MediaStorageSection>
     return NocturneCard(
       key: const Key('settings-media-storage'),
       child: cardContent,
+    );
+  }
+
+  Widget _unusedMediaRow(BuildContext context, MediaFolderStatusDto status) {
+    final l = context.l10n;
+    final nocturne = context.nocturne;
+    final isPhone = MediaQuery.sizeOf(context).width < 720;
+    return Row(
+      key: const Key('settings-media-unused-row'),
+      crossAxisAlignment: CrossAxisAlignment.center,
+      spacing: 12,
+      children: [
+        Icon(FiIcons.broom, size: 18, color: nocturne.muted(.75)),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            spacing: 2,
+            children: [
+              Text(
+                l.settingsMediaUnusedStats(
+                  status.unusedFileCount,
+                  formatByteSize(status.unusedTotalBytes),
+                ),
+                key: const Key('settings-media-unused-stats'),
+                style: const TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w500,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
+              ),
+              Text(
+                l.settingsMediaUnusedCaption,
+                style: TextStyle(fontSize: 12.5, color: nocturne.muted(.65)),
+              ),
+            ],
+          ),
+        ),
+        OutlinedButton(
+          key: const Key('settings-media-clean-up'),
+          style: isPhone
+              ? OutlinedButton.styleFrom(minimumSize: const Size(0, 44))
+              : null,
+          onPressed: () => unawaited(_openUnusedMediaCleanup()),
+          child: Text(l.settingsMediaCleanUpEllipsis),
+        ),
+      ],
     );
   }
 
@@ -1641,6 +1788,355 @@ class _MediaStorageSectionState extends State<_MediaStorageSection>
           ),
         ],
       ],
+    );
+  }
+}
+
+class _UnusedMediaCleanupContent extends StatefulWidget {
+  const _UnusedMediaCleanupContent({
+    required this.controller,
+    required this.prefsStore,
+    required this.initialMinAgeDays,
+    required this.isSheet,
+  });
+
+  final MediaStorageController controller;
+  final UiPrefsStore prefsStore;
+  final int initialMinAgeDays;
+  final bool isSheet;
+
+  @override
+  State<_UnusedMediaCleanupContent> createState() =>
+      _UnusedMediaCleanupContentState();
+}
+
+class _UnusedMediaCleanupContentState
+    extends State<_UnusedMediaCleanupContent> {
+  late final TextEditingController _daysController;
+  late int _minAgeDays;
+  UnusedMediaPreviewDto? _preview;
+  bool _loadingPreview = true;
+  bool _deleting = false;
+  int _previewSeq = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _minAgeDays = widget.initialMinAgeDays < 0 ? 0 : widget.initialMinAgeDays;
+    _daysController = TextEditingController(text: '$_minAgeDays');
+    unawaited(_loadPreview(_minAgeDays));
+  }
+
+  @override
+  void dispose() {
+    _daysController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadPreview(int minAgeDays) async {
+    final seq = ++_previewSeq;
+    if (mounted) setState(() => _loadingPreview = true);
+    try {
+      final preview = await widget.controller.previewUnusedMediaCleanup(
+        minAgeDays: minAgeDays,
+      );
+      if (!mounted || seq != _previewSeq) return;
+      setState(() {
+        _preview = preview;
+        _loadingPreview = false;
+      });
+    } catch (_) {
+      if (!mounted || seq != _previewSeq) return;
+      setState(() {
+        _preview = const UnusedMediaPreviewDto(
+          totalUnusedCount: 0,
+          totalUnusedBytes: 0,
+          matchingCount: 0,
+          matchingBytes: 0,
+        );
+        _loadingPreview = false;
+      });
+    }
+  }
+
+  void _setDays(int days, {required bool syncText}) {
+    final clamped = days < 0 ? 0 : days;
+    if (syncText) {
+      final text = '$clamped';
+      _daysController.value = TextEditingValue(
+        text: text,
+        selection: TextSelection.collapsed(offset: text.length),
+      );
+    }
+    if (_minAgeDays == clamped) return;
+    setState(() => _minAgeDays = clamped);
+    unawaited(
+      widget.prefsStore.update(
+        (prefs) => prefs.copyWith(unusedMediaMinAgeDays: clamped),
+      ),
+    );
+    unawaited(_loadPreview(clamped));
+  }
+
+  void _onDaysTextChanged(String raw) {
+    final trimmed = raw.trim();
+    final parsed = trimmed.isEmpty ? 0 : int.tryParse(trimmed);
+    if (parsed == null) return;
+    _setDays(parsed, syncText: false);
+  }
+
+  Future<void> _confirmDelete() async {
+    final preview = _preview;
+    if (_deleting || _loadingPreview || preview == null || preview.matchingCount == 0) {
+      return;
+    }
+    setState(() => _deleting = true);
+    try {
+      final result = await widget.controller.deleteUnusedMedia(
+        minAgeDays: _minAgeDays,
+      );
+      if (mounted) Navigator.of(context).pop(result);
+    } catch (_) {
+      if (mounted) setState(() => _deleting = false);
+    }
+  }
+
+  Widget _presetChip(
+    BuildContext context, {
+    required int days,
+    required String label,
+  }) {
+    final nocturne = context.nocturne;
+    final selected = _minAgeDays == days;
+    return ChoiceChip(
+      key: Key('settings-media-cleanup-preset-$days'),
+      selected: selected,
+      showCheckmark: false,
+      avatar: selected
+          ? Icon(FiIcons.check, size: 15, color: nocturne.accentInk)
+          : null,
+      label: Text(label),
+      onSelected: _deleting ? null : (_) => _setDays(days, syncText: true),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = context.l10n;
+    final nocturne = context.nocturne;
+    final preview = _preview;
+    final matchingCount = preview?.matchingCount ?? 0;
+    final canDelete = !_loadingPreview && !_deleting && matchingCount > 0;
+
+    return SingleChildScrollView(
+      padding: EdgeInsets.fromLTRB(
+        20,
+        widget.isSheet ? 12 : 20,
+        20,
+        20,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: 16,
+        children: [
+          if (widget.isSheet)
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: nocturne.divider,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            spacing: 6,
+            children: [
+              Text(
+                l.settingsMediaCleanupTitle,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              Text(
+                l.settingsMediaCleanupScopeNote,
+                style: TextStyle(fontSize: 13, color: nocturne.muted(.65)),
+              ),
+            ],
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            spacing: 8,
+            children: [
+              Text(
+                l.settingsMediaCleanupOlderThanLabel,
+                style: const TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                spacing: 12,
+                children: [
+                  SizedBox(
+                    width: 150,
+                    child: TextField(
+                      key: const Key('settings-media-cleanup-days-input'),
+                      controller: _daysController,
+                      enabled: !_deleting,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      style: const TextStyle(
+                        fontFeatures: [FontFeature.tabularFigures()],
+                      ),
+                      decoration: InputDecoration(
+                        isDense: true,
+                        suffixText: l.settingsMediaCleanupDaysSuffix,
+                      ),
+                      onChanged: _onDaysTextChanged,
+                    ),
+                  ),
+                  Text(
+                    l.settingsMediaCleanupZeroHint,
+                    style: TextStyle(fontSize: 12.5, color: nocturne.muted(.6)),
+                  ),
+                ],
+              ),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _presetChip(
+                    context,
+                    days: 0,
+                    label: l.settingsMediaCleanupPresetAnyAge,
+                  ),
+                  _presetChip(
+                    context,
+                    days: 30,
+                    label: l.settingsMediaCleanupPreset30d,
+                  ),
+                  _presetChip(
+                    context,
+                    days: 365,
+                    label: l.settingsMediaCleanupPreset1Year,
+                  ),
+                ],
+              ),
+            ],
+          ),
+          Container(
+            key: const Key('settings-media-cleanup-preview'),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: nocturne.surface,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: nocturne.divider),
+            ),
+            child: _loadingPreview || preview == null
+                ? const SizedBox(
+                    height: 20,
+                    child: Center(
+                      child: SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    ),
+                  )
+                : preview.matchingCount > 0
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    spacing: 4,
+                    children: [
+                      Text(
+                        l.settingsMediaCleanupPreviewMatch(
+                          preview.matchingCount,
+                          preview.totalUnusedCount,
+                          formatByteSize(preview.matchingBytes),
+                        ),
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          fontFeatures: [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                      Text(
+                        l.settingsMediaCleanupPreviewNote,
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          color: nocturne.muted(.65),
+                        ),
+                      ),
+                    ],
+                  )
+                : Text(
+                    l.settingsMediaCleanupPreviewZero(
+                      preview.totalUnusedCount,
+                      _minAgeDays,
+                    ),
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      color: nocturne.muted(.75),
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
+          ),
+          Container(
+            key: const Key('settings-media-cleanup-sync-warning'),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: nocturne.warning.withValues(alpha: .10),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: nocturne.warning.withValues(alpha: .35),
+              ),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              spacing: 10,
+              children: [
+                Icon(FiIcons.warning, size: 18, color: nocturne.warning),
+                Expanded(
+                  child: Text(
+                    l.settingsMediaCleanupSyncWarning,
+                    style: TextStyle(fontSize: 12.5, color: nocturne.muted(.9)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Wrap(
+            alignment: WrapAlignment.end,
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              TextButton(
+                key: const Key('settings-media-cleanup-cancel'),
+                onPressed: _deleting
+                    ? null
+                    : () => Navigator.of(context).pop(),
+                child: Text(l.commonCancel),
+              ),
+              FilledButton.icon(
+                key: const Key('settings-media-cleanup-delete'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: nocturne.danger,
+                  foregroundColor: Theme.of(context).colorScheme.onError,
+                ),
+                onPressed: canDelete ? () => unawaited(_confirmDelete()) : null,
+                icon: const Icon(FiIcons.delete, size: 16),
+                label: Text(l.settingsMediaCleanupDeleteAction(matchingCount)),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

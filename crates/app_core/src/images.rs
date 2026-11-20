@@ -3,6 +3,7 @@ use std::{
     fs,
     io::Write,
     path::{Path, PathBuf},
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 use thiserror::Error;
@@ -11,6 +12,7 @@ use uuid::Uuid;
 use crate::values::ImageAttachment;
 
 const MAX_SANITIZED_STEM_LEN: usize = 48;
+const MS_PER_DAY: u64 = 86_400_000;
 
 #[derive(Debug, Error)]
 pub enum ImageIngestError {
@@ -30,6 +32,24 @@ pub struct MediaFolderStatus {
     pub file_count: u64,
     pub total_bytes: u64,
     pub missing_referenced_count: u64,
+    pub unused_file_count: u64,
+    pub unused_total_bytes: u64,
+}
+
+/// Preview of unused Fi-managed image files in the Media Folder for a given minimum-age threshold.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UnusedMediaPreview {
+    pub total_unused_count: u64,
+    pub total_unused_bytes: u64,
+    pub matching_count: u64,
+    pub matching_bytes: u64,
+}
+
+/// Outcome of a manual unused media deletion pass.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UnusedMediaCleanupResult {
+    pub deleted_count: u64,
+    pub freed_bytes: u64,
 }
 
 /// Detects an image's MIME type and canonical lowercase file extension from its magic bytes.
@@ -190,8 +210,153 @@ pub fn ingest_image_bytes(
     })
 }
 
-/// Scans `media_folder` for accessibility, local file count & total bytes, and how many of
-/// `referenced_paths` are missing from disk.
+/// Parses a Fi-managed `<uuidv7>_<name>.<ext>` filename and returns its embedded UUIDv7
+/// creation timestamp in milliseconds since the Unix epoch.
+#[must_use]
+pub fn parse_fi_managed_image_created_ms(filename: &str) -> Option<u64> {
+    if filename.starts_with(".fi_tmp_") {
+        return None;
+    }
+    let (uuid_str, rest) = filename.split_once('_')?;
+    let (stem, _) = rest.rsplit_once('.')?;
+    if stem.is_empty() || infer_mime_from_extension(rest).is_none() {
+        return None;
+    }
+    let uuid = Uuid::parse_str(uuid_str).ok()?;
+    if uuid.get_version() != Some(uuid::Version::SortRand) {
+        return None;
+    }
+    let ts = uuid.get_timestamp()?;
+    let (secs, nanos) = ts.to_unix();
+    secs.checked_mul(1_000)?
+        .checked_add(u64::from(nanos / 1_000_000))
+}
+
+/// Returns the current UTC timestamp in milliseconds since the Unix epoch.
+#[must_use]
+pub fn current_utc_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |duration| {
+            u64::try_from(duration.as_millis()).unwrap_or(u64::MAX)
+        })
+}
+
+fn matches_min_age(created_ms: u64, now_ms: u64, min_age_days: u32) -> bool {
+    if min_age_days == 0 {
+        return true;
+    }
+    let threshold_ms = u64::from(min_age_days).saturating_mul(MS_PER_DAY);
+    now_ms.saturating_sub(created_ms) >= threshold_ms
+}
+
+struct UnusedMediaCandidate {
+    path: PathBuf,
+    size_bytes: u64,
+    created_ms: u64,
+}
+
+fn collect_unused_media_candidates(
+    media_folder: &Path,
+    referenced_paths: &HashSet<String>,
+) -> Result<Vec<UnusedMediaCandidate>, ImageIngestError> {
+    ensure_media_folder_accessible(media_folder)?;
+    let entries = fs::read_dir(media_folder)?;
+    let mut candidates = Vec::new();
+
+    for entry in entries.flatten() {
+        let Ok(file_type) = entry.file_type() else {
+            continue;
+        };
+        if !file_type.is_file() {
+            continue;
+        }
+        let name = entry.file_name();
+        let Some(name_str) = name.to_str() else {
+            continue;
+        };
+        let Some(created_ms) = parse_fi_managed_image_created_ms(name_str) else {
+            continue;
+        };
+        if referenced_paths.contains(name_str) {
+            continue;
+        }
+        let size_bytes = entry.metadata().map_or(0, |meta| meta.len());
+        candidates.push(UnusedMediaCandidate {
+            path: entry.path(),
+            size_bytes,
+            created_ms,
+        });
+    }
+
+    Ok(candidates)
+}
+
+/// Previews how many unused Fi-managed image files in `media_folder` match `min_age_days` at
+/// `now_ms`.
+pub fn preview_unused_media_cleanup_at(
+    media_folder: &Path,
+    referenced_paths: &HashSet<String>,
+    min_age_days: u32,
+    now_ms: u64,
+) -> Result<UnusedMediaPreview, ImageIngestError> {
+    let candidates = collect_unused_media_candidates(media_folder, referenced_paths)?;
+    let mut total_unused_count = 0u64;
+    let mut total_unused_bytes = 0u64;
+    let mut matching_count = 0u64;
+    let mut matching_bytes = 0u64;
+
+    for candidate in candidates {
+        total_unused_count = total_unused_count.saturating_add(1);
+        total_unused_bytes = total_unused_bytes.saturating_add(candidate.size_bytes);
+        if matches_min_age(candidate.created_ms, now_ms, min_age_days) {
+            matching_count = matching_count.saturating_add(1);
+            matching_bytes = matching_bytes.saturating_add(candidate.size_bytes);
+        }
+    }
+
+    Ok(UnusedMediaPreview {
+        total_unused_count,
+        total_unused_bytes,
+        matching_count,
+        matching_bytes,
+    })
+}
+
+/// Deletes unused Fi-managed image files in `media_folder` that are at least `min_age_days` old
+/// relative to `now_ms`.
+pub fn delete_unused_media_at(
+    media_folder: &Path,
+    referenced_paths: &HashSet<String>,
+    min_age_days: u32,
+    now_ms: u64,
+) -> Result<UnusedMediaCleanupResult, ImageIngestError> {
+    let candidates = collect_unused_media_candidates(media_folder, referenced_paths)?;
+    let mut deleted_count = 0u64;
+    let mut freed_bytes = 0u64;
+
+    for candidate in candidates {
+        if !matches_min_age(candidate.created_ms, now_ms, min_age_days) {
+            continue;
+        }
+        match fs::remove_file(&candidate.path) {
+            Ok(()) => {
+                deleted_count = deleted_count.saturating_add(1);
+                freed_bytes = freed_bytes.saturating_add(candidate.size_bytes);
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+            Err(err) => return Err(ImageIngestError::Io(err)),
+        }
+    }
+
+    Ok(UnusedMediaCleanupResult {
+        deleted_count,
+        freed_bytes,
+    })
+}
+
+/// Scans `media_folder` for accessibility, local file count & total bytes, how many of
+/// `referenced_paths` are missing from disk, and how many Fi-managed image files are unused.
 #[must_use]
 pub fn scan_media_folder(
     media_folder: &Path,
@@ -203,11 +368,15 @@ pub fn scan_media_folder(
             file_count: 0,
             total_bytes: 0,
             missing_referenced_count: u64::try_from(referenced_paths.len()).unwrap_or(u64::MAX),
+            unused_file_count: 0,
+            unused_total_bytes: 0,
         };
     };
 
     let mut file_count = 0u64;
     let mut total_bytes = 0u64;
+    let mut unused_file_count = 0u64;
+    let mut unused_total_bytes = 0u64;
     let mut present_names = HashSet::new();
 
     for entry in entries.flatten() {
@@ -224,9 +393,14 @@ pub fn scan_media_folder(
         if name_str.starts_with(".fi_tmp_") {
             continue;
         }
+        let size_bytes = entry.metadata().map_or(0, |meta| meta.len());
         file_count = file_count.saturating_add(1);
-        if let Ok(meta) = entry.metadata() {
-            total_bytes = total_bytes.saturating_add(meta.len());
+        total_bytes = total_bytes.saturating_add(size_bytes);
+        if parse_fi_managed_image_created_ms(name_str).is_some()
+            && !referenced_paths.contains(name_str)
+        {
+            unused_file_count = unused_file_count.saturating_add(1);
+            unused_total_bytes = unused_total_bytes.saturating_add(size_bytes);
         }
         present_names.insert(name_str.to_string());
     }
@@ -241,6 +415,8 @@ pub fn scan_media_folder(
         file_count,
         total_bytes,
         missing_referenced_count: u64::try_from(missing_referenced_count).unwrap_or(u64::MAX),
+        unused_file_count,
+        unused_total_bytes,
     }
 }
 
@@ -376,10 +552,147 @@ mod tests {
         assert_eq!(status.file_count, 2);
         assert_eq!(status.total_bytes, a.size_bytes + b.size_bytes);
         assert_eq!(status.missing_referenced_count, 1);
+        assert_eq!(status.unused_file_count, 1);
+        assert_eq!(status.unused_total_bytes, b.size_bytes);
 
         let missing_dir = scan_media_folder(Path::new("/nonexistent/fi-scan-test"), &referenced);
         assert!(!missing_dir.accessible);
         assert_eq!(missing_dir.missing_referenced_count, 2);
+        assert_eq!(missing_dir.unused_file_count, 0);
+        assert_eq!(missing_dir.unused_total_bytes, 0);
+    }
+
+    fn uuidv7_for_unix_ms(ms: u64) -> Uuid {
+        let secs = ms / 1_000;
+        let subsec_nanos = u32::try_from((ms % 1_000) * 1_000_000).unwrap();
+        let ts = uuid::Timestamp::from_unix(uuid::NoContext, secs, subsec_nanos);
+        Uuid::new_v7(ts)
+    }
+
+    #[test]
+    fn parse_fi_managed_image_created_ms_validates_uuidv7_and_extensions() {
+        let ts_ms = 1_700_000_123_456u64;
+        let id = uuidv7_for_unix_ms(ts_ms);
+        assert_eq!(
+            parse_fi_managed_image_created_ms(&format!("{id}_receipt.JPG")),
+            Some(ts_ms)
+        );
+        assert_eq!(
+            parse_fi_managed_image_created_ms(&format!("{id}_photo.webp")),
+            Some(ts_ms)
+        );
+        // Rejects non-v7 UUID (v4)
+        let v4 = Uuid::new_v4();
+        assert_eq!(
+            parse_fi_managed_image_created_ms(&format!("{v4}_receipt.jpg")),
+            None
+        );
+        // Rejects non-image, temp, plain, or empty stem
+        assert_eq!(
+            parse_fi_managed_image_created_ms(&format!("{id}_notes.pdf")),
+            None
+        );
+        assert_eq!(
+            parse_fi_managed_image_created_ms(&format!("{id}_.jpg")),
+            None
+        );
+        assert_eq!(
+            parse_fi_managed_image_created_ms(&format!(".fi_tmp_{id}")),
+            None
+        );
+        assert_eq!(parse_fi_managed_image_created_ms("vacation.jpg"), None);
+    }
+
+    #[test]
+    fn unused_media_cleanup_protects_referenced_and_non_fi_files() {
+        let media_dir = TempDir::new().unwrap();
+        let now_ms = 1_800_000_000_000u64;
+        let referenced_name = format!("{}_receipt.jpg", uuidv7_for_unix_ms(now_ms - 500 * MS_PER_DAY));
+        let unused_name = format!("{}_old.jpg", uuidv7_for_unix_ms(now_ms - 10 * MS_PER_DAY));
+        let non_fi_name = "vacation.jpg";
+        let temp_name = format!(".fi_tmp_{}", Uuid::now_v7());
+
+        fs::write(media_dir.path().join(&referenced_name), synthetic_jpeg()).unwrap();
+        fs::write(media_dir.path().join(&unused_name), vec![1u8; 400]).unwrap();
+        fs::write(media_dir.path().join(non_fi_name), vec![2u8; 900]).unwrap();
+        fs::write(media_dir.path().join(&temp_name), vec![3u8; 100]).unwrap();
+        fs::create_dir(media_dir.path().join(".stfolder")).unwrap();
+        fs::write(media_dir.path().join(".stfolder").join(&unused_name), vec![4u8; 50]).unwrap();
+
+        let referenced = HashSet::from([referenced_name.clone()]);
+        let status = scan_media_folder(media_dir.path(), &referenced);
+        assert_eq!(status.unused_file_count, 1);
+        assert_eq!(status.unused_total_bytes, 400);
+
+        let preview = preview_unused_media_cleanup_at(media_dir.path(), &referenced, 0, now_ms)
+            .unwrap();
+        assert_eq!(
+            preview,
+            UnusedMediaPreview {
+                total_unused_count: 1,
+                total_unused_bytes: 400,
+                matching_count: 1,
+                matching_bytes: 400,
+            }
+        );
+
+        let result = delete_unused_media_at(media_dir.path(), &referenced, 0, now_ms).unwrap();
+        assert_eq!(
+            result,
+            UnusedMediaCleanupResult {
+                deleted_count: 1,
+                freed_bytes: 400,
+            }
+        );
+
+        assert!(!media_dir.path().join(&unused_name).exists());
+        assert!(media_dir.path().join(&referenced_name).exists());
+        assert!(media_dir.path().join(non_fi_name).exists());
+        assert!(media_dir.path().join(&temp_name).exists());
+        assert!(media_dir.path().join(".stfolder").join(&unused_name).exists());
+    }
+
+    #[test]
+    fn unused_media_cleanup_filters_by_uuidv7_age_and_handles_clock_skew() {
+        let media_dir = TempDir::new().unwrap();
+        let now_ms = 1_800_000_000_000u64;
+        let old_name = format!("{}_old.jpg", uuidv7_for_unix_ms(now_ms - 400 * MS_PER_DAY));
+        let recent_name = format!("{}_recent.jpg", uuidv7_for_unix_ms(now_ms - 10 * MS_PER_DAY));
+        let future_name = format!("{}_skew.jpg", uuidv7_for_unix_ms(now_ms + 60_000));
+
+        fs::write(media_dir.path().join(&old_name), vec![0u8; 400]).unwrap();
+        fs::write(media_dir.path().join(&recent_name), vec![0u8; 1_200]).unwrap();
+        fs::write(media_dir.path().join(&future_name), vec![0u8; 200]).unwrap();
+
+        let referenced = HashSet::new();
+        let preview_365 =
+            preview_unused_media_cleanup_at(media_dir.path(), &referenced, 365, now_ms).unwrap();
+        assert_eq!(
+            preview_365,
+            UnusedMediaPreview {
+                total_unused_count: 3,
+                total_unused_bytes: 1_800,
+                matching_count: 1,
+                matching_bytes: 400,
+            }
+        );
+
+        let preview_any =
+            preview_unused_media_cleanup_at(media_dir.path(), &referenced, 0, now_ms).unwrap();
+        assert_eq!(preview_any.matching_count, 3);
+        assert_eq!(preview_any.matching_bytes, 1_800);
+
+        let result = delete_unused_media_at(media_dir.path(), &referenced, 365, now_ms).unwrap();
+        assert_eq!(
+            result,
+            UnusedMediaCleanupResult {
+                deleted_count: 1,
+                freed_bytes: 400,
+            }
+        );
+        assert!(!media_dir.path().join(&old_name).exists());
+        assert!(media_dir.path().join(&recent_name).exists());
+        assert!(media_dir.path().join(&future_name).exists());
     }
 
     #[test]

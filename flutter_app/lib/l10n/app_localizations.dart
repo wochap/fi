@@ -7123,6 +7123,114 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Exported to {filename} · {count, plural, =1{1 missing media file wasn\'t included.} other{{count} missing media files weren\'t included.}}'**
   String exportZipDoneWithMissing(String filename, int count);
+
+  /// Count and size of unused Fi-managed image files in the Media Folder.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 unused file} other{{count} unused files}} · {size}'**
+  String settingsMediaUnusedStats(int count, String size);
+
+  /// Secondary caption under the unused media count in Settings.
+  ///
+  /// In en, this message translates to:
+  /// **'Not referenced by any active record'**
+  String get settingsMediaUnusedCaption;
+
+  /// Secondary button in Media storage settings to open the unused media cleanup surface.
+  ///
+  /// In en, this message translates to:
+  /// **'Clean up…'**
+  String get settingsMediaCleanUpEllipsis;
+
+  /// Quiet inline status shown beside the Media Folder file count when zero unused files exist.
+  ///
+  /// In en, this message translates to:
+  /// **'No unused files'**
+  String get settingsMediaNoUnusedFiles;
+
+  /// Title of the unused media cleanup dialog and bottom sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'Clean up unused media'**
+  String get settingsMediaCleanupTitle;
+
+  /// Muted scope explanation at the top of the unused media cleanup dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'Only Fi-managed image files not referenced by any active record across any collection are affected. Other files in this folder are never touched.'**
+  String get settingsMediaCleanupScopeNote;
+
+  /// Label for the numeric minimum-age threshold input.
+  ///
+  /// In en, this message translates to:
+  /// **'Only delete files older than'**
+  String get settingsMediaCleanupOlderThanLabel;
+
+  /// Unit suffix inside the minimum-age numeric input.
+  ///
+  /// In en, this message translates to:
+  /// **'days'**
+  String get settingsMediaCleanupDaysSuffix;
+
+  /// Helper hint explaining that 0 matches unused files of any age.
+  ///
+  /// In en, this message translates to:
+  /// **'0 = any age'**
+  String get settingsMediaCleanupZeroHint;
+
+  /// Quick preset chip for 0 days.
+  ///
+  /// In en, this message translates to:
+  /// **'Any age'**
+  String get settingsMediaCleanupPresetAnyAge;
+
+  /// Quick preset chip for 30 days.
+  ///
+  /// In en, this message translates to:
+  /// **'30d'**
+  String get settingsMediaCleanupPreset30d;
+
+  /// Quick preset chip for 365 days.
+  ///
+  /// In en, this message translates to:
+  /// **'1 year'**
+  String get settingsMediaCleanupPreset1Year;
+
+  /// Live match summary in the unused media cleanup dialog when at least one file matches.
+  ///
+  /// In en, this message translates to:
+  /// **'{total, plural, =1{{matching} of 1 unused file} other{{matching} of {total} unused files}} · {size}'**
+  String settingsMediaCleanupPreviewMatch(int matching, int total, String size);
+
+  /// Secondary line under the live match summary in the unused media cleanup dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'Will be permanently deleted from this folder.'**
+  String get settingsMediaCleanupPreviewNote;
+
+  /// Live summary in the unused media cleanup dialog when zero files match the age threshold.
+  ///
+  /// In en, this message translates to:
+  /// **'{total, plural, =1{0 of 1 unused file is older than {days} days.} other{0 of {total} unused files are older than {days} days.}}'**
+  String settingsMediaCleanupPreviewZero(int total, int days);
+
+  /// Warning callout explaining external sync propagation when deleting unused media.
+  ///
+  /// In en, this message translates to:
+  /// **'Deleting removes files from disk and any externally synced folder (such as Syncthing). Sync other devices first so recently added photos aren\'t lost.'**
+  String get settingsMediaCleanupSyncWarning;
+
+  /// Danger confirmation button label in the unused media cleanup dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Delete 1 file} other{Delete {count} files}}'**
+  String settingsMediaCleanupDeleteAction(int count);
+
+  /// Completion toast after deleting unused media files.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Deleted 1 unused file · {size} freed.} other{Deleted {count} unused files · {size} freed.}}'**
+  String settingsMediaCleanupDone(int count, String size);
 }
 
 class _AppLocalizationsDelegate

@@ -126,6 +126,7 @@ abstract final class FiIcons {
   static const IconData cloudArrowDown = PhosphorIconsRegular.cloudArrowDown;
   static const IconData openExternal = PhosphorIconsRegular.arrowSquareOut;
   static const IconData chevronLeft = PhosphorIconsRegular.caretLeft;
+  static const IconData broom = PhosphorIconsRegular.broom;
 }
 
 /// The one icon for a field type of [kind].

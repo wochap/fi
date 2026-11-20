@@ -319,6 +319,8 @@ pub struct MediaFolderStatusDto {
     pub file_count: u64,
     pub total_bytes: u64,
     pub missing_referenced_count: u64,
+    pub unused_file_count: u64,
+    pub unused_total_bytes: u64,
 }
 
 impl From<app_core::MediaFolderStatus> for MediaFolderStatusDto {
@@ -328,6 +330,42 @@ impl From<app_core::MediaFolderStatus> for MediaFolderStatusDto {
             file_count: value.file_count,
             total_bytes: value.total_bytes,
             missing_referenced_count: value.missing_referenced_count,
+            unused_file_count: value.unused_file_count,
+            unused_total_bytes: value.unused_total_bytes,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UnusedMediaPreviewDto {
+    pub total_unused_count: u64,
+    pub total_unused_bytes: u64,
+    pub matching_count: u64,
+    pub matching_bytes: u64,
+}
+
+impl From<app_core::UnusedMediaPreview> for UnusedMediaPreviewDto {
+    fn from(value: app_core::UnusedMediaPreview) -> Self {
+        Self {
+            total_unused_count: value.total_unused_count,
+            total_unused_bytes: value.total_unused_bytes,
+            matching_count: value.matching_count,
+            matching_bytes: value.matching_bytes,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UnusedMediaCleanupResultDto {
+    pub deleted_count: u64,
+    pub freed_bytes: u64,
+}
+
+impl From<app_core::UnusedMediaCleanupResult> for UnusedMediaCleanupResultDto {
+    fn from(value: app_core::UnusedMediaCleanupResult) -> Self {
+        Self {
+            deleted_count: value.deleted_count,
+            freed_bytes: value.freed_bytes,
         }
     }
 }

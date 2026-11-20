@@ -4549,4 +4549,107 @@ class AppLocalizationsEn extends AppLocalizations {
     );
     return 'Exported to $filename · $_temp0';
   }
+
+  @override
+  String settingsMediaUnusedStats(int count, String size) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count unused files',
+      one: '1 unused file',
+    );
+    return '$_temp0 · $size';
+  }
+
+  @override
+  String get settingsMediaUnusedCaption =>
+      'Not referenced by any active record';
+
+  @override
+  String get settingsMediaCleanUpEllipsis => 'Clean up…';
+
+  @override
+  String get settingsMediaNoUnusedFiles => 'No unused files';
+
+  @override
+  String get settingsMediaCleanupTitle => 'Clean up unused media';
+
+  @override
+  String get settingsMediaCleanupScopeNote =>
+      'Only Fi-managed image files not referenced by any active record across any collection are affected. Other files in this folder are never touched.';
+
+  @override
+  String get settingsMediaCleanupOlderThanLabel =>
+      'Only delete files older than';
+
+  @override
+  String get settingsMediaCleanupDaysSuffix => 'days';
+
+  @override
+  String get settingsMediaCleanupZeroHint => '0 = any age';
+
+  @override
+  String get settingsMediaCleanupPresetAnyAge => 'Any age';
+
+  @override
+  String get settingsMediaCleanupPreset30d => '30d';
+
+  @override
+  String get settingsMediaCleanupPreset1Year => '1 year';
+
+  @override
+  String settingsMediaCleanupPreviewMatch(
+    int matching,
+    int total,
+    String size,
+  ) {
+    String _temp0 = intl.Intl.pluralLogic(
+      total,
+      locale: localeName,
+      other: '$matching of $total unused files',
+      one: '$matching of 1 unused file',
+    );
+    return '$_temp0 · $size';
+  }
+
+  @override
+  String get settingsMediaCleanupPreviewNote =>
+      'Will be permanently deleted from this folder.';
+
+  @override
+  String settingsMediaCleanupPreviewZero(int total, int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      total,
+      locale: localeName,
+      other: '0 of $total unused files are older than $days days.',
+      one: '0 of 1 unused file is older than $days days.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingsMediaCleanupSyncWarning =>
+      'Deleting removes files from disk and any externally synced folder (such as Syncthing). Sync other devices first so recently added photos aren\'t lost.';
+
+  @override
+  String settingsMediaCleanupDeleteAction(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Delete $count files',
+      one: 'Delete 1 file',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String settingsMediaCleanupDone(int count, String size) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Deleted $count unused files · $size freed.',
+      one: 'Deleted 1 unused file · $size freed.',
+    );
+    return '$_temp0';
+  }
 }

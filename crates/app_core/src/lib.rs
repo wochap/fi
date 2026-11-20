@@ -88,9 +88,11 @@ pub use identity::{
     WriteThroughSecureKeyStore,
 };
 pub use images::{
-    ImageIngestError, MediaFolderStatus, build_relative_path,
+    ImageIngestError, MediaFolderStatus, UnusedMediaCleanupResult, UnusedMediaPreview,
+    build_relative_path, current_utc_ms, delete_unused_media_at,
     derive_original_name_from_relative_path, detect_image_format, infer_mime_from_extension,
-    ingest_image_bytes, ingest_image_file, sanitize_filename_stem, scan_media_folder,
+    ingest_image_bytes, ingest_image_file, parse_fi_managed_image_created_ms,
+    preview_unused_media_cleanup_at, sanitize_filename_stem, scan_media_folder,
 };
 pub use import_export::{
     CloneOutcome, ENVELOPE_FORMAT, ENVELOPE_VERSION, Envelope, ExportedCollection, ExportedRecord,

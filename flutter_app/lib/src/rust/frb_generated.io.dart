@@ -899,6 +899,14 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void dco_decode_unit(dynamic raw);
 
   @protected
+  UnusedMediaCleanupResultDto dco_decode_unused_media_cleanup_result_dto(
+    dynamic raw,
+  );
+
+  @protected
+  UnusedMediaPreviewDto dco_decode_unused_media_preview_dto(dynamic raw);
+
+  @protected
   BigInt dco_decode_usize(dynamic raw);
 
   @protected
@@ -2102,6 +2110,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_decode_unit(SseDeserializer deserializer);
+
+  @protected
+  UnusedMediaCleanupResultDto sse_decode_unused_media_cleanup_result_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UnusedMediaPreviewDto sse_decode_unused_media_preview_dto(
+    SseDeserializer deserializer,
+  );
 
   @protected
   BigInt sse_decode_usize(SseDeserializer deserializer);
@@ -3615,6 +3633,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_unit(void self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_unused_media_cleanup_result_dto(
+    UnusedMediaCleanupResultDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_unused_media_preview_dto(
+    UnusedMediaPreviewDto self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_usize(BigInt self, SseSerializer serializer);

@@ -2385,13 +2385,47 @@ impl AppCore {
         Ok(paths)
     }
 
-    /// Scans `media_folder` for local file count/size and missing active record references.
+    /// Scans `media_folder` for local file count/size, missing active record references, and
+    /// unused Fi-managed image files.
     pub fn scan_media_folder(
         &self,
         media_folder: &std::path::Path,
     ) -> Result<crate::MediaFolderStatus> {
         let referenced = self.referenced_image_paths()?;
         Ok(crate::images::scan_media_folder(media_folder, &referenced))
+    }
+
+    /// Previews unused Fi-managed image files in `media_folder` matching `min_age_days`.
+    pub fn preview_unused_media_cleanup(
+        &self,
+        media_folder: &std::path::Path,
+        min_age_days: u32,
+    ) -> Result<crate::UnusedMediaPreview> {
+        let referenced = self.referenced_image_paths()?;
+        crate::images::preview_unused_media_cleanup_at(
+            media_folder,
+            &referenced,
+            min_age_days,
+            crate::images::current_utc_ms(),
+        )
+        .map_err(|err| AppError::Storage(err.to_string()))
+    }
+
+    /// Deletes unused Fi-managed image files in `media_folder` matching `min_age_days`,
+    /// re-collecting active references immediately before unlinking.
+    pub fn delete_unused_media(
+        &self,
+        media_folder: &std::path::Path,
+        min_age_days: u32,
+    ) -> Result<crate::UnusedMediaCleanupResult> {
+        let referenced = self.referenced_image_paths()?;
+        crate::images::delete_unused_media_at(
+            media_folder,
+            &referenced,
+            min_age_days,
+            crate::images::current_utc_ms(),
+        )
+        .map_err(|err| AppError::Storage(err.to_string()))
     }
 
     /// Summarizes referenced media files for the given collections compared against `media_folder`.
@@ -4485,5 +4519,104 @@ mod tests {
             }
         );
         reopened.shutdown().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn unused_media_cleanup_respects_record_deletion_and_clones() {
+        let directory = tempfile::tempdir().unwrap();
+        let media_dir = tempfile::tempdir().unwrap();
+        let core = networked(directory.path()).await;
+        core.create_new_dataset().await.unwrap();
+
+        let collection_id = core
+            .create_collection("Photos".into(), String::new())
+            .await
+            .unwrap();
+        let field_id = FieldId::new();
+        core.add_field(
+            collection_id,
+            FieldDefinition {
+                id: field_id,
+                name: "Attachments".into(),
+                field_type: crate::schema::FieldType::Images,
+                required: false,
+                default: None,
+                default_relative_days: None,
+                validation: crate::schema::ValidationMetadata::default(),
+                display: crate::schema::DisplayMetadata::default(),
+                order: 0,
+                deleted: false,
+                enum_options: Vec::new(),
+                allow_options_from_records: false,
+                allow_multiple: true,
+            },
+        )
+        .await
+        .unwrap();
+
+        let png_bytes = vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00];
+        let shared =
+            crate::images::ingest_image_bytes(&png_bytes, "shared.png", media_dir.path()).unwrap();
+        let orphan =
+            crate::images::ingest_image_bytes(&png_bytes, "orphan.png", media_dir.path()).unwrap();
+
+        let record_a = core
+            .create_record(
+                collection_id,
+                std::collections::BTreeMap::from([(
+                    field_id,
+                    FieldValue::Images(vec![shared.clone(), orphan.clone()]),
+                )]),
+            )
+            .await
+            .unwrap();
+        // Cloned record still references `shared`
+        let _record_b = core
+            .create_record(
+                collection_id,
+                std::collections::BTreeMap::from([(
+                    field_id,
+                    FieldValue::Images(vec![shared.clone()]),
+                )]),
+            )
+            .await
+            .unwrap();
+
+        // While both records exist, nothing is unused.
+        let status_before = core.scan_media_folder(media_dir.path()).unwrap();
+        assert_eq!(status_before.unused_file_count, 0);
+        assert_eq!(status_before.unused_total_bytes, 0);
+
+        // Deleting record_a leaves `orphan` unreferenced on disk, while `shared` stays referenced
+        // by record_b.
+        core.delete_record(record_a, collection_id).await.unwrap();
+        assert!(media_dir.path().join(&orphan.relative_path).exists());
+
+        let status_after_delete = core.scan_media_folder(media_dir.path()).unwrap();
+        assert_eq!(status_after_delete.unused_file_count, 1);
+        assert_eq!(status_after_delete.unused_total_bytes, orphan.size_bytes);
+
+        let preview_365 = core
+            .preview_unused_media_cleanup(media_dir.path(), 365)
+            .unwrap();
+        assert_eq!(preview_365.total_unused_count, 1);
+        assert_eq!(preview_365.matching_count, 0);
+
+        let preview_any = core
+            .preview_unused_media_cleanup(media_dir.path(), 0)
+            .unwrap();
+        assert_eq!(preview_any.matching_count, 1);
+        assert_eq!(preview_any.matching_bytes, orphan.size_bytes);
+
+        let result = core.delete_unused_media(media_dir.path(), 0).unwrap();
+        assert_eq!(result.deleted_count, 1);
+        assert_eq!(result.freed_bytes, orphan.size_bytes);
+
+        assert!(!media_dir.path().join(&orphan.relative_path).exists());
+        assert!(media_dir.path().join(&shared.relative_path).exists());
+        let status_final = core.scan_media_folder(media_dir.path()).unwrap();
+        assert_eq!(status_final.unused_file_count, 0);
+
+        core.shutdown().await.unwrap();
     }
 }

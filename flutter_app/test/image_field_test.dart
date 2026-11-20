@@ -105,7 +105,29 @@ final class _TestMediaService implements MediaStorageService {
         fileCount: 0,
         totalBytes: 0,
         missingReferencedCount: 0,
+        unusedFileCount: 0,
+        unusedTotalBytes: 0,
       );
+
+  @override
+  Future<UnusedMediaPreviewDto> previewUnusedMediaCleanup(
+    String folderPath, {
+    required int minAgeDays,
+  }) async => const UnusedMediaPreviewDto(
+    totalUnusedCount: 0,
+    totalUnusedBytes: 0,
+    matchingCount: 0,
+    matchingBytes: 0,
+  );
+
+  @override
+  Future<UnusedMediaCleanupResultDto> deleteUnusedMedia(
+    String folderPath, {
+    required int minAgeDays,
+  }) async => const UnusedMediaCleanupResultDto(
+    deletedCount: 0,
+    freedBytes: 0,
+  );
 
   @override
   Future<ImageAttachmentDto> ingestFile(String sourcePath, String folderPath) async =>

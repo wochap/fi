@@ -71,4 +71,21 @@ void main() {
     final cleared = prefs.copyWith(customSentryDsn: null);
     expect(cleared.customSentryDsn, isNull);
   });
+
+  test('unusedMediaMinAgeDays defaults to 365, round-trips, and clamps >= 0', () {
+    expect(const UiPrefs().unusedMediaMinAgeDays, 365);
+    expect(UiPrefs.fromJson({}).unusedMediaMinAgeDays, 365);
+    expect(
+      UiPrefs.fromJson({'unused_media_min_age_days': -10}).unusedMediaMinAgeDays,
+      0,
+    );
+    expect(
+      const UiPrefs().copyWith(unusedMediaMinAgeDays: -5).unusedMediaMinAgeDays,
+      0,
+    );
+
+    final prefs = const UiPrefs(unusedMediaMinAgeDays: 30);
+    final read = UiPrefs.fromJson(prefs.toJson());
+    expect(read.unusedMediaMinAgeDays, 30);
+  });
 }

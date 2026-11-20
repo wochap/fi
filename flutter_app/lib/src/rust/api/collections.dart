@@ -119,11 +119,30 @@ Future<ImageAttachmentDto> ingestImageBytes({
   mediaFolder: mediaFolder,
 );
 
-/// Scans `media_folder` for accessibility, local file count/bytes, and missing referenced files.
+/// Scans `media_folder` for accessibility, local file count/bytes, missing referenced files, and
+/// unused Fi-managed image files.
 Future<MediaFolderStatusDto> scanMediaFolder({required String mediaFolder}) =>
     RustLib.instance.api.crateApiCollectionsScanMediaFolder(
       mediaFolder: mediaFolder,
     );
+
+/// Previews unused Fi-managed image files in `media_folder` matching `min_age_days`.
+Future<UnusedMediaPreviewDto> previewUnusedMediaCleanup({
+  required String mediaFolder,
+  required int minAgeDays,
+}) => RustLib.instance.api.crateApiCollectionsPreviewUnusedMediaCleanup(
+  mediaFolder: mediaFolder,
+  minAgeDays: minAgeDays,
+);
+
+/// Deletes unused Fi-managed image files in `media_folder` matching `min_age_days`.
+Future<UnusedMediaCleanupResultDto> deleteUnusedMedia({
+  required String mediaFolder,
+  required int minAgeDays,
+}) => RustLib.instance.api.crateApiCollectionsDeleteUnusedMedia(
+  mediaFolder: mediaFolder,
+  minAgeDays: minAgeDays,
+);
 
 Future<void> deleteCollection({required String id}) =>
     RustLib.instance.api.crateApiCollectionsDeleteCollection(id: id);
